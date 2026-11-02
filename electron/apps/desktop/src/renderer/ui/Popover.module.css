@@ -1,0 +1,269 @@
+/* spec/appearance#popover-shell: the one popover shell and menu (rule 17). Shell: card, 1 px --sep, radius 9, padding 5, shadow 0 10 30 — the
+   look of the composer's Send menu and the toolbar's «…», the most frequent among the old copies. Header: name 12/600
+   --fg and Esc, one row of the popover's size (rule 16). Active row: --accent-fill under --selfg (spec/appearance#accent). */
+.popover {
+	position: fixed;
+	inset: auto;
+	margin: 0;
+	z-index: 40;
+	min-width: 200px;
+	max-width: calc(100vw - 16px);
+	box-sizing: border-box;
+	padding: 5px;
+	display: flex;
+	flex-direction: column;
+	overflow: visible;
+	border: 1px solid var(--sep);
+	border-radius: 9px;
+	background: var(--card);
+	color: var(--fg);
+	box-shadow: var(--shadow-menu);
+	text-align: left;
+	-webkit-app-region: no-drag;
+	outline: none;
+	/* It lives in the top layer but inherits from where it stands in the DOM (a nowrap footer, a 500 toolbar): reset the text. */
+	white-space: normal;
+	font-size: var(--text-13);
+	font-weight: 400;
+	font-style: normal;
+	line-height: normal;
+	letter-spacing: normal;
+	text-transform: none;
+	cursor: default;
+	opacity: 1;
+	translate: 0 0;
+	transition:
+		opacity var(--motion-enter-time) var(--motion-ease),
+		translate var(--motion-enter-time) var(--motion-ease);
+}
+.popover[data-open='false'] {
+	opacity: 0;
+	translate: 0 4px;
+	pointer-events: none;
+}
+.popover[data-side='top'][data-open='false'] {
+	translate: 0 -4px;
+}
+.popover[data-side='right'][data-open='false'] {
+	translate: -4px 0;
+}
+@starting-style {
+	.popover[data-open='true'] {
+		opacity: 0;
+		translate: 0 6px;
+	}
+	.popover[data-side='top'][data-open='true'] {
+		translate: 0 -6px;
+	}
+	.popover[data-side='right'][data-open='true'] {
+		translate: -6px 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.popover,
+	.popover[data-open='false'] {
+		translate: none;
+	}
+}
+
+/* spec/appearance#bundled-fonts: the kit's specimen stands in the flow, always open. */
+.popover[data-static] {
+	position: relative;
+	z-index: auto;
+	transition: none;
+	max-width: 100%;
+}
+/* The nub of a hover popover: on the edge facing the anchor, at its middle. */
+.popover[data-arrow]::after {
+	content: '';
+	position: absolute;
+	left: var(--arrow-left);
+	width: 10px;
+	height: 10px;
+	transform: rotate(45deg);
+	background: var(--card);
+}
+.popover[data-arrow][data-side='top']::after {
+	bottom: -6px;
+	border-right: 1px solid var(--sep);
+	border-bottom: 1px solid var(--sep);
+}
+.popover[data-arrow][data-side='bottom']::after {
+	top: -6px;
+	border-left: 1px solid var(--sep);
+	border-top: 1px solid var(--sep);
+}
+/* spec/sidebar#section-rail: beside the sections rail the nub is on the left edge, at the anchor's middle. */
+.popover[data-arrow][data-side='right']::after {
+	left: -6px;
+	top: var(--arrow-top);
+	border-left: 1px solid var(--sep);
+	border-bottom: 1px solid var(--sep);
+}
+
+.header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	padding: 3px 3px 5px 8px;
+}
+.header > .note {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.header > :not(h2, .note, button):first-child {
+	margin-right: auto;
+}
+.body {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.popover[data-overflow='visible'],
+.popover[data-overflow='visible'] > .body {
+	overflow: visible;
+}
+/* The doubled class outranks a host's `h2` rule (TaskView `.changes h2` 11 px): the popover title is 12 wherever it opens. */
+.header.header > h2 {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-12);
+	font-weight: 600;
+	color: var(--fg);
+}
+
+/* ── Menu ─────────────────────────────────────────────────────────────────────────────────────────────── */
+.items {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: var(--c-h);
+	flex: none;
+	box-sizing: border-box;
+	padding: 0 8px;
+	border: 0;
+	border-radius: calc(var(--c-r) - 2px);
+	background: transparent;
+	color: var(--fg);
+	font-size: var(--c-fs);
+	text-align: left;
+	white-space: nowrap;
+	outline: none;
+}
+.item:has(.label > small) {
+	min-height: var(--control-h-xl);
+	padding-block: 4px;
+}
+.tick {
+	display: inline-flex;
+	width: 11px;
+	flex: none;
+	color: inherit;
+}
+.items:not(:has([aria-checked])) .tick {
+	display: none;
+}
+.icon {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg2);
+}
+.label {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.label > small {
+	font-size: var(--text-11);
+	color: var(--fg2);
+	white-space: normal;
+	line-height: 1.35;
+}
+.tail {
+	flex: none;
+	font-size: var(--text-11);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: var(--fg2);
+}
+.kbd {
+	flex: none;
+	font: inherit;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.item:focus-visible {
+	outline: none;
+}
+.item[data-danger] {
+	color: var(--red);
+}
+.item:disabled {
+	color: var(--fg3);
+}
+/* Rule 15: the whole row lights, by the pointer or the keyboard (not both at once). */
+.items:not([data-keyboard]) .item:not(:disabled):hover,
+.item:not(:disabled):focus-visible,
+.items[data-keyboard] .item:not(:disabled):focus {
+	background: var(--accent-fill);
+	color: var(--selfg);
+}
+.items:not([data-keyboard]) .item:not(:disabled):hover :is(.icon, .tail, .kbd, small),
+.item:not(:disabled):focus-visible :is(.icon, .tail, .kbd, small),
+.items[data-keyboard] .item:not(:disabled):focus :is(.icon, .tail, .kbd, small) {
+	color: var(--selfg);
+}
+/* A status line among the rows (spec/remote-access-and-mobile#module-and-settings: «Connected via LAN» in the window chip's menu): the row's look, no action. */
+.items .item[data-info],
+.items .item[data-info]:hover {
+	background: transparent;
+	color: var(--fg);
+}
+.items .item[data-info]:hover :is(.icon, small) {
+	color: var(--fg2);
+}
+.reason {
+	margin: 0 0 3px;
+	padding: 0 8px 0 27px;
+	font-size: var(--text-11);
+	line-height: 1.35;
+	color: var(--fg2);
+	white-space: normal;
+}
+.section {
+	padding: 7px 8px 3px;
+	font-size: var(--text-10);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--fg3);
+}
+.separator {
+	height: 1px;
+	flex: none;
+	margin: 4px;
+	background: var(--sep);
+}

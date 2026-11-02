@@ -1,0 +1,122 @@
+/* spec/appearance#evolution-redesign, per-action agents: rows of the Agents card that start at the
+   controls' column (12 + 132 + 10 = 154 px; 132 with the 110 px labels of a narrow window, spec/appearance#interface-font), 40 px high. */
+.disclosure,
+.action {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 40px;
+	padding: 5px 12px 5px 154px;
+	font-size: var(--text-12);
+	transition: background-color var(--motion-fast) ease;
+}
+.disclosure {
+	gap: 6px;
+}
+/* Rule 15: the whole row is the toggle and hovers whole; `Reset all` lies above with its own hover. */
+.toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+}
+/* The row draws the hover and the press, not the global button layer over the words. */
+.toggle:hover,
+.toggle:active {
+	background-image: none;
+}
+.toggle::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+}
+.disclosure:has(.toggle:hover),
+.disclosure:has(.toggle:focus-visible),
+.action:hover {
+	background: var(--tint);
+}
+.disclosure:has(.toggle:active) {
+	background: var(--segment-press);
+}
+.disclosure > :is(button:not(.toggle), .count) {
+	position: relative;
+	z-index: 1;
+}
+.chevron {
+	display: inline-flex;
+	color: var(--fg2);
+	transform: rotate(-90deg);
+	transition: transform var(--motion-fast) var(--motion-ease);
+}
+.disclosure[data-open] .chevron {
+	transform: none;
+}
+.space {
+	flex: 1;
+}
+.count {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.heading {
+	padding: 10px 12px 2px 154px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	animation: var(--motion-enter);
+}
+/* The group's heading and its first row read as one: no rule between them. */
+.heading + .action {
+	border-top: 0;
+}
+.action {
+	cursor: default;
+	animation: var(--motion-enter);
+}
+.name {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	line-height: 1.35;
+}
+.name > small {
+	font-size: var(--text-10);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+.reset {
+	margin-right: -4px;
+}
+/* `Reset` shows on the row's hover and for the keyboard. */
+.action:not(:hover):not(:focus-within) .reset {
+	visibility: hidden;
+}
+/* The last row's fill reaches the card's corners (the card is 9 with a 1 px border). */
+.action:last-child {
+	border-bottom-left-radius: 8px;
+	border-bottom-right-radius: 8px;
+}
+/* An inheriting action: `Same as …` in --fg2; on its own hover --fg. */
+.action:not([data-changed]) [data-inherit] [data-agent-segments] {
+	color: var(--fg2);
+}
+/* spec/pull-requests-and-ci#review-crew: a review action that runs by a crew — `Crew · <name>` where the capsule stands, `Reset` before it. */
+.crew {
+	flex: none;
+	color: var(--fg);
+	white-space: nowrap;
+}
+@media (max-width: 560px) {
+	.disclosure,
+	.action,
+	.heading {
+		padding-left: 132px;
+	}
+}

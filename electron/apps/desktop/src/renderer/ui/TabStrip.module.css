@@ -1,0 +1,431 @@
+/* spec/editor#editor-groups, spec/task-window-workspace#work-area, spec/task-window-workspace#layout-switch: one tab strip (rule 17) — the editor groups' strips, the work area's tool tabs and the
+   panel's Files · Changes · PR. spec/appearance#evolution-redesign: the groups' strips are pills (`.documents`); the panel's
+   tabs keep their own look. */
+.tabs {
+	display: flex;
+	overflow: auto;
+	flex: none;
+}
+/* spec/task-window#tab-strips: no visible scrollbar over the tabs: macOS's overlay bar lay on the × and took its clicks. The strip scrolls by wheel,
+   trackpad and to the active tab (ui/use-tab-strip.ts). */
+.tabs {
+	scrollbar-width: none;
+	overscroll-behavior-x: contain;
+}
+.tabs::-webkit-scrollbar {
+	display: none;
+}
+/* A strip that hides tabs past an edge fades out there (use-tab-strip.ts `fade`): the gradient says "scroll for more"
+   without a scrollbar. A mask, not a colour, so the track and the chips fade alike in any theme. */
+.fade {
+	--fade-start: 0px;
+	--fade-end: 0px;
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		#000 var(--fade-start),
+		#000 calc(100% - var(--fade-end)),
+		transparent
+	);
+}
+.fade[data-fade='start'],
+.fade[data-fade='both'] {
+	--fade-start: 24px;
+}
+.fade[data-fade='end'],
+.fade[data-fade='both'] {
+	--fade-end: 24px;
+}
+.tab {
+	position: relative;
+	display: flex;
+	align-items: center;
+	white-space: nowrap;
+}
+.tab > button[role='tab'] > svg {
+	flex: none;
+}
+
+/* ——— The editor groups' strip, pills (spec/appearance#evolution-redesign). ———
+   A row of 40 with a hairline under it, no fill and no frames; the tabs are M pills 2 px apart, the active one `--tint`,
+   the hover `--hover` over the whole pill (rule 15). */
+.documents {
+	height: calc(var(--control-h-m) + 12px);
+	box-sizing: border-box;
+	align-items: center;
+	gap: 2px;
+	padding: 0 8px;
+	border-bottom: 1px solid var(--hair);
+}
+.documents .tab {
+	flex: none;
+	gap: 6px;
+	height: var(--control-h-m);
+	padding-right: 6px;
+	border-radius: var(--control-r-m);
+	color: var(--fg2);
+	transition:
+		background-color var(--motion-fast) ease,
+		box-shadow var(--motion-fast) ease,
+		transform var(--motion-fast) ease;
+}
+.documents .tab:hover {
+	background: var(--hover);
+	color: var(--fg);
+}
+.documents .tab[data-active='true'] {
+	background: var(--tint);
+	color: var(--fg);
+}
+/* The tab's own button spans the whole pill (its ::after), so a press anywhere on it — the padding too — picks the tab. */
+.documents .tab > button[role='tab'] {
+	height: 100%;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 0 0 8px;
+	border-radius: inherit;
+	background: none;
+	color: inherit;
+	font: var(--text-12-5) var(--ui-family);
+	outline: none;
+	transition: none;
+}
+.documents .tab > button[role='tab']::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+}
+.documents .tab:has(> button[role='tab']:active) {
+	background: var(--tint2);
+	color: var(--fg);
+	transform: scale(0.97);
+}
+.documents .tab:has(> button[role='tab']:focus-visible) {
+	box-shadow: var(--ring-soft);
+}
+/* A group without the focus keeps its active tab as an outline; the fill belongs to the focused group. */
+.documents[data-group-focused='false'] .tab[data-active='true'] {
+	background: transparent;
+	box-shadow: inset 0 0 0 1px var(--sep);
+	color: var(--fg2);
+}
+/* The name never yields: a namesake's folder tail (fg3, 11) gives way from its head first; the label stops at 200 px. */
+.label {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+	max-width: 200px;
+	overflow: hidden;
+}
+.name {
+	flex: none;
+	max-width: 200px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.tail {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	direction: rtl;
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+/* A PR's number or a commit after the name. */
+.mark {
+	flex: none;
+	font-size: var(--text-10-5);
+	color: var(--fg3);
+}
+/* The × (16 px drawn, a 24 px target over the pill's edge): on the active tab and under the pointer, transparent elsewhere
+   with its place kept (it is still where the pointer goes, so it shows on the way). While the file is being written it
+   stays, dimmed and off. */
+/* spec/browser-and-simulator#tab-sound: the speaker of a browser tab that plays sound or was muted — the ×'s look, always shown. */
+.tab > .close,
+.tab > .sound {
+	position: relative;
+	z-index: 1;
+	flex: none;
+	width: var(--control-min-target);
+	height: var(--control-min-target);
+	margin: 0 -4px;
+	display: grid;
+	place-items: center;
+	border-radius: 4px;
+	background: none;
+	color: var(--fg3);
+	opacity: 0;
+	transition: opacity var(--motion-fast) ease;
+}
+.close::before,
+.sound::before {
+	content: '';
+	position: absolute;
+	inset: 4px;
+	border-radius: 4px;
+	transition: background-color var(--motion-fast) ease;
+}
+.close > svg,
+.sound > svg {
+	position: relative;
+}
+.close:hover,
+.sound:hover {
+	color: var(--fg);
+}
+.close:hover::before,
+.sound:hover::before {
+	background: var(--tint2);
+}
+.close:active::before,
+.sound:active::before {
+	background: var(--tint2);
+}
+.close:focus-visible,
+.sound:focus-visible {
+	outline: none;
+}
+.close:focus-visible::before,
+.sound:focus-visible::before {
+	box-shadow: var(--ring-soft);
+}
+.tab[data-active='true'] > .close,
+.tab:hover > .close,
+.tab > .close:focus-visible {
+	opacity: 1;
+}
+.tab[data-active='true'] > .close:disabled,
+.tab:hover > .close:disabled {
+	opacity: 0.35;
+}
+.tab > .sound {
+	opacity: 1;
+	margin-right: -8px;
+}
+.tab > .sound[data-muted='true'] {
+	color: var(--fg2);
+}
+/* Unsaved: a dot in the ×'s place; under the pointer the × comes back. The × keeps lying over the dot, transparent, so a
+   press on the dot closes the tab (and asks), as in VS Code. */
+.dirty {
+	display: none;
+	flex: none;
+	width: 6px;
+	height: 6px;
+	margin: 0 5px;
+	border-radius: 3px;
+	background: var(--fg2);
+}
+.tab[data-dirty='true']:not(:hover):not(:focus-within) > button[role='tab'] > .dirty {
+	display: block;
+}
+.tab[data-dirty='true']:not(:hover):not(:focus-within) > .close {
+	position: absolute;
+	top: calc((var(--control-h-m) - var(--control-min-target)) / 2);
+	right: 2px;
+	margin: 0;
+	opacity: 0;
+}
+/* The local diff's sign, in the file icon's place. */
+.diffSign {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	height: 15px;
+	padding: 0 3px;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+	color: var(--fg);
+	font-size: var(--text-10);
+}
+.glyph {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg2);
+}
+/* spec/pull-requests-and-ci#pr-files: the tab of a PR file that is opening spins in place of its icon. */
+.opening {
+	display: inline-flex;
+	flex: none;
+	color: var(--accent);
+}
+.opening > svg {
+	animation: tab-opening-spin 900ms linear infinite;
+}
+@keyframes tab-opening-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+.conflictDot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	border-radius: 3px;
+	background: var(--amber);
+}
+@media (prefers-reduced-motion: reduce) {
+	.documents .tab {
+		transition: none;
+	}
+	.documents .tab:has(> button[role='tab']:active) {
+		transform: none;
+	}
+	.opening > svg {
+		animation: none;
+	}
+}
+
+/* A tab dragged over a strip lands where the accent mark stands, in the gap before a tab or after the last one. */
+.tab[data-drop-before]::before {
+	content: '';
+	position: absolute;
+	left: -2px;
+	top: 4px;
+	bottom: 4px;
+	width: 2px;
+	border-radius: 1px;
+	background: var(--accent);
+}
+.dropEnd {
+	flex: none;
+	width: 2px;
+	height: 20px;
+	border-radius: 1px;
+	background: var(--accent);
+}
+.tab[draggable='true'] {
+	-webkit-user-drag: element;
+}
+/* The dragged tab dims in its strip; the pointer carries its ghost (startTabDrag). */
+.tab[data-dragging='true'] {
+	opacity: 0.4;
+}
+.ghost {
+	position: fixed;
+	top: -100px;
+	left: 0;
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	height: 28px;
+	padding: 0 10px;
+	box-sizing: border-box;
+	border-radius: 6px;
+	background: var(--card);
+	border: 1px solid var(--sep);
+	box-shadow: var(--shadow-float);
+	opacity: 0.94;
+	color: var(--fg);
+	font: var(--text-11) var(--ui-family);
+	white-space: nowrap;
+	pointer-events: none;
+}
+.ghost > svg {
+	flex: none;
+}
+/* The ghost is the tab's face: the tail, the dot and the drop marks stay in the strip. */
+.ghost > .dirty,
+.ghost .tail {
+	display: none;
+}
+
+/* spec/task-window-workspace#work-area: «+ ▾» right after the tabs opens Tools for that group; the row's M. */
+.add {
+	align-self: center;
+	flex: none;
+}
+.documents .add[data-strip-tools] {
+	gap: 2px;
+	padding: 0 6px;
+}
+.addGlyph {
+	display: inline-flex;
+}
+/* spec/task-window-workspace#work-area: a browser tab the agent acts on — «agent» after the name; the dot of a tab it just acted on. */
+.agentTag {
+	flex: none;
+	font-size: var(--text-10);
+	font-weight: 500;
+	line-height: 16px;
+	padding: 0 5px;
+	border-radius: 4px;
+	background: var(--accent-soft);
+	color: var(--accent);
+	font-family: var(--ui-family);
+}
+.agentDot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--accent);
+}
+
+/* ——— spec/task-window-workspace#two-columns: two columns' first group. ———
+   The pinned Chat tab stands first, a 1 × 18 divider after it; the group's own tabs scroll in a run of their own that fades
+   at the edges it hides (use-tab-strip `fade`), so the Chat tab and the divider never move. */
+.documents.pinned {
+	overflow: hidden;
+}
+.run {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex: 0 1 auto;
+	min-width: 0;
+	height: 100%;
+	overflow: auto;
+	scrollbar-width: none;
+	overscroll-behavior-x: contain;
+}
+.run::-webkit-scrollbar {
+	display: none;
+}
+/* The fade is 18 px at the start, 28 px at the end. */
+.run.fade[data-fade='start'],
+.run.fade[data-fade='both'] {
+	--fade-start: 18px;
+}
+.run.fade[data-fade='end'],
+.run.fade[data-fade='both'] {
+	--fade-end: 28px;
+}
+.documents .pin {
+	padding-right: 0;
+}
+.documents .pin > button[role='tab'] {
+	padding: 0 8px;
+}
+.pinSep {
+	flex: none;
+	width: 1px;
+	height: 18px;
+	margin: 0 4px;
+	background: var(--sep);
+}
+/* The Chat tab's state while a file is shown: the bubble in the tab's colour, the spinner in the accent, amber while the
+   agent waits for the person. */
+.pin .glyph {
+	color: inherit;
+}
+.pin[data-state='running'] .glyph {
+	color: var(--accent);
+}
+.pin[data-state='waiting'] .glyph {
+	color: var(--amber);
+}
+.pinDot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	border-radius: 3px;
+	background: var(--accent);
+}
+.pinDot[data-state='waiting'] {
+	background: var(--amber);
+}

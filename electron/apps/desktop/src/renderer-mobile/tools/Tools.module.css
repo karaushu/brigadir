@@ -1,0 +1,53 @@
+/* spec/remote-access-and-mobile#phone-task-tools: the task's tools. */
+.space {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+/* The change summary: «3 files +38 −12 · from main … kit». */
+.summary {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 16px 8px;
+	font-size: 13px;
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.summary :global(.mono) {
+	font-size: 12px;
+}
+.files {
+	margin: 0 12px;
+}
+.captionTop {
+	padding-top: 10px;
+}
+/* The diff's body, its hunk bands and the pager under it. */
+.diff {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.hunk {
+	padding: 6px 16px;
+	background: var(--tint);
+	font-size: 12px;
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.pager {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 52px;
+	padding: 0 8px;
+}
+.position {
+	font-size: 13px;
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}

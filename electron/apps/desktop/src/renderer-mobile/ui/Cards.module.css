@@ -1,0 +1,319 @@
+.card {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	width: 100%;
+	min-height: 64px;
+	padding: 12px 14px 12px 12px;
+	border-radius: 12px;
+	background: var(--tint);
+}
+.card[data-amber] {
+	background: var(--amber-soft);
+}
+.card:active {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+.card > span[role='img'] {
+	width: 18px;
+	height: 18px;
+	margin-top: 1px;
+}
+.cardBody {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.cardHead {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+}
+.cardTitle {
+	flex: 1 1 auto;
+	font-size: 15px;
+	font-weight: 500;
+}
+.provider {
+	flex: none;
+	display: inline-flex;
+	margin-top: 3px;
+	color: var(--fg3);
+}
+.crew {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	margin-top: 1px;
+	font-size: 12px;
+	color: var(--fg2);
+}
+.unread {
+	flex: none;
+	width: 7px;
+	height: 7px;
+	margin-top: 6px;
+	border-radius: 50%;
+	background: var(--accent);
+}
+.line {
+	font-size: 13px;
+	color: var(--fg2);
+}
+.line[data-amber] {
+	color: var(--amber-text);
+}
+.line[data-mono] {
+	font-size: 12px;
+}
+.meta {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	font-size: 12px;
+	color: var(--fg2);
+}
+.branch {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+}
+.branch > svg {
+	flex: none;
+}
+/* spec/remote-access-and-mobile#remote-button, as the computer's card (spec/appearance#evolution-redesign): the branch in the row's own font, in --fg3. */
+.branchName {
+	color: var(--fg3);
+}
+.space {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.counts {
+	flex: none;
+	font-size: 12px;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+.add {
+	color: var(--green);
+}
+.del {
+	color: var(--red);
+}
+
+.quiet {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	height: 44px;
+	padding: 0 14px 0 13px;
+	border-radius: 10px;
+}
+.quiet:active {
+	background: var(--segment-press);
+}
+.quietTick {
+	flex: none;
+	color: var(--fg3);
+}
+.quietTitle {
+	flex: 1 1 auto;
+	font-size: 15px;
+	color: var(--fg2);
+}
+.age {
+	flex: none;
+	font-size: 12px;
+	color: var(--fg3);
+	font-variant-numeric: tabular-nums;
+}
+.separator {
+	flex: none;
+	height: 1px;
+	margin: 4px 12px;
+	background: var(--sep);
+}
+
+/* A worker under its foreman (the computer's worker row in the phone's scale, like the quiet row `.qr`). */
+.worker {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	min-height: 44px;
+	padding: 0 14px 0 42px;
+	border-radius: 10px;
+	font-size: 14px;
+}
+.worker:active {
+	background: var(--segment-press);
+}
+.worker[data-amber] {
+	background: var(--amber-soft);
+}
+.worker > span[role='img'] {
+	flex: none;
+	width: 16px;
+	height: 16px;
+}
+.workerTitle {
+	flex: 1 1 auto;
+}
+.workerName {
+	color: var(--fg2);
+}
+.worker > .unread {
+	margin-top: 0;
+}
+.worker > .provider {
+	margin-top: 0;
+}
+.frame {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 4px;
+	border: 1px solid var(--sep);
+	border-radius: 16px;
+}
+.frameHead {
+	display: flex;
+	align-items: center;
+	height: 44px;
+}
+/* The canvas `.hb` (chevron 14, gap 8, padding 8) split in two: the fold is the chevron's 30, the rest opens the project. */
+.frameFold {
+	position: relative;
+	z-index: 1;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	width: 30px;
+	height: 44px;
+	padding: 0 8px;
+	border-radius: 10px;
+}
+/* A 44 pt target (spec/remote-access-and-mobile#phone-app) without moving the dot: 7 more on each side, over the frame's padding and the name. */
+.frameFold::after {
+	content: '';
+	position: absolute;
+	inset: 0 -7px;
+}
+.frameButton {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 44px;
+	padding: 0 8px 0 0;
+	border-radius: 10px;
+}
+.frameFold:active,
+.frameButton:active,
+.frameNew:active {
+	background: var(--segment-press);
+}
+.frameButton b {
+	font-size: 16px;
+	font-weight: 700;
+}
+.frameChevron {
+	flex: none;
+	color: var(--fg3);
+}
+.dot {
+	flex: none;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+}
+.frameCount {
+	font-size: 13px;
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+.frameWaiting {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 13px;
+	color: var(--amber-text);
+}
+.frameWaiting > span[role='img'] {
+	width: 14px;
+	height: 14px;
+}
+.frameNew {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 12px;
+	color: var(--fg2);
+}
+.frameNew:disabled {
+	opacity: 0.45;
+}
+
+.attention {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	min-height: 48px;
+	padding: 10px 10px 10px 17px;
+	border-radius: 12px;
+	background: var(--amber-soft);
+	font-size: 14px;
+}
+.attention:active {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+.attention > span[role='img'] {
+	width: 18px;
+	height: 18px;
+}
+.attentionChevron {
+	flex: none;
+	color: var(--fg2);
+}
+.two {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+.two b {
+	font-weight: 600;
+}
+.two small {
+	font-size: 12px;
+	color: var(--fg2);
+}
+.banner {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 6px 10px 12px;
+	border-radius: 12px;
+	background: var(--tint);
+	font-size: 14px;
+}
+.banner[data-amber] {
+	background: var(--amber-soft);
+}

@@ -1,0 +1,100 @@
+/* spec/task-window#files-look: format icons of the Files tree. */
+.slot,
+.svg,
+.folder {
+	flex: none;
+	width: 16px;
+	height: 16px;
+}
+.slot {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 1;
+	color: var(--k);
+}
+.badge {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	height: 14px;
+	border-radius: 3px;
+	background: var(--kf);
+	color: var(--kt);
+	font: 700 7.5px/1 var(--ui-family);
+	letter-spacing: -0.2px;
+}
+.glyph {
+	font: 800 8px/1 var(--ui-family);
+	letter-spacing: -0.3px;
+}
+.glyph[data-kind='json'] {
+	font: 800 10px/1 var(--mono-family);
+	letter-spacing: -1px;
+}
+.svg {
+	color: var(--k);
+}
+.folder {
+	color: var(--fg2);
+}
+.folder[data-library='true'] {
+	color: var(--ft-lib);
+}
+[data-kind='ts'] {
+	--k: var(--ft-ts);
+	--kf: var(--ft-tsfill);
+	--kt: var(--ft-tstext);
+}
+[data-kind='js'] {
+	--k: var(--ft-js);
+	--kf: var(--ft-jsfill);
+	--kt: var(--ft-jstext);
+}
+[data-kind='react'] {
+	--k: var(--ft-react);
+}
+[data-kind='json'] {
+	--k: var(--ft-json);
+}
+[data-kind='md'] {
+	--k: var(--ft-md);
+}
+[data-kind='docker'] {
+	--k: var(--ft-docker);
+}
+[data-kind='git'] {
+	--k: var(--ft-git);
+}
+[data-kind='env'] {
+	--k: var(--ft-env);
+}
+[data-kind='rc'] {
+	--k: var(--ft-rc);
+}
+[data-kind='yml'] {
+	--k: var(--ft-yml);
+}
+[data-kind='image'] {
+	--k: var(--ft-img);
+}
+[data-kind='shell'] {
+	--k: var(--ft-sh);
+}
+[data-kind='lock'] {
+	--k: var(--ft-lock);
+}
+[data-kind='text'] {
+	--k: var(--fg2);
+}
+/* A selected row inverts the badge and draws every other mark in the selection text colour. A selected tab is a `--tint`
+   pill (spec/appearance#evolution-redesign), not a solid selection: its icon keeps its colours. */
+[aria-selected='true']:not([role='tab']) > :is(.slot, .svg, .folder) {
+	--k: var(--selfg);
+	color: var(--selfg);
+}
+[aria-selected='true']:not([role='tab']) > .slot > .badge {
+	background: var(--selfg);
+	color: var(--accent-fill);
+}

@@ -1,0 +1,89 @@
+/* spec/git#commit-dialog: the foot of the Diff tab — the SHA line after a commit while changes are left (with
+   Push), then ONE row: the snapshot picker on the left, `+N −M` and the soft «Commit» on the right (or `✓ sha` and «Push»
+   once nothing is left). Rows of size S (rule 16); the controls keep their own look, this file only places them. */
+.root {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	border-top: 1px solid var(--hair);
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 32px;
+	padding: 0 8px 0 6px;
+	min-width: 0;
+}
+.row > span:empty {
+	flex: 1;
+	min-width: 0;
+}
+.row > .counts {
+	font: var(--text-10-5) var(--mono-family);
+	white-space: nowrap;
+}
+/* Busy: the name stays for the width, hidden; the spinner sits over it. */
+.open {
+	position: relative;
+}
+.open[data-busy] {
+	opacity: 0.8;
+	cursor: default;
+}
+.open[data-busy] > span {
+	visibility: hidden;
+}
+.open > i {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-style: normal;
+}
+/* «✓ a41c9e2» / «✓ 3 commits» in the button's place; the SHAs are in the tooltip. */
+.ok {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	color: var(--fg2);
+	animation: var(--motion-reveal);
+}
+.ok > svg {
+	color: var(--green);
+}
+.ok code,
+.done code {
+	color: var(--fg);
+	font: var(--text-10-5) var(--mono-family);
+	user-select: text;
+}
+.done {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	height: 28px;
+	padding: 0 8px 0 12px;
+	min-width: 0;
+	white-space: nowrap;
+	animation: var(--motion-reveal);
+}
+.done > span:first-child {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.error {
+	margin: 0;
+	padding: 0 12px 6px;
+	color: var(--red);
+	font-size: var(--text-10-5);
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}

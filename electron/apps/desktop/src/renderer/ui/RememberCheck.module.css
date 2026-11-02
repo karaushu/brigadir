@@ -1,0 +1,38 @@
+/* spec/appearance#evolution-redesign: a menu row of the row's height under a rule inset like the note's; --tint on hover. */
+/* A long `Remember for …` in a 260 px popup wraps to a second line instead of «…»: one line keeps the row's
+   height (the padding centres a line of --rm-line in --c-h), two lines grow the row, the box stays on the first line. */
+.remember {
+	--rm-line: calc(var(--c-fs) + 4px);
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	box-sizing: border-box;
+	min-height: var(--c-h);
+	margin-top: 9px;
+	padding: calc((var(--c-h) - var(--rm-line)) / 2) 8px;
+	border-radius: calc(var(--c-r) - 1px);
+	font-size: var(--c-fs);
+	line-height: var(--rm-line);
+	color: var(--fg);
+	transition: background-color var(--motion-fast) ease;
+}
+.remember::before {
+	content: '';
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	top: -5px;
+	border-top: 1px solid var(--sep);
+}
+.remember:hover,
+.remember:has(:focus-visible) {
+	background: var(--tint);
+}
+.remember > input {
+	margin-top: calc((var(--rm-line) - var(--c-box)) / 2);
+}
+.remember > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}

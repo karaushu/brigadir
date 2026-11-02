@@ -1,0 +1,42 @@
+/* spec/diff-and-review#changes-header: the base as a quiet chip between the view switch and the filter. */
+.chip {
+	flex: none;
+}
+button.chip {
+	color: var(--fg2);
+}
+.chip > svg {
+	flex: none;
+}
+/* The range is a pill, not a button: its own «all changes» reset is the only target, a 24 px square at its end. */
+span.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--c-gap);
+	box-sizing: border-box;
+	height: var(--c-h);
+	padding: 0 2px 0 var(--c-px);
+	border-radius: var(--c-r);
+	background: var(--tint);
+	font-size: var(--c-fs);
+	white-space: nowrap;
+}
+.chip[data-diff-base-chip='range'] {
+	background: var(--accent-soft);
+	color: var(--accent);
+}
+.reset {
+	margin-left: 1px;
+	color: inherit;
+}
+/* Narrow panel: the filter would shrink to a few letters, so the chip keeps only its icon. */
+@container changes (max-width: 360px) {
+	.label {
+		display: none;
+	}
+	button.chip {
+		width: var(--c-h);
+		padding: 0;
+		justify-content: center;
+	}
+}

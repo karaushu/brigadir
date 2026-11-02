@@ -1,0 +1,206 @@
+.chips {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+	min-width: 0;
+	padding: 6px 0;
+}
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 0;
+	height: var(--c-h);
+	max-width: 100%;
+	padding: 0 0 0 var(--c-gap);
+	border-radius: var(--c-r);
+	background: var(--accent-soft);
+	color: var(--fg);
+}
+.chip .open {
+	min-width: 0;
+	padding: 0 var(--c-gap);
+}
+.open {
+	flex: 1;
+}
+.open svg {
+	flex: none;
+	color: var(--fg2);
+}
+.name {
+	direction: rtl;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.chip .remove {
+	flex: none;
+}
+.cli {
+	flex: none;
+}
+/* spec/composer#island: the composer's shelf. */
+.shelf {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	min-width: 0;
+	padding: 12px 14px 0;
+}
+/* spec/terminal-and-cli-agents#cli-context: above the terminal, within its column: one row that scrolls sideways (the padding keeps the × of the edge tiles unclipped), the toolbar's 12 px gutter and a line below. */
+.cli .shelf {
+	flex-wrap: nowrap;
+	overflow-x: auto;
+	overflow-y: hidden;
+	overscroll-behavior-x: contain;
+	scrollbar-width: thin;
+	padding: 12px 12px 10px;
+	border-bottom: 1px solid var(--sep);
+}
+.tile {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+	max-width: 220px;
+}
+.tile .tileOpen {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 44px;
+	max-width: 220px;
+	padding: 0 10px 0 8px;
+	border: 1px solid var(--sep);
+	border-radius: 8px;
+	background: var(--tint);
+	color: var(--fg);
+	text-align: left;
+}
+.tile[data-kind='image'] .tileOpen {
+	width: 44px;
+	padding: 0;
+	justify-content: center;
+	overflow: hidden;
+}
+.tile .tileOpen:not(:disabled):hover {
+	border-color: var(--accent);
+}
+.thumb {
+	display: block;
+	width: 100%;
+	height: 100%;
+	background: var(--term, var(--tint));
+}
+.thumb img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.tileIcon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 26px;
+	height: 26px;
+	border-radius: 6px;
+	background: var(--card);
+	color: var(--fg2);
+}
+.tileText {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+.tileName {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: 600 var(--text-11) var(--mono-family);
+	color: var(--fg);
+}
+.range {
+	color: var(--accent);
+}
+.tileText small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.tile .tileRemove {
+	position: absolute;
+	top: -8px;
+	right: -8px;
+	opacity: 0;
+}
+.tile:hover .tileRemove,
+.tile:focus-within .tileRemove {
+	opacity: 1;
+}
+/* spec/chat#images: the same tiles under the person's message: 8 px under its text, wrapping, no ×. */
+.log {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	min-width: 0;
+	white-space: normal;
+}
+.log[data-spaced] {
+	padding-top: 8px;
+}
+/* spec/chat#images: square crop — a tall picture from its top, a wide one from its left edge. */
+.thumb img[data-crop='top'] {
+	object-position: center top;
+}
+.thumb img[data-crop='start'] {
+	object-position: left center;
+}
+.thumb {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--fg3);
+}
+/* spec/chat#images: while the thumbnail loads the square keeps its place; an image that is gone or changed is «unavailable». */
+.tile[data-state='loading'] .thumb {
+	background: linear-gradient(
+		110deg,
+		var(--tint) 30%,
+		color-mix(in srgb, var(--fg) 9%, transparent) 50%,
+		var(--tint) 70%
+	);
+}
+.tile[data-kind='image'] .tileOpen {
+	cursor: zoom-in;
+}
+.tile[data-state='missing'] .tileOpen {
+	border-style: dashed;
+	background: var(--tint);
+	cursor: default;
+}
+.tile[data-state='missing'] .thumb {
+	background: transparent;
+}
+/* spec/notifications-slack-notes-and-schedules#notice-chips: the CLI task's class S chips — a 32 px row (chip S 24) at the right of the shelf; it draws nothing when no chip is there. */
+.cliNotices {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 4px;
+	padding: 0 10px;
+	border-bottom: 1px solid var(--sep);
+}
+.cliNotices:empty {
+	display: none;
+}
+.cliNotices:not(:has(button)) {
+	display: none;
+}
+.cliNotices > button {
+	margin: 4px 0;
+}

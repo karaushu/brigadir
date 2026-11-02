@@ -1,0 +1,297 @@
+/* spec/chat-turns-plans-and-questions#question-card: amber lives in the header band and the frame; the body is --card,
+   its content 14 px from the sides and 12 px from the bottom, 10 px between blocks. */
+.question {
+	margin: 0 16px 16px;
+	padding: 0 0 12px;
+	border: 1px solid color-mix(in srgb, var(--amber) 50%, var(--sep));
+	border-radius: 10px;
+	background: var(--card);
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+	overflow: hidden;
+}
+.question > :not(header, .permissionHead) {
+	margin-inline: 14px;
+}
+.question > header,
+.permission > .permissionHead {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	margin: 0;
+	padding: 7px 14px;
+	background: var(--amber-soft);
+	border-bottom: 1px solid color-mix(in srgb, var(--amber) 28%, transparent);
+}
+.question > header strong {
+	font-size: var(--text-12);
+}
+.question > header small {
+	padding: 0 5px;
+	border-radius: 3px;
+	background: var(--tint);
+	color: var(--fg);
+	font-size: var(--text-10);
+	white-space: nowrap;
+}
+.question h3 {
+	font-size: var(--text-13);
+	font-weight: 500;
+	line-height: 1.45;
+}
+/* spec/chat-turns-plans-and-questions#question-card: the Markdown question keeps the heading's weight; its code, lists and links are the body's own look. */
+.text {
+	font-weight: 500;
+	min-width: 0;
+}
+/* The body brings its own block insets (the phone's plan Markdown); in the card the gap above and below is the card's. */
+.text > * {
+	padding-block: 0;
+}
+.text > * > :last-child {
+	margin-bottom: 0;
+}
+.question pre {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	max-height: 180px;
+	overflow: auto;
+}
+.waited {
+	margin-left: auto;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+
+/* One list: a --sep frame on --content, rows 8 × 10 split by --sep lines; the hover and the choice fill the whole row
+   (rule 15) and the last row's fill reaches the frame. */
+.options {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--sep);
+	border-radius: 8px;
+	background: var(--content);
+	overflow: hidden;
+}
+.questionOption {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	transition: background-color var(--motion-fast) ease;
+}
+.questionOption + .questionOption {
+	border-top: 1px solid var(--sep);
+}
+.questionOption:not([data-selected='true']):not(:has(:disabled)):hover {
+	background: var(--tint);
+}
+.questionOption[data-selected='true'] {
+	background: var(--accent-soft);
+}
+.questionOption > input {
+	flex: none;
+}
+.questionOption > span {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.questionOption strong {
+	font-size: var(--c-fs);
+	font-weight: 500;
+}
+.description {
+	margin: 0;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+
+/* «Your answer…» is the list's last row: the same Choice as the options (decorative, the field answers) and the field; the placeholder is --fg2. */
+.ownAnswer {
+	align-items: flex-start;
+	cursor: text;
+}
+.ownAnswer > input[type='radio'],
+.ownAnswer > input[type='checkbox'] {
+	order: -1;
+	pointer-events: none;
+}
+.question .ownAnswer textarea {
+	flex: 1;
+	min-width: 0;
+	max-height: 150px;
+	padding: 0;
+	background: transparent;
+	field-sizing: content;
+}
+.question .ownAnswer textarea::placeholder {
+	color: var(--fg2);
+}
+
+/* spec/chat#tool-calls: left of the buttons the key that answers (View ▸ Submit) or, with several options, how many are chosen.
+   The buttons are size M (spec/appearance#control-scale); a disabled one is the system 40 %. */
+.actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+.footHint {
+	margin-right: auto;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+
+/* The permission card is the same family: «Permission: Write · path» in the band, the agent's options under it. */
+.permission {
+	margin: 0 16px 16px;
+}
+.permission > .permissionHead > svg {
+	flex: none;
+	color: var(--amber);
+}
+.permission > .permissionHead strong {
+	flex: none;
+	font-size: var(--text-13);
+	font-weight: 600;
+	color: var(--fg);
+}
+.permission > .permissionHead > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: var(--text-12) var(--mono-family);
+	color: var(--fg);
+}
+.permission .actions {
+	justify-content: flex-start;
+}
+
+/* spec/remote-access-and-mobile#phone-app: the same cards in the phone's scale. The band 9 × 14, the body
+   12 × 14 × 14 with 12 between blocks, option rows of 52 on the whole width with a ring radio, 44 buttons sharing the row;
+   the permission's path and the edit's first lines in the body, its actions one under another. */
+.question[data-touch] {
+	margin: 0;
+	padding: 0 0 14px;
+	gap: 12px;
+	border-radius: 12px;
+}
+.question[data-touch] > header,
+.permission[data-touch] > .permissionHead {
+	gap: 8px;
+	padding: 9px 14px;
+	font-size: 14px;
+}
+.question[data-touch] > header strong,
+.permission[data-touch] > .permissionHead strong {
+	font-size: 14px;
+	font-weight: 600;
+}
+.question[data-touch] > header > svg,
+.permission[data-touch] > .permissionHead > svg {
+	flex: none;
+	color: var(--amber);
+}
+.question[data-touch] > header small {
+	display: inline-flex;
+	align-items: center;
+	height: 22px;
+	padding: 0 7px;
+	border-radius: 6px;
+	font-size: 12px;
+}
+.question[data-touch] .waited {
+	font-size: 12px;
+}
+.question[data-touch] h3 {
+	margin-block: 0;
+	font-size: 15px;
+	font-weight: 500;
+	line-height: 1.34;
+}
+.question[data-touch] .options {
+	border-radius: 10px;
+}
+.question[data-touch] .questionOption {
+	align-items: flex-start;
+	gap: 12px;
+	min-height: 52px;
+	padding: 12px;
+}
+.question[data-touch] .questionOption strong {
+	font-size: 15px;
+	font-weight: 400;
+}
+.question[data-touch] .description {
+	font-size: 13px;
+}
+.question[data-touch] .questionOption > input {
+	width: 20px;
+	height: 20px;
+	background: transparent;
+	box-shadow: inset 0 0 0 1.5px var(--fg2);
+}
+.question[data-touch] .questionOption > input[type='radio']:checked {
+	background: transparent;
+	box-shadow: inset 0 0 0 6px var(--accent);
+}
+.question[data-touch] .questionOption > input[type='radio']:checked::after {
+	display: none;
+}
+.question[data-touch] .questionOption > input[type='checkbox']:checked {
+	background: var(--accent);
+	box-shadow: none;
+}
+.question[data-touch] .ownAnswer textarea {
+	font-size: 15px;
+	min-height: 20px;
+}
+.question[data-touch] .actions {
+	flex-wrap: nowrap;
+	gap: 8px;
+}
+.question[data-touch]:not(.permission) .actions > button {
+	flex: 1 1 0;
+}
+.permission[data-touch] .actions {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+}
+.permission[data-touch] .actions > button[data-appearance='danger'] {
+	background-color: var(--tint);
+	color: var(--red);
+}
+.permissionPath {
+	margin: 0;
+	font: 12.5px var(--mono-family);
+	color: var(--fg);
+	overflow-wrap: anywhere;
+}
+.preview {
+	border: 1px solid var(--sep);
+	border-radius: 8px;
+	overflow: hidden;
+	font: 12px var(--mono-family);
+}
+.preview > div {
+	padding: 3px 10px;
+	white-space: pre-wrap;
+	word-break: break-all;
+	background: color-mix(in srgb, var(--diffAddedFg) 16%, transparent);
+}
+/* The wait sits in the band's own face, not the path's monospace. */
+.permission[data-touch] > .permissionHead > .waited {
+	margin-left: auto;
+	font: 12px var(--ui-family);
+	color: var(--fg2);
+}

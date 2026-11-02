@@ -1,0 +1,135 @@
+/* spec/notifications-slack-notes-and-schedules#schedules: label column 70 px, rows M 28 (rule 16), the summary on --tint. Layout only;
+   the controls keep their own look (rule 17). */
+.editor {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	font-size: 12.5px;
+}
+.row {
+	display: grid;
+	grid-template-columns: 70px minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+	min-height: 28px;
+}
+.label {
+	font-size: 11.5px;
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.control {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.control > :global(*) {
+	min-width: 0;
+}
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.days {
+	display: flex;
+	gap: 2px;
+}
+.day {
+	width: 28px;
+	padding: 0;
+}
+.times {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.timeItem {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+}
+.time {
+	width: 100px;
+	font-variant-numeric: tabular-nums;
+}
+.wide {
+	flex: 1;
+}
+.dash {
+	color: var(--fg2);
+}
+.zone {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.zone small {
+	font-size: 11.5px;
+	color: var(--fg2);
+}
+.summary {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: var(--tint);
+}
+.summary b {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12.5px;
+	font-weight: 600;
+}
+.summary b svg {
+	color: var(--fg2);
+}
+.summary small {
+	font-size: 11px;
+	line-height: 15px;
+	color: var(--fg2);
+}
+.summary[data-bad] {
+	background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+.summary[data-bad] b,
+.summary[data-bad] b svg {
+	color: var(--red);
+}
+.error,
+.hint {
+	margin: -4px 0 0 78px;
+	font-size: 11px;
+	line-height: 15px;
+}
+.error {
+	color: var(--red);
+}
+.hint {
+	color: var(--fg2);
+}
+.separator {
+	height: 1px;
+	margin: 0;
+	border: 0;
+	background: var(--hair);
+}
+[data-schedule-editor] input[data-mono] {
+	font-family: var(--mono-family);
+	font-size: 12px;
+}
+/* A lone control spans its row, as the sheet's rail popups do; a popup's trigger inside it too. */
+.control > :only-child {
+	flex: 1;
+	min-width: 0;
+}
+.control > :only-child > button[aria-haspopup] {
+	width: 100%;
+}

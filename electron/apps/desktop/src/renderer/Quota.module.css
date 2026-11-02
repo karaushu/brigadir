@@ -1,0 +1,228 @@
+/* spec/agents-and-providers#usage, spec/appearance#evolution-redesign: rings in the sidebar footer and the launch sheet, the popover of limits.
+   The number is what is left; colour: from 25 % plain, under 25 % --amber, under 10 % --red; stale data --fg3. */
+.button {
+	gap: 14px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.gauge {
+	--tone: var(--fg2);
+	--value: var(--fg2);
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--fg2);
+}
+.gauge[data-provider='claude'] > svg:not(.rings) {
+	color: var(--providerClaude);
+}
+.rings,
+.gauge svg {
+	flex: none;
+	display: block;
+}
+/* A ring: the --tint2 track and the arc in its own window's tone; an exhausted window is a red track. */
+.track {
+	stroke: var(--tint2);
+}
+.arc {
+	stroke: var(--fg2);
+	transition: stroke-dasharray var(--motion-travel) var(--motion-ease);
+}
+.ring[data-ring-tone='low'] .arc {
+	stroke: var(--amber);
+}
+.ring[data-ring-tone='critical'] .arc,
+.ring[data-exhausted] .track {
+	stroke: var(--red);
+}
+.ring[data-ring-stale] .arc {
+	stroke: var(--fg3);
+}
+.percent {
+	font-size: var(--text-11);
+	font-weight: 500;
+	color: var(--value);
+	font-variant-numeric: tabular-nums;
+}
+
+/* spec/sidebar#section-rail: the rail's tile — a provider per block, rings 30 px with the glyph inside and the
+   shown window's percent under them (10 / 600 in that window's tone); the whole tile hovers (rule 15). */
+.railButton.railButton {
+	flex-direction: column;
+	height: auto;
+	width: var(--c-h);
+	padding: 5px 0 4px;
+	gap: 6px;
+	color: var(--fg2);
+}
+.railButton > .gauge {
+	flex-direction: column;
+	gap: 1px;
+}
+.railRings {
+	position: relative;
+	display: block;
+	width: 30px;
+	height: 30px;
+}
+.railRings > svg:not(.rings) {
+	position: absolute;
+	inset: 0;
+	margin: auto;
+}
+.railButton .percent {
+	font-size: var(--text-10);
+	font-weight: 600;
+	line-height: 12px;
+}
+
+/* The popover: a block per provider under a hairline; rows run the card's full width. */
+.content {
+	display: flex;
+	flex-direction: column;
+	margin: 0 -5px -5px;
+}
+.provider {
+	display: flex;
+	flex-direction: column;
+	padding-bottom: 4px;
+}
+.separator {
+	height: 1px;
+	margin: 0 0 0;
+	border: 0;
+	background: var(--hair);
+}
+.head {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 10px 14px 4px;
+	font-size: var(--text-12-5);
+	color: var(--fg);
+}
+.provider[data-provider='claude'] .head > svg {
+	color: var(--providerClaude);
+}
+.head strong {
+	font-weight: 600;
+}
+.space {
+	flex: 1;
+}
+.caption {
+	font-size: var(--text-11);
+	color: var(--fg3);
+	white-space: nowrap;
+}
+.head .caption[data-stale] {
+	color: var(--amber);
+}
+.row {
+	--tone: var(--fg2);
+	--value: var(--fg);
+	display: grid;
+	grid-template-columns: 18px minmax(0, 1fr) auto;
+	column-gap: 10px;
+	align-items: center;
+	padding: 7px 14px;
+	transition: background-color var(--motion-fast) ease;
+}
+.row:hover {
+	background: var(--tint);
+}
+/* The window the eye chose drives the indicator: the soft selection. */
+.row[data-watched] {
+	background: var(--sel);
+}
+/* Tone after the base rules: the base sets the same custom properties with equal specificity. */
+.gauge[data-tone='low'],
+.row[data-tone='low'] {
+	--tone: var(--amber);
+	--value: var(--amber);
+}
+.gauge[data-tone='critical'],
+.row[data-tone='critical'] {
+	--tone: var(--red);
+	--value: var(--red);
+}
+.gauge[data-stale],
+.row[data-stale] {
+	--tone: var(--fg3);
+	--value: var(--fg3);
+}
+.label {
+	min-width: 0;
+	font-size: var(--text-12);
+	color: var(--fg);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.row[data-stale] .label {
+	color: var(--fg2);
+}
+.value {
+	font-size: var(--text-12);
+	font-weight: 600;
+	color: var(--value);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.unit {
+	margin-left: 3px;
+	font-size: var(--text-11);
+	font-weight: 400;
+	color: var(--fg3);
+}
+.sub {
+	grid-column: 2 / 4;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 4px;
+}
+.sub > .track {
+	flex: 1;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--tint2);
+	overflow: hidden;
+}
+.sub > .track > span {
+	display: block;
+	height: 100%;
+	border-radius: 2px;
+	background: var(--tone);
+	transition:
+		width var(--motion-travel) var(--motion-ease),
+		background-color var(--motion-fast) ease;
+}
+.sub > .caption {
+	font-size: calc(var(--text-11) - 0.5px);
+}
+/* The eye: 20 px, --fg3 at rest; chosen — the accent on --tint2. */
+.sub > .eye {
+	width: 20px;
+	height: 20px;
+	min-width: 20px;
+	color: var(--fg3);
+}
+.sub > .eye[aria-pressed='true'] {
+	color: var(--accent);
+	background: var(--tint2);
+}
+.note {
+	margin: 0;
+	padding: 2px 14px 10px;
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+@media (prefers-reduced-motion: reduce) {
+	.arc,
+	.sub > .track > span {
+		transition: none;
+	}
+}

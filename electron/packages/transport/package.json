@@ -1,0 +1,17 @@
+{
+	"name": "@brigadir/transport",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./cli-hooks": "./src/cli-hooks.ts"
+	},
+	"dependencies": {
+		"@brigadir/core": "workspace:*",
+		"@agentclientprotocol/sdk": "1.4.0"
+	},
+	"devDependencies": {
+		"@modelcontextprotocol/sdk": "1.30.0"
+	}
+}

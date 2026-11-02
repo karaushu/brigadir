@@ -1,0 +1,246 @@
+/* spec/notifications-slack-notes-and-schedules#notes: list 248 · note · chat 352; the toolbar sits flush on the body, without the board's gap. */
+.screen {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1;
+}
+.screen > [data-project-toolbar] {
+	margin-bottom: 0;
+}
+.body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+.list {
+	width: 248px;
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	border-right: 1px solid var(--hair);
+}
+.listHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 40px;
+	flex: none;
+	padding: 0 8px 0 10px;
+}
+.search {
+	flex: 1;
+	min-width: 0;
+}
+.rows {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 0 6px 6px;
+}
+/* Rule 15: hover and selection fill the whole row; the «…» lies over it with its own hover and shows on hover. */
+.row {
+	position: relative;
+	border-radius: 7px;
+}
+.row:hover {
+	background: var(--hover);
+}
+.row[data-selected='true'] {
+	background: var(--sel);
+}
+.rowMain {
+	all: unset;
+	box-sizing: border-box;
+	display: flex;
+	gap: 8px;
+	width: 100%;
+	padding: 7px 8px;
+	border-radius: 7px;
+	cursor: default;
+}
+.rowMain:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.rowGlyph {
+	flex: none;
+	padding-top: 1px;
+	color: var(--fg2);
+}
+.rowText {
+	min-width: 0;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+.rowTitle {
+	font-size: var(--text-12-5);
+	font-weight: 500;
+	line-height: 17px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.rowMeta {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: var(--text-11);
+	line-height: 16px;
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+	padding-right: 18px;
+}
+.rowTasks {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+.rowMore {
+	position: absolute;
+	right: 6px;
+	top: 6px;
+	opacity: 0;
+}
+.row:hover .rowMore,
+.row:focus-within .rowMore {
+	opacity: 1;
+}
+.none {
+	padding: 4px 10px 12px;
+	font-size: var(--text-12);
+	color: var(--fg2);
+}
+.note {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.noteHead {
+	height: 40px;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 8px 0 14px;
+	border-bottom: 1px solid var(--hair);
+	box-sizing: border-box;
+}
+.noteTitle {
+	min-width: 40px;
+	flex: 0 1 auto;
+	font-size: var(--text-12-5);
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.pick {
+	all: unset;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 22px;
+	padding: 0 6px;
+	border-radius: 5px;
+	background: var(--tint);
+	font-size: var(--text-11);
+	color: var(--fg);
+}
+.pick:hover {
+	background: var(--tint2);
+}
+.pick:focus-visible {
+	box-shadow: 0 0 0 2px var(--accent);
+}
+.pick[data-none] {
+	color: var(--fg2);
+}
+.saved {
+	flex: none;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.gap {
+	flex: 1;
+}
+.preview {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 16px 24px;
+}
+.empty {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 13px;
+	padding: 40px;
+	color: var(--fg2);
+}
+.empty > svg {
+	color: var(--fg3);
+}
+.empty h1 {
+	font-size: var(--text-15);
+	font-weight: 600;
+	color: var(--fg);
+}
+.empty p {
+	font-size: var(--text-11);
+	line-height: 1.5;
+	max-width: 320px;
+	text-align: center;
+}
+/* spec/notifications-slack-notes-and-schedules#notes: the sidebar strip's Notes — absolute after the drag regions, its right edge 4 px before the bell (spec/notifications-slack-notes-and-schedules#notification-center),
+   which stands 4 px before Remote or the toggle; the bell and Notes are the same size (S on macOS, M on Windows and Linux). */
+.notesButton {
+	position: absolute;
+	z-index: 2;
+	top: calc((var(--strip-h) - var(--c-h)) / 2);
+	left: calc(var(--sidebar-w, 280px) - 10px - var(--control-h-m) - 4px - var(--c-h) - 4px);
+	translate: -100% 0;
+	gap: 3px;
+	font-variant-numeric: tabular-nums;
+	-webkit-app-region: no-drag;
+}
+:global([data-chip-shown]) > .notesButton {
+	left: calc(
+		var(--sidebar-w, 280px) - 10px - var(--control-h-m) - 4px - var(--remote-chip-w) - 4px -
+			var(--c-h) - 4px
+	);
+}
+/* Code | Side by side | Preview (spec/editor#markdown-views): side by side halves the room, the preview scrolls on its own. */
+.views {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+.views > * {
+	flex: 1;
+	min-width: 0;
+}
+.views[data-view='side'] > .preview {
+	border-left: 1px solid var(--hair);
+}
+/* spec/notifications-slack-notes-and-schedules#note-markdown: a checkbox or radio at an item's start is a control; its list loses the bullet. */
+.preview input[data-note-line] {
+	accent-color: var(--accent);
+	margin: 0 6px 0 0;
+	vertical-align: -1px;
+}
+.preview li:has(> input[data-note-line]) {
+	list-style: none;
+	margin-left: -1.1em;
+}

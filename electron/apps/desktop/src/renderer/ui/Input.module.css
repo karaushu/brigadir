@@ -1,0 +1,75 @@
+/* spec/appearance#control-scale: a text field is the height of its size, a --tint fill with no border; focus is a 2 px --accent ring inside the box. */
+.control {
+	min-width: 0;
+	border: 0;
+	border-radius: var(--c-r);
+	background: var(--tint);
+	color: var(--fg);
+	font: var(--c-fs)/1.4 var(--ui-family);
+	outline: none;
+	box-shadow: none;
+}
+.singleLine {
+	height: var(--c-h);
+	padding: 0 var(--c-px);
+}
+.multiline {
+	padding: 8px var(--c-px);
+	resize: none;
+}
+.control::placeholder {
+	color: var(--fg3);
+}
+.control:focus,
+.frame:focus-within {
+	background: var(--field);
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.embedded,
+.embedded:focus {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	outline: none;
+	box-shadow: none;
+}
+.singleLine.embedded {
+	padding: 0;
+	height: calc(var(--c-h) - 4px);
+}
+/* A field with a note at its end: the note lies over the field's right padding and takes no clicks. */
+.tailed {
+	position: relative;
+	display: flex;
+	min-width: 0;
+}
+.tailed > input {
+	flex: 1;
+	min-width: 0;
+	padding-right: 96px;
+}
+.tail {
+	position: absolute;
+	top: 50%;
+	right: var(--c-px);
+	transform: translateY(-50%);
+	font-size: var(--text-11);
+	color: var(--fg2);
+	pointer-events: none;
+}
+/* A field with a tag before its text (spec/remote-access-and-mobile#browser-from-device): the frame is the wrapper's, the input inside has none. */
+.leaded {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	box-sizing: border-box;
+	padding-left: 6px;
+	cursor: text;
+}
+.leaded > input {
+	flex: 1;
+	min-width: 0;
+	height: 100%;
+	padding: 0;
+}

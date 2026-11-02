@@ -1,0 +1,168 @@
+.diff {
+	container-type: inline-size;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--content);
+}
+.header {
+	padding: 12px 16px;
+	display: flex;
+	gap: 10px;
+	align-items: center;
+}
+.header strong {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font: var(--text-12) var(--mono-family);
+}
+.header small {
+	color: var(--fg2);
+}
+.tools {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	padding: 0 12px 10px;
+	flex-wrap: wrap;
+}
+.tools label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.sides {
+	display: flex;
+	gap: 16px;
+	padding: 7px 12px;
+	border-block: 1px solid var(--sep);
+	color: var(--fg2);
+	font-size: var(--text-10);
+	background: var(--sb);
+}
+.sides span {
+	flex: 1;
+}
+.diff[data-wrap='true'] .text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.pair {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.pair > :first-child {
+	border-right: 1px solid var(--sep);
+}
+.empty {
+	margin: auto;
+	padding: 24px;
+	color: var(--fg2);
+}
+
+.header {
+	flex-wrap: wrap;
+}
+
+.why {
+	width: 18px;
+	min-width: 18px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--fg2);
+	font: inherit;
+	opacity: 0;
+	user-select: none;
+}
+[data-kind]:hover > .why,
+[data-kind]:focus-within > .why {
+	opacity: 1;
+}
+.why:focus-visible {
+	outline: 1px solid var(--accent);
+}
+
+.header {
+	padding: 5px 10px;
+	gap: 6px;
+	flex-wrap: nowrap;
+	border-bottom: 1px solid var(--sep);
+	min-height: 32px;
+	box-sizing: border-box;
+	flex: none;
+}
+.header small {
+	font-size: var(--text-10);
+	white-space: nowrap;
+}
+.header .counts {
+	font-size: var(--text-10);
+	white-space: nowrap;
+}
+.tools {
+	padding: 4px 10px;
+	gap: 6px;
+	flex: none;
+}
+.sides {
+	padding: 4px 10px;
+	font: var(--text-10) var(--mono-family);
+	flex: none;
+}
+.sides span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.attribution {
+	position: fixed;
+	inset: auto;
+	margin: 0;
+	padding: 0;
+	z-index: 50;
+	width: min(420px, calc(100vw - 16px));
+	max-height: min(320px, calc(100vh - 16px));
+	overflow: auto;
+	box-sizing: border-box;
+	border: 1px solid var(--sep);
+	border-radius: 9px;
+	background: var(--card);
+	color: var(--fg);
+	box-shadow: 0 18px 50px var(--shadow);
+}
+
+/* Unified / Side by side in the diff header. */
+.header > div[data-icon-only='true'] {
+	flex: none;
+	gap: 2px;
+	border-radius: 6px;
+	height: 24px;
+}
+.header > div[data-icon-only='true'] button {
+	padding: 2px 7px;
+	height: 20px;
+	min-height: 20px;
+}
+/* spec/editor#line-wrap: line wrap is a framed button in the file header. */
+/* spec/editor#markdown-views: ⌘F in the changes preview — the panels' search field above the rendered document. */
+.previewFind {
+	display: flex;
+	align-items: center;
+	padding: 4px 10px;
+	border-bottom: 1px solid var(--sep);
+	flex: none;
+}
+/* spec/appearance#evolution-redesign: the host's own file row (the review modal) stands where the header and the sides line were. */
+.hostHeader {
+	flex: none;
+	display: flex;
+	min-width: 0;
+}

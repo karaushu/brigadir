@@ -1,0 +1,11 @@
+# Secret scan for the repository and its pull requests (.github/workflows/secret-scan.yml).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures: placeholder Slack tokens and the RFC 8291 Web Push example vectors"
+paths = [
+  '''electron/apps/desktop/src/main/slack(-mentions)?\.test\.ts''',
+  '''electron/packages/core/src/slack(-mentions)?\.test\.ts''',
+  '''electron/packages/remote/src/web-push\.test\.ts''',
+]

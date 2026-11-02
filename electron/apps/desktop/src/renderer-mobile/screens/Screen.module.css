@@ -1,0 +1,166 @@
+/* A screen of the stack: the status bar's inset on top, one scroll body, a bar below. */
+.screen {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	padding-top: var(--safe-top);
+	background: var(--win);
+	overflow: hidden;
+}
+.scroll {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	-webkit-overflow-scrolling: touch;
+}
+.stack {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 0 16px calc(40px + var(--safe-bottom));
+}
+.frames {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+/* The cache is dimmed but opens — a task's chat reads from this page's memory, its actions stay off (spec/remote-access-and-mobile#phone-chat). */
+.dim {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	opacity: 0.45;
+}
+.workers {
+	display: flex;
+	flex-direction: column;
+}
+.empty {
+	padding: 24px 0;
+	text-align: center;
+	color: var(--fg2);
+}
+.bannerIcon {
+	flex: none;
+	color: var(--fg2);
+}
+.bannerAction.bannerAction {
+	height: 40px;
+	padding: 0 12px;
+}
+.push {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 14px;
+	border-radius: 12px;
+	background: var(--tint);
+	font-size: 14px;
+}
+.pushHead {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+}
+.pushIcon {
+	flex: none;
+	color: var(--accent);
+}
+.pushText {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+.pushText b {
+	font-weight: 600;
+}
+.pushText small {
+	font-size: 13px;
+	color: var(--fg2);
+}
+.pair {
+	display: flex;
+	gap: 8px;
+}
+.pair > * {
+	flex: 1 1 0;
+}
+.bottom {
+	position: relative;
+	z-index: 20;
+	flex: none;
+	padding-bottom: var(--safe-bottom);
+	background: var(--bar);
+	border-top: 0.5px solid var(--sep);
+}
+.bottom[data-clear] {
+	background: var(--win);
+	border-top: 0;
+}
+.bottomAction {
+	padding: 8px 16px;
+}
+.bottomAction > button {
+	width: 100%;
+}
+.search {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 44px;
+	margin: 8px 16px 6px;
+	padding: 0 12px;
+	border-radius: 12px;
+	background: var(--tint);
+	color: var(--fg);
+	font-size: 16px;
+}
+.search:focus-within {
+	background: var(--field);
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.search > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.search > input {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 100%;
+	padding: 0;
+	border: 0;
+	outline: none;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+}
+.search > input::placeholder {
+	color: var(--fg3);
+}
+.groups {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 0 16px calc(20px);
+}
+.groupHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 10px 0 2px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--fg2);
+}
+.groupHead > span {
+	font-weight: 400;
+}
+/* A state group of the project list: its heading and cards stay in the list's one 6 px rhythm. */
+.frames6 {
+	display: contents;
+}

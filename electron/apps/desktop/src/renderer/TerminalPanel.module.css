@@ -1,0 +1,242 @@
+.panel {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+	overflow: hidden;
+	background: var(--content);
+}
+.panel > header {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 6px 8px;
+	overflow: auto;
+	border-bottom: 1px solid var(--sep);
+	flex: none;
+}
+.panel > header button {
+	white-space: nowrap;
+}
+/* Shell exited: the shell's exit code in an amber line under the output. */
+.panel p {
+	display: flex;
+	align-items: center;
+	min-height: 30px;
+	margin: 0;
+	padding: 0 12px;
+	box-sizing: border-box;
+	background: var(--amber-soft);
+	font-size: var(--text-12);
+	flex: none;
+}
+.mount {
+	flex: 1;
+	min-height: 0;
+	padding: 6px;
+	overflow: hidden;
+}
+.grid,
+.mount :global(.xterm) {
+	height: 100%;
+}
+/* The rest of the height under the last whole row shows the console's tone, not xterm.css's black. */
+.mount :global(.xterm-viewport) {
+	background-color: transparent;
+}
+
+/* The strips under and over the output (failed, stopped, session ended, «Stop this terminal process?») are
+   rows of S controls in 32 px, the last button 6 px from the right edge. */
+.failure,
+.confirmClose {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: calc(var(--control-h-s) + 8px);
+	padding: 0 6px 0 12px;
+	box-sizing: border-box;
+	background: var(--amber-soft);
+	font-size: var(--text-12);
+	flex: none;
+}
+.failure > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 1;
+}
+
+/* spec/appearance#control-scale: the strip is a row of S controls (tabs, close marks, actions) in 32 px: a 24 px target with 4 px above and below. */
+.panel > header {
+	height: calc(var(--control-h-s) + 8px);
+	padding: 0 8px;
+	gap: 2px;
+	/* Command running: the command's row is on the panel's own colour, over the console's code tone. */
+	background: none;
+	overflow: hidden;
+}
+.tabs {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+	overflow: auto;
+	scrollbar-width: none;
+	overscroll-behavior-x: contain;
+}
+/* spec/task-window#tab-strips: no scrollbar over the console tabs; the strip scrolls by wheel, trackpad and to the shown tab. */
+.tabs::-webkit-scrollbar {
+	display: none;
+}
+/* Console tab (spec/terminal-and-cli-agents#console, spec/search-menus-and-commands#project-commands): a tab is an S control; accent-soft when shown (the system's selected), the close mark only on hover or the shown tab. */
+.tab {
+	display: flex;
+	align-items: center;
+	flex: none;
+	max-width: 210px;
+	height: var(--control-h-s);
+	border-radius: var(--control-r-s);
+	color: var(--fg2);
+	transition:
+		background-color var(--motion-fast) ease,
+		color var(--motion-fast) ease;
+}
+.tab:hover {
+	background: var(--tint);
+}
+.tab[data-selected='true'] {
+	background: var(--accent-soft);
+	color: var(--accent);
+}
+.tab > button:first-child {
+	min-width: 0;
+	max-width: 170px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	background-color: transparent;
+}
+.tab > button:first-child > [data-glyph='console'] {
+	flex: none;
+}
+.tab > button:last-child {
+	opacity: 0;
+	color: var(--fg3);
+}
+/* The name and × are one tab: their hovers meet square, only the tab's outer corners are round. */
+.tab > button:first-child {
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+.tab > button:last-child {
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+}
+.tab:hover > button:last-child,
+.tab[data-selected='true'] > button:last-child,
+.tab > button:last-child:focus-visible {
+	opacity: 1;
+}
+.failure[data-failed='true'] {
+	background: var(--diffRemovedBg);
+}
+.failure[data-failed='true'] > span {
+	color: var(--red);
+}
+.confirmClose > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.confirmClose > button {
+	flex: none;
+}
+
+.panel[data-role='console'] > .mount {
+	padding: 8px 12px;
+	background: var(--term);
+}
+/* spec/task-window-workspace#tool-tab-look: a CLI task's terminal is the console's tone too. */
+.panel[data-role='agent'] > .mount {
+	position: relative;
+	background: var(--term);
+}
+/* spec/notifications-slack-notes-and-schedules#notice-chips: the CLI's input box with its border and the status line under it — the bottom six rows of the TUI
+   (xterm's cell is about 1.2 × the font size at line height 1). Marked data-toast-avoid, it lifts the toasts over them. */
+.inputRows {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: calc(var(--terminal-size, 13px) * 1.2 * 6 + 6px);
+	pointer-events: none;
+}
+
+.mount[data-launch-hidden='true'] {
+	display: none;
+}
+.panel[data-role='agent'] > .mount[data-launch-hidden='false'] {
+	animation: var(--motion-fade);
+}
+
+/* spec/search-menus-and-commands#project-commands: the shown command — its line, port and Restart / Stop, before the console's own actions. */
+.runActions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+	margin-left: auto;
+}
+.runActions > code {
+	min-width: 0;
+	max-width: 240px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	padding-right: 4px;
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg3);
+}
+.port {
+	margin-right: 2px;
+	font-family: var(--mono-family);
+}
+.run svg {
+	color: var(--green);
+}
+.failure[data-stopped='true'] {
+	background: transparent;
+	box-shadow: inset 0 1px 0 var(--sep);
+}
+.failure[data-stopped='true'] > span {
+	color: var(--fg2);
+}
+.runActions::after {
+	content: '';
+	width: 1px;
+	height: 14px;
+	margin: 0 2px;
+	background: var(--sep);
+	flex: none;
+}
+
+/* spec/terminal-and-cli-agents#console-links: the hint under the pointer over a link while ⌘ is held. */
+.linkTip {
+	position: fixed;
+	z-index: 60;
+	padding: 4px 8px;
+	border-radius: 6px;
+	background: var(--card);
+	border: 1px solid var(--sep);
+	box-shadow: 0 8px 24px var(--shadow);
+	font-size: var(--text-11);
+	color: var(--fg);
+	white-space: nowrap;
+	pointer-events: none;
+}
+.linkTip[hidden] {
+	display: none;
+}

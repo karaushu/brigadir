@@ -1,0 +1,22 @@
+/* spec/diff-and-review#change-counters, spec/appearance#component-details: the `+N −M` pair — green and red halves; the type of the line is the caller's. */
+.counts[data-split] {
+	display: contents;
+}
+.counts > span {
+	flex: none;
+}
+.add {
+	color: var(--green);
+}
+.remove {
+	color: var(--red);
+}
+.counts[data-tone='diff'] > .add {
+	color: var(--diffAddedFg);
+}
+.counts[data-tone='diff'] > .remove {
+	color: var(--diffRemovedFg);
+}
+.counts[data-tone='inherit'] > span {
+	color: inherit;
+}

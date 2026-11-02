@@ -1,0 +1,344 @@
+/* spec/composer#agent-capsule: one --tint pill as high as the row's M controls (28); segments of 24 inside it, 2 px from
+   its edges, apart by a --fg3 `·`, and ▾ at the end. A segment hovers --tint2 under --fg; the one that opened the menu is accent. */
+.options {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	min-width: 0;
+	flex: none;
+	border: 0;
+	padding: 0;
+	margin: 0;
+}
+/* The system's one disabled look on the whole pill, not again on every segment inside it. */
+.options[data-disabled] .capsule {
+	opacity: var(--control-disabled);
+}
+.capsule button:disabled {
+	opacity: 1;
+}
+.capsule {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	height: var(--c-h);
+	padding: 0 2px;
+	border-radius: calc(var(--c-h) / 2);
+	flex: none;
+	background: var(--tint);
+	color: var(--fg2);
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+.entry {
+	display: inline-flex;
+	align-items: center;
+	min-width: 0;
+}
+.dot {
+	flex: none;
+	padding: 0 1px;
+	color: var(--fg3);
+}
+.icon {
+	min-width: 11px;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.provider {
+	display: inline-flex;
+	flex: none;
+}
+.provider[data-provider='claude'] {
+	color: var(--providerClaude);
+}
+.icon[data-kind='fast'] {
+	color: var(--amber);
+}
+.capsule button {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: calc(var(--c-h) - 4px);
+	min-width: calc(var(--c-h) - 4px);
+	padding: 0 6px;
+	border-radius: calc((var(--c-h) - 4px) / 2);
+	color: inherit;
+	font: inherit;
+	white-space: nowrap;
+	transition:
+		background-color var(--motion-fast) ease,
+		color var(--motion-fast) ease;
+}
+.capsule button:not(:disabled):hover {
+	background-color: var(--tint2);
+	background-image: none;
+	color: var(--fg);
+}
+.capsule button:not(:disabled):active {
+	background-color: var(--tint2);
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+/* An on/off option the agent has on reads as the system's selected look. */
+.capsule button[data-on] {
+	background-color: var(--accent-soft);
+	color: var(--accent);
+}
+/* The open segment — and ▾ when the menu opened on a section the capsule does not show — is the selected look. */
+.capsule button[aria-expanded='true'],
+.compact.compact[aria-expanded='true'] {
+	background-color: var(--accent-soft);
+	background-image: none;
+	color: var(--accent);
+}
+.more.more {
+	justify-content: center;
+	padding: 0;
+}
+.chevron {
+	flex: none;
+	display: block;
+}
+/* A mode the person just changed flashes the accent once. */
+.entry[data-flash] > button {
+	animation: capsuleFlash 1.2s var(--motion-ease, ease) both;
+}
+@keyframes capsuleFlash {
+	0%,
+	45% {
+		background-color: var(--accent-soft);
+		color: var(--accent);
+	}
+	100% {
+		background-color: transparent;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.entry[data-flash] > button {
+		animation: none;
+	}
+}
+.label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* spec/composer#capsule-squeeze: labels go from the end — Fast and the rest, then mode, then effort; the icon stays, the name is the tooltip. */
+[data-squeeze='1'] .entry:is([data-option-kind='fast'], [data-option-kind='other']) .label,
+[data-squeeze='2']
+	.entry:is([data-option-kind='fast'], [data-option-kind='other'], [data-option-kind='mode'])
+	.label,
+[data-squeeze='3'] .entry:not([data-option-kind='model']) .label {
+	display: none;
+}
+[data-squeeze='1'] .entry:is([data-option-kind='fast'], [data-option-kind='other']) button,
+[data-squeeze='2']
+	.entry:is([data-option-kind='fast'], [data-option-kind='other'], [data-option-kind='mode'])
+	button,
+[data-squeeze='3'] .entry:not([data-option-kind='model']) button {
+	justify-content: center;
+	padding: 0;
+}
+
+/* spec/composer#capsule-squeeze, squeezed: one button framed in --sep — the model, the pictures of what the capsule shows, ▾. */
+.compact.compact {
+	display: none;
+	align-items: center;
+	gap: 5px;
+	height: var(--c-h);
+	min-width: 0;
+	max-width: 240px;
+	padding: 0 10px;
+	border-radius: calc(var(--c-h) / 2);
+	box-shadow: inset 0 0 0 1px var(--sep);
+	color: var(--fg2);
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+.compact.compact:hover {
+	color: var(--fg);
+}
+[data-squeeze='4'] .capsule {
+	display: none;
+}
+[data-squeeze='4'] .compact.compact {
+	display: inline-flex;
+}
+[data-composer-bar][data-squeeze='4'] [data-context-percent] {
+	display: none;
+}
+
+/* spec/composer#capsule-squeeze, menu open: one agent menu above the capsule, at its right edge; sections without rules. */
+.menu section {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 4px 0 2px;
+}
+.menu h3 {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	padding: 4px 8px 2px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+}
+.kbd {
+	padding: 0 4px;
+	border-radius: 3px;
+	box-shadow: inset 0 0 0 1px var(--sep);
+	font: var(--text-10) / 15px var(--mono-family);
+	font-weight: 400;
+	color: var(--fg2);
+}
+.menu section > [role='radiogroup']:not(.list) {
+	display: flex;
+	margin: 0 8px;
+}
+.menu section > [role='radiogroup']:not(.list) > button {
+	flex: 1;
+	justify-content: center;
+}
+.list {
+	display: flex;
+	flex-direction: column;
+}
+.list > button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: var(--c-h);
+	padding: 0 8px;
+	border-radius: calc(var(--c-r) - 1px);
+	color: var(--fg);
+	font-size: var(--c-fs);
+	text-align: left;
+}
+.list > button[aria-checked='true'] {
+	background-color: var(--sel);
+}
+.check {
+	width: 12px;
+	flex: none;
+	display: inline-flex;
+	color: var(--accent);
+}
+.choice {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* spec/composer-steering-queue-and-ghost#quick-question: the model-only capsule's menu — the models by provider under a dim
+   label with its glyph, `task` at the end of the task's model, a dimmed group with the limit chip, the note under a rule. */
+.menu .models {
+	padding: 0 0 2px;
+}
+.group h4 {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	margin: 0;
+	padding: 6px 8px 2px;
+	font-size: var(--text-10);
+	font-weight: 500;
+	color: var(--fg3);
+}
+.group h4 > :last-child[data-static] {
+	margin-left: auto;
+}
+.group[data-limited] .list > button {
+	color: var(--fg3);
+}
+.marker {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg3);
+}
+.models > .note {
+	margin: 4px 8px 0;
+	padding-top: 6px;
+	border-top: 1px solid var(--sep);
+	font-size: var(--text-10);
+	line-height: 1.4;
+	color: var(--fg3);
+}
+.models > [data-remember] + .note {
+	margin-top: 0;
+	padding-top: 3px;
+	border-top: 0;
+}
+/* spec/appearance#evolution-redesign, capsule open: `Same as Default agent · Opus 5.5 · High` above the providers, under a rule. */
+.inherit {
+	padding-bottom: 4px;
+	margin-bottom: 2px;
+	border-bottom: 1px solid var(--sep);
+}
+/* An inheriting action reads `Same as …` in --fg2, without the provider glyph. */
+.options[data-inherit] .capsule [data-option-kind='model'] .icon {
+	display: none;
+}
+
+/* spec/appearance#evolution-redesign: the Helper agent's capsule — its effort section under the models, and in a narrow window the provider glyph
+   alone (the model and effort are the tooltip). */
+/* `Effort` and its segments share one row under the models, the segments as wide as their text. */
+.menu .models > .effort {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	margin-top: 2px;
+	padding: 6px 8px 4px;
+}
+.menu .models > .effort > h3 {
+	padding: 0;
+	font-weight: 400;
+}
+.menu .models > .effort > [role='radiogroup']:not(.list) {
+	margin: 0;
+}
+.menu .models > .effort > [role='radiogroup']:not(.list) > button {
+	flex: none;
+}
+/* A model with more levels than fit as segments (Codex: Low … Max) lists them like the models: `Effort` on its own line
+   above the list, not beside a column of five. */
+.menu .models > .effort:has(> .list) {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 2px;
+	padding: 4px 0 2px;
+}
+.menu .models > .effort:has(> .list) > h3 {
+	padding: 4px 8px 2px;
+}
+[data-models-narrow] .capsule {
+	display: none;
+}
+[data-models-narrow] .compact.compact {
+	display: inline-flex;
+	padding: 0 8px;
+}
+[data-models-narrow] .compact > :not(.provider):not(.chevron) {
+	display: none;
+}
+/* The split's spark is the 12 px accent one, not the button's 14 px icon in its text colour. */
+.generate {
+	display: inline-flex;
+	flex: none;
+	color: var(--accent);
+}
+/* The Helper agent's model reads in --fg at 500, the effort after it stays --fg2. */
+:global([data-helper-capsule]) .entry[data-option-kind='model'] .label {
+	font-weight: 500;
+	color: var(--fg);
+}
+/* The effort reads as text after the model — `Haiku 4.5 · Low` — without the composer's glyph. */
+:global([data-helper-capsule]) .entry[data-option-kind='effort'] .icon {
+	display: none;
+}

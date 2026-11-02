@@ -1,0 +1,5413 @@
+{
+ "none": {
+  "initialize": {
+   "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+     "tools": {
+      "listChanged": true
+     }
+    },
+    "serverInfo": {
+     "name": "brigadir",
+     "version": "0.1.0"
+    },
+    "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+   },
+   "jsonrpc": "2.0",
+   "id": 1
+  },
+  "toolsList": {
+   "tools": [
+    {
+     "name": "ask_user",
+     "description": "Ask the human a question and wait for their explicit answer. Use this tool whenever you need the human to choose or clarify. The wait has no human-response timeout. Returns the selected labels and free text. Do not use it to ask the person to check a page, the app or a command you can check with your own tools.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "question": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+       },
+       "header": {
+        "default": "",
+        "type": "string",
+        "maxLength": 100
+       },
+       "options": {
+        "default": [],
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "label": {
+           "type": "string",
+           "minLength": 1
+          },
+          "description": {
+           "default": "",
+           "type": "string"
+          }
+         },
+         "required": [
+          "label"
+         ]
+        }
+       },
+       "allowsFreeText": {
+        "default": true,
+        "type": "boolean"
+       },
+       "allowsMultiple": {
+        "default": false,
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "question"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "create_task",
+     "description": "Propose a new task in this project for another agent session, with the context it needs. The human sees a card and creates the task, edits it first, or declines; the call waits for that. Write the prompt in English as a complete brief: the new agent sees only the prompt and the context. context: summary (an overview of this task: its prompt, turns and changed files), diff (the changes of this task as a stat; full adds the patch), file (an absolute path the new agent can read), text (a named note). folders: absolute paths of folders outside the project root to add to the new task (a git repository is edited in place; a folder without git is read-only). Repos and isolation are inherited from this task; the branch is new. agent: the provider (claude or codex) and optionally its model and effort, by value or name as that provider lists them, when the human asks for another agent or model; without it the agent, model and effort are inherited from this task, and with it whatever is left out is that provider default. An unknown model or effort fails with the available ones. start: now starts the task after it is created, backlog leaves it in the backlog, schedule proposes a schedule instead — every run of it is a new task with this prompt (context and folders are not kept for a schedule). schedule.rule: once {at: ISO time}, hourly {minute}, interval {hours 1–12, between?: {from, to} as HH:MM}, weekly {days: 1–7 Monday first, times: [HH:MM]}, or cron {expr: five fields}; timeZone is IANA (default: this computer); missed: catch-up (default), skip or ask. Returns the created task (or schedule) or created: false. Use it when the person asks for a separate task, or when you find work outside this task that another agent should do.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "prompt": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+       },
+       "context": {
+        "default": [],
+        "maxItems": 10,
+        "type": "array",
+        "items": {
+         "oneOf": [
+          {
+           "type": "object",
+           "properties": {
+            "kind": {
+             "type": "string",
+             "const": "summary"
+            }
+           },
+           "required": [
+            "kind"
+           ]
+          },
+          {
+           "type": "object",
+           "properties": {
+            "kind": {
+             "type": "string",
+             "const": "diff"
+            },
+            "full": {
+             "default": false,
+             "type": "boolean"
+            }
+           },
+           "required": [
+            "kind"
+           ]
+          },
+          {
+           "type": "object",
+           "properties": {
+            "kind": {
+             "type": "string",
+             "const": "file"
+            },
+            "path": {
+             "type": "string",
+             "minLength": 1,
+             "maxLength": 4096
+            }
+           },
+           "required": [
+            "kind",
+            "path"
+           ]
+          },
+          {
+           "type": "object",
+           "properties": {
+            "kind": {
+             "type": "string",
+             "const": "text"
+            },
+            "name": {
+             "type": "string",
+             "minLength": 1,
+             "maxLength": 200
+            },
+            "text": {
+             "type": "string",
+             "minLength": 1,
+             "maxLength": 262144
+            }
+           },
+           "required": [
+            "kind",
+            "name",
+            "text"
+           ]
+          }
+         ]
+        }
+       },
+       "folders": {
+        "default": [],
+        "maxItems": 5,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 4096
+        }
+       },
+       "agent": {
+        "type": "object",
+        "properties": {
+         "provider": {
+          "type": "string",
+          "enum": [
+           "claude",
+           "codex"
+          ]
+         },
+         "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+         },
+         "effort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+         }
+        },
+        "required": [
+         "provider"
+        ],
+        "additionalProperties": false
+       },
+       "start": {
+        "default": "now",
+        "type": "string",
+        "enum": [
+         "now",
+         "backlog",
+         "schedule"
+        ]
+       },
+       "schedule": {
+        "type": "object",
+        "properties": {
+         "rule": {
+          "oneOf": [
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "once"
+             },
+             "at": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 40
+             }
+            },
+            "required": [
+             "kind",
+             "at"
+            ]
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "hourly"
+             },
+             "minute": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 59
+             }
+            },
+            "required": [
+             "kind",
+             "minute"
+            ]
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "interval"
+             },
+             "hours": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+             },
+             "between": {
+              "type": "object",
+              "properties": {
+               "from": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+               },
+               "to": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+               }
+              },
+              "required": [
+               "from",
+               "to"
+              ]
+             }
+            },
+            "required": [
+             "kind",
+             "hours"
+            ]
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "weekly"
+             },
+             "days": {
+              "minItems": 1,
+              "maxItems": 7,
+              "type": "array",
+              "items": {
+               "type": "integer",
+               "minimum": 1,
+               "maximum": 7
+              }
+             },
+             "times": {
+              "minItems": 1,
+              "maxItems": 12,
+              "type": "array",
+              "items": {
+               "type": "string",
+               "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              }
+             }
+            },
+            "required": [
+             "kind",
+             "days",
+             "times"
+            ]
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "cron"
+             },
+             "expr": {
+              "type": "string",
+              "minLength": 9,
+              "maxLength": 120
+             }
+            },
+            "required": [
+             "kind",
+             "expr"
+            ]
+           }
+          ]
+         },
+         "timeZone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+         },
+         "missed": {
+          "type": "string",
+          "enum": [
+           "catch-up",
+           "skip",
+           "ask"
+          ]
+         }
+        },
+        "required": [
+         "rule"
+        ],
+        "additionalProperties": false
+       }
+      },
+      "required": [
+       "prompt"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "add_folder",
+     "description": "Add a folder from outside the project to this task. A git repository becomes writable after the human allows it; a folder without git joins read-only at once. The folder shows in the diff and the workspace repositories. Use its absolute path right away; your workspace roots include it from your next turn. Folders inside the project are already in the repo list. Returns added: true with name, path and writable, or added: false with the reason. Use it when the work needs files outside the project, such as a sibling repository.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+       }
+      },
+      "required": [
+       "path"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_open",
+     "description": "Open a page in your own browser tab of this task, on screen or not: the first call makes the tab and later calls navigate it; tab \"new\" makes another one. The human sees the tab in the work area when they open the task. External navigation requires domain permission. Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "A tab from browser_state to navigate, or \"new\" for another tab; default: your tab.",
+        "type": "string",
+        "pattern": "^(b[0-9a-z]{1,16}|new)$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_state",
+     "description": "The state of your browser tab (address, title, loading) and tabs: every browser tab of this task with its address, title, whether you opened it and whether it is on screen. Call it to see which page is open and whether it finished loading.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_read",
+     "description": "read the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to read the text of the page, or of one element by selector, after it loads.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_console",
+     "description": "console the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Call it after the page loads or after an action, to catch JavaScript errors and warnings.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_network",
+     "description": "Requests of the page in the browser of this task (Fetch, XHR, EventSource, WebSocket), newest last; an open request shows its state (pending or streaming), how long it has been open, bytes received and messages so far. With requestId: response headers and the body (text up to 16 KiB); for an event stream or a WebSocket, its newest messages. The human sees the same page. Call it when the page shows wrong or missing data, to see which request failed and what it returned.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_screenshot",
+     "description": "screenshot the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to check how the page looks after a UI change; to find elements, prefer browser_ui.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_ui",
+     "description": "The accessibility tree of the page in the browser of this task, one element a line: role, accessible name, = value, @ref, box in CSS px of the viewport (x,y width×height) and states (focused, disabled, checked, expanded, offscreen). Use it before browser_act: a @ref is the most exact target. Refs last until the page navigates. Long pages come in pages: pass offset. Call it to find what to click or type into, and again after an action to check the result.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_act",
+     "description": "One action in the browser of this task, on screen or not, as real mouse and keyboard input: click (count 2 for a double click), hover, type (text into the target or the focused field; clear empties it first; submit presses Enter; a color input takes a color like #3366ff), key (Enter, Escape, Tab, ArrowDown, a character, or a combination like Meta+A or Shift+Tab), scroll (dx, dy in px, at the target or the middle of the page), select (an option of a <select> by value or text), back, forward, reload; dialog (accept, and text for a prompt: the answer to the next alert, confirm or prompt of the page — dialogs never show while you work with the page, they get Cancel unless you set this); clipboard (what the page copied to the task clipboard); paste (text: puts it in the task clipboard and pastes it into the focused field, as Meta+V); notifications (permission granted, denied or default: allows, blocks or asks again about the notifications of the page's domain, answering a request the page is waiting on, as the human's browser strip does; the project keeps it for the domain). The page copies to and pastes from the task clipboard, never the human's. Target: ref from browser_ui, a CSS selector, label (accessible name) or x,y in CSS px of the viewport. If another element covers the target, nothing happens and the answer names it. Password, one-time code and payment card fields are refused: ask the human to fill them. File uploads are not supported. Local pages need no permission; acting on another domain asks the human. The human sees each action marked on the page. Returns what was done, the page address and title when they changed, and what the page did meanwhile (dialogs, copies, the human using the page); call browser_ui again for the new tree. Use it to go through the flow you changed the way the person would, instead of giving them steps to try.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "action": {
+        "type": "string",
+        "enum": [
+         "click",
+         "hover",
+         "type",
+         "key",
+         "scroll",
+         "select",
+         "back",
+         "forward",
+         "reload",
+         "dialog",
+         "clipboard",
+         "paste",
+         "notifications"
+        ]
+       },
+       "ref": {
+        "type": "string",
+        "pattern": "^@?e[0-9]{1,12}$"
+       },
+       "selector": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "label": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "x": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "y": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "text": {
+        "type": "string",
+        "maxLength": 10000
+       },
+       "clear": {
+        "type": "boolean"
+       },
+       "submit": {
+        "type": "boolean"
+       },
+       "key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       },
+       "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2
+       },
+       "dx": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "dy": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+       },
+       "accept": {
+        "type": "boolean"
+       },
+       "permission": {
+        "type": "string",
+        "enum": [
+         "granted",
+         "denied",
+         "default"
+        ]
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      },
+      "required": [
+       "action"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_show",
+     "description": "Ask the human to show the page of this task on screen, for what does not work while the page is hidden: uploading a file, an OAuth or sign-in window, a passkey, a CAPTCHA. The human sees a request and shows the page or declines. Returns whether the page is on screen; keep working with the same page either way. Call it only when the page has to be on screen for the step: a file upload, an OAuth or sign-in window, a passkey or a CAPTCHA; everything else works while the page is hidden.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_list",
+     "description": "The saved commands of this project (dev servers, watchers, scripts, tests) the person runs from the toolbar: id, name, the shell line, repo, folder, the absolute cwd in the tree of this task, agentRuns (true: you run it without asking), and its state in this task (not run, starting, running, failed, done, stopped) with the local address once the output names one, or the exit code. Call it before you start a server or a script yourself. Read-only.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_run",
+     "description": "Run a saved project command by id (from commands_list) in the console of this task, in the person's login shell, as a tab the person sees and can stop. A running command is left as it is unless restart is true. Without agentRuns the person allows it first, once per task. Waits up to wait seconds (default 20) until the output names a local address (http://localhost:N) or the command exits, and returns its state, url, exit code and the last output lines. Use it for a dev server, a build or the tests when a saved command fits, instead of your shell.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "restart": {
+        "default": false,
+        "type": "boolean"
+       },
+       "wait": {
+        "default": 20,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 120
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_output",
+     "description": "The last output lines of a saved project command in this task, as plain text, with its state, url and exit code. Read-only. Call it when a command fails, or to read what a running server printed.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_stop",
+     "description": "Stop a saved project command running in this task, as the person's Stop button does: Ctrl-C, then SIGTERM and SIGKILL to its process group. Without agentRuns the person allows it first, once per task. Returns its state and the last output lines. Use it when a command must stop, for example when the person asks; to restart one, pass restart to commands_run.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_list",
+     "description": "The console of this task: the terminal tabs the person opened beside you (shells, dev servers, watchers, saved command runs), each with id, title, folder, the absolute cwd, whether its process runs or exited with a code, the saved command when the tab runs one, and the last shell command with its state and exit code. An empty list means no console is open. Read-only. Call it when the person speaks of the console, a terminal, a log or a server they started, before you ask them for its output.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_read",
+     "description": "The last output lines of a console session of this task as plain text (no ANSI; wrapped lines joined), newest last, as the person sees them, with the state of the session. Without id: the only session, or the newest of several. Read-only. Call it to read an error or a log the person sees in the console, and again after a change to see the new lines.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "editor_state",
+     "description": "What the person is looking at in the window of this task: the open tabs of every editor group (files, diffs, console and browser tabs; paths relative to your working directory, the repo of each file, unsaved changes), the focused tab and its view (editor, diff or Markdown preview), the cursor (line and column from 1), every selection with its line range and text, and the visible lines; for a diff, its repo, its base and the selected diff lines with their side and whether they are added, removed or unchanged; with a split editor, what each group shows. Call it when the person says \"this\", \"here\", \"this file\" or \"the selected code\" without naming it. Read-only.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "editor_restart_language_servers",
+     "description": "Restart the language servers behind the person's editor in this task (TypeScript and others): a new process re-reads node_modules, tsconfig and the project, reopens the open files and reports their problems again. Returns the servers restarted. After an install that finishes, the app restarts the TypeScript server by itself. Call it when the person sees errors in the editor that are already fixed, or after you replace node_modules or change tsconfig/jsconfig. Do not install packages again or replace node_modules only to refresh the editor.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "pr_state",
+     "description": "The pull request open in the Pull requests panel of this task (or in the active tab): number, title, state, branches, the panel tab, its files with the ones the person marked Viewed and the ones open in tabs, the PR file on screen with its visible and selected lines, the GitHub review threads (file and lines, resolved, comments), the PR comments and reviews, with the person's own marked mine, and their draft review comments not sent yet, with the replies under them. Call it when the person speaks of a pull request, its comments or the file they are reviewing. Read-only.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    }
+   ]
+  },
+  "calls": {
+   "missing": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool nope not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 3
+   },
+   "askEmpty": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool ask_user: Too small: expected string to have >=1 characters at question"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 4
+   },
+   "askBadOptions": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool ask_user: Too small: expected string to have >=1 characters at options[0].label\nInvalid input: expected boolean, received string at allowsFreeText"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 5
+   },
+   "browserBad": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool browser_read: Invalid input: expected string, received number at url\nInvalid string: must match pattern /^network-[0-9]{1,12}$/ at requestId"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 6
+   },
+   "plan": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool propose_plan not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 7
+   },
+   "transcript": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool read_transcript not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 8
+   },
+   "review": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool submit_review not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 9
+   },
+   "notes": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool read_notes not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 10
+   },
+   "noArgs": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool read_notes not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 11
+   },
+   "ping": {
+    "result": {},
+    "jsonrpc": "2.0",
+    "id": 12
+   },
+   "unknown": {
+    "jsonrpc": "2.0",
+    "id": 13,
+    "error": {
+     "code": -32601,
+     "message": "Method not found"
+    }
+   },
+   "oldVersion": {
+    "result": {
+     "protocolVersion": "2025-11-25",
+     "capabilities": {
+      "tools": {
+       "listChanged": true
+      }
+     },
+     "serverInfo": {
+      "name": "brigadir",
+      "version": "0.1.0"
+     },
+     "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+    },
+    "jsonrpc": "2.0",
+    "id": 14
+   }
+  }
+ },
+ "foreman": {
+  "initialize": {
+   "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+     "tools": {
+      "listChanged": true
+     }
+    },
+    "serverInfo": {
+     "name": "brigadir",
+     "version": "0.1.0"
+    },
+    "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run.\nYour agents have the same tools: when a part changes what a person sees, its prompt says how the agent checks it."
+   },
+   "jsonrpc": "2.0",
+   "id": 1
+  },
+  "toolsList": {
+   "tools": [
+    {
+     "name": "ask_user",
+     "description": "Ask the human a question and wait for their explicit answer. Use this tool whenever you need the human to choose or clarify. The wait has no human-response timeout. Returns the selected labels and free text. Do not use it to ask the person to check a page, the app or a command you can check with your own tools.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "question": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+       },
+       "header": {
+        "default": "",
+        "type": "string",
+        "maxLength": 100
+       },
+       "options": {
+        "default": [],
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "label": {
+           "type": "string",
+           "minLength": 1
+          },
+          "description": {
+           "default": "",
+           "type": "string"
+          }
+         },
+         "required": [
+          "label"
+         ]
+        }
+       },
+       "allowsFreeText": {
+        "default": true,
+        "type": "boolean"
+       },
+       "allowsMultiple": {
+        "default": false,
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "question"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "create_task",
+     "description": "Propose a new task in this project for another agent session, with the context it needs. The human sees a card and creates the task, edits it first, or declines; the call waits for that. Write the prompt in English as a complete brief: the new agent sees only the prompt and the context. context: summary (an overview of this task: its prompt, turns and changed files), diff (the changes of this task as a stat; full adds the patch), file (an absolute path the new agent can read), text (a named note). folders: absolute paths of folders outside the project root to add to the new task (a git repository is edited in place; a folder without git is read-only). Repos and isolation are inherited from this task; the branch is new. agent: the provider (claude or codex) and optionally its model and effort, by value or name as that provider lists them, when the human asks for another agent or model; without it the agent, model and effort are inherited from this task, and with it whatever is left out is that provider default. An unknown model or effort fails with the available ones. start: now starts the task after it is created, backlog leaves it in the backlog, schedule proposes a schedule instead — every run of it is a new task with this prompt (context and folders are not kept for a schedule). schedule.rule: once {at: ISO time}, hourly {minute}, interval {hours 1–12, between?: {from, to} as HH:MM}, weekly {days: 1–7 Monday first, times: [HH:MM]}, or cron {expr: five fields}; timeZone is IANA (default: this computer); missed: catch-up (default), skip or ask. Returns the created task (or schedule) or created: false. Use it when the person asks for a separate task, or when you find work outside this task that another agent should do.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "prompt": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+       },
+       "context": {
+        "default": [],
+        "maxItems": 10,
+        "type": "array",
+        "items": {
+         "oneOf": [
+          {
+           "type": "object",
+           "properties": {
+            "kind": {
+             "type": "string",
+             "const": "summary"
+            }
+           },
+           "required": [
+            "kind"
+           ]
+          },
+          {
+           "type": "object",
+           "properties": {
+            "kind": {
+             "type": "string",
+             "const": "diff"
+            },
+            "full": {
+             "default": false,
+             "type": "boolean"
+            }
+           },
+           "required": [
+            "kind"
+           ]
+          },
+          {
+           "type": "object",
+           "properties": {
+            "kind": {
+             "type": "string",
+             "const": "file"
+            },
+            "path": {
+             "type": "string",
+             "minLength": 1,
+             "maxLength": 4096
+            }
+           },
+           "required": [
+            "kind",
+            "path"
+           ]
+          },
+          {
+           "type": "object",
+           "properties": {
+            "kind": {
+             "type": "string",
+             "const": "text"
+            },
+            "name": {
+             "type": "string",
+             "minLength": 1,
+             "maxLength": 200
+            },
+            "text": {
+             "type": "string",
+             "minLength": 1,
+             "maxLength": 262144
+            }
+           },
+           "required": [
+            "kind",
+            "name",
+            "text"
+           ]
+          }
+         ]
+        }
+       },
+       "folders": {
+        "default": [],
+        "maxItems": 5,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 4096
+        }
+       },
+       "agent": {
+        "type": "object",
+        "properties": {
+         "provider": {
+          "type": "string",
+          "enum": [
+           "claude",
+           "codex"
+          ]
+         },
+         "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+         },
+         "effort": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+         }
+        },
+        "required": [
+         "provider"
+        ],
+        "additionalProperties": false
+       },
+       "start": {
+        "default": "now",
+        "type": "string",
+        "enum": [
+         "now",
+         "backlog",
+         "schedule"
+        ]
+       },
+       "schedule": {
+        "type": "object",
+        "properties": {
+         "rule": {
+          "oneOf": [
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "once"
+             },
+             "at": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 40
+             }
+            },
+            "required": [
+             "kind",
+             "at"
+            ]
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "hourly"
+             },
+             "minute": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 59
+             }
+            },
+            "required": [
+             "kind",
+             "minute"
+            ]
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "interval"
+             },
+             "hours": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+             },
+             "between": {
+              "type": "object",
+              "properties": {
+               "from": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+               },
+               "to": {
+                "type": "string",
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+               }
+              },
+              "required": [
+               "from",
+               "to"
+              ]
+             }
+            },
+            "required": [
+             "kind",
+             "hours"
+            ]
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "weekly"
+             },
+             "days": {
+              "minItems": 1,
+              "maxItems": 7,
+              "type": "array",
+              "items": {
+               "type": "integer",
+               "minimum": 1,
+               "maximum": 7
+              }
+             },
+             "times": {
+              "minItems": 1,
+              "maxItems": 12,
+              "type": "array",
+              "items": {
+               "type": "string",
+               "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+              }
+             }
+            },
+            "required": [
+             "kind",
+             "days",
+             "times"
+            ]
+           },
+           {
+            "type": "object",
+            "properties": {
+             "kind": {
+              "type": "string",
+              "const": "cron"
+             },
+             "expr": {
+              "type": "string",
+              "minLength": 9,
+              "maxLength": 120
+             }
+            },
+            "required": [
+             "kind",
+             "expr"
+            ]
+           }
+          ]
+         },
+         "timeZone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+         },
+         "missed": {
+          "type": "string",
+          "enum": [
+           "catch-up",
+           "skip",
+           "ask"
+          ]
+         }
+        },
+        "required": [
+         "rule"
+        ],
+        "additionalProperties": false
+       }
+      },
+      "required": [
+       "prompt"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "add_folder",
+     "description": "Add a folder from outside the project to this task. A git repository becomes writable after the human allows it; a folder without git joins read-only at once. The folder shows in the diff and the workspace repositories. Use its absolute path right away; your workspace roots include it from your next turn. Folders inside the project are already in the repo list. Returns added: true with name, path and writable, or added: false with the reason. Use it when the work needs files outside the project, such as a sibling repository.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+       }
+      },
+      "required": [
+       "path"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_open",
+     "description": "Open a page in your own browser tab of this task, on screen or not: the first call makes the tab and later calls navigate it; tab \"new\" makes another one. The human sees the tab in the work area when they open the task. External navigation requires domain permission. Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "A tab from browser_state to navigate, or \"new\" for another tab; default: your tab.",
+        "type": "string",
+        "pattern": "^(b[0-9a-z]{1,16}|new)$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_state",
+     "description": "The state of your browser tab (address, title, loading) and tabs: every browser tab of this task with its address, title, whether you opened it and whether it is on screen. Call it to see which page is open and whether it finished loading.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_read",
+     "description": "read the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to read the text of the page, or of one element by selector, after it loads.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_console",
+     "description": "console the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Call it after the page loads or after an action, to catch JavaScript errors and warnings.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_network",
+     "description": "Requests of the page in the browser of this task (Fetch, XHR, EventSource, WebSocket), newest last; an open request shows its state (pending or streaming), how long it has been open, bytes received and messages so far. With requestId: response headers and the body (text up to 16 KiB); for an event stream or a WebSocket, its newest messages. The human sees the same page. Call it when the page shows wrong or missing data, to see which request failed and what it returned.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_screenshot",
+     "description": "screenshot the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to check how the page looks after a UI change; to find elements, prefer browser_ui.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_ui",
+     "description": "The accessibility tree of the page in the browser of this task, one element a line: role, accessible name, = value, @ref, box in CSS px of the viewport (x,y width×height) and states (focused, disabled, checked, expanded, offscreen). Use it before browser_act: a @ref is the most exact target. Refs last until the page navigates. Long pages come in pages: pass offset. Call it to find what to click or type into, and again after an action to check the result.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_act",
+     "description": "One action in the browser of this task, on screen or not, as real mouse and keyboard input: click (count 2 for a double click), hover, type (text into the target or the focused field; clear empties it first; submit presses Enter; a color input takes a color like #3366ff), key (Enter, Escape, Tab, ArrowDown, a character, or a combination like Meta+A or Shift+Tab), scroll (dx, dy in px, at the target or the middle of the page), select (an option of a <select> by value or text), back, forward, reload; dialog (accept, and text for a prompt: the answer to the next alert, confirm or prompt of the page — dialogs never show while you work with the page, they get Cancel unless you set this); clipboard (what the page copied to the task clipboard); paste (text: puts it in the task clipboard and pastes it into the focused field, as Meta+V); notifications (permission granted, denied or default: allows, blocks or asks again about the notifications of the page's domain, answering a request the page is waiting on, as the human's browser strip does; the project keeps it for the domain). The page copies to and pastes from the task clipboard, never the human's. Target: ref from browser_ui, a CSS selector, label (accessible name) or x,y in CSS px of the viewport. If another element covers the target, nothing happens and the answer names it. Password, one-time code and payment card fields are refused: ask the human to fill them. File uploads are not supported. Local pages need no permission; acting on another domain asks the human. The human sees each action marked on the page. Returns what was done, the page address and title when they changed, and what the page did meanwhile (dialogs, copies, the human using the page); call browser_ui again for the new tree. Use it to go through the flow you changed the way the person would, instead of giving them steps to try.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "action": {
+        "type": "string",
+        "enum": [
+         "click",
+         "hover",
+         "type",
+         "key",
+         "scroll",
+         "select",
+         "back",
+         "forward",
+         "reload",
+         "dialog",
+         "clipboard",
+         "paste",
+         "notifications"
+        ]
+       },
+       "ref": {
+        "type": "string",
+        "pattern": "^@?e[0-9]{1,12}$"
+       },
+       "selector": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "label": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "x": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "y": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "text": {
+        "type": "string",
+        "maxLength": 10000
+       },
+       "clear": {
+        "type": "boolean"
+       },
+       "submit": {
+        "type": "boolean"
+       },
+       "key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       },
+       "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2
+       },
+       "dx": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "dy": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+       },
+       "accept": {
+        "type": "boolean"
+       },
+       "permission": {
+        "type": "string",
+        "enum": [
+         "granted",
+         "denied",
+         "default"
+        ]
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      },
+      "required": [
+       "action"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_show",
+     "description": "Ask the human to show the page of this task on screen, for what does not work while the page is hidden: uploading a file, an OAuth or sign-in window, a passkey, a CAPTCHA. The human sees a request and shows the page or declines. Returns whether the page is on screen; keep working with the same page either way. Call it only when the page has to be on screen for the step: a file upload, an OAuth or sign-in window, a passkey or a CAPTCHA; everything else works while the page is hidden.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_list",
+     "description": "The saved commands of this project (dev servers, watchers, scripts, tests) the person runs from the toolbar: id, name, the shell line, repo, folder, the absolute cwd in the tree of this task, agentRuns (true: you run it without asking), and its state in this task (not run, starting, running, failed, done, stopped) with the local address once the output names one, or the exit code. Call it before you start a server or a script yourself. Read-only.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_run",
+     "description": "Run a saved project command by id (from commands_list) in the console of this task, in the person's login shell, as a tab the person sees and can stop. A running command is left as it is unless restart is true. Without agentRuns the person allows it first, once per task. Waits up to wait seconds (default 20) until the output names a local address (http://localhost:N) or the command exits, and returns its state, url, exit code and the last output lines. Use it for a dev server, a build or the tests when a saved command fits, instead of your shell.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "restart": {
+        "default": false,
+        "type": "boolean"
+       },
+       "wait": {
+        "default": 20,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 120
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_output",
+     "description": "The last output lines of a saved project command in this task, as plain text, with its state, url and exit code. Read-only. Call it when a command fails, or to read what a running server printed.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_stop",
+     "description": "Stop a saved project command running in this task, as the person's Stop button does: Ctrl-C, then SIGTERM and SIGKILL to its process group. Without agentRuns the person allows it first, once per task. Returns its state and the last output lines. Use it when a command must stop, for example when the person asks; to restart one, pass restart to commands_run.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_list",
+     "description": "The console of this task: the terminal tabs the person opened beside you (shells, dev servers, watchers, saved command runs), each with id, title, folder, the absolute cwd, whether its process runs or exited with a code, the saved command when the tab runs one, and the last shell command with its state and exit code. An empty list means no console is open. Read-only. Call it when the person speaks of the console, a terminal, a log or a server they started, before you ask them for its output.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_read",
+     "description": "The last output lines of a console session of this task as plain text (no ANSI; wrapped lines joined), newest last, as the person sees them, with the state of the session. Without id: the only session, or the newest of several. Read-only. Call it to read an error or a log the person sees in the console, and again after a change to see the new lines.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "editor_state",
+     "description": "What the person is looking at in the window of this task: the open tabs of every editor group (files, diffs, console and browser tabs; paths relative to your working directory, the repo of each file, unsaved changes), the focused tab and its view (editor, diff or Markdown preview), the cursor (line and column from 1), every selection with its line range and text, and the visible lines; for a diff, its repo, its base and the selected diff lines with their side and whether they are added, removed or unchanged; with a split editor, what each group shows. Call it when the person says \"this\", \"here\", \"this file\" or \"the selected code\" without naming it. Read-only.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "editor_restart_language_servers",
+     "description": "Restart the language servers behind the person's editor in this task (TypeScript and others): a new process re-reads node_modules, tsconfig and the project, reopens the open files and reports their problems again. Returns the servers restarted. After an install that finishes, the app restarts the TypeScript server by itself. Call it when the person sees errors in the editor that are already fixed, or after you replace node_modules or change tsconfig/jsconfig. Do not install packages again or replace node_modules only to refresh the editor.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "pr_state",
+     "description": "The pull request open in the Pull requests panel of this task (or in the active tab): number, title, state, branches, the panel tab, its files with the ones the person marked Viewed and the ones open in tabs, the PR file on screen with its visible and selected lines, the GitHub review threads (file and lines, resolved, comments), the PR comments and reviews, with the person's own marked mine, and their draft review comments not sent yet, with the replies under them. Call it when the person speaks of a pull request, its comments or the file they are reviewing. Read-only.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "propose_plan",
+     "description": "Show the human your split of the work before any worker starts. One part per agent: title, agent name (one of your agents), the files that part owns (project-relative paths or globs) and the full prompt for that agent. When your brief says you compose your crew, also pass crew: the agents the parts go to; the human approves crew and parts together. Wait for the result even if this call runs asynchronously; do not end your turn while it is pending. Returns approved and the possibly edited parts. When approved is true, immediately call create_worker_task for the approved parts without another human message. When false, revise the plan or ask what to change. Call it first, before you create any worker task.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "summary": {
+        "default": "",
+        "type": "string",
+        "maxLength": 20000
+       },
+       "crew": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "name": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "template": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 200
+          },
+          "summary": {
+           "type": "string",
+           "maxLength": 240
+          },
+          "zone": {
+           "maxItems": 256,
+           "type": "array",
+           "items": {
+            "type": "string",
+            "maxLength": 1024
+           }
+          },
+          "provider": {
+           "type": "string",
+           "maxLength": 40
+          },
+          "model": {
+           "type": "string",
+           "maxLength": 200
+          },
+          "effort": {
+           "type": "string",
+           "maxLength": 200
+          },
+          "checkedBy": {
+           "maxItems": 64,
+           "type": "array",
+           "items": {
+            "type": "string",
+            "maxLength": 80
+           }
+          }
+         },
+         "required": [
+          "name",
+          "template"
+         ]
+        }
+       },
+       "parts": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "title": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "agent": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "prompt": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 100000
+          },
+          "files": {
+           "default": [],
+           "maxItems": 1024,
+           "type": "array",
+           "items": {
+            "type": "string",
+            "maxLength": 1024
+           }
+          },
+          "scopes": {
+           "default": [],
+           "maxItems": 512,
+           "type": "array",
+           "items": {
+            "type": "string",
+            "maxLength": 4096
+           }
+          }
+         },
+         "required": [
+          "title",
+          "agent",
+          "prompt"
+         ]
+        }
+       }
+      },
+      "required": [
+       "parts"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "create_worker_task",
+     "description": "Give one of your agents a part after the plan was approved. The prompt must state which files the part owns. Each agent has one task for the whole crew: the first part creates it; a later part, once you accepted the previous one, continues in the same task and session after your tree is merged into its branch. While a part is open, change or return it with prompt_task. Returns the taskId you use in the other tools. Call it for each part of the approved plan, wave by wave.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "agent": {
+        "type": "string",
+        "maxLength": 80
+       },
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "prompt": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+       },
+       "files": {
+        "default": [],
+        "maxItems": 1024,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 1024
+        }
+       },
+       "scopes": {
+        "default": [],
+        "maxItems": 512,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 4096
+        }
+       }
+      },
+      "required": [
+       "title",
+       "prompt"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "prompt_task",
+     "description": "Send a prompt to a worker task about its open part: return work with instructions, or answer its question by passing the questionId from the question message. A next part goes through create_worker_task. Use it when a part needs changes or a worker asked you a question.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+       },
+       "questionId": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId",
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "task_status",
+     "description": "Status of a worker task: state, whether it is working, turns, changed files and a pending question. Reports arrive by themselves; do not poll. Call it only when a worker seems stuck.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_report",
+     "description": "The structured report of a worker task built from its journal and diff: files, +N −M, changes outside its zone, checks and its last message. A reviewer passes the reviewId of the check it was asked to do. Call it when a report arrives, before you accept or return the part.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_transcript",
+     "description": "The worker transcript with a line limit, for finding where a worker got stuck. Prefer read_report. Use it only when the report does not explain what happened.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "limit": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_diff",
+     "description": "Changed files of a worker task (up to 200); with path, the unified diff of one file with line numbers in the @@ headers. full:true returns the before and after text instead (up to 64 KiB each). Read one file at a time. Call it when the report is not enough to judge a change.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "path": {
+        "type": "string",
+        "maxLength": 1024
+       },
+       "full": {
+        "type": "boolean"
+       },
+       "reviewId": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "submit_review",
+     "description": "Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. Use it when the work needs changes before it is accepted.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "maxLength": 128
+       },
+       "comments": {
+        "minItems": 1,
+        "maxItems": 200,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "path": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 1024
+          },
+          "start": {
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 9007199254740991
+          },
+          "end": {
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 9007199254740991
+          },
+          "text": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 10000
+          }
+         },
+         "required": [
+          "path",
+          "text"
+         ]
+        }
+       }
+      },
+      "required": [
+       "taskId",
+       "comments"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "accept_task",
+     "description": "Accept the finished part of a worker task: commits its changes and squashes the part into this task as one commit. Merge conflicts are left for the human. Call it once the report and the diff show the part is done.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "post_note",
+     "description": "Share a short fact other agents of the crew need, such as a changed shared type. Not a chat: no replies, no addressees. Up to 8 KiB. Call it when you change something other agents rely on.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+       },
+       "files": {
+        "default": [],
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 1024
+        }
+       }
+      },
+      "required": [
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_notes",
+     "description": "Read crew notes after the given sequence number (exclusive). Returns up to 100 notes, nextCursor and hasMore. Call it before you touch a shared type or config.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "since": {
+        "default": 0,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    }
+   ]
+  },
+  "calls": {
+   "missing": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool nope not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 3
+   },
+   "askEmpty": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool ask_user: Too small: expected string to have >=1 characters at question"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 4
+   },
+   "askBadOptions": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool ask_user: Too small: expected string to have >=1 characters at options[0].label\nInvalid input: expected boolean, received string at allowsFreeText"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 5
+   },
+   "browserBad": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool browser_read: Invalid input: expected string, received number at url\nInvalid string: must match pattern /^network-[0-9]{1,12}$/ at requestId"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 6
+   },
+   "plan": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool propose_plan: Too small: expected array to have >=1 items at parts"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 7
+   },
+   "transcript": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_transcript: Too small: expected string to have >=1 characters at taskId\nInvalid input: expected int, received number at limit"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 8
+   },
+   "review": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool submit_review: Too small: expected number to be >=1 at comments[0].start\nToo small: expected string to have >=1 characters at comments[0].text"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 9
+   },
+   "notes": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_notes: Too small: expected number to be >=0 at since"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 10
+   },
+   "noArgs": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_notes: Invalid input: expected object, received undefined"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 11
+   },
+   "ping": {
+    "result": {},
+    "jsonrpc": "2.0",
+    "id": 12
+   },
+   "unknown": {
+    "jsonrpc": "2.0",
+    "id": 13,
+    "error": {
+     "code": -32601,
+     "message": "Method not found"
+    }
+   },
+   "oldVersion": {
+    "result": {
+     "protocolVersion": "2025-11-25",
+     "capabilities": {
+      "tools": {
+       "listChanged": true
+      }
+     },
+     "serverInfo": {
+      "name": "brigadir",
+      "version": "0.1.0"
+     },
+     "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run.\nYour agents have the same tools: when a part changes what a person sees, its prompt says how the agent checks it."
+    },
+    "jsonrpc": "2.0",
+    "id": 14
+   }
+  }
+ },
+ "lead": {
+  "initialize": {
+   "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+     "tools": {
+      "listChanged": true
+     }
+    },
+    "serverInfo": {
+     "name": "brigadir",
+     "version": "0.1.0"
+    },
+    "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run.\nYour agents have the same tools: when a part changes what a person sees, its prompt says how the agent checks it."
+   },
+   "jsonrpc": "2.0",
+   "id": 1
+  },
+  "toolsList": {
+   "tools": [
+    {
+     "name": "browser_open",
+     "description": "Open a page in your own browser tab of this task, on screen or not: the first call makes the tab and later calls navigate it; tab \"new\" makes another one. The human sees the tab in the work area when they open the task. External navigation requires domain permission. Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "A tab from browser_state to navigate, or \"new\" for another tab; default: your tab.",
+        "type": "string",
+        "pattern": "^(b[0-9a-z]{1,16}|new)$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_state",
+     "description": "The state of your browser tab (address, title, loading) and tabs: every browser tab of this task with its address, title, whether you opened it and whether it is on screen. Call it to see which page is open and whether it finished loading.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_read",
+     "description": "read the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to read the text of the page, or of one element by selector, after it loads.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_console",
+     "description": "console the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Call it after the page loads or after an action, to catch JavaScript errors and warnings.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_network",
+     "description": "Requests of the page in the browser of this task (Fetch, XHR, EventSource, WebSocket), newest last; an open request shows its state (pending or streaming), how long it has been open, bytes received and messages so far. With requestId: response headers and the body (text up to 16 KiB); for an event stream or a WebSocket, its newest messages. The human sees the same page. Call it when the page shows wrong or missing data, to see which request failed and what it returned.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_screenshot",
+     "description": "screenshot the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to check how the page looks after a UI change; to find elements, prefer browser_ui.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_ui",
+     "description": "The accessibility tree of the page in the browser of this task, one element a line: role, accessible name, = value, @ref, box in CSS px of the viewport (x,y width×height) and states (focused, disabled, checked, expanded, offscreen). Use it before browser_act: a @ref is the most exact target. Refs last until the page navigates. Long pages come in pages: pass offset. Call it to find what to click or type into, and again after an action to check the result.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_act",
+     "description": "One action in the browser of this task, on screen or not, as real mouse and keyboard input: click (count 2 for a double click), hover, type (text into the target or the focused field; clear empties it first; submit presses Enter; a color input takes a color like #3366ff), key (Enter, Escape, Tab, ArrowDown, a character, or a combination like Meta+A or Shift+Tab), scroll (dx, dy in px, at the target or the middle of the page), select (an option of a <select> by value or text), back, forward, reload; dialog (accept, and text for a prompt: the answer to the next alert, confirm or prompt of the page — dialogs never show while you work with the page, they get Cancel unless you set this); clipboard (what the page copied to the task clipboard); paste (text: puts it in the task clipboard and pastes it into the focused field, as Meta+V); notifications (permission granted, denied or default: allows, blocks or asks again about the notifications of the page's domain, answering a request the page is waiting on, as the human's browser strip does; the project keeps it for the domain). The page copies to and pastes from the task clipboard, never the human's. Target: ref from browser_ui, a CSS selector, label (accessible name) or x,y in CSS px of the viewport. If another element covers the target, nothing happens and the answer names it. Password, one-time code and payment card fields are refused: ask the human to fill them. File uploads are not supported. Local pages need no permission; acting on another domain asks the human. The human sees each action marked on the page. Returns what was done, the page address and title when they changed, and what the page did meanwhile (dialogs, copies, the human using the page); call browser_ui again for the new tree. Use it to go through the flow you changed the way the person would, instead of giving them steps to try.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "action": {
+        "type": "string",
+        "enum": [
+         "click",
+         "hover",
+         "type",
+         "key",
+         "scroll",
+         "select",
+         "back",
+         "forward",
+         "reload",
+         "dialog",
+         "clipboard",
+         "paste",
+         "notifications"
+        ]
+       },
+       "ref": {
+        "type": "string",
+        "pattern": "^@?e[0-9]{1,12}$"
+       },
+       "selector": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "label": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "x": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "y": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "text": {
+        "type": "string",
+        "maxLength": 10000
+       },
+       "clear": {
+        "type": "boolean"
+       },
+       "submit": {
+        "type": "boolean"
+       },
+       "key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       },
+       "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2
+       },
+       "dx": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "dy": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+       },
+       "accept": {
+        "type": "boolean"
+       },
+       "permission": {
+        "type": "string",
+        "enum": [
+         "granted",
+         "denied",
+         "default"
+        ]
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      },
+      "required": [
+       "action"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_show",
+     "description": "Ask the human to show the page of this task on screen, for what does not work while the page is hidden: uploading a file, an OAuth or sign-in window, a passkey, a CAPTCHA. The human sees a request and shows the page or declines. Returns whether the page is on screen; keep working with the same page either way. Call it only when the page has to be on screen for the step: a file upload, an OAuth or sign-in window, a passkey or a CAPTCHA; everything else works while the page is hidden.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_list",
+     "description": "The saved commands of this project (dev servers, watchers, scripts, tests) the person runs from the toolbar: id, name, the shell line, repo, folder, the absolute cwd in the tree of this task, agentRuns (true: you run it without asking), and its state in this task (not run, starting, running, failed, done, stopped) with the local address once the output names one, or the exit code. Call it before you start a server or a script yourself. Read-only.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_run",
+     "description": "Run a saved project command by id (from commands_list) in the console of this task, in the person's login shell, as a tab the person sees and can stop. A running command is left as it is unless restart is true. Without agentRuns the person allows it first, once per task. Waits up to wait seconds (default 20) until the output names a local address (http://localhost:N) or the command exits, and returns its state, url, exit code and the last output lines. Use it for a dev server, a build or the tests when a saved command fits, instead of your shell.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "restart": {
+        "default": false,
+        "type": "boolean"
+       },
+       "wait": {
+        "default": 20,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 120
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_output",
+     "description": "The last output lines of a saved project command in this task, as plain text, with its state, url and exit code. Read-only. Call it when a command fails, or to read what a running server printed.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_stop",
+     "description": "Stop a saved project command running in this task, as the person's Stop button does: Ctrl-C, then SIGTERM and SIGKILL to its process group. Without agentRuns the person allows it first, once per task. Returns its state and the last output lines. Use it when a command must stop, for example when the person asks; to restart one, pass restart to commands_run.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_list",
+     "description": "The console of this task: the terminal tabs the person opened beside you (shells, dev servers, watchers, saved command runs), each with id, title, folder, the absolute cwd, whether its process runs or exited with a code, the saved command when the tab runs one, and the last shell command with its state and exit code. An empty list means no console is open. Read-only. Call it when the person speaks of the console, a terminal, a log or a server they started, before you ask them for its output.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_read",
+     "description": "The last output lines of a console session of this task as plain text (no ANSI; wrapped lines joined), newest last, as the person sees them, with the state of the session. Without id: the only session, or the newest of several. Read-only. Call it to read an error or a log the person sees in the console, and again after a change to see the new lines.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "propose_plan",
+     "description": "Show the human your split of the work before any worker starts. One part per agent: title, agent name (one of your agents), the files that part owns (project-relative paths or globs) and the full prompt for that agent. When your brief says you compose your crew, also pass crew: the agents the parts go to; the human approves crew and parts together. Wait for the result even if this call runs asynchronously; do not end your turn while it is pending. Returns approved and the possibly edited parts. When approved is true, immediately call create_worker_task for the approved parts without another human message. When false, revise the plan or ask what to change. Call it first, before you create any worker task.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "summary": {
+        "default": "",
+        "type": "string",
+        "maxLength": 20000
+       },
+       "crew": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "name": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "template": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 200
+          },
+          "summary": {
+           "type": "string",
+           "maxLength": 240
+          },
+          "zone": {
+           "maxItems": 256,
+           "type": "array",
+           "items": {
+            "type": "string",
+            "maxLength": 1024
+           }
+          },
+          "provider": {
+           "type": "string",
+           "maxLength": 40
+          },
+          "model": {
+           "type": "string",
+           "maxLength": 200
+          },
+          "effort": {
+           "type": "string",
+           "maxLength": 200
+          },
+          "checkedBy": {
+           "maxItems": 64,
+           "type": "array",
+           "items": {
+            "type": "string",
+            "maxLength": 80
+           }
+          }
+         },
+         "required": [
+          "name",
+          "template"
+         ]
+        }
+       },
+       "parts": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "title": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "agent": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "prompt": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 100000
+          },
+          "files": {
+           "default": [],
+           "maxItems": 1024,
+           "type": "array",
+           "items": {
+            "type": "string",
+            "maxLength": 1024
+           }
+          },
+          "scopes": {
+           "default": [],
+           "maxItems": 512,
+           "type": "array",
+           "items": {
+            "type": "string",
+            "maxLength": 4096
+           }
+          }
+         },
+         "required": [
+          "title",
+          "agent",
+          "prompt"
+         ]
+        }
+       }
+      },
+      "required": [
+       "parts"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "create_worker_task",
+     "description": "Give one of your agents a part after the plan was approved. The prompt must state which files the part owns. Each agent has one task for the whole crew: the first part creates it; a later part, once you accepted the previous one, continues in the same task and session after your tree is merged into its branch. While a part is open, change or return it with prompt_task. Returns the taskId you use in the other tools. Call it for each part of the approved plan, wave by wave.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "agent": {
+        "type": "string",
+        "maxLength": 80
+       },
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "prompt": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+       },
+       "files": {
+        "default": [],
+        "maxItems": 1024,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 1024
+        }
+       },
+       "scopes": {
+        "default": [],
+        "maxItems": 512,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 4096
+        }
+       }
+      },
+      "required": [
+       "title",
+       "prompt"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "prompt_task",
+     "description": "Send a prompt to a worker task about its open part: return work with instructions, or answer its question by passing the questionId from the question message. A next part goes through create_worker_task. Use it when a part needs changes or a worker asked you a question.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+       },
+       "questionId": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId",
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "task_status",
+     "description": "Status of a worker task: state, whether it is working, turns, changed files and a pending question. Reports arrive by themselves; do not poll. Call it only when a worker seems stuck.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_report",
+     "description": "The structured report of a worker task built from its journal and diff: files, +N −M, changes outside its zone, checks and its last message. A reviewer passes the reviewId of the check it was asked to do. Call it when a report arrives, before you accept or return the part.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_transcript",
+     "description": "The worker transcript with a line limit, for finding where a worker got stuck. Prefer read_report. Use it only when the report does not explain what happened.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "limit": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_diff",
+     "description": "Changed files of a worker task (up to 200); with path, the unified diff of one file with line numbers in the @@ headers. full:true returns the before and after text instead (up to 64 KiB each). Read one file at a time. Call it when the report is not enough to judge a change.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "path": {
+        "type": "string",
+        "maxLength": 1024
+       },
+       "full": {
+        "type": "boolean"
+       },
+       "reviewId": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "submit_review",
+     "description": "Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. Use it when the work needs changes before it is accepted.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "maxLength": 128
+       },
+       "comments": {
+        "minItems": 1,
+        "maxItems": 200,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "path": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 1024
+          },
+          "start": {
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 9007199254740991
+          },
+          "end": {
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 9007199254740991
+          },
+          "text": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 10000
+          }
+         },
+         "required": [
+          "path",
+          "text"
+         ]
+        }
+       }
+      },
+      "required": [
+       "taskId",
+       "comments"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "accept_task",
+     "description": "Accept the finished part of a worker task: commits its changes and squashes the part into this task as one commit. Merge conflicts are left for the human. Call it once the report and the diff show the part is done.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "post_note",
+     "description": "Share a short fact other agents of the crew need, such as a changed shared type. Not a chat: no replies, no addressees. Up to 8 KiB. Call it when you change something other agents rely on.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+       },
+       "files": {
+        "default": [],
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 1024
+        }
+       }
+      },
+      "required": [
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_notes",
+     "description": "Read crew notes after the given sequence number (exclusive). Returns up to 100 notes, nextCursor and hasMore. Call it before you touch a shared type or config.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "since": {
+        "default": 0,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "ask_foreman",
+     "description": "Ask the agent you work for a substantive question and wait for the answer. Blocks your turn until it arrives. Permissions are decided by the human, not through this tool. Use it when the task or a shared decision is unclear, not for permissions.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "question": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+       },
+       "options": {
+        "default": [],
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 1000
+        }
+       }
+      },
+      "required": [
+       "question"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    }
+   ]
+  },
+  "calls": {
+   "missing": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool nope not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 3
+   },
+   "askEmpty": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool ask_user not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 4
+   },
+   "askBadOptions": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool ask_user not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 5
+   },
+   "browserBad": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool browser_read: Invalid input: expected string, received number at url\nInvalid string: must match pattern /^network-[0-9]{1,12}$/ at requestId"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 6
+   },
+   "plan": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool propose_plan: Too small: expected array to have >=1 items at parts"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 7
+   },
+   "transcript": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_transcript: Too small: expected string to have >=1 characters at taskId\nInvalid input: expected int, received number at limit"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 8
+   },
+   "review": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool submit_review: Too small: expected number to be >=1 at comments[0].start\nToo small: expected string to have >=1 characters at comments[0].text"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 9
+   },
+   "notes": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_notes: Too small: expected number to be >=0 at since"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 10
+   },
+   "noArgs": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_notes: Invalid input: expected object, received undefined"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 11
+   },
+   "ping": {
+    "result": {},
+    "jsonrpc": "2.0",
+    "id": 12
+   },
+   "unknown": {
+    "jsonrpc": "2.0",
+    "id": 13,
+    "error": {
+     "code": -32601,
+     "message": "Method not found"
+    }
+   },
+   "oldVersion": {
+    "result": {
+     "protocolVersion": "2025-11-25",
+     "capabilities": {
+      "tools": {
+       "listChanged": true
+      }
+     },
+     "serverInfo": {
+      "name": "brigadir",
+      "version": "0.1.0"
+     },
+     "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run.\nYour agents have the same tools: when a part changes what a person sees, its prompt says how the agent checks it."
+    },
+    "jsonrpc": "2.0",
+    "id": 14
+   }
+  }
+ },
+ "developer": {
+  "initialize": {
+   "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+     "tools": {
+      "listChanged": true
+     }
+    },
+    "serverInfo": {
+     "name": "brigadir",
+     "version": "0.1.0"
+    },
+    "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+   },
+   "jsonrpc": "2.0",
+   "id": 1
+  },
+  "toolsList": {
+   "tools": [
+    {
+     "name": "browser_open",
+     "description": "Open a page in your own browser tab of this task, on screen or not: the first call makes the tab and later calls navigate it; tab \"new\" makes another one. The human sees the tab in the work area when they open the task. External navigation requires domain permission. Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "A tab from browser_state to navigate, or \"new\" for another tab; default: your tab.",
+        "type": "string",
+        "pattern": "^(b[0-9a-z]{1,16}|new)$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_state",
+     "description": "The state of your browser tab (address, title, loading) and tabs: every browser tab of this task with its address, title, whether you opened it and whether it is on screen. Call it to see which page is open and whether it finished loading.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_read",
+     "description": "read the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to read the text of the page, or of one element by selector, after it loads.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_console",
+     "description": "console the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Call it after the page loads or after an action, to catch JavaScript errors and warnings.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_network",
+     "description": "Requests of the page in the browser of this task (Fetch, XHR, EventSource, WebSocket), newest last; an open request shows its state (pending or streaming), how long it has been open, bytes received and messages so far. With requestId: response headers and the body (text up to 16 KiB); for an event stream or a WebSocket, its newest messages. The human sees the same page. Call it when the page shows wrong or missing data, to see which request failed and what it returned.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_screenshot",
+     "description": "screenshot the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to check how the page looks after a UI change; to find elements, prefer browser_ui.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_ui",
+     "description": "The accessibility tree of the page in the browser of this task, one element a line: role, accessible name, = value, @ref, box in CSS px of the viewport (x,y width×height) and states (focused, disabled, checked, expanded, offscreen). Use it before browser_act: a @ref is the most exact target. Refs last until the page navigates. Long pages come in pages: pass offset. Call it to find what to click or type into, and again after an action to check the result.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_act",
+     "description": "One action in the browser of this task, on screen or not, as real mouse and keyboard input: click (count 2 for a double click), hover, type (text into the target or the focused field; clear empties it first; submit presses Enter; a color input takes a color like #3366ff), key (Enter, Escape, Tab, ArrowDown, a character, or a combination like Meta+A or Shift+Tab), scroll (dx, dy in px, at the target or the middle of the page), select (an option of a <select> by value or text), back, forward, reload; dialog (accept, and text for a prompt: the answer to the next alert, confirm or prompt of the page — dialogs never show while you work with the page, they get Cancel unless you set this); clipboard (what the page copied to the task clipboard); paste (text: puts it in the task clipboard and pastes it into the focused field, as Meta+V); notifications (permission granted, denied or default: allows, blocks or asks again about the notifications of the page's domain, answering a request the page is waiting on, as the human's browser strip does; the project keeps it for the domain). The page copies to and pastes from the task clipboard, never the human's. Target: ref from browser_ui, a CSS selector, label (accessible name) or x,y in CSS px of the viewport. If another element covers the target, nothing happens and the answer names it. Password, one-time code and payment card fields are refused: ask the human to fill them. File uploads are not supported. Local pages need no permission; acting on another domain asks the human. The human sees each action marked on the page. Returns what was done, the page address and title when they changed, and what the page did meanwhile (dialogs, copies, the human using the page); call browser_ui again for the new tree. Use it to go through the flow you changed the way the person would, instead of giving them steps to try.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "action": {
+        "type": "string",
+        "enum": [
+         "click",
+         "hover",
+         "type",
+         "key",
+         "scroll",
+         "select",
+         "back",
+         "forward",
+         "reload",
+         "dialog",
+         "clipboard",
+         "paste",
+         "notifications"
+        ]
+       },
+       "ref": {
+        "type": "string",
+        "pattern": "^@?e[0-9]{1,12}$"
+       },
+       "selector": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "label": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "x": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "y": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "text": {
+        "type": "string",
+        "maxLength": 10000
+       },
+       "clear": {
+        "type": "boolean"
+       },
+       "submit": {
+        "type": "boolean"
+       },
+       "key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       },
+       "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2
+       },
+       "dx": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "dy": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+       },
+       "accept": {
+        "type": "boolean"
+       },
+       "permission": {
+        "type": "string",
+        "enum": [
+         "granted",
+         "denied",
+         "default"
+        ]
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      },
+      "required": [
+       "action"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_show",
+     "description": "Ask the human to show the page of this task on screen, for what does not work while the page is hidden: uploading a file, an OAuth or sign-in window, a passkey, a CAPTCHA. The human sees a request and shows the page or declines. Returns whether the page is on screen; keep working with the same page either way. Call it only when the page has to be on screen for the step: a file upload, an OAuth or sign-in window, a passkey or a CAPTCHA; everything else works while the page is hidden.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_list",
+     "description": "The saved commands of this project (dev servers, watchers, scripts, tests) the person runs from the toolbar: id, name, the shell line, repo, folder, the absolute cwd in the tree of this task, agentRuns (true: you run it without asking), and its state in this task (not run, starting, running, failed, done, stopped) with the local address once the output names one, or the exit code. Call it before you start a server or a script yourself. Read-only.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_run",
+     "description": "Run a saved project command by id (from commands_list) in the console of this task, in the person's login shell, as a tab the person sees and can stop. A running command is left as it is unless restart is true. Without agentRuns the person allows it first, once per task. Waits up to wait seconds (default 20) until the output names a local address (http://localhost:N) or the command exits, and returns its state, url, exit code and the last output lines. Use it for a dev server, a build or the tests when a saved command fits, instead of your shell.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "restart": {
+        "default": false,
+        "type": "boolean"
+       },
+       "wait": {
+        "default": 20,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 120
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_output",
+     "description": "The last output lines of a saved project command in this task, as plain text, with its state, url and exit code. Read-only. Call it when a command fails, or to read what a running server printed.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_stop",
+     "description": "Stop a saved project command running in this task, as the person's Stop button does: Ctrl-C, then SIGTERM and SIGKILL to its process group. Without agentRuns the person allows it first, once per task. Returns its state and the last output lines. Use it when a command must stop, for example when the person asks; to restart one, pass restart to commands_run.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_list",
+     "description": "The console of this task: the terminal tabs the person opened beside you (shells, dev servers, watchers, saved command runs), each with id, title, folder, the absolute cwd, whether its process runs or exited with a code, the saved command when the tab runs one, and the last shell command with its state and exit code. An empty list means no console is open. Read-only. Call it when the person speaks of the console, a terminal, a log or a server they started, before you ask them for its output.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_read",
+     "description": "The last output lines of a console session of this task as plain text (no ANSI; wrapped lines joined), newest last, as the person sees them, with the state of the session. Without id: the only session, or the newest of several. Read-only. Call it to read an error or a log the person sees in the console, and again after a change to see the new lines.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "ask_foreman",
+     "description": "Ask the agent you work for a substantive question and wait for the answer. Blocks your turn until it arrives. Permissions are decided by the human, not through this tool. Use it when the task or a shared decision is unclear, not for permissions.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "question": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+       },
+       "options": {
+        "default": [],
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 1000
+        }
+       }
+      },
+      "required": [
+       "question"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "post_note",
+     "description": "Share a short fact other agents of the crew need, such as a changed shared type. Not a chat: no replies, no addressees. Up to 8 KiB. Call it when you change something other agents rely on.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+       },
+       "files": {
+        "default": [],
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 1024
+        }
+       }
+      },
+      "required": [
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_notes",
+     "description": "Read crew notes after the given sequence number (exclusive). Returns up to 100 notes, nextCursor and hasMore. Call it before you touch a shared type or config.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "since": {
+        "default": 0,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    }
+   ]
+  },
+  "calls": {
+   "missing": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool nope not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 3
+   },
+   "askEmpty": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool ask_user not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 4
+   },
+   "askBadOptions": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool ask_user not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 5
+   },
+   "browserBad": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool browser_read: Invalid input: expected string, received number at url\nInvalid string: must match pattern /^network-[0-9]{1,12}$/ at requestId"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 6
+   },
+   "plan": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool propose_plan not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 7
+   },
+   "transcript": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool read_transcript not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 8
+   },
+   "review": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool submit_review not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 9
+   },
+   "notes": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_notes: Too small: expected number to be >=0 at since"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 10
+   },
+   "noArgs": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_notes: Invalid input: expected object, received undefined"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 11
+   },
+   "ping": {
+    "result": {},
+    "jsonrpc": "2.0",
+    "id": 12
+   },
+   "unknown": {
+    "jsonrpc": "2.0",
+    "id": 13,
+    "error": {
+     "code": -32601,
+     "message": "Method not found"
+    }
+   },
+   "oldVersion": {
+    "result": {
+     "protocolVersion": "2025-11-25",
+     "capabilities": {
+      "tools": {
+       "listChanged": true
+      }
+     },
+     "serverInfo": {
+      "name": "brigadir",
+      "version": "0.1.0"
+     },
+     "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+    },
+    "jsonrpc": "2.0",
+    "id": 14
+   }
+  }
+ },
+ "reviewer": {
+  "initialize": {
+   "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+     "tools": {
+      "listChanged": true
+     }
+    },
+    "serverInfo": {
+     "name": "brigadir",
+     "version": "0.1.0"
+    },
+    "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+   },
+   "jsonrpc": "2.0",
+   "id": 1
+  },
+  "toolsList": {
+   "tools": [
+    {
+     "name": "browser_open",
+     "description": "Open a page in your own browser tab of this task, on screen or not: the first call makes the tab and later calls navigate it; tab \"new\" makes another one. The human sees the tab in the work area when they open the task. External navigation requires domain permission. Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "A tab from browser_state to navigate, or \"new\" for another tab; default: your tab.",
+        "type": "string",
+        "pattern": "^(b[0-9a-z]{1,16}|new)$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_state",
+     "description": "The state of your browser tab (address, title, loading) and tabs: every browser tab of this task with its address, title, whether you opened it and whether it is on screen. Call it to see which page is open and whether it finished loading.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_read",
+     "description": "read the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to read the text of the page, or of one element by selector, after it loads.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_console",
+     "description": "console the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Call it after the page loads or after an action, to catch JavaScript errors and warnings.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_network",
+     "description": "Requests of the page in the browser of this task (Fetch, XHR, EventSource, WebSocket), newest last; an open request shows its state (pending or streaming), how long it has been open, bytes received and messages so far. With requestId: response headers and the body (text up to 16 KiB); for an event stream or a WebSocket, its newest messages. The human sees the same page. Call it when the page shows wrong or missing data, to see which request failed and what it returned.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_screenshot",
+     "description": "screenshot the browser of this task, on screen or not; the human sees the same page when they open the task. External navigation requires domain permission. Use it to check how the page looks after a UI change; to find elements, prefer browser_ui.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 8192
+       },
+       "selector": {
+        "type": "string",
+        "maxLength": 500
+       },
+       "requestId": {
+        "type": "string",
+        "pattern": "^network-[0-9]{1,12}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_ui",
+     "description": "The accessibility tree of the page in the browser of this task, one element a line: role, accessible name, = value, @ref, box in CSS px of the viewport (x,y width×height) and states (focused, disabled, checked, expanded, offscreen). Use it before browser_act: a @ref is the most exact target. Refs last until the page navigates. Long pages come in pages: pass offset. Call it to find what to click or type into, and again after an action to check the result.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_act",
+     "description": "One action in the browser of this task, on screen or not, as real mouse and keyboard input: click (count 2 for a double click), hover, type (text into the target or the focused field; clear empties it first; submit presses Enter; a color input takes a color like #3366ff), key (Enter, Escape, Tab, ArrowDown, a character, or a combination like Meta+A or Shift+Tab), scroll (dx, dy in px, at the target or the middle of the page), select (an option of a <select> by value or text), back, forward, reload; dialog (accept, and text for a prompt: the answer to the next alert, confirm or prompt of the page — dialogs never show while you work with the page, they get Cancel unless you set this); clipboard (what the page copied to the task clipboard); paste (text: puts it in the task clipboard and pastes it into the focused field, as Meta+V); notifications (permission granted, denied or default: allows, blocks or asks again about the notifications of the page's domain, answering a request the page is waiting on, as the human's browser strip does; the project keeps it for the domain). The page copies to and pastes from the task clipboard, never the human's. Target: ref from browser_ui, a CSS selector, label (accessible name) or x,y in CSS px of the viewport. If another element covers the target, nothing happens and the answer names it. Password, one-time code and payment card fields are refused: ask the human to fill them. File uploads are not supported. Local pages need no permission; acting on another domain asks the human. The human sees each action marked on the page. Returns what was done, the page address and title when they changed, and what the page did meanwhile (dialogs, copies, the human using the page); call browser_ui again for the new tree. Use it to go through the flow you changed the way the person would, instead of giving them steps to try.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "action": {
+        "type": "string",
+        "enum": [
+         "click",
+         "hover",
+         "type",
+         "key",
+         "scroll",
+         "select",
+         "back",
+         "forward",
+         "reload",
+         "dialog",
+         "clipboard",
+         "paste",
+         "notifications"
+        ]
+       },
+       "ref": {
+        "type": "string",
+        "pattern": "^@?e[0-9]{1,12}$"
+       },
+       "selector": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "label": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       },
+       "x": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "y": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 20000
+       },
+       "text": {
+        "type": "string",
+        "maxLength": 10000
+       },
+       "clear": {
+        "type": "boolean"
+       },
+       "submit": {
+        "type": "boolean"
+       },
+       "key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       },
+       "count": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2
+       },
+       "dx": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "dy": {
+        "type": "number",
+        "minimum": -100000,
+        "maximum": 100000
+       },
+       "value": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+       },
+       "accept": {
+        "type": "boolean"
+       },
+       "permission": {
+        "type": "string",
+        "enum": [
+         "granted",
+         "denied",
+         "default"
+        ]
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      },
+      "required": [
+       "action"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "browser_show",
+     "description": "Ask the human to show the page of this task on screen, for what does not work while the page is hidden: uploading a file, an OAuth or sign-in window, a passkey, a CAPTCHA. The human sees a request and shows the page or declines. Returns whether the page is on screen; keep working with the same page either way. Call it only when the page has to be on screen for the step: a file upload, an OAuth or sign-in window, a passkey or a CAPTCHA; everything else works while the page is hidden.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_list",
+     "description": "The saved commands of this project (dev servers, watchers, scripts, tests) the person runs from the toolbar: id, name, the shell line, repo, folder, the absolute cwd in the tree of this task, agentRuns (true: you run it without asking), and its state in this task (not run, starting, running, failed, done, stopped) with the local address once the output names one, or the exit code. Call it before you start a server or a script yourself. Read-only.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_run",
+     "description": "Run a saved project command by id (from commands_list) in the console of this task, in the person's login shell, as a tab the person sees and can stop. A running command is left as it is unless restart is true. Without agentRuns the person allows it first, once per task. Waits up to wait seconds (default 20) until the output names a local address (http://localhost:N) or the command exits, and returns its state, url, exit code and the last output lines. Use it for a dev server, a build or the tests when a saved command fits, instead of your shell.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "restart": {
+        "default": false,
+        "type": "boolean"
+       },
+       "wait": {
+        "default": 20,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 120
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_output",
+     "description": "The last output lines of a saved project command in this task, as plain text, with its state, url and exit code. Read-only. Call it when a command fails, or to read what a running server printed.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "commands_stop",
+     "description": "Stop a saved project command running in this task, as the person's Stop button does: Ctrl-C, then SIGTERM and SIGKILL to its process group. Without agentRuns the person allows it first, once per task. Returns its state and the last output lines. Use it when a command must stop, for example when the person asks; to restart one, pass restart to commands_run.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 40,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      },
+      "required": [
+       "id"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_list",
+     "description": "The console of this task: the terminal tabs the person opened beside you (shells, dev servers, watchers, saved command runs), each with id, title, folder, the absolute cwd, whether its process runs or exited with a code, the saved command when the tab runs one, and the last shell command with its state and exit code. An empty list means no console is open. Read-only. Call it when the person speaks of the console, a terminal, a log or a server they started, before you ask them for its output.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "console_read",
+     "description": "The last output lines of a console session of this task as plain text (no ANSI; wrapped lines joined), newest last, as the person sees them, with the state of the session. Without id: the only session, or the newest of several. Read-only. Call it to read an error or a log the person sees in the console, and again after a change to see the new lines.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "lines": {
+        "default": 80,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 400
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_report",
+     "description": "The structured report of a worker task built from its journal and diff: files, +N −M, changes outside its zone, checks and its last message. A reviewer passes the reviewId of the check it was asked to do. Call it when a report arrives, before you accept or return the part.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_diff",
+     "description": "Changed files of a worker task (up to 200); with path, the unified diff of one file with line numbers in the @@ headers. full:true returns the before and after text instead (up to 64 KiB each). Read one file at a time. Call it when the report is not enough to judge a change.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "path": {
+        "type": "string",
+        "maxLength": 1024
+       },
+       "full": {
+        "type": "boolean"
+       },
+       "reviewId": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "submit_review",
+     "description": "Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. Use it when the work needs changes before it is accepted.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "maxLength": 128
+       },
+       "comments": {
+        "minItems": 1,
+        "maxItems": 200,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "path": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 1024
+          },
+          "start": {
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 9007199254740991
+          },
+          "end": {
+           "type": "integer",
+           "minimum": 1,
+           "maximum": 9007199254740991
+          },
+          "text": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 10000
+          }
+         },
+         "required": [
+          "path",
+          "text"
+         ]
+        }
+       }
+      },
+      "required": [
+       "taskId",
+       "comments"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "approve",
+     "description": "Approve the checked work: nothing is left to fix. Requires the reviewId of the report you were asked to check. Call it when your check found nothing to fix.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId",
+       "reviewId"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "ask_foreman",
+     "description": "Ask the agent you work for a substantive question and wait for the answer. Blocks your turn until it arrives. Permissions are decided by the human, not through this tool. Use it when the task or a shared decision is unclear, not for permissions.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "question": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+       },
+       "options": {
+        "default": [],
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 1000
+        }
+       }
+      },
+      "required": [
+       "question"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "post_note",
+     "description": "Share a short fact other agents of the crew need, such as a changed shared type. Not a chat: no replies, no addressees. Up to 8 KiB. Call it when you change something other agents rely on.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+       },
+       "files": {
+        "default": [],
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "maxLength": 1024
+        }
+       }
+      },
+      "required": [
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_notes",
+     "description": "Read crew notes after the given sequence number (exclusive). Returns up to 100 notes, nextCursor and hasMore. Call it before you touch a shared type or config.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "since": {
+        "default": 0,
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+       }
+      }
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    }
+   ]
+  },
+  "calls": {
+   "missing": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool nope not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 3
+   },
+   "askEmpty": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool ask_user not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 4
+   },
+   "askBadOptions": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool ask_user not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 5
+   },
+   "browserBad": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool browser_read: Invalid input: expected string, received number at url\nInvalid string: must match pattern /^network-[0-9]{1,12}$/ at requestId"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 6
+   },
+   "plan": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool propose_plan not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 7
+   },
+   "transcript": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Tool read_transcript not found"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 8
+   },
+   "review": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool submit_review: Too small: expected number to be >=1 at comments[0].start\nToo small: expected string to have >=1 characters at comments[0].text"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 9
+   },
+   "notes": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_notes: Too small: expected number to be >=0 at since"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 10
+   },
+   "noArgs": {
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "MCP error -32602: Input validation error: Invalid arguments for tool read_notes: Invalid input: expected object, received undefined"
+      }
+     ],
+     "isError": true
+    },
+    "jsonrpc": "2.0",
+    "id": 11
+   },
+   "ping": {
+    "result": {},
+    "jsonrpc": "2.0",
+    "id": 12
+   },
+   "unknown": {
+    "jsonrpc": "2.0",
+    "id": 13,
+    "error": {
+     "code": -32601,
+     "message": "Method not found"
+    }
+   },
+   "oldVersion": {
+    "result": {
+     "protocolVersion": "2025-11-25",
+     "capabilities": {
+      "tools": {
+       "listChanged": true
+      }
+     },
+     "serverInfo": {
+      "name": "brigadir",
+      "version": "0.1.0"
+     },
+     "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+    },
+    "jsonrpc": "2.0",
+    "id": 14
+   }
+  }
+ }
+}

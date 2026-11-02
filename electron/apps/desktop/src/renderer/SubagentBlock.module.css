@@ -1,0 +1,244 @@
+/* spec/chat#subagents: the header has the spec/chat#tool-groups group geometry — 24 px, chevron, sign, time. */
+.block {
+	margin: 0 16px 12px;
+	font-size: var(--text-12);
+}
+/* spec/chat#layout: the head is the quiet group line — 24 px, fg3, «Subagent» 500 in fg2, the chevron in the
+   margin on hover or while open; calls and time on the right. */
+.block > details > summary {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	height: 24px;
+	margin: 0 -6px;
+	padding: 0 6px;
+	border-radius: 6px;
+	color: var(--fg3);
+	font-size: var(--text-12);
+	white-space: nowrap;
+	cursor: default;
+	list-style: none;
+	transition:
+		background-color var(--motion-fast) ease,
+		color var(--motion-fast) ease;
+}
+.block > details > summary::-webkit-details-marker {
+	display: none;
+}
+.block > details > summary:hover {
+	background: var(--tint);
+	color: var(--fg2);
+}
+.block > details > summary:active {
+	background: var(--segment-press);
+}
+.block > details > summary:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	background: transparent;
+}
+.block > details > summary > svg:first-child {
+	position: absolute;
+	left: -12px;
+	flex: none;
+	color: var(--fg3);
+	opacity: 0;
+	transform: rotate(-90deg);
+	transition:
+		transform var(--motion-fast),
+		opacity var(--motion-fast);
+}
+.block > details > summary:is(:hover, :focus-visible) > svg:first-child,
+.block > details[open] > summary > svg:first-child {
+	opacity: 1;
+}
+.block > details[open] > summary > svg:first-child {
+	transform: none;
+}
+.block > details > summary > [role='img'],
+.block > details > summary > [role='img'] svg {
+	flex: none;
+	width: 12px;
+	height: 12px;
+}
+.block > details > summary > [data-status='done'] {
+	color: var(--green);
+}
+.block > details > summary > strong {
+	flex: none;
+	color: var(--fg2);
+	font-size: var(--text-12);
+	font-weight: 500;
+}
+.block > details > summary:hover > strong,
+.block > details[open] > summary > strong {
+	color: var(--fg);
+}
+/* In a narrow column the type gives way first, then the name; the count, the errors and the time stay. */
+.type {
+	flex: 0 1000 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font: calc(11px * var(--ui-scale)) var(--mono-family);
+	color: var(--fg3);
+}
+.name {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--fg2);
+	font-size: var(--text-12);
+}
+.dot {
+	flex: none;
+	color: var(--fg3);
+}
+.spacer {
+	flex: 1;
+	min-width: 8px;
+}
+.count {
+	flex: none;
+	font-size: var(--text-11);
+}
+.errors {
+	flex: none;
+	color: var(--diffRemovedFg);
+	font-size: var(--text-11);
+}
+.time {
+	flex: none;
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+	font-variant-numeric: tabular-nums;
+}
+.body,
+.pin {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 4px 0 2px 6px;
+	padding: 2px 0 2px 13px;
+	border-left: 1px solid var(--hair);
+}
+.pin {
+	gap: 4px;
+	margin-top: 2px;
+	padding-block: 0;
+}
+.block .body > *,
+.block .pin > * {
+	margin-inline: 0;
+	padding-inline: 0;
+}
+.block .body > * {
+	margin-block: 0;
+}
+.section {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 3px;
+	min-width: 0;
+}
+.section > h4 {
+	margin: 0;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+}
+.prompt {
+	margin: 0;
+	font-size: var(--text-12);
+	line-height: 18px;
+	color: var(--fg);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	overflow: hidden;
+}
+.prompt[data-full] {
+	display: block;
+}
+/* The answer is the subagent's text: the conversation's own markdown rows, up to 8 lines until expanded. */
+.answer {
+	position: relative;
+	align-self: stretch;
+	max-height: 132px;
+	overflow: hidden;
+}
+.answer[data-full] {
+	max-height: none;
+}
+.answer:not([data-full])::after {
+	content: '';
+	position: absolute;
+	inset: auto 0 0 0;
+	height: 28px;
+	background: linear-gradient(to bottom, transparent, var(--content));
+	pointer-events: none;
+}
+/* Markdown rows come wrapped in a classless box; their own row margins give way to the block's guide line. */
+.answer > div:not([class]) > div,
+.block .body > div:not([class]) > div {
+	margin: 0;
+	padding-inline: 0;
+}
+.answer > div:not([class]) + div:not([class]) {
+	margin-top: 8px;
+}
+.more {
+	position: relative;
+	margin-left: calc(-1 * var(--c-px));
+}
+.wait {
+	margin: 0;
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+.meta {
+	margin: 0;
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+	color: var(--fg3);
+}
+/* The answer's first line under the collapsed header: a row of its own, hover on the whole line (rule 15); a click opens the block. */
+.line {
+	display: block;
+	width: calc(100% + 12px);
+	height: 24px;
+	margin: 0 -6px;
+	padding: 0 6px;
+	border-radius: 6px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: left;
+	font-size: var(--text-11);
+	line-height: 24px;
+	color: var(--fg2);
+}
+.line:hover {
+	background: var(--tint);
+	color: var(--fg);
+}
+@media (prefers-reduced-motion: no-preference) {
+	.block > details::details-content {
+		interpolate-size: allow-keywords;
+		block-size: 0;
+		opacity: 0;
+		overflow: clip;
+		transition:
+			block-size var(--motion-travel) var(--motion-ease),
+			opacity var(--motion-enter-time) ease,
+			content-visibility var(--motion-travel) allow-discrete;
+	}
+	.block > details[open]::details-content {
+		block-size: auto;
+		opacity: 1;
+	}
+}

@@ -1,0 +1,896 @@
+/* spec/pull-requests-and-ci#pr-list: the PR panel. */
+.panel {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	container: prs / inline-size;
+	animation: var(--motion-fade);
+}
+.panel .header {
+	flex: none;
+	justify-content: flex-start;
+	color: inherit;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	/* spec/pull-requests-and-ci#pr-detail: a 44 px row of M controls 8 px from the edges over a hairline, as the
+	   Changes header (spec/task-window#panel). */
+	height: 44px;
+	padding: 0 8px;
+	box-sizing: border-box;
+	border-bottom: 1px solid var(--hair);
+}
+.space {
+	flex: 1;
+	min-width: 0;
+}
+/* spec/pull-requests-and-ci#pr-panel: next to the segment in the header the repo chip gives way first, the actions stay. */
+.header .filter {
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 60%;
+	overflow: hidden;
+}
+/* spec/pull-requests-and-ci#reading-and-refresh: the refresh glyph turns while the PR list or the PR is read and finishes its turn; reduced motion only dims it. */
+.icon[data-spinning] > svg {
+	animation: pr-refresh-turn 800ms linear infinite;
+}
+@keyframes pr-refresh-turn {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.icon[data-spinning] > svg {
+		animation: none;
+		opacity: 0.55;
+	}
+}
+.list {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 4px 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+/* A scrolled column never squeezes its rows: a shrinking flex child would take its share of the height and lie over the next row (62 files of 8 px instead of a scroll). */
+.list > * {
+	flex-shrink: 0;
+}
+.group {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.groupHeading {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	padding: 10px 4px 3px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	letter-spacing: 0.02em;
+}
+.groupHeading[data-first='true'] {
+	padding-top: 6px;
+}
+.groupHeading small {
+	font-size: var(--text-10);
+	font-weight: 400;
+	letter-spacing: 0;
+	color: var(--fg2);
+}
+.row {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	width: 100%;
+	padding: 6px 8px;
+	box-sizing: border-box;
+	border-radius: 6px;
+	text-align: left;
+}
+.row:hover {
+	background-color: var(--hover);
+	background-image: none;
+}
+/* spec/pull-requests-and-ci#pr-detail: the hover is --hover on the whole row, the last opened PR is --sel. spec/appearance#evolution-redesign: the
+   row under its open menu keeps that hover. */
+.row[data-menu-open='true'] {
+	background-color: var(--hover);
+}
+.row[aria-pressed='true'] {
+	background-color: var(--sel);
+}
+.row[data-closed='true'] {
+	opacity: 0.6;
+}
+.checks > svg {
+	display: block;
+}
+.copy {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.title {
+	font-size: var(--text-12);
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.meta {
+	font-size: var(--text-10);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* spec/pull-requests-and-ci#repo-picker: the repo's name leads the second line in the title's colour; the rest stays --fg2. */
+.repo {
+	color: var(--fg);
+}
+.meta code {
+	font-family: var(--mono-family);
+}
+.comments {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	flex: none;
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.comments > svg {
+	flex: none;
+}
+/* The list row's second line and count are 10.5; a commit's line and the tabs' counts
+   keep 10. */
+.row .meta,
+.row .comments {
+	font-size: var(--text-10-5);
+}
+.checks {
+	display: inline-flex;
+	flex: none;
+}
+.checks[data-checks='pass'] {
+	color: var(--green);
+}
+.checks[data-checks='fail'] {
+	color: var(--red);
+}
+.checks[data-checks='pending'] {
+	color: var(--amber);
+}
+.older {
+	align-self: flex-start;
+}
+.banner {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin: 8px 8px 0;
+	padding: 8px 10px;
+	border-radius: 7px;
+	background: var(--amber-soft);
+	color: var(--fg);
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.banner > svg {
+	flex: none;
+	margin-top: 2px;
+	color: var(--amber);
+}
+.banner > span {
+	flex: 1;
+}
+.error {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin: 6px 2px;
+	padding: 8px 10px;
+	border-radius: 7px;
+	background: var(--red-soft);
+	color: var(--fg);
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.error > svg {
+	flex: none;
+	margin-top: 2px;
+	color: var(--red);
+}
+.error > span {
+	flex: 1;
+}
+.opening {
+	display: inline-flex;
+	flex: none;
+}
+.empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 2px;
+	padding: 20px 12px;
+	border: 1px solid var(--sep);
+	border-radius: 8px;
+	color: var(--fg2);
+	text-align: center;
+}
+.empty p {
+	margin: 0;
+	color: var(--fg);
+	font-size: var(--text-12);
+}
+.hint {
+	margin: 0;
+	padding: 12px 6px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+
+/* PR */
+.detailHead {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	padding: 8px 10px 10px;
+}
+.titleRow {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	height: 28px;
+}
+/* `.titleRow` outranks TaskView's `.changes h2` (11 px); the title is 12. */
+.titleRow .prTitle {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: var(--text-12);
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.number {
+	flex: none;
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.metaRow {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding-left: 2px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	min-width: 0;
+}
+.who {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.branches > span {
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+}
+.metaChecks {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex: none;
+}
+.metaChecks small {
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	min-width: 0;
+}
+.narrow {
+	display: none;
+}
+.tabs {
+	flex: none;
+	padding: 0 10px 8px;
+	border-bottom: 1px solid var(--sep);
+}
+/* The tab strip is an icon-only Segments whose icons carry the labels. spec/pull-requests-and-ci#pr-detail: it fills
+   the row and the four tabs share it evenly (`stretch`), as Files · Changes · PR above it. */
+.tabs > div[data-icon-only] > button {
+	width: auto;
+	padding: 0 4px;
+}
+.tab {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+.tab small {
+	font-size: var(--text-10);
+	color: inherit;
+	opacity: 0.7;
+}
+.tabIcon {
+	display: none;
+}
+.body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 0 6px 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.body > * {
+	flex-shrink: 0;
+} /* the tab rows, as `.list > *` */
+.checkbox {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: var(--c-h);
+	padding: 2px 6px 0;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+/* A checkbox is a 24 px target: the Choice box sits in a cell of the row's size, the label around it takes the click. */
+/* TaskView gives every `.changes input` a margin (the search fields); a checkbox in this panel has none. */
+.checkbox input[type],
+.tick input[type] {
+	margin: 0;
+}
+.tick {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: var(--c-h);
+	height: var(--c-h);
+}
+/* spec/pull-requests-and-ci#pr-files: «Viewed» shows the person's mark at once; a slow save pulses the box, a failed one rings it red. */
+.tick input[data-saving] {
+	animation: viewed-saving 900ms ease-in-out infinite alternate;
+}
+@keyframes viewed-saving {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0.35;
+	}
+}
+.tick input[data-failed] {
+	outline: 1.5px solid var(--red);
+	outline-offset: 1px;
+}
+.saving {
+	color: var(--fg2);
+}
+@media (prefers-reduced-motion: reduce) {
+	.tick input[data-saving] {
+		animation: none;
+		opacity: 0.5;
+	}
+}
+.thread {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	width: 100%;
+	padding: 7px 6px;
+	box-sizing: border-box;
+	border-radius: 6px;
+	text-align: left;
+}
+.thread[data-resolved='true'] {
+	opacity: 0.55;
+}
+.thread [data-avatar] {
+	margin-top: 1px;
+}
+.place {
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+	color: var(--accent);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.text {
+	font-size: var(--text-12);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.openDot {
+	width: 6px;
+	height: 6px;
+	margin-top: 4px;
+	border-radius: 50%;
+	background: var(--amber);
+	flex: none;
+}
+.resolved {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg3);
+}
+.caption {
+	margin: 0;
+	padding: 6px 6px 2px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+/* The PR panel: «4 of 6 viewed» and the line of the same share. */
+.caption[data-pr-viewed-caption] {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.file {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	padding: 4px 6px;
+	box-sizing: border-box;
+	border-radius: 5px;
+	text-align: left;
+}
+/* A file row with «Viewed»: the row button spans the whole row (rule 15), the 24 px checkbox lies over its left end. */
+.fileLine {
+	position: relative;
+	display: flex;
+}
+.fileLine > .file {
+	padding-left: 34px;
+}
+.fileLine > .tick {
+	position: absolute;
+	left: 5px;
+	top: 50%;
+	translate: 0 -50%;
+}
+/* The row hovers as a whole, also while the pointer is on the checkbox over its left end (rule 15). */
+.fileLine:has(> .tick:hover) > .file {
+	background-image: linear-gradient(var(--segment-hover), var(--segment-hover));
+}
+.file[aria-pressed='true'] {
+	background: var(--sel);
+}
+.path {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	font-family: var(--mono-family);
+}
+.path strong {
+	font-size: var(--text-12);
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.path small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.counts {
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+}
+.commit {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 6px;
+	box-sizing: border-box;
+	border-radius: 6px;
+	text-align: left;
+}
+.commit > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.subject {
+	font-size: var(--text-12);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* spec/pull-requests-and-ci#pr-panel: at the narrowest panel the repo picker (spec/pull-requests-and-ci#repo-picker) steps aside so the actions fit. */
+@container prs (max-width: 230px) {
+	.panel .header .filter {
+		display: none;
+	}
+}
+/* spec/pull-requests-and-ci#pr-list: below ~300 px the tabs become glyphs with numbers and the branches hide. */
+@container prs (max-width: 300px) {
+	/* spec/pull-requests-and-ci#pr-panel: the header segment reads «PR · CI», so the actions keep their place down to the 200 px panel. */
+	.panel .header [data-segment-full] {
+		display: none;
+	}
+	.panel .header [data-segment-short] {
+		display: inline;
+	}
+	.tabIcon {
+		display: inline-flex;
+	}
+	.tabLabel,
+	.branches,
+	.metaChecks small {
+		display: none;
+	}
+	.tab small {
+		opacity: 1;
+	}
+	.wide {
+		display: none;
+	}
+	.narrow {
+		display: inline;
+	}
+}
+.commitGroup {
+	display: flex;
+	flex-direction: column;
+}
+.commitFiles {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 0 0 4px 20px;
+}
+.threadLine {
+	display: flex;
+	align-items: flex-start;
+	gap: 0;
+}
+.threadLine > .tick {
+	margin: 3px 0 0 4px;
+}
+.threadLine > .thread {
+	flex: 1;
+	min-width: 0;
+}
+.handed {
+	display: inline-flex;
+	flex: none;
+	margin-top: 2px;
+	color: var(--accent);
+}
+.draftMark {
+	display: inline-flex;
+	flex: none;
+	margin-top: 2px;
+	color: var(--accent);
+}
+/* spec/pull-requests-and-ci#hand-to-agent: the footer of your own PR. */
+.ownFooter {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 10px;
+	border-top: 1px solid var(--sep);
+	background: var(--card);
+}
+.ownFooter small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.ownFooter > svg {
+	flex: none;
+	color: var(--accent);
+}
+.ownSent {
+	font-size: var(--text-12);
+	color: var(--fg);
+}
+/* spec/pull-requests-and-ci#ci: the «Pull requests · CI» segment under the list header, CI filters and groups, a merged PR's folded checks. */
+.ciFilters {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px 2px;
+}
+.ciGroup {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	padding-right: 6px;
+}
+.ciGroup > small {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ciRun {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+/* spec/pull-requests-and-ci#ci-segment: the run page's title row — S buttons (24) in a 28 row. */
+.ciRunTitle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 34px;
+	box-sizing: border-box;
+	padding: 2px 0 4px;
+}
+.ciFold {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 28px;
+	box-sizing: border-box;
+	padding: 0 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+	text-align: left;
+}
+.ciFold:hover {
+	background: var(--segment-hover);
+}
+.ciFold:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+.ciFoldName {
+	flex: 1;
+	min-width: 0;
+	font-family: var(--mono-family);
+	font-size: var(--text-12);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ciFold > small {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.ciChevron {
+	display: inline-flex;
+	flex: none;
+	width: 12px;
+	color: var(--fg3);
+	transform: rotate(-90deg);
+	transition: transform var(--motion-fast) var(--motion-ease);
+}
+.ciFold[data-open] .ciChevron {
+	transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+	.ciChevron {
+		transition: none;
+	}
+}
+
+/* spec/pull-requests-and-ci#ci-bell: the bell in a run's header; on, it is the button's selected state in --accent. */
+.ciBell[aria-pressed='true'] {
+	color: var(--accent);
+	background: var(--accent-soft);
+}
+/* spec/pull-requests-and-ci#ready-card: the header's glyphs — New PR, search, refresh, GitHub — one tight group (2 px). */
+.headerActions {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+.newWrap {
+	display: inline-flex;
+	flex: none;
+}
+.newGlyph,
+.hideGlyph {
+	display: inline-flex;
+	align-items: center;
+}
+.hideGlyph {
+	color: var(--fg3);
+}
+.newHide:hover .hideGlyph {
+	color: var(--fg);
+}
+.mono {
+	font-family: var(--mono-family);
+}
+/* spec/pull-requests-and-ci#ready-card: the card of a branch ready for a PR — an accent wash with a 1 px accent edge, above «Yours». */
+.newCard,
+.newList {
+	margin: 6px 2px 2px;
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--accent) 7%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+	display: flex;
+	flex-direction: column;
+	animation: var(--motion-fade);
+}
+.newCard {
+	padding: 8px 8px 8px 10px;
+	gap: 4px;
+}
+.newHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 20px;
+	min-width: 0;
+	font-size: var(--text-12);
+}
+.newHead > svg,
+.newRow > svg {
+	flex: none;
+	color: var(--accent);
+}
+.newRepo {
+	flex: none;
+	font-weight: 600;
+}
+.newBranch {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-family: var(--mono-family);
+	font-size: var(--text-11-5);
+	color: var(--fg);
+}
+/* × keeps a 24 px target inside the 20 px row (the row does not grow for it). */
+.newHide {
+	flex: none;
+	margin: -2px -2px -2px auto;
+	color: var(--fg3);
+}
+.newFoot {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px 8px;
+	min-height: 24px;
+}
+.newFoot > span {
+	flex: 1 1 150px;
+	min-width: 0;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.newFoot > button {
+	margin-left: auto;
+}
+.newList {
+	padding: 4px;
+	gap: 1px;
+}
+.newListHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	padding: 0 0 0 6px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+}
+.newListHead small {
+	font-weight: 400;
+	color: var(--fg3);
+}
+.newListHead .newHide {
+	margin: 0 0 0 auto;
+}
+.newRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 4px 4px 6px;
+	border-radius: 6px;
+}
+.newRow > button {
+	flex: none;
+}
+.newRowCopy {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.newRowCopy b {
+	font-size: var(--text-12);
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.newRowCopy em {
+	font-style: normal;
+	font-weight: 400;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	margin-left: 6px;
+}
+.newRowCopy small {
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	color: var(--fg);
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+/* spec/pull-requests-and-ci#review-crew: `Agent · Crew` in place of the «Agent» heading — the menu's section inset, the capsule across the menu. */
+.agentPicker {
+	display: contents;
+}
+.agentSwitch {
+	display: flex;
+	padding: 6px 4px 4px;
+}
+/* The list under the switch changes with it; the shared enter motion (none under reduced motion). */
+.agentPicks {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	animation: var(--motion-enter);
+}
+/* spec/appearance#evolution-redesign: the line under the «Agent» section of «Review with an agent ▾». */
+.agentNote {
+	margin: 4px 8px 2px;
+	padding-top: 6px;
+	border-top: 1px solid var(--sep);
+	font-size: var(--text-10);
+	line-height: 1.4;
+	color: var(--fg3);
+}
+/* spec/appearance#evolution-redesign: under `Remember for …` the note takes no rule of its own (the row has it). */
+[data-remember] + .agentNote {
+	margin-top: 0;
+	padding-top: 3px;
+	border-top: 0;
+}

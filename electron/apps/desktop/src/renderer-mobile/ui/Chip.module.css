@@ -1,0 +1,47 @@
+/* A 44 target around a 34 pill — the terminal's command tabs
+   (spec/remote-access-and-mobile#phone-task-tools) and the PR list's filter (spec/remote-access-and-mobile#phone-pr-list). */
+.row {
+	flex: none;
+	display: flex;
+	gap: 6px;
+	padding: 4px 14px 8px;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.row[data-line] {
+	border-bottom: 0.5px solid var(--sep);
+}
+.chip {
+	position: relative;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	height: 44px;
+	padding: 0 2px;
+}
+.chip > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	padding: 0 12px;
+	border-radius: 17px;
+	background: var(--tint);
+	font-size: 14px;
+	white-space: nowrap;
+}
+.chip:is([aria-selected='true'], [aria-checked='true']) > span {
+	background: var(--accent-soft);
+	color: var(--accent-text);
+}
+.chip:active > span {
+	background: var(--segment-press);
+}
+.chip small {
+	font-size: 14px;
+	color: var(--fg2);
+}
+.chip:is([aria-selected='true'], [aria-checked='true']) small {
+	color: inherit;
+	opacity: 0.8;
+}

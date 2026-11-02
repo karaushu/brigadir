@@ -1,0 +1,120 @@
+--- a/grammar.js
++++ b/grammar.js
+@@ -68,6 +68,13 @@
+       alias(choice($.identifier, $._concatenated_identifier), $.class_name),
+     )),
+ 
++    // Brigadir: a nested selector may start with a combinator, `> .item`, `~ p`, `+ a`.
++    child_selector: $ => prec.left(seq(optional($._selector), '>', $._selector)),
++
++    sibling_selector: $ => prec.left(seq(optional($._selector), '~', $._selector)),
++
++    adjacent_sibling_selector: $ => prec.left(seq(optional($._selector), '+', $._selector)),
++
+     pseudo_class_selector: $ => seq(
+       optional($._selector),
+       alias($._pseudo_class_selector_colon, ':'),
+@@ -85,15 +92,29 @@
+       ':',
+       $._value,
+       repeat(seq(optional(','), $._value)),
+-      optional($.important),
++      repeat($.important),
+       ';',
+     ),
+ 
++    // Brigadir: Sass flags share the `important` node.
++    important: _ => choice('!important', '!default', '!global'),
++
+     // Media queries
+ 
+     _query: ($, original) => choice(
+       original,
+       prec(-1, $.interpolation),
++      $.style_query,
++    ),
++
++    // Brigadir: a container style query, `@container style(--name: value)`.
++    style_query: $ => seq(
++      'style',
++      token.immediate('('),
++      alias($.identifier, $.feature_name),
++      ':',
++      $._value,
++      ')',
+     ),
+ 
+     // Property Values
+@@ -108,9 +129,37 @@
+       $.variable,
+     ),
+ 
+-    use_statement: $ => seq('@use', $._value, ';'),
++    // Brigadir: module system clauses (`as`, `with`, `show`/`hide`).
++    use_statement: $ => seq(
++      '@use',
++      $._value,
++      optional(seq('as', choice('*', $.identifier))),
++      optional(seq('with', alias($._module_config, $.arguments))),
++      ';',
++    ),
++
++    forward_statement: $ => seq(
++      '@forward',
++      $._value,
++      optional(seq('as', $.identifier, token.immediate('*'))),
++      optional(seq(choice('show', 'hide'), sep1(',', choice($.identifier, $.variable)))),
++      optional(seq('with', alias($._module_config, $.arguments))),
++      ';',
++    ),
+ 
+-    forward_statement: $ => seq('@forward', $._value, ';'),
++    _module_config: $ => seq(
++      '(',
++      sep1(',', alias($._module_config_item, $.argument)),
++      optional(','),
++      ')',
++    ),
++
++    _module_config_item: $ => seq(
++      field('name', $.variable),
++      ':',
++      field('value', $._value),
++      optional($.important),
++    ),
+ 
+     mixin_statement: $ => seq(
+       '@mixin',
+@@ -121,7 +170,8 @@
+ 
+     include_statement: $ => seq(
+       '@include',
+-      $.identifier,
++      // Brigadir: a mixin from a module, `@include module.name`.
++      choice($.identifier, alias(/[a-zA-Z_][a-zA-Z0-9_-]*\.[a-zA-Z_-][a-zA-Z0-9_-]*/, $.identifier)),
+       optional(alias($._include_arguments, $.arguments)),
+       choice($.block, ';'),
+     ),
+@@ -156,7 +206,12 @@
+ 
+     return_statement: $ => seq('@return', $._value, ';'),
+ 
+-    extend_statement: $ => seq('@extend', choice($._value, $.class_selector), ';'),
++    extend_statement: $ => seq(
++      '@extend',
++      choice($._value, $.class_selector, $.placeholder),
++      optional('!optional'),
++      ';',
++    ),
+ 
+     error_statement: $ => seq('@error', $._value, ';'),
+ 
+@@ -188,7 +243,7 @@
+       optional(seq(field('key', $.variable), ',')),
+       field('value', $.variable),
+       'in',
+-      $._value,
++      sep1(',', $._value),
+       $.block,
+     ),
+ 

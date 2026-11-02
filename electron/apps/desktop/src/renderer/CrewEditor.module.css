@@ -1,0 +1,407 @@
+/* Crew tree (spec/crew-templates-and-editor#crew-editor): 976 px sheet, tree with dotted background on the left, 376 px inspector on the right. */
+.dialog {
+	width: min(976px, calc(100vw - 48px));
+	height: min(720px, calc(100vh - 48px));
+	padding: 0;
+	border: 1px solid var(--sep);
+	border-radius: 11px;
+	color: var(--fg);
+	background: var(--card);
+	box-shadow: 0 18px 44px var(--shadow);
+	overflow: hidden;
+}
+.dialog[open] {
+	display: flex;
+	flex-direction: column;
+}
+.dialog::backdrop {
+	background: var(--modal-scrim);
+}
+.header {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	/* spec/crew-templates-and-editor#editor-inspector: 10 / 12 / 10 / 16 round the M row. */
+	padding: 10px 12px 10px 16px;
+	border-bottom: 1px solid var(--sep);
+}
+.title {
+	font-size: var(--text-14);
+	font-weight: 600;
+}
+.crewName {
+	width: 220px;
+}
+.cap {
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.space {
+	flex: 1;
+	min-width: 0;
+}
+.body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+.tree {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	padding: 16px;
+	overflow: auto;
+	background: var(--content);
+	background-image: radial-gradient(var(--sep) 1px, transparent 1px);
+	background-size: 16px 16px;
+}
+.canvas {
+	position: relative;
+	margin: 0 auto;
+	flex: none;
+}
+.wires {
+	position: absolute;
+	left: 0;
+	top: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+.nodeWrap {
+	position: absolute;
+}
+.nodeWrap[style] > .node {
+	height: 54px;
+}
+.node {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: 100%;
+	height: 100%;
+	padding: 6px 9px;
+	border: 1px solid var(--sep);
+	border-radius: 9px;
+	background: var(--card);
+	text-align: left;
+	color: var(--fg);
+	transition:
+		border-color var(--motion-fast),
+		box-shadow var(--motion-fast);
+}
+.nodeWrap[style] > .node[data-root='true'] {
+	height: 34px;
+}
+.node[data-root='true'] {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 0 12px;
+	border-color: var(--fg3);
+}
+.node[data-root='true'] code {
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+}
+.node[data-root='true'] > span > svg:last-of-type {
+	color: var(--fg2);
+}
+.node[data-role='reviewer'] {
+	border-color: var(--amber);
+}
+.node[data-selected='true'] {
+	border-color: var(--accent);
+	border-width: 1.5px;
+	box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* spec/crew-templates-and-editor#editor-inspector: hovering a node shows its «+», the card itself stays; no global hover layer. */
+.node:hover {
+	background-image: none;
+}
+.node[data-dragging='true'] {
+	opacity: 0.6;
+}
+.nodeTitle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	width: 100%;
+}
+.nodeTitle strong {
+	font-size: var(--text-12);
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.nodeTitle > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.node[data-root='true'] .nodeTitle > svg:first-child {
+	color: var(--fg);
+}
+.nodeSub {
+	display: block;
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.addChild {
+	position: absolute;
+	left: calc(50% - var(--c-h) / 2);
+	top: 58px;
+	animation: var(--motion-fade);
+}
+.slotWrap {
+	position: absolute;
+	width: 104px;
+	height: 54px;
+}
+.slot {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	width: 100%;
+	height: 100%;
+	border: 1px dashed var(--fg3);
+	border-radius: 9px;
+	background: transparent;
+	color: var(--fg2);
+	font-size: var(--text-10-5);
+}
+.slot:hover,
+.slot[aria-expanded='true'] {
+	border: 1px solid var(--accent);
+	background: var(--accent-soft);
+	color: var(--fg);
+}
+/* The empty agent has no glyph: the gap keeps its name under the others. */
+.menuSpace {
+	width: 12px;
+	flex: none;
+}
+.legend {
+	margin-top: auto;
+	padding-top: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+}
+.legendRow {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	flex-wrap: wrap;
+}
+.legendRow > span:nth-child(3) {
+	margin-left: 11px;
+}
+.legendSolid {
+	width: 18px;
+	height: 1px;
+	background: var(--fg3);
+	flex: none;
+}
+.legendDashed {
+	width: 18px;
+	height: 0;
+	border-top: 1.2px dashed var(--amber);
+	flex: none;
+}
+.legend small {
+	font-size: var(--text-10-5);
+	color: var(--fg3);
+}
+.warn {
+	color: var(--amber) !important;
+}
+.inspector {
+	width: 376px;
+	flex: none;
+	min-width: 0;
+	overflow: auto;
+	border-left: 1px solid var(--sep);
+	padding: 12px 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+}
+.hint {
+	font-size: var(--text-12);
+	color: var(--fg2);
+	padding: 8px 0;
+}
+.row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.row[data-align='start'] {
+	align-items: flex-start;
+}
+.row[data-align='start'] > .label {
+	padding-top: 5px;
+}
+.label {
+	width: 76px;
+	flex: none;
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+}
+.nameField {
+	flex: 1;
+	min-width: 0;
+}
+/* spec/crew-templates-and-editor#editor-inspector: the field's own rule loads later, so the name's weight and the zone's mono
+   need the doubled class, as the rail's `.ref.ref`. */
+.nameField.nameField {
+	font-weight: 600;
+}
+.row > div[class*='popupRoot'] {
+	min-width: 0;
+}
+.zone {
+	flex: 1;
+	min-width: 0;
+}
+.zone.zone {
+	font-family: var(--mono-family);
+}
+.summary {
+	flex: 1;
+	min-width: 0;
+}
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	flex: 1;
+	position: relative;
+}
+.chipMenuWrap {
+	position: relative;
+	display: inline-flex;
+}
+.dim {
+	font-size: var(--text-10-5);
+	color: var(--fg3);
+}
+.leadNote {
+	padding: 5px 8px;
+	border-radius: 6px;
+	background: var(--accent-soft);
+	font-size: var(--text-10-5);
+	line-height: 1.4;
+	color: var(--fg2);
+}
+.sep {
+	border: 0;
+	border-top: 1px solid var(--sep);
+	margin: 0;
+}
+.instructions summary {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-height: var(--control-h-s);
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+	cursor: default;
+	list-style: none;
+}
+.instructions summary::-webkit-details-marker {
+	display: none;
+}
+.instructions summary > svg {
+	transition: transform var(--motion-fast);
+}
+.instructions[open] summary > svg {
+	transform: rotate(90deg);
+}
+.instructions small {
+	font-size: inherit;
+	color: var(--fg3);
+}
+.instructions p {
+	margin: 0 0 0 14px;
+	font-size: var(--text-11);
+	line-height: 1.5;
+	color: var(--fg2);
+	white-space: pre-wrap;
+}
+.group {
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	letter-spacing: 0.02em;
+}
+/* spec/crew-templates-and-editor#editor-inspector: 64 px under its caption, the buttons right below; the field does not eat the inspector. */
+.extra {
+	flex: none;
+	width: 100%;
+	min-height: 64px;
+}
+.footer {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 16px;
+	border-top: 1px solid var(--sep);
+	background: var(--tint);
+}
+.issue {
+	font-size: var(--text-10-5);
+	color: var(--amber);
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+	.node,
+	.addChild {
+		transition: none;
+		animation: none;
+	}
+}
+.edgeHit {
+	position: absolute;
+	height: var(--control-h-s);
+	z-index: 2;
+}
+.edgeRemove {
+	position: absolute;
+	top: 0;
+	opacity: 0;
+	transition: opacity var(--motion-fast);
+}
+.edgeHit:hover .edgeRemove,
+.edgeRemove:focus-visible {
+	opacity: 1;
+}
+.chips [data-tone='warning'] > svg {
+	color: var(--fg2);
+}
+.chips [data-tone='warning']:hover > svg {
+	color: var(--red);
+}
+/* spec/crew-templates-and-editor#editor-inspector: an empty icon slot the width of the 10 px edit glyph, so built-in and own templates share a column. */
+.glyphSlot {
+	width: 10px;
+	flex: none;
+}

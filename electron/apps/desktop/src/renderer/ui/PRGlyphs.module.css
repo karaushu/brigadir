@@ -1,0 +1,36 @@
+/* spec/pull-requests-and-ci#repo-counter: a PR's state and review state as glyphs without words — the PR panel and the phone's list (spec/remote-access-and-mobile#phone-pr-list). */
+.state {
+	display: inline-flex;
+	flex: none;
+	color: var(--green);
+}
+.state[data-pr-state='DRAFT'] {
+	color: var(--fg2);
+}
+.state[data-pr-state='MERGED'] {
+	color: var(--purple);
+}
+.state[data-pr-state='CLOSED'] {
+	color: var(--red);
+}
+.state > svg,
+.mark > svg {
+	display: block;
+}
+.mark {
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+}
+.mark[data-mark='changes'] {
+	color: var(--amber);
+}
+.mark[data-mark='approved'] {
+	color: var(--green);
+}
+.waitingDot {
+	width: var(--pr-dot, 7px);
+	height: var(--pr-dot, 7px);
+	border-radius: 50%;
+	background: var(--amber);
+}

@@ -1,0 +1,185 @@
+/*
+ * spec/remote-access-and-mobile#phone-app: the phone's base — the desktop's tokens (tokens.css) and three of its own, the touch scale of the control
+ * system (spec/appearance#control-scale) and the body: 15 px text, one side margin of 16 for every screen.
+ */
+@import '../renderer/tokens.css';
+
+:root[data-touch] {
+	--safe-top: env(safe-area-inset-top, 0px);
+	--safe-bottom: env(safe-area-inset-bottom, 0px);
+	--gutter: 16px;
+	/* spec/appearance#control-scale in touch sizes: L 44 (rows, buttons, fields), XL 50 (the sheet's main action). */
+	--control-h-l: 44px;
+	--control-px-l: 16px;
+	--control-r-l: 12px;
+	--control-fs-l: 15px;
+	--control-icon-l: 20px;
+	--control-gap-l: 8px;
+	--control-box-l: 20px;
+	--control-sw-w-l: 51px;
+	--control-sw-h-l: 31px;
+	--control-seg-r-l: 9px;
+	--control-h-xl: 50px;
+	--control-px-xl: 18px;
+	--control-r-xl: 14px;
+	--control-fs-xl: 16px;
+	--control-icon-xl: 20px;
+	--control-gap-xl: 8px;
+	--control-seg-r-xl: 10px;
+	--control-min-target: 44px;
+	/* spec/remote-access-and-mobile#phone-task-tools: the diff's text (`ui/DiffCode`) at the phone's scale; the computer sets these from its typography. */
+	--diff-family: var(--mono-family);
+	--diff-size: 12.5px;
+	--diff-line: 19px;
+	--diff-ligatures: none;
+}
+/* The keyboard covers the home indicator: no safe-area inset left between the keyboard and the composer or a sheet. */
+:root[data-touch][data-keyboard] {
+	--safe-bottom: 0px;
+}
+:root[data-touch] [data-size='l'] {
+	--c-fw: 500;
+	--c-fw-solid: 500;
+}
+:root[data-touch] [data-size='xl'] {
+	--c-fw: 600;
+	--c-fw-solid: 600;
+}
+/* Tokens the computer has no use for: the sheet's scrim and face, the translucent bottom bar, the swipe's archive (iOS gray). */
+:root[data-touch] {
+	--swipe-archive: #8e8e93;
+	--scrim: rgba(0, 0, 0, 0.32);
+	--sheet: #ffffff;
+	--bar: rgba(247, 247, 248, 0.95);
+}
+:root[data-touch][data-theme='dark'] {
+	--scrim: rgba(0, 0, 0, 0.5);
+	--sheet: #2a2a2a;
+	--bar: rgba(34, 34, 34, 0.94);
+	--shadow: rgba(0, 0, 0, 0.5);
+}
+
+html[data-touch],
+html[data-touch] body {
+	height: 100%;
+	margin: 0;
+	overflow: hidden;
+	overscroll-behavior: none;
+	background: var(--win);
+	color: var(--fg);
+	-webkit-text-size-adjust: 100%;
+	-webkit-tap-highlight-color: transparent;
+}
+html[data-touch] body {
+	font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif;
+	font-size: 15px;
+	line-height: 1.34;
+	letter-spacing: -0.1px;
+}
+html[data-touch] #root {
+	height: 100%;
+}
+/* The reset: a button is its content, the component draws the rest. */
+/* Zero specificity: every component's own class wins over it. */
+:where(html[data-touch]) :where(button, a) {
+	font: inherit;
+	color: inherit;
+	border: 0;
+	background: none;
+	padding: 0;
+	margin: 0;
+	text-align: left;
+	text-decoration: none;
+	letter-spacing: inherit;
+	cursor: default;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+}
+:where(html[data-touch]) :where(p) {
+	margin: 0;
+}
+html[data-touch] :focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+/* Rule 15 on a touch screen: no hover; «pressed» takes its place on the same area. */
+@media (hover: none) {
+	html[data-touch] button:hover {
+		background-image: none;
+	}
+}
+html[data-touch] button[data-variant]:active:not(:disabled) {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+html[data-touch] button[data-variant='solid']:active:not(:disabled) {
+	background-image: linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18));
+}
+html[data-touch] button[data-variant]:disabled {
+	opacity: 0.45;
+}
+/* Segments and the switch in the touch look. */
+html[data-touch] [role='radiogroup'][data-size='l'] {
+	padding: 3px;
+	gap: 2px;
+}
+html[data-touch] [role='radiogroup'][data-size='l'] > button {
+	flex: 1 1 0;
+	justify-content: center;
+	height: calc(var(--c-h) - 6px);
+	font-size: 14px;
+	font-weight: 500;
+}
+html[data-touch] [role='radiogroup'][data-size='l'] > span[aria-hidden] {
+	top: 3px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+html[data-touch] :is([role='switch'][data-size='l'], [data-size='l'] > [role='switch']) {
+	width: auto;
+}
+html[data-touch] :is([role='switch'][data-size='l'], [data-size='l'] > [role='switch']) > span {
+	background: var(--fg3);
+	box-shadow: none;
+}
+html[data-touch]
+	:is([role='switch'][data-size='l'], [data-size='l'] > [role='switch'])
+	> span::after {
+	top: 2px;
+	left: 2px;
+	width: 27px;
+	height: 27px;
+	background: #fff;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+html[data-touch]
+	:is([role='switch'][data-size='l'], [data-size='l'] > [role='switch'])[aria-checked='true']
+	> span {
+	background: var(--green);
+}
+html[data-touch]
+	:is([role='switch'][data-size='l'], [data-size='l'] > [role='switch'])[aria-checked='true']
+	> span::after {
+	background: #fff;
+	transform: translateX(20px);
+}
+.mono {
+	font-family: var(--mono-family);
+	letter-spacing: 0;
+}
+.ell {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+@keyframes mobile-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	html[data-touch] * {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}

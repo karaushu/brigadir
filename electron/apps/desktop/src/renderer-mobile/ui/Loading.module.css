@@ -1,0 +1,66 @@
+.loading {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 16px;
+}
+/* A row's place: the name and the line under it as bars, the height of a list row. */
+.row {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 8px;
+	min-height: 52px;
+	padding: 0 14px;
+	box-sizing: border-box;
+	border-radius: 12px;
+	background: var(--tint);
+}
+.row > i {
+	display: block;
+	height: 11px;
+	border-radius: 6px;
+	background: var(--tint);
+	animation: loading-pulse 1.4s ease-in-out infinite alternate;
+}
+.row > i:first-child {
+	height: 13px;
+}
+@keyframes loading-pulse {
+	to {
+		opacity: 0.45;
+	}
+}
+/* A long network read: the small ring and its name under the rows. */
+.status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 2px;
+	font-size: 13px;
+	color: var(--fg2);
+}
+.status > .ring {
+	width: 12px;
+	height: 12px;
+	border-width: 1.5px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.row > i,
+	.ring {
+		animation: none;
+	}
+}
+.ring {
+	width: 22px;
+	height: 22px;
+	border: 2px solid var(--sep);
+	border-top-color: var(--fg2);
+	border-radius: 50%;
+	animation: loading-spin 0.8s linear infinite;
+}
+@keyframes loading-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}

@@ -1,0 +1,224 @@
+/* SettingsTemplates (spec/crew-templates-and-editor#template-library): 222 px list with two groups, detail form on the right. */
+.root {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+.list {
+	width: 222px;
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	border-right: 1px solid var(--sep);
+	background: var(--sb);
+}
+.items {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 8px 8px 4px;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.groupTitle {
+	padding: 4px 8px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	letter-spacing: 0.02em;
+}
+.groupTitle + .groupTitle,
+.item + .groupTitle {
+	padding-top: 12px;
+}
+.item {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	width: 100%;
+	height: var(--c-h);
+	padding: 0 8px;
+	border-radius: var(--c-r);
+	background-color: transparent;
+	font-size: var(--c-fs);
+	color: var(--fg);
+	text-align: left;
+}
+.item > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.item > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.item small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.item[data-active='true'] {
+	background-color: var(--accent-fill);
+	color: var(--selfg);
+}
+.item[data-active='true'] > svg,
+.item[data-active='true'] small {
+	color: inherit;
+	opacity: 0.85;
+}
+.listFooter {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 8px;
+	border-top: 1px solid var(--sep);
+}
+.addWrap {
+	position: relative;
+	display: inline-flex;
+}
+.space {
+	flex: 1;
+}
+.detail {
+	flex: 1;
+	min-width: 0;
+	overflow: auto;
+	padding: 14px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.head > svg {
+	color: var(--fg);
+	flex: none;
+}
+.head strong {
+	font-size: var(--text-14);
+	font-weight: 600;
+}
+.head button + button {
+	margin-left: 0;
+}
+.tag {
+	padding: 0 5px;
+	border: 1px solid var(--sep);
+	border-radius: 3px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.group {
+	margin: 0;
+	min-width: 0;
+	padding: 0;
+	border: 1px solid var(--sep);
+	border-radius: 9px;
+	background: var(--card);
+}
+.row {
+	composes: switchRow from './ui/Controls.module.css';
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 5px 12px;
+	min-height: 40px;
+}
+/* spec/settings-modules-and-onboarding#row-hover: the «Rights» switch row fills to the card's corners. */
+.group > .row:first-child {
+	border-top-left-radius: 8px;
+	border-top-right-radius: 8px;
+}
+.group > .row:last-child {
+	border-bottom-left-radius: 8px;
+	border-bottom-right-radius: 8px;
+}
+.row + .row {
+	border-top: 1px solid var(--sep);
+}
+/* Canvas 12.6 `.k12-td .tg.dis`: a built-in's Rights read as one dimmed card — the label and the text too, the switch
+   not dimmed twice. */
+.group[data-read-only] {
+	opacity: 0.45;
+}
+.group[data-read-only] [role='switch']:disabled {
+	opacity: 1;
+}
+/* A crew's agents and levels: plain text at the labels' size (canvas 12.6 crew rows). */
+.value {
+	font-size: var(--text-12);
+}
+.row [role='switch'] {
+	margin: 0 -6px;
+}
+.label {
+	width: 110px;
+	flex: none;
+	text-align: right;
+	font-size: var(--text-12);
+}
+.row input[type='text'],
+.row input:not([type]) {
+	flex: 1;
+	min-width: 0;
+	max-width: 260px;
+}
+.row > div[class*='popupRoot'] {
+	width: 190px;
+	min-width: 0;
+}
+.cap {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.dim {
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+.rights {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+.rights span {
+	font-size: var(--text-12);
+}
+.rights small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+	line-height: 1.4;
+}
+.instructionsGroup {
+	flex: 1 0 auto;
+	display: flex;
+	flex-direction: column;
+}
+.instructionsGroup .row {
+	padding-bottom: 6px;
+}
+/* Canvas 12.6 `.k12-td .ta`: the M field (rule 16) at 1.5 — over the field's own 1.4 — and a built-in's role in --fg2,
+   read-only on the field's own fill. */
+.instructionsGroup .instructions {
+	flex: 1;
+	min-height: 120px;
+	margin: 0 12px 12px 132px;
+	line-height: 1.5;
+}
+.instructionsGroup .instructions:read-only {
+	color: var(--fg2);
+}
+.instructionsGroup .instructions:read-only:focus {
+	background: var(--tint);
+}
+.error {
+	font-size: var(--text-12);
+	color: var(--red);
+}

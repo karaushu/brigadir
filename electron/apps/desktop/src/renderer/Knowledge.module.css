@@ -1,0 +1,289 @@
+.band {
+	flex: 0 1 auto;
+	min-height: 0;
+	max-height: 55%;
+	overflow: auto;
+	padding: 0 24px 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+/* spec/projects-and-board#screen-layout: in a narrow window, up to 1050 px the band keeps the board's 16 px edge. */
+@media (max-width: 1050px) {
+	.band {
+		padding-inline: 16px;
+	}
+}
+.card {
+	flex: none;
+	border: 1px solid var(--sep);
+	border-radius: 9px;
+	background: var(--tint);
+	font-size: var(--text-12);
+	animation: var(--motion-fade);
+}
+.card > header {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 11px 12px 9px;
+}
+.card > header > svg {
+	flex: none;
+	color: var(--fg2);
+	margin-top: 2px;
+}
+.card > header button {
+	flex: none;
+}
+.copy {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-size: var(--text-13);
+}
+.copy > small {
+	font-size: var(--text-11);
+	color: var(--fg2);
+	overflow-wrap: anywhere;
+}
+.chevron {
+	display: flex;
+	transition: transform var(--motion-travel) var(--motion-ease);
+}
+.chevron[data-open='true'] {
+	transform: rotate(180deg);
+}
+.reveal {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows var(--motion-travel) var(--motion-ease),
+		opacity var(--motion-enter-time) var(--motion-ease);
+}
+.reveal[data-open='true'] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+}
+.reveal > div {
+	min-height: 0;
+	overflow: hidden;
+}
+.body {
+	padding: 0 12px 12px 37px;
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+}
+.destination {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.destination > span {
+	width: 44px;
+}
+.destination > div {
+	min-width: 0;
+	max-width: 160px;
+}
+/* spec/projects-and-board#screen-layout: the file name and the text are mono 12, the text on 18 px lines. */
+.destination input {
+	width: 180px;
+	font-family: var(--mono-family);
+	font-size: var(--text-12);
+}
+.destination > small {
+	font-size: var(--text-10);
+}
+.body .editor {
+	font-family: var(--mono-family);
+	font-size: var(--text-12);
+	line-height: 18px;
+	resize: vertical;
+}
+.note {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	color: var(--fg2);
+}
+.note > small {
+	flex: 1;
+	font-size: var(--text-10);
+}
+.sources {
+	border-top: 1px solid var(--sep);
+	padding-top: 9px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.sources > small {
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	padding: 0 8px 3px;
+}
+.sources button {
+	display: flex;
+	justify-content: flex-start;
+	gap: 7px;
+	width: 100%;
+	text-align: left;
+}
+.sources button > span {
+	max-width: 30%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.sources button > small {
+	flex: 1;
+	color: var(--fg2);
+	font-size: var(--text-10);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.sources svg {
+	flex: none;
+	color: var(--fg2);
+}
+.body footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.body footer > code {
+	flex: 1;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	overflow-wrap: anywhere;
+}
+.added {
+	margin: 0 12px 12px 37px;
+	border: 1px solid var(--sep);
+	border-radius: 6px;
+	max-height: 180px;
+	overflow: auto;
+	background: var(--win);
+}
+/* spec/projects-and-board#screen-layout: the receipt's tick is green; a file name in the copy is mono 12. */
+.card[data-knowledge-added] > header > svg {
+	color: var(--green);
+}
+.copy code {
+	font-family: var(--mono-family);
+	font-size: var(--text-12);
+}
+/* «Current file» and the file under it: one block, so the closed file adds no second gap (9 px to the text). */
+.current {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+}
+.current > div {
+	align-self: stretch;
+}
+.current .existing {
+	margin-top: 9px;
+}
+.error {
+	color: var(--red);
+	overflow-wrap: anywhere;
+}
+.dialog {
+	position: fixed;
+	inset: var(--strip-h) 0 auto;
+	margin: 0 auto;
+	box-sizing: border-box;
+	width: min(620px, calc(100vw - 32px));
+	max-height: calc(100vh - 68px);
+	padding: 16px;
+	border: 1px solid var(--sep);
+	border-top: 0;
+	border-radius: 0 0 11px 11px;
+	background: var(--card);
+	color: var(--fg);
+	box-shadow: 0 22px 60px var(--shadow);
+	overflow: auto;
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.dialog[open] {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.dialog::backdrop {
+	background: var(--modal-scrim);
+}
+.dialog header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.dialog h2 {
+	font-size: var(--text-14);
+	font-weight: 600;
+	flex: 1;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+.rejected {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--sep);
+}
+.rejected > span {
+	flex: 1;
+}
+.file {
+	font: var(--text-11)/18px var(--mono-family);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	margin: 0;
+	min-height: 0;
+	overflow: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+	.reveal,
+	.chevron {
+		transition: none;
+	}
+	.card {
+		animation: none;
+	}
+}
+
+.existing {
+	max-height: 160px;
+	overflow: auto;
+	margin: 0;
+	padding: 9px 11px;
+	font: var(--text-11)/18px var(--mono-family);
+	background: var(--content);
+	border: 1px solid var(--sep);
+	border-radius: 6px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.destination > span {
+	width: auto;
+	min-width: 44px;
+	flex: none;
+}
+.body > button,
+.current > button {
+	align-self: flex-start;
+}

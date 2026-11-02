@@ -1,0 +1,11 @@
+/* Rule 17: the file box of the commit dialog and the Conflicts dialog. */
+.box {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 4px;
+	border-radius: 8px;
+	background: var(--win);
+	box-shadow: inset 0 0 0 1px var(--sep);
+}

@@ -1,0 +1,46 @@
+/* The card moves left over its action, 84 wide, the action's colour under it (spec/tasks#archive-actions). */
+.swipe {
+	position: relative;
+	overflow: hidden;
+	border-radius: 12px;
+	touch-action: pan-y;
+}
+.swipe[data-row] {
+	border-radius: 10px;
+}
+.action {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 84px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	background: var(--green);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 500;
+}
+/* At rest the action is not drawn: under the card's rounded corners its colour would show through the edge's smoothing. */
+.swipe:not([data-open], [data-dragging]) > .action {
+	visibility: hidden;
+	/* …once the card has slid back over it. */
+	transition: visibility 0s linear var(--motion-travel);
+}
+.action[data-swipe-action='archive'] {
+	background: var(--swipe-archive);
+}
+.action:active:not(:disabled) {
+	background-image: linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18));
+}
+.content {
+	position: relative;
+	background: var(--win);
+	transition: transform var(--motion-travel) var(--motion-ease);
+}
+.content[data-dragging] {
+	transition: none;
+}

@@ -1,0 +1,154 @@
+/* spec/remote-access-and-mobile#client-ui-seam: the folder browser. The dialog itself is
+   ui/ModalDialog: 540 wide, 80 from the top. */
+.bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.crumbs {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: 28px;
+	box-sizing: border-box;
+	padding: 0 4px;
+	overflow: hidden;
+	border-radius: 7px;
+	background: var(--tint);
+}
+.step {
+	display: contents;
+	color: var(--fg3);
+}
+.step > svg {
+	flex: none;
+}
+.crumb {
+	position: relative;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	height: 22px;
+	min-height: 22px;
+	padding: 0 6px;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--fg2);
+	font: inherit;
+	font-size: var(--text-12);
+	white-space: nowrap;
+}
+.crumb[data-last='true'] {
+	color: var(--fg);
+	font-weight: 500;
+}
+.crumb:hover {
+	background: var(--tint2);
+	color: var(--fg);
+}
+.crumb:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+.list {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	/* 300 px of rows plus the padding and the hairline. */
+	height: 310px;
+	box-sizing: border-box;
+	padding: 4px;
+	overflow-y: auto;
+	border: 1px solid var(--sep);
+	border-radius: 8px;
+	/* The list lies on the dialog's own card. */
+	background: var(--card);
+	outline: none;
+}
+.list:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -1px;
+}
+.row {
+	position: relative;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 28px;
+	box-sizing: border-box;
+	padding: 0 8px;
+	border-radius: 6px;
+	font-size: var(--text-12);
+	color: var(--fg);
+	cursor: default;
+	user-select: none;
+}
+.row > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.row[data-git='true'] > svg {
+	color: var(--accent-text);
+}
+.row[data-hidden='true'] {
+	color: var(--fg3);
+}
+.row:hover {
+	background: var(--tint);
+}
+.row[aria-selected='true'] {
+	background: var(--accent-fill, var(--accent));
+	color: var(--selfg);
+}
+.row[aria-selected='true'] > svg,
+.row[aria-selected='true'] .meta,
+.row[aria-selected='true'] .chevron {
+	color: var(--selfg);
+}
+.row[data-naming] > span {
+	flex: 1;
+	min-width: 0;
+}
+.name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.meta {
+	flex: none;
+	font-size: var(--text-11);
+	color: var(--fg3);
+	white-space: nowrap;
+}
+.chevron {
+	flex: none;
+	display: flex;
+	color: var(--fg3);
+}
+.empty {
+	margin: auto;
+	font-size: var(--text-12);
+	color: var(--fg2);
+}
+.hint {
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg2);
+	overflow-wrap: anywhere;
+}
+.path {
+	font-family: var(--mono-family);
+}
+.newFolder {
+	color: var(--fg2);
+}
+.grow {
+	flex: 1;
+}

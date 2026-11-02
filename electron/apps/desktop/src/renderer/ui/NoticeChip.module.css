@@ -1,0 +1,121 @@
+/* spec/notifications-slack-notes-and-schedules#repo-contention, spec/appearance#control-scale: a chip for an ongoing state (S, 24 tall: the minimum target) and its popover. Hover covers the whole chip (rule 15). Amber text is
+   --amber-text, which passes 4.5:1 at 11 px where --amber does not in light. Every class S state is amber (spec/notifications-slack-notes-and-schedules#notice-chips).
+   spec/appearance#component-details (rule 17): the one amber pill — `Chip tone="warning"` (ui/Controls) wears this class too. */
+.chip {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	box-sizing: border-box;
+	justify-content: center;
+	height: 24px;
+	min-height: 24px;
+	min-width: 24px;
+	padding: 0 6px;
+	border: 0;
+	border-radius: 12px;
+	font: inherit;
+	font-size: var(--text-12);
+	font-weight: 500;
+	line-height: 1;
+	white-space: nowrap;
+	background: var(--amber-soft);
+	color: var(--amber-text);
+}
+.chip > svg {
+	flex: none;
+}
+.chip:hover,
+.chip[aria-expanded='true'] {
+	background: var(--amber-hover);
+	background-image: none;
+}
+.chip:active {
+	background: var(--amber-press);
+}
+.chip:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-color: transparent;
+}
+.chip[data-placement='composer'] {
+	align-self: center;
+	margin: 0 6px 0 2px;
+}
+.chip[data-placement='composer'] + .chip[data-placement='composer'] {
+	margin-left: -2px;
+}
+.chip[data-placement='shelf'] {
+	align-self: center;
+}
+
+/* spec/notifications-slack-notes-and-schedules#notice-chips: the popover's text is 12/17 (the shell's header and footer keep their own sizes). */
+.popover {
+	max-height: min(480px, calc(100vh - 140px));
+	font-size: var(--text-12);
+	line-height: calc(17px * var(--ui-scale));
+}
+/* The sections every class S popover shares: the lede, a repo's row with its count, a repo's name. */
+.lede {
+	margin: 0;
+	padding: 0 8px 4px;
+	color: var(--fg2);
+}
+.lede p {
+	margin: 0;
+}
+.lede p + p {
+	margin-top: 4px;
+}
+.lede strong {
+	color: var(--fg);
+	font-weight: 600;
+}
+.repoRow {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	padding: 10px 8px 4px;
+	font-size: var(--text-11);
+	font-weight: 400;
+	color: var(--fg2);
+}
+.repoRow > svg {
+	flex: none;
+	color: var(--amber);
+}
+.repo {
+	font-family: var(--mono-family);
+	font-size: var(--text-12);
+	font-weight: 600;
+	color: var(--fg);
+}
+.count {
+	margin-left: auto;
+	font-size: var(--text-10);
+}
+.popover footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 6px 8px 3px;
+	padding-top: 8px;
+	border-top: 1px solid var(--sep);
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.popover footer span {
+	flex: 1;
+}
+/* spec/composer-steering-queue-and-ghost#quick-question: the label without a popover — no hover, the height of a line of small text. */
+.chip[data-static] {
+	height: 20px;
+	min-height: 20px;
+	padding: 0 7px;
+	font-size: var(--text-11);
+	cursor: default;
+}
+.chip[data-static]:hover {
+	background: var(--amber-soft);
+}

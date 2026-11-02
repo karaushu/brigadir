@@ -1,0 +1,200 @@
+/* spec/appearance#evolution-redesign: the language and the copy button in a thin row above the code, the code full
+   width and scrolling sideways. Nothing lies over the code and nothing fades it out. */
+.block {
+	margin: 2px 0;
+	border-radius: 10px;
+	background: var(--code);
+	box-shadow: inset 0 0 0 1px var(--hair);
+	overflow: hidden;
+}
+.header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	padding: 0 4px 0 14px;
+}
+.lang {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg3);
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+}
+.copied {
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.header > .copy {
+	color: var(--fg3);
+}
+.header > .copy[data-copied] {
+	color: var(--green);
+}
+.counts {
+	flex: none;
+	margin-right: 2px;
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+}
+.add {
+	color: var(--diffAddedFg);
+}
+.remove {
+	color: var(--diffRemovedFg);
+}
+.block > pre {
+	margin: 0;
+	padding: 0 14px 12px;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--fg);
+	white-space: pre;
+	overflow-wrap: normal;
+	overflow-x: auto;
+	overflow-y: hidden;
+	font: var(--text-12) / 19px var(--mono-family);
+	/* spec/appearance#evolution-redesign: code blocks follow the editor's Ligatures switch (Geist Mono's Stylistic Set 11). */
+	font-feature-settings: var(--editor-features, normal);
+	tab-size: 4;
+}
+.block > pre code {
+	padding: 0;
+	background: transparent;
+	font: inherit;
+}
+/* Eight lines, then «Show all · N» under them: a fold that cuts at a line, not a fade over the code. */
+.block[data-folded='true'] > pre > code {
+	display: block;
+	width: max-content;
+	min-width: 100%;
+	max-height: calc(19px * 8);
+	overflow-x: visible;
+	overflow-y: clip;
+}
+.block > .more {
+	display: flex;
+	margin: -2px auto 10px;
+	height: 20px;
+	padding: 0 7px;
+	font-size: var(--text-11);
+}
+/* The scroll track under a wide block: thin, inside the block's padding. */
+.block > pre::-webkit-scrollbar,
+.diff::-webkit-scrollbar {
+	height: 3px;
+}
+.block > pre::-webkit-scrollbar-track,
+.diff::-webkit-scrollbar-track {
+	margin-inline: 14px;
+	border-radius: 2px;
+	background: var(--tint);
+}
+.block > pre::-webkit-scrollbar-thumb,
+.diff::-webkit-scrollbar-thumb {
+	border-radius: 2px;
+	background: var(--tint2);
+}
+/* spec/appearance#evolution-redesign: a ```diff block — the sign in its own column, tinted lines, the file's grammar and the changed words. */
+.diff {
+	padding-bottom: 6px;
+	overflow-x: auto;
+}
+.diffRows {
+	display: block;
+	width: max-content;
+	min-width: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	font: calc(11.5px * var(--ui-scale)) / 19px var(--mono-family);
+	font-feature-settings: var(--editor-features, normal);
+	color: var(--fg);
+	white-space: pre;
+	overflow: visible;
+	max-height: none;
+}
+.diffLine {
+	display: flex;
+	min-height: 19px;
+}
+.diffLine[data-kind='added'] {
+	background: var(--diffAddedBg);
+}
+.diffLine[data-kind='removed'] {
+	background: var(--diffRemovedBg);
+}
+.sign {
+	flex: none;
+	width: 16px;
+	text-align: center;
+	color: var(--fg3);
+	user-select: none;
+}
+.diffLine[data-kind='added'] > .sign {
+	color: var(--diffAddedFg);
+}
+.diffLine[data-kind='removed'] > .sign {
+	color: var(--diffRemovedFg);
+}
+.text {
+	padding-right: 14px;
+}
+.diffLine[data-kind='added'] [data-changed='true'] {
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--green) 24%, transparent);
+}
+.diffLine[data-kind='removed'] [data-changed='true'] {
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--red) 24%, transparent);
+}
+.diffFile {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	padding: 0 12px;
+	border-block: 1px solid var(--hair);
+	background: var(--tint);
+	color: var(--fg2);
+}
+.diffFile:first-child {
+	border-top: 0;
+}
+.diffFile > svg {
+	flex: none;
+}
+.diffFile > span:first-of-type {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--fg);
+	font-size: var(--text-11);
+}
+.diffFile > .counts {
+	margin: 0 0 0 auto;
+	padding-left: 12px;
+}
+.diffGap {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 20px;
+	padding: 0 12px 0 4px;
+	background: var(--tint);
+	color: var(--fg3);
+	font-size: var(--text-11);
+}
+.diffGap > svg {
+	flex: none;
+}
+/* «Syntax highlighting limit reached.» under the block. */
+.warning {
+	display: block;
+	margin: -6px 16px 12px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}

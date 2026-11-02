@@ -1,0 +1,162 @@
+/* spec/architecture-and-platform#crash-recovery: the screens a boundary draws. Window: whole window; surface: centred in the column that failed. */
+.window {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--win);
+	color: var(--fg);
+	interpolate-size: allow-keywords;
+	animation: var(--motion-fade);
+}
+.titlebar {
+	height: var(--strip-h);
+	flex: none;
+	-webkit-app-region: drag;
+}
+.column {
+	width: 440px;
+	max-width: calc(100% - 48px);
+	margin: auto;
+	padding-bottom: var(--strip-h);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+}
+.column h1 {
+	margin: 14px 0 0;
+	font-size: var(--text-15);
+	font-weight: 600;
+	line-height: 1.35;
+}
+.column p {
+	margin: 6px 0 0;
+	font-size: var(--text-12);
+	line-height: 1.5;
+	color: var(--fg2);
+}
+.actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 16px;
+}
+.column .actions {
+	margin-top: 18px;
+}
+.details {
+	align-self: stretch;
+	margin-top: 18px;
+	text-align: left;
+}
+.details summary {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	width: max-content;
+	margin: 0 auto;
+	padding: 3px 8px;
+	border-radius: 5px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	cursor: default;
+	list-style: none;
+	transition:
+		background-color var(--motion-fast) ease,
+		color var(--motion-fast) ease;
+}
+.details summary::-webkit-details-marker {
+	display: none;
+}
+.details summary:hover {
+	background: var(--tint);
+	color: var(--fg);
+}
+.details summary:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.details summary svg {
+	transform: rotate(-90deg);
+	transition: transform var(--motion-travel) var(--motion-ease);
+}
+.details[open] summary svg {
+	transform: none;
+}
+.details::details-content {
+	height: 0;
+	overflow: clip;
+	transition:
+		height var(--motion-travel) var(--motion-ease),
+		content-visibility var(--motion-travel) allow-discrete;
+}
+.details[open]::details-content {
+	height: auto;
+}
+.details pre {
+	margin: 8px 0 0;
+	max-height: 220px;
+	overflow: auto;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: var(--tint);
+	font: var(--text-11)/1.5 var(--mono-family);
+	color: var(--fg2);
+	white-space: pre-wrap;
+	word-break: break-word;
+	user-select: text;
+}
+.surface {
+	flex: 1;
+	align-self: stretch;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	box-sizing: border-box;
+	padding: 16px 20px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	background: transparent;
+	color: var(--fg);
+	animation: var(--motion-fade);
+	overflow: auto;
+}
+.surface {
+	position: relative;
+}
+.surface[data-framed] {
+	flex: none;
+	border-left: 1px solid var(--sep);
+}
+.surfaceTitlebar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: var(--strip-h);
+	-webkit-app-region: drag;
+}
+.surfaceTitlebar[data-short] {
+	height: 36px;
+}
+.surface h2 {
+	margin: 10px 0 0;
+	font-size: var(--text-13);
+	font-weight: 600;
+	line-height: 1.35;
+}
+.surface p {
+	margin: 4px 0 0;
+	max-width: 320px;
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+.surface .actions {
+	gap: 6px;
+	margin-top: 12px;
+}

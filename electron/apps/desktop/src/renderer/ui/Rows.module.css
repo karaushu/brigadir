@@ -1,0 +1,85 @@
+.viewport {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	overflow-anchor: none;
+	contain: strict;
+}
+/* spec/chat-turns-plans-and-questions#rail-scrollbar: the turn rail is the conversation's scrollbar; the system one would lie over its marks. */
+.viewport[data-scrollbar='hidden'] {
+	scrollbar-width: none;
+}
+.viewport[data-scrollbar='hidden']::-webkit-scrollbar {
+	display: none;
+}
+
+.search {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--sep);
+	background: var(--card);
+	flex: none;
+}
+.searchField {
+	position: relative;
+	display: flex;
+	align-items: center;
+	flex: 1;
+	min-width: 0;
+}
+.search input {
+	flex: 1;
+	min-width: 0;
+}
+/* spec/appearance#clear-field: the × sits inside the field's right edge; the text stops short of it. */
+.searchField > button {
+	position: absolute;
+	right: 6px;
+}
+.searchField:has(> button) input {
+	padding-right: 26px;
+}
+.search span {
+	font: var(--text-11) var(--mono-family);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.search input {
+	font-size: var(--text-13);
+}
+/* Canvas v3 2.1: the words the search found, in the rows on screen; the current row's in solid yellow. */
+::highlight(rows-find) {
+	background-color: var(--find-hit);
+}
+::highlight(rows-find-current) {
+	background-color: var(--find-current);
+	color: var(--on-find);
+}
+
+.surface {
+	position: relative;
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
+}
+.latest {
+	position: absolute;
+	right: 14px;
+	bottom: 12px;
+}
+/* Canvas v3 2.1: «To latest ⌄» is a floating pill — card, lift, a 14-px radius. */
+.latest.latest {
+	padding: 0 10px 0 12px;
+	border-radius: 14px;
+	background: var(--card);
+	box-shadow: var(--lift);
+	color: var(--fg);
+}
+
+.measured {
+	display: flow-root;
+}

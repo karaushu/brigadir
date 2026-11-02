@@ -1,0 +1,25 @@
+/* The preview's text inside the divided ModalDialog; the shell is ModalDialog's. */
+.content {
+	font-size: var(--text-12);
+	line-height: 1.5;
+}
+.content img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin: auto;
+}
+.content pre {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font: var(--text-12)/1.5 var(--mono-family);
+}
+.content p {
+	padding: 0;
+	overflow-wrap: anywhere;
+}
+.content h3 {
+	font-size: var(--text-12);
+	font-weight: 600;
+	margin: 12px 0 6px;
+}

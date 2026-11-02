@@ -1,0 +1,16 @@
+/* spec/pull-requests-and-ci#repo-picker: the picker's label gives way with an ellipsis, the chevron stays. */
+.picker > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.picker > svg {
+	flex: none;
+}
+/* spec/pull-requests-and-ci#repo-picker: the open PRs of a repo in the picker's menu, the glyph and the number as on the Repo row's counter. */
+.repoCount {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-variant-numeric: tabular-nums;
+}

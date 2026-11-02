@@ -1,0 +1,176 @@
+/* The phone's chat cards: the plan card, the proposed task, the question's footer. */
+.plan {
+	border: 1px solid var(--sep);
+	border-radius: 12px;
+	background: var(--card);
+	overflow: hidden;
+}
+.planHead {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 14px 4px;
+	font-size: 15px;
+	font-weight: 600;
+}
+.planHead > svg {
+	flex: none;
+}
+.lead {
+	padding: 0 14px 12px;
+	border-bottom: 1px solid var(--sep);
+	font-size: 14px;
+	line-height: 1.45;
+}
+.lead :global(p) {
+	margin: 0;
+}
+.lead :global(code) {
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: var(--tint);
+	font-family: var(--mono-family);
+	font-size: 13px;
+}
+.part {
+	display: flex;
+	gap: 10px;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--sep);
+}
+.number {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border: 1px solid var(--sep);
+	border-radius: 11px;
+	font-size: 12px;
+	color: var(--fg2);
+}
+.partBody {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.partBody b {
+	font-size: 15px;
+	font-weight: 600;
+}
+.files {
+	font-size: 12px;
+	color: var(--fg2);
+}
+.who {
+	align-self: flex-start;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 36px;
+	padding: 0 12px;
+	border-radius: 10px;
+	background: var(--tint);
+	font-size: 14px;
+}
+.who:active:not(:disabled) {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+.who > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.planFoot {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px 14px 14px;
+}
+.planFoot small {
+	font-size: 13px;
+	color: var(--fg2);
+}
+.pair {
+	display: flex;
+	gap: 8px;
+}
+.pair > * {
+	flex: 1 1 0;
+}
+/* The head's second word (the computer's `.hint`): who proposes, whose question. */
+.headNote {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--fg2);
+}
+/* spec/tasks#agent-created-tasks: the proposed task's name and prompt, folded to six lines until «Весь промпт». */
+.proposalTitle {
+	display: block;
+	margin-bottom: 4px;
+	font-size: 15px;
+	font-weight: 600;
+}
+.prompt {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.prompt[data-folded] {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 6;
+	overflow: hidden;
+}
+.whole {
+	min-height: 44px;
+	color: var(--accent);
+	font-size: 14px;
+}
+.context {
+	display: block;
+	margin-top: 6px;
+	font-size: 13px;
+	color: var(--fg2);
+}
+.planFoot small[data-error] {
+	color: var(--red);
+}
+/* spec/chat-turns-plans-and-questions#checklist-tools on the phone: the plan to approve, the chat's Markdown in the permission card. */
+.planText {
+	padding: 4px 0 8px;
+	font-size: 14px;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}
+.planText :global(h1),
+.planText :global(h2),
+.planText :global(h3) {
+	margin: 10px 0 4px;
+	font-size: 15px;
+	font-weight: 600;
+}
+.planText :global(h1) {
+	font-size: 16px;
+}
+.planText :global(p),
+.planText :global(ul),
+.planText :global(ol) {
+	margin: 0 0 6px;
+}
+.planText :global(ul),
+.planText :global(ol) {
+	padding-left: 20px;
+}
+.planText :global(code) {
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: var(--tint);
+	font-family: var(--mono-family);
+	font-size: 13px;
+}

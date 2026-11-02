@@ -1,0 +1,656 @@
+/* spec/search-menus-and-commands#search-tabs: Search Everywhere. The modal keeps its top
+   (64 px), the tab strip sits under the field, Text widens to 1000 with the preview on the right. */
+.dialog {
+	width: min(640px, calc(100vw - 32px));
+	max-height: calc(100vh - 96px);
+	margin: 64px auto auto;
+	padding: 0;
+	background: var(--card);
+	color: var(--fg);
+	/* The hairline is a ring outside the content: rows keep the full 640. */
+	border: 0;
+	border-radius: 10px;
+	box-shadow:
+		0 0 0 1px var(--sep),
+		0 18px 44px var(--shadow);
+	overflow: hidden;
+	font-size: var(--text-13);
+	transition:
+		opacity var(--motion-enter-time) var(--motion-ease),
+		translate var(--motion-travel) var(--motion-ease),
+		width var(--motion-travel) var(--motion-ease),
+		display var(--motion-travel) allow-discrete,
+		overlay var(--motion-travel) allow-discrete;
+}
+.dialog[open] {
+	display: flex;
+	flex-direction: column;
+}
+.dialog[data-tab='text'] {
+	width: min(1000px, calc(100vw - 32px));
+	height: min(596px, calc(100vh - 96px));
+}
+.dialog::backdrop {
+	background: var(--modal-scrim);
+}
+.dialog header {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--sep);
+}
+.dialog header > svg {
+	flex: none;
+	color: var(--fg2);
+}
+/* spec/appearance#control-scale: the query is a system field of size L (32): --tint, no border, an inset 2 px --accent ring while it is focused. */
+.query {
+	composes: frame from './ui/Input.module.css';
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: var(--c-h);
+	padding: 0 var(--c-px);
+	border-radius: var(--c-r);
+	background: var(--tint);
+}
+.query > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.query input[role='combobox'] {
+	flex: 1;
+	min-width: 50px;
+}
+
+/* Tabs under the field: the soft --sel on the chosen one (spec/search-menus-and-commands#search-modal), the segment hover with --fg on the others. */
+.tabs {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 4px 8px;
+	border-bottom: 1px solid var(--sep);
+}
+/* S tabs (spec/appearance#control-scale): a 24 px target. */
+.tabs button {
+	display: flex;
+	align-items: center;
+	gap: var(--c-gap);
+	height: var(--c-h);
+	padding: 0 var(--c-px);
+	border-radius: var(--c-r);
+	color: var(--fg2);
+	font-size: var(--c-fs);
+	white-space: nowrap;
+}
+.tabs button[aria-selected='true'] {
+	background-color: var(--sel);
+	color: var(--fg);
+}
+.tabs button:hover,
+.tabs button[data-zero='true']:hover {
+	color: var(--fg);
+}
+.tabs button[data-zero='true']:not([aria-selected='true']) {
+	color: var(--fg3);
+}
+.tabCount {
+	color: var(--fg3);
+	font-size: var(--text-10);
+	font-variant-numeric: tabular-nums;
+}
+.tabs button[aria-selected='true'] .tabCount {
+	color: var(--fg2);
+}
+
+/* Rows: hover moves the selection (spec/search-menus-and-commands#search-tabs), so the fill is the selection over the whole row. */
+/* Rows are direct children, or grouped by file in sections (CodeLocations, spec/editor-code-intelligence#references-and-problems). */
+.results {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-height: 0;
+	max-height: min(440px, calc(100vh - 236px));
+	overflow: auto;
+	padding: 2px 6px 6px;
+}
+/* An empty list (no recent on an empty «All») leaves no strip between the tabs and the footer (rule 15). */
+.results:empty {
+	padding: 0;
+}
+.results > button,
+.results > section > button {
+	position: relative;
+	display: flex;
+	align-items: center;
+	flex: none;
+	width: 100%;
+	min-width: 0;
+	text-align: left;
+	gap: 8px;
+	padding: 5px 8px;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	background-image: none;
+	color: var(--fg);
+	font-size: var(--text-13);
+}
+.results > button:hover,
+.results > section > button:hover {
+	background-image: none;
+}
+.results > button > svg,
+.results > button > span[data-state] {
+	flex: none;
+}
+.results > button > svg {
+	color: var(--fg2);
+}
+/* spec/appearance#evolution-redesign: the chosen result is the soft --sel under the row's own colours, as a selected list row. */
+.results > button[aria-selected='true'],
+.results > section > button[aria-selected='true'] {
+	background: var(--sel);
+}
+.title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.title strong,
+.textHead strong {
+	font-weight: 700;
+}
+.title[data-mono] {
+	font: var(--text-12) var(--mono-family);
+}
+.results small {
+	flex: none;
+	max-width: 42%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.results small[data-mono] {
+	font-family: var(--mono-family);
+}
+.results kbd {
+	flex: none;
+	color: var(--fg2);
+	font: inherit;
+	font-size: var(--text-11);
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.02em;
+}
+.dim {
+	color: var(--fg3);
+}
+.english {
+	color: var(--fg3);
+	font-size: var(--text-11);
+}
+.english strong {
+	color: var(--fg);
+}
+.chip {
+	flex: none;
+	font-size: var(--text-10);
+	padding: 0 5px;
+	line-height: 15px;
+	border-radius: 3px;
+	box-shadow: inset 0 0 0 1px var(--sep);
+	color: var(--fg2);
+}
+.column {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.column small {
+	max-width: none;
+}
+.results > button[data-two='true'] {
+	align-items: flex-start;
+}
+.results > button[data-two='true'] > svg,
+.results > button[data-two='true'] > .prIcon {
+	margin-top: 2px;
+}
+.textHead {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+.textHead > span {
+	flex: none;
+	font: var(--text-12) var(--mono-family);
+}
+.textHead > small {
+	margin-left: auto;
+}
+.code {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: pre;
+	font: var(--text-11)/1.45 var(--mono-family);
+	color: var(--fg2);
+}
+.results mark,
+.source mark {
+	background: color-mix(in srgb, var(--accent) 32%, transparent);
+	color: var(--fg);
+	border-radius: 2px;
+	padding: 0 1px;
+	font-weight: 600;
+}
+.prIcon {
+	flex: none;
+	display: flex;
+}
+.state {
+	flex: none;
+	font-size: var(--text-10);
+	padding: 0 6px;
+	line-height: 16px;
+	border-radius: 8px;
+	color: var(--green);
+	background: var(--green-soft);
+}
+.state[data-state='DRAFT'] {
+	color: var(--fg2);
+	background: var(--tint);
+}
+.state[data-state='MERGED'] {
+	color: var(--purple);
+	background: var(--purple-soft);
+}
+.state[data-state='CLOSED'] {
+	color: var(--red);
+	background: var(--red-soft);
+}
+/* The PR panel's «waiting for you» dot (ui/PRGlyphs), on the title's line. */
+.waiting {
+	flex: none;
+	display: flex;
+	margin-top: 5px;
+}
+
+/* Group headers of «All», PR and Actions; «More N» has its own hover. */
+.group {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	min-height: calc(var(--control-h-s) + 4px);
+	padding: 0 8px;
+	color: var(--fg3);
+	font-size: var(--text-10);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+.groupCount {
+	font-weight: 400;
+}
+.more {
+	margin-left: auto;
+	margin-right: -6px;
+	display: flex;
+	align-items: center;
+	gap: var(--c-gap);
+	height: var(--c-h);
+	padding: 0 var(--c-px);
+	border-radius: var(--c-r);
+	color: var(--accent);
+	font-size: var(--c-fs);
+	font-weight: 500;
+}
+.more:hover {
+	background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+	background-image: none;
+}
+.spinner {
+	flex: none;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+	border-top-color: var(--accent);
+	animation: search-spin 900ms linear infinite;
+}
+@keyframes search-spin {
+	to {
+		rotate: 1turn;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.spinner {
+		animation: none;
+	}
+}
+
+/* Text: options, progress, the split with the preview. */
+.options {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-bottom: 1px solid var(--sep);
+}
+.toggle {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--c-h);
+	height: var(--c-h);
+	border-radius: var(--c-r);
+	font: 600 var(--c-fs) var(--mono-family);
+	color: var(--fg2);
+}
+.toggle[aria-pressed='true'] {
+	background-color: var(--sel);
+	color: var(--fg);
+}
+.toggle:hover {
+	color: var(--fg);
+}
+.vsep {
+	flex: none;
+	width: 1px;
+	height: 16px;
+	background: var(--sep);
+}
+.field {
+	composes: frame from './ui/Input.module.css';
+	display: flex;
+	align-items: center;
+	gap: var(--c-gap);
+	height: var(--c-h);
+	padding: 0 var(--c-px);
+	border-radius: var(--c-r);
+	background: var(--tint);
+	font-size: var(--c-fs);
+	color: var(--fg2);
+	box-sizing: border-box;
+}
+.field input {
+	field-sizing: content;
+	align-self: stretch;
+	min-width: 24px;
+	max-width: 220px;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+	outline: none;
+}
+.field input::placeholder {
+	color: var(--fg3);
+}
+.field svg {
+	color: var(--fg2);
+}
+.repo > div {
+	min-width: 0;
+}
+.progress {
+	flex: none;
+	height: 2px;
+	position: relative;
+	overflow: hidden;
+	background: var(--tint);
+}
+.progress i {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	background: var(--accent);
+	transition: width var(--motion-fast) linear;
+}
+.split {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+.left {
+	/* 410 inside the hairline. */
+	width: 411px;
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	border-right: 1px solid var(--sep);
+}
+.left .results {
+	flex: 1;
+	max-height: none;
+}
+.results[data-tab='text'] > button {
+	min-height: var(--control-h-s);
+	padding: 3px 8px 3px 10px;
+	gap: 8px;
+}
+.line {
+	flex: none;
+	width: 26px;
+	text-align: right;
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg3);
+}
+.results[data-tab='text'] .code {
+	flex: 1;
+	color: var(--fg);
+}
+.fileHead {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	flex: none;
+	padding: 6px 8px 2px;
+	min-width: 0;
+	font-size: var(--text-11);
+}
+.fileHead svg {
+	flex: none;
+	color: var(--fg2);
+}
+.fileHead b {
+	font: 600 var(--text-11) var(--mono-family);
+	white-space: nowrap;
+}
+.fileHead span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg2);
+	font: var(--text-10) var(--mono-family);
+}
+.fileHead small {
+	margin-left: auto;
+	color: var(--fg3);
+}
+.progressRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	margin: 0;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.preview {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--content);
+}
+.previewHead {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 12px;
+	border-bottom: 1px solid var(--sep);
+	font-size: var(--text-11);
+	min-width: 0;
+}
+.previewHead svg {
+	flex: none;
+	color: var(--fg2);
+}
+.previewHead b {
+	font: 600 var(--text-11) var(--mono-family);
+	white-space: nowrap;
+}
+.previewPath {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg2);
+	font: var(--text-10) var(--mono-family);
+}
+.previewWhere {
+	margin-left: auto;
+	flex: none;
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.source {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 6px 0;
+	font: 11.5px/18px var(--mono-family);
+	white-space: pre;
+}
+.source > div {
+	display: flex;
+	padding-right: 12px;
+}
+.source > div[data-hit='true'] {
+	background: var(--sel);
+}
+.gutter {
+	flex: none;
+	width: 40px;
+	padding-right: 12px;
+	text-align: right;
+	color: var(--fg3);
+}
+.source > div[data-hit='true'] .gutter {
+	color: var(--fg);
+}
+
+/* Notes and states. */
+.empty {
+	margin: 0;
+	padding: 12px;
+	color: var(--fg2);
+	font-size: var(--text-12);
+}
+.error {
+	margin: 0;
+	padding: 8px 12px 0;
+	color: var(--red);
+	font-size: var(--text-12);
+}
+.notice {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 6px 6px 0;
+	padding: 7px 8px;
+	border-radius: 5px;
+	background: var(--tint);
+	color: var(--fg);
+	font-size: var(--text-11);
+}
+.notice svg {
+	flex: none;
+	color: var(--fg2);
+}
+.nothing {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 22px 16px 20px;
+	text-align: center;
+}
+.nothing strong {
+	font-size: var(--text-13);
+	font-weight: 400;
+	color: var(--fg);
+}
+.nothing span {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.dialog footer {
+	flex: none;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	border-top: 1px solid var(--sep);
+	padding: 7px 12px;
+	color: var(--fg2);
+	font-size: var(--text-10);
+	align-items: center;
+}
+.count {
+	margin-left: auto;
+}
+
+/* spec/search-menus-and-commands#project-commands: the Commands tab — name, line, repo and state. */
+.results > button[data-command='true'] > b {
+	flex: none;
+	font-weight: 400;
+	font-size: var(--text-13);
+	white-space: nowrap;
+}
+.results > button[data-command='true'] > code {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: var(--text-11) var(--mono-family);
+	color: var(--fg2);
+}
+/* Without a task only the name dims; the row keeps its fill, glyph and line. */
+.results > button[data-command='true'][aria-disabled='true'] {
+	opacity: 1;
+}
+.results > button[data-command='true'][aria-disabled='true'] > b {
+	color: var(--fg3);
+}
+.results > button[data-command='true'] strong {
+	font-weight: 700;
+}
+.results > button[data-command='true'] > span[aria-hidden='true'] {
+	flex: none;
+	width: 14px;
+}
+/* spec/tasks#archive: archived matches, a dimmer group under the live tasks. */
+.results > button[data-archived='true'] .title {
+	color: var(--fg2);
+}

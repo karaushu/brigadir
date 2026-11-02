@@ -1,0 +1,464 @@
+/* spec/appearance#evolution-redesign: the commit dialog with baskets. Placement and the
+   dialog's own pieces (list, baskets, chips); buttons, menus, popovers and fields are the shared ui/ ones. */
+.grow {
+	flex: 1;
+	min-width: 0;
+}
+.kbd {
+	margin-left: 4px;
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	opacity: 0.72;
+}
+.status {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex: none;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.status code {
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	color: var(--fg);
+}
+.status[data-tone='error'] {
+	color: var(--red);
+}
+.status > svg:first-child {
+	color: var(--green);
+}
+.status[data-tone='error'] > svg:first-child,
+.status [data-glyph='agent-spinner'],
+.status [data-glyph='clock'] {
+	color: inherit;
+}
+/* The footer's note: what Commit will do, or why it waits. */
+.note {
+	margin-right: auto;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.note[data-tone='warning'] {
+	color: var(--amber-text);
+}
+.note[data-tone='error'] {
+	color: var(--red);
+}
+.note > svg {
+	flex: none;
+}
+.empty {
+	margin: 0;
+	padding: 12px 4px;
+	color: var(--fg2);
+	font-size: var(--text-12);
+}
+.two {
+	display: grid;
+	grid-template-columns: 250px minmax(0, 1fr);
+	gap: 12px;
+	align-items: start;
+}
+/* Left: the changed files, each with its basket (the box is ui/FileListBox). */
+.list {
+	min-width: 0;
+}
+.listHead {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 24px;
+	padding: 0 2px 0 6px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.listHead b,
+.listRepo b,
+.repoHead b {
+	font-weight: 600;
+	color: var(--fg);
+}
+.listRepo {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	padding: 2px 6px 0;
+	font-size: var(--text-11);
+	min-width: 0;
+}
+.listRepo code {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	color: var(--fg3);
+}
+/* A row hovers whole (rule 15): its open button covers the row, the checkbox stays above it. */
+.file {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	padding: 0 6px;
+	border-radius: 6px;
+	font-size: var(--text-12);
+	color: var(--fg);
+	min-width: 0;
+}
+.file:hover {
+	background: var(--hover);
+}
+.file[data-selected] {
+	background: var(--sel);
+}
+.file > input {
+	position: relative;
+	z-index: 1;
+}
+.fileOpen {
+	all: unset;
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	cursor: default;
+}
+.fileOpen::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: 6px;
+}
+.fileOpen:focus-visible::after {
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.name {
+	flex: none;
+	max-width: 62%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.file[data-off] .name {
+	color: var(--fg3);
+}
+.dir {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg3);
+	font-size: var(--text-11);
+}
+/* The basket mark C1…Cn: accent on the active basket, green once committed, red when its commit failed. */
+.tag {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	height: 18px;
+	min-width: 22px;
+	padding: 0 5px;
+	box-sizing: border-box;
+	border-radius: 5px;
+	background: var(--tint);
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	font-weight: 500;
+	color: var(--fg2);
+}
+.tag[data-on] {
+	background: var(--accent-soft);
+	color: var(--accent-text);
+}
+.tag[data-state='ok'] {
+	background: var(--green-soft);
+	color: var(--green);
+}
+.tag[data-state='bad'] {
+	background: var(--red-soft);
+	color: var(--red);
+}
+.outTag {
+	flex: none;
+	width: 22px;
+	text-align: center;
+	color: var(--fg3);
+}
+/* Right: the baskets, grouped by repo in a monorepo. */
+.baskets,
+.repo {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+.repoHead {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	height: 20px;
+	padding: 0 2px;
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+.basket {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 6px 6px 8px 8px;
+	border-radius: 9px;
+	background: var(--win);
+	box-shadow: inset 0 0 0 1px var(--sep);
+	transition: box-shadow var(--motion-fast);
+}
+.basket[data-active] {
+	box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.basket[data-tone='warning'] {
+	box-shadow: inset 0 0 0 1.5px var(--amber);
+}
+.basket[data-drop='on'] {
+	box-shadow: inset 0 0 0 1.5px var(--accent);
+	background: var(--accent-soft);
+}
+.basket[data-drop='no'] {
+	box-shadow: inset 0 0 0 1.5px var(--red);
+}
+.tip {
+	position: absolute;
+	z-index: 2;
+	top: -14px;
+	left: 24px;
+	padding: 4px 8px;
+	border-radius: 6px;
+	background: var(--card);
+	box-shadow: var(--lift);
+	font-size: var(--text-11);
+	color: var(--fg);
+	white-space: nowrap;
+	pointer-events: none;
+}
+.basketHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	min-width: 0;
+}
+.message {
+	min-height: 30px;
+	resize: none;
+	field-sizing: content;
+	max-height: 160px;
+	font-size: var(--text-12);
+	line-height: 17px;
+}
+.message[data-invalid] {
+	box-shadow: inset 0 0 0 1.5px var(--red);
+}
+.skeleton {
+	padding: 5px 8px;
+	border-radius: 6px;
+	background: var(--tint);
+}
+.skeleton span {
+	display: block;
+	height: 7px;
+	margin: 5px 0;
+	border-radius: 4px;
+	background: var(--tint2);
+	animation: var(--motion-fade);
+}
+.skeleton span + span {
+	width: 60%;
+}
+.line {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	margin: 0;
+	font-size: var(--text-11);
+	line-height: 15px;
+	color: var(--fg2);
+}
+.line > svg {
+	flex: none;
+	margin-top: 2px;
+}
+.line[data-tone='warning'] {
+	align-items: center;
+	color: var(--amber-text);
+}
+.line[data-tone='error'] {
+	color: var(--red);
+}
+.lineAction {
+	margin: -4px 0 -4px auto;
+	flex: none;
+}
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.chip {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	height: 24px;
+	box-sizing: border-box;
+	border-radius: 6px;
+	background: var(--tint);
+	font-size: var(--text-11-5);
+	color: var(--fg);
+	white-space: nowrap;
+}
+.chip:hover {
+	background: var(--tint2);
+}
+.chipOpen {
+	all: unset;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 24px;
+	padding: 0 7px 0 5px;
+	border-radius: 6px;
+	cursor: default;
+}
+.chipOpen:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* × appears with the chip's hover and sits over its right padding, so the chip keeps its width. */
+.chipOut {
+	all: unset;
+	display: none;
+	place-items: center;
+	width: 16px;
+	height: 24px;
+	margin: 0 2px 0 -6px;
+	color: var(--fg2);
+	cursor: default;
+}
+.chip:hover .chipOut,
+.chipOut:focus-visible {
+	display: grid;
+}
+.chipOut:hover {
+	color: var(--fg);
+}
+.dropHere {
+	display: grid;
+	place-items: center;
+	height: 32px;
+	border-radius: 8px;
+	border: 1px dashed var(--sep);
+	color: var(--fg2);
+	font-size: var(--text-11-5);
+}
+.newCommit {
+	all: unset;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	height: 32px;
+	box-sizing: border-box;
+	border-radius: 8px;
+	border: 1px dashed var(--sep);
+	color: var(--fg2);
+	font-size: var(--text-11-5);
+	cursor: default;
+}
+.newCommit small {
+	color: var(--fg3);
+	font-size: var(--text-11);
+}
+.newCommit:hover:not(:disabled) {
+	background: var(--hover);
+	color: var(--fg);
+}
+.newCommit:focus-visible {
+	box-shadow: 0 0 0 2px var(--accent);
+}
+.newCommit[data-drop='on'] {
+	border-color: var(--accent);
+	background: var(--accent-soft);
+	color: var(--accent-text);
+}
+.newCommit[data-drop='no'] {
+	border-color: var(--red);
+}
+.newCommit:disabled {
+	opacity: var(--control-disabled);
+}
+/* A failed hook: its output under the basket and «Ask the agent». */
+.output {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	color: var(--red);
+	font-size: var(--text-11);
+}
+.output > svg {
+	flex: none;
+	margin-top: 2px;
+}
+.output pre {
+	flex: 1;
+	min-width: 0;
+	max-height: 120px;
+	overflow: auto;
+	margin: 0;
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	line-height: 15px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+/* The diff peek. */
+.peekTitle {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.picker {
+	gap: 4px;
+	font-family: var(--mono-family);
+}
+.peekBody {
+	max-height: 320px;
+	overflow: auto;
+	margin: 0 -8px -4px;
+	padding-bottom: 4px;
+	outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+	.basket {
+		transition: none;
+	}
+	.skeleton span {
+		animation: none;
+	}
+}

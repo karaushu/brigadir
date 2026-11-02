@@ -1,0 +1,362 @@
+/* spec/search-menus-and-commands#project-commands, spec/task-window#repo-line: the toolbar's command is a `ui/SegmentGroup` (frame, parts, rules); `data-fit` is the
+   width step (full | compact | minimal, read by TaskView), not a control size. Here only what is the command's own. */
+.control {
+	max-width: 260px;
+}
+.current {
+	gap: 6px;
+	min-width: 0;
+	max-width: 190px;
+}
+.current > [data-glyph='chevron-down'] {
+	flex: none;
+	color: var(--fg2);
+}
+.current > [data-glyph='command-play'] {
+	flex: none;
+	color: var(--fg2);
+}
+.control:not([data-fit='full']) .current {
+	gap: 4px;
+	padding: 0 7px;
+}
+.name {
+	min-width: 0;
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.more {
+	flex: none;
+	padding: 0 4px;
+	border-radius: 4px;
+	background: var(--tint);
+	color: var(--fg2);
+	font-size: var(--text-10);
+	font-weight: 600;
+	line-height: 15px;
+	font-variant-numeric: tabular-nums;
+}
+.control [data-run],
+.action.action.action[data-run] {
+	color: var(--green);
+}
+.glyph {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 12px;
+	height: 12px;
+	color: var(--fg3);
+}
+.glyph[data-state='starting'] {
+	color: var(--accent);
+}
+.glyph[data-state='starting'] svg {
+	animation: command-spin 1s linear infinite;
+}
+.glyph[data-state='failed'] {
+	color: var(--red);
+}
+.glyph[data-state='done'] {
+	color: var(--fg2);
+}
+.dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--green);
+	box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--green) 20%, transparent);
+}
+@keyframes command-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.rows {
+	display: flex;
+	flex-direction: column;
+	overflow: auto;
+	min-height: 0;
+}
+.row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: var(--c-h);
+	padding: 5px 4px 5px 8px;
+	border-radius: 6px;
+}
+/* spec/search-menus-and-commands#command-editor: a row the menu focused on opening (a click) stays quiet; the keyboard ring and the pointer tint it. */
+.row:hover,
+.row:has(:focus-visible) {
+	background: var(--tint);
+}
+.rowMain {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 1px;
+	border-radius: 4px;
+	color: var(--fg);
+	text-align: left;
+}
+.rowMain:hover,
+.rowMain:active {
+	background-image: none;
+}
+.rowMain > span {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	min-width: 0;
+	max-width: 100%;
+}
+.rowMain b {
+	font-weight: 400;
+	font-size: var(--text-12);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.rowMain small {
+	flex: none;
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg2);
+}
+.rowMain code {
+	display: block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: 10.5px var(--mono-family);
+	color: var(--fg2);
+}
+.port {
+	font-family: var(--mono-family);
+}
+.exit {
+	flex: none;
+	font: var(--text-10) var(--mono-family);
+	color: var(--red);
+}
+.empty {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 4px 8px 10px;
+}
+.empty p {
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+.empty code {
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: var(--tint);
+	font: var(--text-11) var(--mono-family);
+	color: var(--fg2);
+}
+.menu footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--sep);
+}
+.item {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: var(--c-h);
+	padding: 0 8px;
+	border-radius: calc(var(--c-r) - 2px);
+	color: var(--fg);
+	font-size: var(--c-fs);
+	text-align: left;
+}
+.item:hover,
+.item:focus-visible {
+	background: var(--accent-fill);
+	color: var(--selfg);
+}
+.hint {
+	margin-left: auto;
+	padding-right: 8px;
+	font-size: var(--text-10);
+	color: var(--fg3);
+}
+
+.editor {
+	width: min(600px, calc(100vw - 32px));
+	padding: 0;
+	color: var(--fg);
+	background: var(--card);
+	border: 1px solid var(--sep);
+	border-radius: 12px;
+	box-shadow: 0 24px 60px var(--shadow);
+}
+.editor::backdrop {
+	background: var(--modal-scrim);
+}
+.editor > header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 14px 16px 10px 20px;
+}
+.editor h2 {
+	margin: 0;
+	font-size: var(--text-14);
+	font-weight: 600;
+}
+.editor > header > span {
+	flex: 1;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.editor form {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	padding: 8px 20px 0;
+}
+.editor label,
+.editor fieldset {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	font-size: var(--text-12);
+	font-weight: 500;
+	color: var(--fg);
+}
+.editor legend {
+	padding: 0;
+	margin-bottom: 6px;
+}
+.editor label small {
+	font-weight: 400;
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.editor label input,
+.editor label textarea {
+	width: 100%;
+	font-weight: 400;
+}
+/* spec/search-menus-and-commands#package-scripts: the Command field with the Scripts button at the end of its caption. */
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.fieldHead {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	min-height: var(--c-h);
+}
+.scripts section + section {
+	margin-top: 4px;
+	padding-top: 4px;
+	border-top: 1px solid var(--sep);
+}
+.group {
+	margin: 0;
+	padding: 4px 8px 2px;
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg2);
+}
+/* spec/search-menus-and-commands#command-editor: the command line and the folder are mono a step under the field's text, as code is. */
+.editor .line,
+.editor .mono {
+	font-family: var(--mono-family);
+	font-size: var(--text-12);
+	line-height: 1.5;
+	resize: none;
+}
+/* Two lines of 18 under 8 + 8 would be 52; the field is 56. */
+.editor .line {
+	min-height: 56px;
+}
+.repos {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+/* spec/search-menus-and-commands#command-editor: a repo is named in mono 12 / 500, not the global 10 of `code`. */
+.repos code {
+	font: 500 var(--text-12) var(--mono-family);
+}
+.place {
+	display: flex;
+	gap: 8px;
+	margin: -10px 0 0;
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: var(--tint);
+	font-size: var(--text-11);
+}
+.place > span {
+	flex: none;
+	width: 96px;
+	color: var(--fg2);
+}
+.place code {
+	min-width: 0;
+	font-size: inherit;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--mono-family);
+}
+.editor label.agentRuns {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	min-height: var(--c-h);
+	font-weight: 400;
+}
+.editor label.agentRuns input {
+	width: var(--c-box);
+}
+/* spec/search-menus-and-commands#command-editor: while it saves the whole row is inert, its text dims with the box. */
+.editor label.agentRuns:has(:disabled) > span {
+	opacity: var(--control-disabled);
+}
+.error {
+	margin: -8px 0 0;
+	color: var(--red);
+	font-size: var(--text-11);
+}
+.editor footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 -20px;
+	padding: 12px 16px 14px 20px;
+	border-top: 1px solid var(--sep);
+}
+.editor footer > span {
+	flex: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+	.glyph[data-state='starting'] svg {
+		animation: none;
+	}
+	.menu {
+		animation: none;
+	}
+}

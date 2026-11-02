@@ -1,0 +1,22 @@
+/* spec/composer#mention-menu: the menu opens above the composer text, from its left edge; the island stays where it is.
+   spec/composer#mentions: with the tabs it is 400 wide (at most the island less 20). */
+.menu.menu.menu {
+	left: 10px;
+	width: min(360px, calc(100% - 20px));
+}
+.menu.menu.menu[data-mention-tabs] {
+	width: min(400px, calc(100% - 20px));
+}
+/* A task's state glyph at the row's 12 px. */
+.taskIcon {
+	display: flex;
+	flex: none;
+}
+.taskIcon > span {
+	width: 12px;
+	height: 12px;
+}
+/* spec/composer#mentions: the `/` menu's tabs are its groups (up to five, longer names): 480 wide. */
+.menu.menu.menu.slash[data-mention-tabs] {
+	width: min(480px, calc(100% - 20px));
+}

@@ -1,0 +1,265 @@
+/* spec/task-window-workspace#work-area: a tab of the work area — it fills its group. */
+.panel {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	background: var(--content);
+	position: relative;
+}
+.panel form,
+.panel > header,
+.panel > footer {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 8px;
+	border-bottom: 1px solid var(--sep);
+	flex: none;
+}
+.panel input {
+	flex: 1;
+	min-width: 0;
+}
+.viewport {
+	flex: 1;
+	min-height: 100px;
+	background: var(--card);
+	position: relative;
+	box-sizing: border-box;
+}
+/* spec/browser-and-simulator#browser, mobile view: round the centred phone viewport the tab is tinted; its picture under an
+   overlay stands where the page stands. */
+.viewport[data-mobile] {
+	background: var(--tint);
+}
+.viewport[data-mobile] > .snapshot {
+	left: 50%;
+	width: min(390px, 100%);
+	translate: -50% 0;
+}
+/* spec/task-window-workspace#work-area: the accent frame round the agent's page; the native view sits inside it. */
+.viewport[data-agent-frame] {
+	border: 2px solid var(--accent);
+}
+/* spec/task-window-workspace#work-area: the page's picture while an overlay covers it. */
+.snapshot {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: left top;
+	pointer-events: none;
+}
+/* spec/task-window-workspace#work-area: «Agent in the browser · clicks «Save»», the count and «In chat». */
+.panel > .agentBar {
+	flex: none;
+	height: 26px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 6px 0 10px;
+	box-sizing: border-box;
+	background: var(--accent-soft);
+	border-bottom: 1px solid var(--sep);
+	font-size: var(--text-11);
+	color: var(--fg);
+	white-space: nowrap;
+	overflow: hidden;
+}
+.agentBar > svg {
+	color: var(--accent);
+	flex: none;
+}
+/* spec/browser-and-simulator#notifications: the page's question about notifications — the same strip, neutral. */
+.panel > .agentBar[data-page-ask] {
+	background: var(--tint);
+}
+.agentBar[data-page-ask] > svg {
+	color: var(--fg2);
+}
+.agentBar b {
+	font-weight: 600;
+}
+.agentStep {
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+.agentCount {
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+.agentBar > button {
+	font-size: var(--text-11);
+}
+.panel p {
+	margin: 0;
+	padding: 6px 10px;
+	font-size: var(--text-11);
+	overflow-wrap: anywhere;
+}
+/* A page error is a line under the strips. */
+.panel > p[role='alert'] {
+	flex: none;
+	border-bottom: 1px solid var(--hair);
+}
+.panel p[data-error='true'] {
+	color: var(--red);
+}
+.drawer {
+	height: 190px;
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border-top: 1px solid var(--sep);
+}
+/* Drawer: an entry is a line with a hairline under it; «Show the agent» is an S button at the start. */
+.drawer p {
+	line-height: 15px;
+	padding: 5px 10px;
+	border-bottom: 1px solid var(--hair);
+}
+.drawer > button {
+	align-self: flex-start;
+	margin: 6px 8px;
+}
+.capture {
+	position: absolute;
+	inset: 0;
+	background: var(--content);
+	z-index: 2;
+	overflow: auto;
+	padding: 10px;
+}
+.capture img {
+	display: block;
+	max-width: 100%;
+	margin-top: 10px;
+}
+
+.request {
+	display: grid;
+	grid-template-columns: 38px 30px minmax(40px, 1fr) 40px 46px 44px auto;
+	align-items: center;
+	gap: 4px;
+	height: 28px;
+	padding: 0 8px;
+	box-sizing: border-box;
+	border-bottom: 1px solid var(--hair);
+	font-size: var(--text-10);
+}
+.request > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.request[data-error='true'] {
+	color: var(--red);
+}
+.path {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+/* Page errors: the last failure in a 32 px strip of S controls, as the console's (TerminalPanel). */
+.failure {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: calc(var(--control-h-s) + 8px);
+	padding: 0 6px 0 12px;
+	box-sizing: border-box;
+	background: var(--amber-soft);
+	flex: none;
+}
+.failure > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-12);
+}
+
+.panel form {
+	height: 36px;
+	padding: 0 6px;
+	gap: 2px;
+	/* The address strip is on the panel's own colour; only the field is tinted. */
+	background: none;
+}
+.panel input {
+	font-family: var(--mono-family);
+}
+/* The address takes the strip's free width; with the machine's tag (spec/remote-access-and-mobile#browser-from-device) the field is a wrapper round the input. */
+.address {
+	flex: 1;
+	min-width: 0;
+}
+.panel > header {
+	height: 32px;
+	padding: 0 7px;
+	gap: 4px;
+	background: var(--tint);
+}
+.spacer {
+	flex: 1;
+}
+
+/* Native WebContents bounds must remain stationary: fade chrome only. */
+.panel > header,
+.panel > form,
+.drawer {
+	animation: var(--motion-fade);
+}
+
+/* spec/browser-and-simulator#simulator: the column starts at the top edge of the window, so its first strip drags the window like the toolbar. */
+/* spec/task-window-workspace#work-area: the strips are inside a group of the work area, under the toolbar: no window drag, no OS buttons' room. */
+
+/* spec/remote-access-and-mobile#browser-from-device: in a window of another machine the page is a picture of it, drawn at its CSS size from the top left,
+   as the native view stands locally; the keys go through a field nobody sees (it takes an input method too). */
+.screenBox {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+}
+.screen {
+	display: block;
+	touch-action: none;
+	outline: none;
+}
+.keys {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	border: 0;
+	opacity: 0;
+	resize: none;
+	pointer-events: none;
+}
+/* spec/remote-access-and-mobile#networking: this device's own select, colour or date element over the page's one, unseen: only its popup shows. */
+.picker {
+	position: absolute;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+/* An open drawer keeps its button's error colour; the press shows in the drawer itself. */
+.panel > header button[data-errors='true'][aria-pressed='true'] {
+	background-color: var(--ap-soft);
+	color: var(--ap-text);
+}
+/* spec/appearance#dialogs: the note under a cut response body is dim. */
+.truncated {
+	color: var(--fg2);
+}

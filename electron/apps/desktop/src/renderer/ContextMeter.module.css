@@ -1,0 +1,72 @@
+/* spec/composer#agent-capsule (canvas 3.9): the ring and its percent, 11 px --fg2; the ring's colour is the tone — accent, amber over 70 %,
+   red over 90 %. */
+.chip.chip {
+	--context-color: var(--accent);
+	flex: none;
+	gap: 4px;
+	padding-inline: 6px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.chip svg {
+	color: var(--context-color);
+	flex: none;
+}
+.track {
+	stroke: var(--tint2);
+}
+.popover {
+	--context-color: var(--accent);
+}
+[data-tone='warning'].chip,
+[data-tone='warning'].popover {
+	--context-color: var(--amber);
+}
+[data-tone='danger'].chip,
+[data-tone='danger'].popover {
+	--context-color: var(--red);
+}
+.tokens,
+.percent {
+	font: var(--text-11) var(--mono-family);
+	white-space: nowrap;
+}
+.tokens {
+	font-weight: 400;
+	color: var(--fg2);
+}
+.percent {
+	padding-right: 4px;
+	color: var(--context-color);
+}
+.content {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 2px 8px 6px;
+}
+.progress {
+	height: 4px;
+	border-radius: 2px;
+	background: var(--tint2);
+	overflow: hidden;
+}
+.progress > div {
+	height: 100%;
+	border-radius: 2px;
+	background: var(--context-color);
+	transition:
+		width var(--motion-travel) var(--motion-ease),
+		background-color var(--motion-fast) ease;
+}
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.detail {
+	margin: 0;
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg2);
+}

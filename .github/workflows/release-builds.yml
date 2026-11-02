@@ -1,0 +1,150 @@
+# spec/architecture-and-platform#packaging, spec/architecture-and-platform#linux-package, spec/architecture-and-platform#auto-update: release builds,
+# full builds only. macOS — DMG and update zip, arm64 + x64; Linux — AppImage + deb + rpm, x64 + arm64, natives
+# cross-compiled by zig. Every run uploads its packages as workflow artifacts. A tag v* also publishes them, with
+# latest*.yml, to the GitHub Releases of the repository named by `releases` in electron/apps/desktop/package.json
+# (this repository), with the workflow's own GITHUB_TOKEN: a draft
+# release first, both builds upload into it, and it becomes public once both succeeded. A manual run only builds.
+# How to build and release by hand: docs/guides/releasing.md.
+name: Release builds
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  # A tag: check the tag against the app version and the releases repository, then open a draft release there.
+  prepare:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    outputs:
+      repo: ${{ steps.target.outputs.repo }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Release target
+        id: target
+        run: |
+          node electron/scripts/release-target.mjs "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+      - name: Draft release
+        env:
+          REPO: ${{ steps.target.outputs.repo }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$REPO" > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$REPO" --draft \
+              --title "Brigadir ${GITHUB_REF_NAME#v}" --notes "Brigadir ${GITHUB_REF_NAME#v}"
+          fi
+
+  build:
+    needs: prepare
+    permissions:
+      contents: write
+    # A manual run has no prepare job and builds without publishing.
+    if: ${{ !cancelled() && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04 # the natives target glibc 2.28 through zig, so the runner's own glibc does not leak in
+            args: --linux --x64 --arm64
+            artifact: brigadir-linux
+            scripts: false
+          - os: macos-15
+            args: --all
+            artifact: brigadir-macos
+            scripts: true
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: electron
+    env:
+      HUSKY: "0"
+      PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') && '--publish' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # CFBundleVersion and the Linux package release count the commits
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: electron/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: electron/pnpm-lock.yaml
+      # Linux needs no node-pty build or Electron binary of the runner: install scripts stay off there (zig builds node-pty
+      # for Linux from its sources in node_modules).
+      - name: Install
+        shell: bash
+        run: pnpm install --frozen-lockfile ${{ matrix.scripts && '' || '--ignore-scripts' }}
+      # spec/architecture-and-platform#linux-package: zig cross-compiles the Linux natives (C helpers and node-pty) for x64 and arm64.
+      - uses: mlugg/setup-zig@v2
+        if: runner.os == 'Linux'
+        with:
+          version: 0.17.0
+      # The Fedora .rpm is written by nfpm (scripts/rpm.mjs); rpm reads it back in the package check.
+      - name: nfpm
+        if: runner.os == 'Linux'
+        run: |
+          curl -sfL -o /tmp/nfpm.deb https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_amd64.deb
+          sudo dpkg -i /tmp/nfpm.deb
+          sudo apt-get update && sudo apt-get install -y rpm
+      # The macOS icon is an Icon Composer document: actool of Xcode 26 compiles it.
+      - name: Xcode 26
+        if: runner.os == 'macOS'
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+          xcodebuild -version
+      # A tag uploads the packages and latest*.yml into the draft release (spec/architecture-and-platform#auto-update).
+      - name: Package
+        run: node scripts/dist.mjs ${{ matrix.args }} $PUBLISH
+        env:
+          GH_TOKEN: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.GITHUB_TOKEN || '' }}
+          # macOS: Developer ID and notarization turn on when these secrets exist; otherwise the DMG is ad-hoc.
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_PATH || '' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+      # electron-builder does not make the .rpm (nfpm does), so it goes into the same release here.
+      - name: Upload the .rpm
+        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ needs.prepare.outputs.repo }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.rpm --repo "$REPO" --clobber
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            electron/dist/*.dmg
+            electron/dist/*.zip
+            electron/dist/*.AppImage
+            electron/dist/*.deb
+            electron/dist/*.rpm
+            electron/dist/latest*.yml
+
+  # Both builds are in the draft: the release becomes public, and apps see it as the latest version.
+  publish:
+    needs: [prepare, build]
+    permissions:
+      contents: write
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ needs.prepare.outputs.repo }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$REPO" --draft=false --latest

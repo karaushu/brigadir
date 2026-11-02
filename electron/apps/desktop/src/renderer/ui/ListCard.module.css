@@ -1,0 +1,67 @@
+/* spec/settings-modules-and-onboarding#intro-remote, rule 17: the card of rows the intro started with (agents, Git, editor and notification switches, modules,
+   remote access) and Settings ▸ Modules and ▸ Remote share. A row: lead marks, a name with a second line, a control. */
+.list {
+	align-self: stretch;
+	border: 1px solid var(--sep);
+	border-radius: 9px;
+	overflow: hidden;
+	background: var(--card);
+}
+.row {
+	border-top: 1px solid var(--sep);
+	margin-top: -1px;
+	transition: opacity 0.3s ease;
+}
+.row[data-off='true'] {
+	opacity: 0.5;
+}
+.line {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 12px;
+	min-height: 38px;
+}
+.line[data-tall] {
+	min-height: 56px;
+}
+.line[data-compact] {
+	padding: 6px 8px 6px 12px;
+}
+/* Rule 15: a row that toggles as a whole hovers as a whole; its switch stays the keyboard control. */
+.line[data-interactive] {
+	transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.line[data-interactive]:hover {
+	background-color: var(--segment-hover);
+}
+.lead {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg2);
+}
+.line[data-dim] .lead,
+.line[data-dim] .title {
+	opacity: 0.55;
+}
+.name {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	font-size: var(--text-13);
+}
+.name small {
+	font-size: var(--text-11);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.name[data-wrap] small {
+	white-space: normal;
+}
+.title {
+	min-width: 0;
+}

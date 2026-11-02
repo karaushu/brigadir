@@ -1,0 +1,903 @@
+/* spec/appearance#evolution-redesign: the PR review modal and the PR panel footer. */
+
+/* ── The PR panel footer ── */
+.footer {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	border-top: 1px solid var(--sep);
+	background: var(--card);
+	font-size: var(--text-12);
+}
+.caption {
+	flex: 1;
+	min-width: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.caption svg {
+	color: var(--accent);
+	vertical-align: -1px;
+}
+.sentGlyph {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg2);
+}
+.sentGlyph[data-event='REQUEST_CHANGES'] {
+	color: var(--amber);
+}
+.sentGlyph[data-event='APPROVE'] {
+	color: var(--green);
+}
+.sent {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg);
+}
+/* The window glyph after the name says the button opens the review window (spec/appearance#evolution-redesign). */
+.opener > svg {
+	flex: none;
+	order: 2;
+}
+
+/* ── The modal ── */
+.root {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	font-size: var(--text-12);
+}
+.space {
+	flex: 1;
+	min-width: 0;
+}
+.number {
+	flex: none;
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.who {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-size: var(--text-11-5);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.branches {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+}
+.branches > [data-branch-name] {
+	max-width: 190px;
+}
+.amber {
+	display: inline-flex;
+	color: var(--amber);
+}
+.red {
+	display: inline-flex;
+	color: var(--red);
+}
+.accent {
+	display: inline-flex;
+	color: var(--accent);
+}
+
+/* spec/appearance#evolution-redesign: the agent summary in the step column — no band over the steps. */
+.summary {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	min-width: 0;
+	animation: var(--motion-fade);
+}
+/* The summary header: the spark, «Summary» 13/600, the capsule and Regenerate or Stop on the right. */
+.sumHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 24px;
+	min-width: 0;
+	font-size: var(--text-13);
+}
+.sumHead > svg {
+	flex: none;
+	color: var(--accent);
+}
+.sumHead[data-tone='quiet'] > svg {
+	color: var(--fg3);
+}
+.sumHead b {
+	flex: none;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.sumHead > :is(button, [data-helper-capsule]) {
+	flex: none;
+	font-size: var(--text-12);
+}
+.tldr {
+	margin: 0;
+	font-size: var(--text-12-5);
+	line-height: 18px;
+	color: var(--fg);
+}
+/* «What to check»: a tick and the sentence; a ticked one is crossed out. The spots and the ticks
+   are spaced by the column's 9 px gap. */
+.checks,
+.spots {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+}
+.spots > .row {
+	padding: 4px 6px;
+}
+.checkRow {
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
+	min-height: 22px;
+	padding: 0 6px;
+	font-size: var(--text-12);
+	line-height: 17px;
+	color: var(--fg);
+}
+.checkRow > input {
+	flex: none;
+	margin: 1px 0 0;
+}
+.checkRow[data-done] > span {
+	color: var(--fg2);
+	text-decoration: line-through;
+}
+.headingTail {
+	margin-left: auto;
+	font-size: var(--text-10-5);
+	font-weight: 400;
+	letter-spacing: 0;
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.headingToggle {
+	margin: -2px -4px -2px auto;
+	padding: 0 4px;
+	height: 18px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	font: inherit;
+	font-size: var(--text-10-5);
+	font-weight: 400;
+	letter-spacing: 0;
+	color: var(--accent);
+	cursor: pointer;
+}
+/* spec/pull-requests-and-ci#review-modal: `Accept all` right after the first toggle of the heading. */
+.headingToggle + .headingToggle {
+	margin-left: 0;
+}
+.headingToggle:disabled {
+	color: var(--fg3);
+	cursor: default;
+}
+.headingToggle:hover:not(:disabled) {
+	background: var(--segment-hover);
+	text-decoration: underline;
+}
+.headingToggle:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 0;
+}
+/* A spot: the `file:line` link on its own line, the text wrapped. */
+.spotCopy {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	line-height: 16px;
+	color: var(--fg);
+}
+.spotLink {
+	align-self: flex-start;
+	margin: 0 -2px;
+	padding: 0 2px;
+	border-radius: 3px;
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+	color: var(--accent);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 100%;
+}
+.row:hover .spotLink {
+	background: var(--sel);
+	text-decoration: underline;
+}
+.markGap {
+	display: inline-block;
+	width: 12px;
+}
+.unviewed {
+	margin: -4px 0 0;
+	padding: 0 6px;
+	font-size: var(--text-11-5);
+	line-height: 16px;
+	color: var(--fg2);
+}
+.fileLink {
+	padding: 0;
+	border: 0;
+	border-radius: 3px;
+	background: transparent;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+.fileLink:hover {
+	color: var(--fg);
+	text-decoration: underline;
+}
+.fileLink:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 0;
+}
+/* Steps 2–5: the step and «✦ Summary» tabs, 28 px over the column's body. */
+.tabs {
+	flex: none;
+	display: flex;
+	margin: 10px 12px 0;
+}
+.tabs > * {
+	flex: 1;
+}
+
+/* Steps. */
+.steps {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: 44px;
+	padding: 0 10px;
+	border-bottom: 1px solid var(--hair);
+}
+.step {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 8px 0 5px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	font: inherit;
+	font-size: var(--text-12);
+	color: var(--fg2);
+	white-space: nowrap;
+	transition:
+		background var(--motion-fast) ease-out,
+		box-shadow var(--motion-fast) ease-out;
+}
+.step:hover:not(:disabled) {
+	background: var(--segment-hover);
+	color: var(--fg);
+}
+.step:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.step > i {
+	flex: none;
+	width: 18px;
+	height: 18px;
+	border-radius: 9px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-style: normal;
+	font-size: var(--text-10-5);
+	font-weight: 600;
+	box-shadow: inset 0 0 0 1.3px var(--fg3);
+	color: var(--fg2);
+}
+.step[data-state='on'] {
+	color: var(--fg);
+	font-weight: 600;
+}
+.step[data-state='on'] > i {
+	background: var(--accent-fill);
+	box-shadow: none;
+	color: var(--selfg);
+}
+.step[data-state='done'] > i {
+	background: var(--tint2);
+	box-shadow: none;
+	color: var(--fg);
+}
+.step[data-suggested] {
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.step:disabled {
+	opacity: 0.45;
+}
+.step small {
+	margin-left: 2px;
+	font-size: var(--text-11);
+	font-weight: 400;
+	color: var(--fg2);
+}
+.stepLine {
+	flex: 1;
+	min-width: 6px;
+	height: 1px;
+	background: var(--sep);
+}
+.fileDrop {
+	flex: none;
+	margin-right: 8px;
+	max-width: 220px;
+}
+.fileDropName {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.fileDrop small {
+	color: var(--fg2);
+}
+
+/* Body: files, the diff and the column of the step. */
+.body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+.files {
+	flex: none;
+	width: var(--review-files, 220px);
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 6px;
+	border-right: 1px solid var(--hair);
+	overflow: auto;
+}
+.diff {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	background: var(--content);
+}
+.diffHead {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 32px;
+	padding: 0 10px 0 12px;
+	border-bottom: 1px solid var(--hair);
+	font-size: var(--text-12);
+	white-space: nowrap;
+}
+.diffName {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.diffDir {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	color: var(--fg3);
+}
+.viewed {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	padding: 0 6px;
+	border-radius: 6px;
+	font-size: var(--text-11-5);
+	color: var(--fg2);
+}
+.viewed:hover {
+	background: var(--segment-hover);
+	color: var(--fg);
+}
+/* Centred in the diff: the dialog's own `.body p { margin: 0 }` would pin it to the corner. */
+.diff > .state {
+	margin: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--fg2);
+}
+.empty {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 24px;
+	text-align: center;
+	font-size: var(--text-12);
+	line-height: 17px;
+	color: var(--fg2);
+}
+.files > .empty {
+	padding: 18px 8px;
+}
+.empty b {
+	font-size: var(--text-13);
+	font-weight: 600;
+	color: var(--fg);
+}
+.empty > svg {
+	margin-bottom: 2px;
+	color: var(--fg3);
+}
+.empty > button {
+	margin-top: 4px;
+}
+
+/* The column of the step. */
+.column {
+	flex: none;
+	width: var(--review-column, 340px);
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	border-left: 1px solid var(--hair);
+	background: var(--win);
+}
+.columnBody {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	padding: 12px;
+	transition: opacity var(--motion-fast) ease-out;
+}
+.columnBody[data-dim] {
+	opacity: 0.55;
+	pointer-events: none;
+}
+.columnTitle {
+	margin: 0;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 22px;
+	font-size: var(--text-13);
+	font-weight: 600;
+}
+.columnTitle small {
+	margin-left: auto;
+	font-size: var(--text-11);
+	font-weight: 400;
+	color: var(--fg2);
+}
+.foot {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	border-top: 1px solid var(--sep);
+	background: var(--card);
+}
+.foot small {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.heading {
+	margin: 0;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 20px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--fg2);
+}
+.heading > svg {
+	color: var(--accent);
+}
+.expl {
+	margin: 0;
+	font-size: var(--text-11-5);
+	line-height: 16px;
+	color: var(--fg2);
+}
+.expl[data-tight] {
+	margin-top: -4px;
+}
+.none {
+	margin: 0;
+	font-size: var(--text-12);
+	line-height: 17px;
+	color: var(--fg2);
+}
+.none[data-pad] {
+	padding: 0 6px;
+}
+.inline {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.capLine {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.emptyComments {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 14px 4px;
+}
+.emptyComments b {
+	font-size: var(--text-12-5);
+	font-weight: 600;
+}
+.options {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+/* A list row: one button over the whole row (rule 15), its actions over it on hover. */
+.rows {
+	display: flex;
+	flex-direction: column;
+}
+.row {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
+	padding: 5px 6px;
+	border-radius: 6px;
+	min-width: 0;
+	font-size: var(--text-12);
+}
+.row:hover,
+.row:focus-within {
+	background: var(--segment-hover);
+}
+.row[data-bad] {
+	background: color-mix(in srgb, var(--red) 9%, transparent);
+}
+.rowButton {
+	position: absolute;
+	inset: 0;
+	border: 0;
+	border-radius: inherit;
+	background: transparent;
+	padding: 0;
+	cursor: default;
+}
+.rowButton:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+.rowMark,
+.rowCopy,
+.row > :not(.rowButton, .rowActions) {
+	pointer-events: none;
+}
+.rowMark {
+	flex: none;
+	display: inline-flex;
+	margin-top: 2px;
+	color: var(--fg2);
+}
+.rowCopy {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.rowFirst {
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.rowText {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	line-height: 16px;
+	color: var(--fg);
+}
+.rowActions {
+	position: relative;
+	flex: none;
+	display: none;
+	gap: 2px;
+	margin: -1px -2px -1px 0;
+	pointer-events: auto;
+}
+.row:hover .rowActions,
+.row:focus-within .rowActions {
+	display: flex;
+}
+.rowActions button {
+	width: 24px;
+	height: 24px;
+}
+.openDot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	margin-top: 5px;
+	border-radius: 50%;
+	background: var(--amber);
+}
+
+/* A suggestion of the agent or a draft being edited. */
+.card {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	padding: 8px 8px 9px 10px;
+	border-radius: 8px;
+	box-shadow: inset 0 0 0 1px var(--sep);
+	min-width: 0;
+	animation: var(--motion-fade);
+}
+.cardHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 20px;
+	min-width: 0;
+	font-size: var(--text-11-5);
+}
+.cardHead b {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+	font-weight: 600;
+}
+.cardLine {
+	flex: none;
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+}
+.agentTag {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	height: 18px;
+	padding: 0 6px;
+	border-radius: 9px;
+	font-size: var(--text-10-5);
+	background: var(--sel);
+	color: var(--accent);
+	white-space: nowrap;
+}
+.cardText {
+	margin: 0;
+	font-size: var(--text-12);
+	line-height: 17px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.cardActions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 2px;
+}
+textarea.cardEdit {
+	min-height: 52px;
+	resize: vertical;
+}
+textarea.reviewBody {
+	min-height: 120px;
+	resize: vertical;
+}
+textarea.reviewBody[data-generated] {
+	background: linear-gradient(var(--sel), var(--sel)), var(--win);
+}
+.writing {
+	box-sizing: border-box;
+	min-height: 120px;
+	padding: 6px 8px;
+	border-radius: 6px;
+	background: linear-gradient(var(--sel), var(--sel)), var(--win);
+	box-shadow: inset 0 0 0 1px var(--sep);
+}
+
+/* «What GitHub gets». */
+.preview {
+	border-radius: 8px;
+	box-shadow: inset 0 0 0 1px var(--sep);
+	overflow: hidden;
+	flex: none;
+}
+.previewHead {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-height: 32px;
+	padding: 0 10px;
+	border-bottom: 1px solid var(--sep);
+	background: var(--tint);
+	font-size: var(--text-12);
+}
+.previewHead b {
+	font-weight: 600;
+}
+.previewGlyph {
+	display: inline-flex;
+	color: var(--fg2);
+}
+.previewGlyph[data-event='REQUEST_CHANGES'] {
+	color: var(--amber);
+}
+.previewGlyph[data-event='APPROVE'] {
+	color: var(--green);
+}
+.previewBody {
+	padding: 8px 10px;
+	font-size: var(--text-12);
+	line-height: 17px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.previewBody[data-none] {
+	color: var(--fg3);
+}
+.previewComment {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	min-width: 0;
+	padding: 7px 10px;
+	border-top: 1px solid var(--hair);
+	font-size: var(--text-12);
+	line-height: 16px;
+}
+.previewComment > div {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	overflow-wrap: anywhere;
+}
+.previewComment[data-bad] {
+	background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+.previewPlace {
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	color: var(--accent);
+}
+.previewError {
+	font-size: var(--text-11);
+	color: var(--red);
+}
+
+/* Step 5's footer: Send, «or don't send — fix it», the agent and the checkbox. */
+.checkFoot {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+	padding: 8px 10px 10px;
+	border-top: 1px solid var(--sep);
+	background: var(--card);
+}
+.checkFoot .sendButton {
+	flex: 1;
+	justify-content: center;
+}
+.kbd {
+	margin-left: 3px;
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+	opacity: 0.75;
+}
+.or {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+.or::before,
+.or::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: var(--sep);
+}
+.fixWrap {
+	display: flex;
+}
+.checkFoot .fixButton {
+	flex: 1;
+	justify-content: center;
+}
+.fixNote {
+	font-size: var(--text-11);
+	line-height: 15px;
+	color: var(--fg2);
+	white-space: normal;
+}
+.check {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-12);
+}
+/* spec/appearance#evolution-redesign: the glyph of step 5's merge row — amber with a conflict. */
+.mergeGlyph {
+	flex: none;
+	display: inline-flex;
+	color: var(--fg2);
+}
+.mergeGlyph[data-conflict] {
+	color: var(--amber);
+}

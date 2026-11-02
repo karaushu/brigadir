@@ -1,0 +1,248 @@
+.trigger {
+	-webkit-app-region: no-drag;
+	gap: 5px;
+	padding: 0 8px;
+	color: var(--fg2);
+}
+.pulse {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+}
+/* spec/appearance#evolution-redesign: someone waits — an amber dot over the pulse's top-right corner, ringed in the window's colour. */
+.waiting {
+	position: absolute;
+	top: -1px;
+	right: -2px;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--amber);
+	box-shadow: 0 0 0 1.5px var(--win);
+}
+.count {
+	font-size: calc(var(--c-fs) - 0.5px);
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	color: var(--fg);
+}
+.trigger[aria-expanded='true'] > .count {
+	color: inherit;
+}
+.popup {
+	position: fixed;
+	inset: auto;
+	margin: 0;
+	width: 420px;
+	max-width: calc(100vw - 24px);
+	padding: 0;
+	border: 1px solid var(--sep);
+	border-radius: 11px;
+	background: var(--card);
+	color: var(--fg);
+	box-shadow: 0 22px 60px var(--shadow);
+	overflow: hidden;
+}
+.popup[open] {
+	display: flex;
+	flex-direction: column;
+}
+.popup::backdrop {
+	background: transparent;
+}
+.popup > header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px 8px;
+	border-bottom: 1px solid var(--sep);
+}
+.popup h2 {
+	flex: 1;
+	font-size: var(--text-14);
+	font-weight: 600;
+}
+.popup header > span {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.list {
+	display: flex;
+	flex-direction: column;
+	overflow: auto;
+	min-height: 0;
+	padding: 0 8px 4px;
+}
+.list > p {
+	padding: 12px 4px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.list h3 {
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	letter-spacing: 0.02em;
+	padding: 8px 4px 4px;
+}
+.row {
+	border-radius: 5px;
+}
+.row:hover,
+.row:focus-within {
+	background: var(--tint);
+}
+.row[data-state='needs-you'] {
+	background: var(--amber-soft);
+}
+.line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px;
+	min-height: calc(var(--control-h-s) + 8px);
+}
+.chevron {
+	width: 9px;
+	flex: none;
+}
+.status {
+	flex: none;
+	margin-top: 1px;
+	color: var(--fg2);
+}
+.row[data-state='working'] .status {
+	color: var(--accent);
+}
+.row[data-state='needs-you'] .status {
+	color: var(--amber);
+}
+.row[data-state='failed'] .status {
+	color: var(--red);
+}
+.row[data-state='done'] .status {
+	color: var(--green);
+}
+.row[data-state='completed'] .status {
+	color: var(--fg3);
+} /* spec/sidebar#done-rows: the quiet tick */
+.row[data-state='working'] .status svg {
+	animation: agent-spin 1s steps(8) infinite;
+}
+.task {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	text-align: left;
+	border: 0;
+	padding: 0;
+	background: transparent;
+	font-size: var(--text-13);
+	line-height: 15px;
+}
+.task:hover {
+	background: transparent;
+}
+.task > span {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	max-width: 100%;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.task > span svg {
+	flex: none;
+	color: var(--fg3);
+}
+.task > small {
+	display: block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-10);
+	line-height: 11px;
+	color: var(--fg2);
+}
+.action {
+	width: 64px;
+	flex: none;
+	display: grid;
+	align-items: center;
+	justify-items: end;
+}
+.age,
+.stop {
+	grid-area: 1/1;
+}
+.age {
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.stop.stop {
+	opacity: 0;
+	pointer-events: none;
+}
+.row:hover .stop,
+.row:focus-within .stop {
+	opacity: 1;
+	pointer-events: auto;
+}
+.row:hover .age,
+.row:focus-within .age {
+	opacity: 0;
+}
+.more {
+	flex: none;
+	opacity: 0;
+}
+.row:hover .more,
+.row:focus-within .more {
+	opacity: 1;
+}
+.confirm {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 4px 8px 25px;
+	border-top: 1px solid var(--sep);
+	animation: var(--motion-fade);
+}
+.confirm > span {
+	flex: 1;
+	font-size: var(--text-11);
+}
+.error {
+	font-size: var(--text-11);
+	color: var(--red);
+	padding: 6px 4px;
+	overflow-wrap: anywhere;
+}
+.popup > footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 12px;
+	border-top: 1px solid var(--sep);
+	background: var(--tint);
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.popup > footer > span {
+	flex: 1;
+}
+@keyframes agent-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.row[data-state='working'] .status svg {
+		animation: none;
+	}
+}

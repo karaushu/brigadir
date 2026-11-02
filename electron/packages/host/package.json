@@ -1,0 +1,25 @@
+{
+	"name": "@brigadir/host",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./client": "./src/ui.ts",
+		"./peer": "./src/peer.ts",
+		"./mcp-list": "./src/mcp-list.ts",
+		"./login-shell": "./src/login-shell.ts"
+	},
+	"dependencies": {
+		"@brigadir/core": "workspace:*",
+		"@brigadir/diff": "workspace:*",
+		"@brigadir/git": "workspace:*",
+		"@brigadir/orchestrator": "workspace:*",
+		"@brigadir/persistence": "workspace:*",
+		"@brigadir/transport": "workspace:*",
+		"@xterm/addon-serialize": "^0.14.0",
+		"@xterm/headless": "^6.0.0",
+		"node-pty": "^1.1.0",
+		"zod": "^4.0.0"
+	}
+}

@@ -1,0 +1,443 @@
+.task {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+/* spec/task-window-workspace#work-area: the toolbar, the chat, the work area and the panel live in .main. */
+.main {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.toolbar {
+	height: var(--strip-h);
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 14px;
+	background: var(--strip-bg);
+	border-bottom: 1px solid var(--sep);
+	-webkit-app-region: drag;
+}
+.toolbar button {
+	-webkit-app-region: no-drag;
+}
+.title {
+	min-width: 70px;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.title h1 {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-13);
+	font-weight: 600;
+}
+/* spec/appearance#evolution-redesign: the second line is 11 px — the repo line of a task, «main tree · repo» of the main tree. */
+.title > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.separator {
+	width: 1px;
+	height: 20px;
+	background: var(--sep);
+	flex: none;
+}
+.body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+.surface {
+	position: relative;
+	container-type: inline-size;
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+/* spec/task-window#width-rules: like the chat, the panel gives way to its minimum (spec/task-window#layout-overview, 200 px) before the window scrolls. */
+.changes {
+	width: 244px;
+	flex: 0 1 auto;
+	min-width: 200px;
+	display: flex;
+	flex-direction: column;
+	border-left: 1px solid var(--sep);
+	/* spec/task-window#panel: the panel is the window's colour. */
+	background: var(--content);
+}
+/* spec/task-window#panel: the Files · Changes · PR capsule, 8 px from the panel's edges, no line under it. */
+.panelTabs {
+	display: flex;
+	flex: none;
+	padding: 8px 8px 0;
+}
+.changes header {
+	display: flex;
+	justify-content: space-between;
+	padding: 12px;
+	color: var(--fg2);
+}
+.changes h2 {
+	font-size: var(--text-11);
+}
+.changes input:not([type='checkbox']):not([type='radio']) {
+	min-width: 0;
+}
+.files {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 0 6px;
+}
+.files > p {
+	position: absolute;
+	margin-top: 24px;
+	pointer-events: none;
+}
+.files h3 {
+	font-size: var(--text-11);
+	display: flex;
+	gap: 8px;
+	padding: 12px 6px 6px;
+}
+.files small {
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-weight: 400;
+}
+.file {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 6px;
+	border-color: transparent;
+	background: transparent;
+	text-align: left;
+	font-size: var(--text-10);
+}
+.changes footer {
+	padding: 8px 12px;
+	border-top: 1px solid var(--sep);
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.empty {
+	margin: auto;
+	padding: 24px;
+	color: var(--fg2);
+}
+.hint {
+	padding: 20px 6px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.error {
+	padding: 8px 12px;
+	background: var(--amber-soft);
+}
+@media (max-width: 1000px) {
+	.changes {
+		width: 200px;
+	}
+}
+
+.pending {
+	max-height: 280px;
+	overflow: auto;
+	flex: none;
+	border-bottom: 1px solid var(--sep);
+}
+
+.queuedReview {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 12px;
+	background: var(--tint);
+	flex: none;
+	font-size: var(--text-11);
+}
+.changes > header {
+	padding: 8px 10px;
+	align-items: center;
+	/* spec/task-window#panel: a hairline under the mode's header. */
+	border-bottom: 1px solid var(--hair);
+}
+
+.body[data-columns='3'] {
+	overflow-x: auto;
+}
+.body[data-columns='3'] > .surface {
+	min-width: 400px;
+}
+/* relative: the drop target of a dragged bottom-group tab covers the column (spec/task-window-workspace#work-area). */
+.chatColumn {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 380px;
+	flex: 1;
+}
+/* A fixed width only beside documents. Not `[style]`: React leaves an empty style attribute behind when the width goes away.
+   spec/task-window-workspace#layout-switch: with all three columns on, the chat gives way to its minimum before the window scrolls. */
+.chatColumn[data-sized='true'] {
+	flex: 0 1 auto;
+}
+/* spec/task-window#resize-handles: the handle takes no room, so the documents carry the border between them and the chat, as every other column does. */
+.chatColumn[data-sized='true'] ~ .surface {
+	border-left: 1px solid var(--sep);
+}
+/* spec/task-window-workspace#two-columns: the Chat tab takes its group; the transcript and the composer
+   stand in a column of 760 px at most, centred. */
+.chatTab {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	justify-content: center;
+}
+.chatTabColumn {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	max-width: 760px;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+/* spec/git#merge: History shares the header with Diff; the mode's actions sit on the right, in the filter's place. */
+.historyActions {
+	flex: 1 0 auto;
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+}
+.diffModes {
+	flex: none;
+}
+.changes > .diffToolbar {
+	gap: 6px;
+	padding: 8px;
+	flex-wrap: nowrap;
+	min-height: calc(var(--control-h-m) + 16px);
+	/* spec/diff-and-review#changes-header: a header wider than the panel scrolls sideways, without a visible bar (as ui/TabStrip, spec/task-window#tab-strips). */
+	overflow-x: auto;
+	overflow-y: hidden;
+	scrollbar-width: none;
+	overscroll-behavior-x: contain;
+}
+.changes > .diffToolbar::-webkit-scrollbar {
+	display: none;
+}
+.changes > .diffToolbar input {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+}
+.headerSpace {
+	flex: 1;
+	min-width: 0;
+}
+
+/* spec/appearance#evolution-redesign: a changed file sits under its repo root, its text in line with the root's name.
+   spec/task-window#panel: one line of 26 px — icon, name 12.5, its folder 11 --fg3, +N −M mono 10.5;
+   hover --hover over the whole row, the open file --sel. */
+.file {
+	height: 26px;
+	padding: 0 8px 0 31px;
+	gap: 6px;
+	border: 0;
+	border-radius: 6px;
+	white-space: nowrap;
+	color: var(--fg);
+}
+.file:hover {
+	background-color: var(--hover);
+	background-image: none;
+}
+.file[aria-pressed='true'] {
+	background-color: var(--sel);
+}
+.fileName {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--text-12-5);
+}
+.fileDir {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+.file > .counts {
+	font: var(--text-10-5) var(--mono-family);
+}
+.fileBinary {
+	flex: none;
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+
+.changes,
+.files {
+	animation: var(--motion-fade);
+}
+.reviewDialog {
+	width: min(620px, calc(100vw - 48px));
+	height: auto;
+	max-height: calc(100vh - 76px);
+	inset: var(--strip-h) auto auto 50%;
+	transform: translateX(-50%);
+	margin: 0;
+	padding: 0;
+	border: 1px solid var(--sep);
+	border-top: 0;
+	border-radius: 0 0 11px 11px;
+	color: var(--fg);
+	background: var(--card);
+	box-shadow: 0 22px 60px var(--shadow);
+	overflow: hidden;
+}
+.reviewDialog[open] {
+	display: flex;
+	flex-direction: column;
+}
+.reviewDialog::backdrop {
+	background: var(--modal-scrim);
+}
+.reviewDialog > header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 14px;
+	border-bottom: 1px solid var(--sep);
+	flex: none;
+}
+.reviewDialog > header > svg {
+	color: var(--accent);
+	flex: none;
+}
+.reviewDialog h2 {
+	font-size: var(--text-13);
+	font-weight: 600;
+}
+.reviewDialog > header small {
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.reviewActions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	justify-content: space-between;
+	padding: 9px 14px;
+	border-top: 1px solid var(--sep);
+	background: var(--tint);
+	flex: none;
+}
+.reviewActions span {
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.reviewActions button {
+	display: flex;
+	gap: 5px;
+	align-items: center;
+}
+
+.files h3 {
+	flex-wrap: wrap;
+	align-items: center;
+}
+.files h3 > div {
+	flex-basis: 100%;
+}
+.files > p {
+	position: static;
+}
+
+/* The changes panel header stays on one line even at the 200 px minimum width. */
+.changes {
+	container: changes / inline-size;
+}
+@container changes (max-width: 260px) {
+	.changes > .diffToolbar {
+		gap: 4px;
+		padding: 8px 6px;
+	}
+	.changes > .diffToolbar input {
+		padding-inline: 6px;
+	}
+}
+
+/* spec/task-window#narrow-toolbar: a toolbar button that may leave for «…» stands in a slot the toolbar measures. */
+.slot {
+	display: flex;
+	align-items: center;
+	flex: none;
+}
+/* spec/task-window-workspace#work-area: Search, Tools and Layout stand together at the end and never leave for «…»; the toolbar measures them as one. */
+.fixed {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+}
+.rule {
+	width: 1px;
+	height: 20px;
+	flex: none;
+	background: var(--sep);
+}
+/* spec/task-window-workspace#work-area: the bottom group under the chat (the work area hidden or beside it). */
+.underChat {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	min-height: 120px;
+	max-height: 70%;
+	overflow: hidden;
+	contain: inline-size;
+	border-top: 1px solid var(--sep);
+}
+.underChat > * {
+	flex: 1;
+	min-height: 0;
+}
+/* spec/architecture-and-platform#window-frame: the toolbar ends under the OS buttons (no full-height column stands right of it, spec/task-window-workspace#work-area). */
+:root:is([data-platform='win32'], [data-platform='linux']) .toolbar {
+	padding-right: calc(var(--os-controls-right) + 6px);
+}
+/* spec/task-window#toolbar: the toolbar's captions are 500 — the command's name and the agents' count. */
+.toolbar [data-quick-commands] > button,
+.toolbar [data-toolbar-item] > button {
+	font-weight: 500;
+}
+
+/* spec/appearance#evolution-redesign: the list's own 6 px is the root's margin here. */
+.changesRoot.changesRoot {
+	margin: 0;
+}

@@ -1,0 +1,375 @@
+/* spec/remote-access-and-mobile#module-and-settings: Settings ▸ Remote on the form of spec/appearance#interface-font (SettingsForm). */
+.inline {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-12);
+}
+/* Over the status lines the switch's line is the track's 20 px, not its 28 px target. */
+.inline[data-lines] > [role='switch'] {
+	margin-block: -4px;
+}
+.inline[data-inactive] {
+	opacity: 0.45;
+}
+.mono {
+	font-family: var(--mono-family);
+}
+.status {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	font-size: var(--text-12);
+	color: var(--fg);
+}
+.dot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--fg3);
+}
+.dot[data-on='true'] {
+	background: var(--green);
+}
+/* spec/notifications-slack-notes-and-schedules#slack: Slack's bot line — the token refused, Slack unreachable. */
+.dot[data-tone='error'] {
+	background: var(--red);
+}
+.dot[data-tone='warn'] {
+	background: var(--amber);
+}
+.warn {
+	color: var(--amber-text);
+}
+/* spec/notifications-slack-notes-and-schedules#slack: the setup steps of `@ mentions in Slack` under its card, in the footnote's type. */
+.steps {
+	margin: 0;
+	padding-left: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.error,
+.errorText,
+.hintError {
+	color: var(--red);
+}
+.error {
+	font-size: var(--text-12);
+}
+/* spec/settings-modules-and-onboarding#intro-remote: what the tab is for, above its controls in every state — the sentence, the scheme and the facts of the
+   intro's Remote access step, on the section titles' 12 px inset. */
+.overview {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 0 12px;
+}
+.overview > p {
+	margin: 0;
+	font-size: var(--text-12);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+/* Turning on: the fields are M, 240 wide; the row of actions closes the card. */
+.passwordField {
+	width: 240px;
+}
+.formActions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	min-height: 40px;
+	padding: 5px 12px;
+}
+.nameField {
+	width: 200px;
+}
+.nameField[aria-invalid='true'] {
+	box-shadow: inset 0 0 0 2px var(--red);
+}
+.passwordField[aria-invalid='true'],
+.fieldRow input[aria-invalid='true'] {
+	box-shadow: inset 0 0 0 2px var(--red);
+}
+.name {
+	font-size: var(--text-12);
+	font-weight: 600;
+}
+/* A device: the whole row hovers (rule 15); its action lies over it with its own hover. */
+.device {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 40px;
+	padding: 6px 8px 6px 12px;
+	transition: background-color var(--motion-fast) ease;
+}
+.device:hover {
+	background: var(--tint);
+}
+.device[data-fresh] {
+	background: var(--accent-soft);
+}
+.two {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.two b {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-12);
+	font-weight: 500;
+}
+.two small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.two small[data-warning] {
+	color: var(--amber-text);
+}
+.live {
+	display: inline-flex;
+	align-items: center;
+	height: 16px;
+	padding: 0 5px;
+	border-radius: 4px;
+	background: var(--accent-soft);
+	color: var(--accent-text);
+	font-size: var(--text-10);
+	font-weight: 500;
+}
+/* spec/remote-access-and-mobile#remote-button: the two parts' switch, centred over the tab (size M). */
+.parts {
+	flex: none;
+	display: flex;
+	justify-content: center;
+}
+.partIntro {
+	flex: none;
+	margin: 0;
+	padding: 0 12px;
+	font-size: var(--text-12);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+/* A machine row opens as a whole (rule 15); its buttons sit above it with their own hover. */
+.device[data-opens] {
+	cursor: default;
+}
+.peerActions {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+/* No paired machines yet: one row — the dashed plate, what to do on the other machine, New machine…. */
+.empty {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px;
+}
+.empty .two b {
+	font-size: var(--text-12);
+}
+.wrap {
+	white-space: normal !important;
+	line-height: 1.4;
+}
+/* The card's last row: Add device, Revoke all. */
+.actions {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	min-height: 40px;
+	padding: 6px 8px 6px 12px;
+}
+/* «Log» under the card: an accent link, the size of an S control, with its glyph. */
+/* `Log` follows the sentence (the form's footnote gives every span the rest of the row). */
+.footText.footText {
+	flex: 0 1 auto;
+}
+.linkSlot {
+	flex: 1;
+	margin-left: -16px;
+}
+.link {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 24px;
+	padding: 0 8px;
+	border-radius: 6px;
+	font-size: var(--text-11);
+	color: var(--accent-text);
+}
+.link:hover {
+	background: var(--accent-soft);
+	background-image: none;
+}
+/* A device's window: why the tab is read-only. */
+.note {
+	flex: none;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: var(--amber-soft);
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg);
+}
+.note > svg {
+	flex: none;
+	margin-top: 1px;
+	color: var(--amber);
+}
+.note b {
+	font-weight: 600;
+}
+/* Dialogs: Change password, the log. */
+.label {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.label[data-gap] {
+	margin-top: 4px;
+}
+.fieldRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.fieldRow > * {
+	flex: 1;
+}
+.hint,
+.hintError {
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+.hintError {
+	color: var(--red);
+}
+.journalScroll {
+	max-height: 320px;
+	overflow: auto;
+}
+.journal {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--text-12);
+}
+.journal th {
+	padding: 0 10px 6px 0;
+	font-size: var(--text-11);
+	font-weight: 400;
+	text-align: left;
+	color: var(--fg2);
+}
+.journal td {
+	padding: 6px 10px 6px 0;
+	border-top: 1px solid var(--sep);
+	vertical-align: top;
+}
+.journal td:nth-child(1) {
+	width: 48px;
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.journal td:nth-child(2) {
+	width: 76px;
+	font-weight: 500;
+}
+.journal td:nth-child(4) {
+	font-size: var(--text-11);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.journal td[data-tone='warn'] {
+	color: var(--amber-text);
+}
+.journal td[data-tone='err'] {
+	color: var(--red);
+}
+/* spec/remote-access-and-mobile#tailscale-guidance: the phone's steps — an 18 px mark with the number, or ✓ once the machine sees it
+   done; a done step's text is quieter. Step 3 carries the command and its Copy in a row of S. */
+.steps {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: 100%;
+	margin: 0;
+	padding: 2px 0;
+	list-style: none;
+}
+.steps > li {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	font-size: var(--text-12);
+	line-height: 18px;
+	color: var(--fg);
+}
+.steps > li[data-done] > .stepText > span:first-child {
+	color: var(--fg2);
+}
+.stepMark {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: var(--tint);
+	color: var(--fg2);
+	font-size: var(--text-10);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+.stepMark[data-done] {
+	background: none;
+	color: var(--green);
+}
+.stepMark > span {
+	display: inline-flex;
+}
+.stepText {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+}
+.command {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.command > code {
+	display: inline-flex;
+	align-items: center;
+	height: var(--c-h);
+	padding: 0 8px;
+	border-radius: var(--c-r);
+	box-sizing: border-box;
+	background: var(--tint);
+	font-size: calc(10.5px * var(--ui-scale));
+	white-space: nowrap;
+}

@@ -1,0 +1,184 @@
+/* spec/remote-access-and-mobile#phone-pr-list: the board's tabs and pages, the empty column, the lifted card and the hint. */
+.board {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.tabs {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 48px;
+	padding: 0 10px;
+	border-bottom: 0.5px solid var(--sep);
+}
+.tab {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 44px;
+	padding: 0 12px;
+	border-radius: 10px;
+	font-size: 15px;
+	font-weight: 500;
+	color: var(--fg2);
+	transition:
+		background-color var(--motion-fast, 120ms) ease,
+		color var(--motion-fast, 120ms) ease;
+}
+.tab small {
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+.tab[aria-selected='true'] {
+	color: var(--fg);
+}
+.tab[aria-selected='true']::after {
+	content: '';
+	position: absolute;
+	left: 12px;
+	right: 12px;
+	bottom: 0;
+	height: 2.5px;
+	border-radius: 2px;
+	background: var(--accent);
+}
+.tab:active {
+	background: var(--segment-press);
+}
+.tab[data-drop] {
+	background: var(--accent-soft);
+	color: var(--accent-text);
+}
+.tab[data-refused] {
+	color: var(--fg3);
+}
+.tab[data-refused] small {
+	text-decoration: line-through;
+}
+.area {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+.pager {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scroll-snap-type: x mandatory;
+	overscroll-behavior: contain;
+	scrollbar-width: none;
+}
+.pager::-webkit-scrollbar {
+	display: none;
+}
+.pager[data-lifting] {
+	scroll-snap-type: none;
+}
+.page {
+	flex: none;
+	width: 100%;
+	height: 100%;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scroll-snap-align: start;
+	scroll-snap-stop: always;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 16px 20px;
+	box-sizing: border-box;
+}
+.slot {
+	flex: none;
+	-webkit-touch-callout: none;
+	user-select: none;
+}
+.slot[data-lifted] {
+	opacity: 0.3;
+}
+.empty {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: 150px;
+	padding: 18px;
+	border: 1.5px dashed var(--sep);
+	border-radius: 14px;
+	color: var(--fg2);
+	font-size: 15px;
+	text-align: center;
+	box-sizing: border-box;
+}
+.empty[data-compact] {
+	min-height: 96px;
+}
+.empty small {
+	font-size: 13px;
+	color: var(--fg3);
+}
+.empty[data-drop] {
+	border-color: var(--accent);
+	background: var(--accent-soft);
+	color: var(--accent-text);
+}
+.empty[data-drop] small {
+	color: inherit;
+}
+.lifted {
+	position: fixed;
+	z-index: 60;
+	pointer-events: none;
+	transform: rotate(-2deg) scale(1.03);
+	transform-origin: 30% 50%;
+}
+.lifted > * {
+	background: var(--card) !important;
+	box-shadow:
+		0 16px 40px var(--shadow),
+		0 0 0 1px var(--sep);
+}
+.toast {
+	position: absolute;
+	z-index: 61;
+	left: 50%;
+	bottom: 20px;
+	transform: translateX(-50%);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 16px;
+	border-radius: 22px;
+	background: var(--sheet);
+	box-shadow:
+		0 8px 30px var(--shadow),
+		0 0 0 0.5px var(--sep);
+	font-size: 14px;
+	white-space: nowrap;
+}
+.toast > svg {
+	flex: none;
+	color: var(--green);
+}
+.toast[data-refused] {
+	color: var(--red);
+}
+.toast[data-refused] > svg {
+	color: var(--red);
+}
+.failed.failed {
+	color: var(--red);
+}
+@media (prefers-reduced-motion: reduce) {
+	.tab {
+		transition: none;
+	}
+}

@@ -1,0 +1,87 @@
+/* spec/sidebar#section-rail: the sections rail. 48 px, the sidebar's ground; the window strip runs over it with
+   a --sep hairline under it, the --hair line between the rail and the sidebar starts under that strip. */
+.rail {
+	position: relative;
+	flex: none;
+	width: var(--rail-w, 48px);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	min-height: 0;
+	padding-bottom: 8px;
+	background: var(--sb);
+	/* The dots of the XL tiles sit on the glyph's corner (10 px in from the tile). */
+	--dot-inset: 10px;
+	--dot-inset-bottom: 10px;
+	--dot-ring: var(--sb);
+}
+.rail::after {
+	content: '';
+	position: absolute;
+	top: var(--strip-h);
+	bottom: 0;
+	right: 0;
+	width: 1px;
+	background: var(--hair);
+	pointer-events: none;
+}
+.strip {
+	flex: none;
+	align-self: stretch;
+	box-sizing: border-box;
+	height: var(--strip-h);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-bottom: 1px solid var(--sep);
+	margin-bottom: 4px;
+	-webkit-app-region: drag;
+}
+.strip > * {
+	-webkit-app-region: no-drag;
+}
+.group {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+}
+.fill {
+	flex: 1;
+	min-height: 8px;
+}
+/* The open section: the selection fill and an accent glyph, hover keeps it (rule 15: the whole tile). */
+.section.section[aria-pressed='true'] {
+	background-color: var(--sel);
+	background-image: none;
+	color: var(--accent);
+}
+.section {
+	position: relative;
+}
+.count {
+	position: absolute;
+	top: 5px;
+	left: 22px;
+	min-width: 14px;
+	height: 14px;
+	padding: 0 3px;
+	box-sizing: border-box;
+	border-radius: 7px;
+	font-size: var(--text-10);
+	font-weight: 600;
+	line-height: 14px;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+	color: #fff;
+	background: var(--accent);
+	box-shadow: 0 0 0 1.5px var(--sb);
+	pointer-events: none;
+}
+.count[data-tone='amber'] {
+	background: var(--amber);
+}
+:root[data-theme='dark'] .count[data-tone='amber'],
+[data-palette='dark'] .count[data-tone='amber'] {
+	color: var(--win);
+}

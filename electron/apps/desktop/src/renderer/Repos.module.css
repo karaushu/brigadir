@@ -1,0 +1,331 @@
+/* spec/appearance#evolution-redesign: the header's second line, the «Repos k/n» popover and the panel's roots. */
+
+/* ── The header's second line: 11 px, fg2; the repo chip, «+N ▾», then «· state» ─────────────────────────────── */
+.line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	height: 20px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.placeholder {
+	flex: none;
+	width: 0;
+}
+/* A click target is at least 24 px tall even where the pill is drawn smaller. The control is
+   24 px (a negative block margin keeps the line's height), the visible pill is its ::before, inset from top and bottom.
+   The header line's own chips are ui/HeaderChip. */
+.prChip,
+.branchButton,
+.rootBranch,
+.mark {
+	position: relative;
+	isolation: isolate;
+	box-sizing: border-box;
+	height: 24px;
+	background: none;
+}
+.prChip::before,
+.branchButton::before,
+.rootBranch::before,
+.mark::before {
+	content: '';
+	position: absolute;
+	inset: var(--pill-inset, 2px) 0;
+	z-index: -1;
+	border-radius: inherit;
+	background: var(--pill, transparent);
+	transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.chipName {
+	flex: none;
+	color: var(--fg);
+}
+.branch {
+	color: var(--fg3);
+}
+.dot {
+	flex: none;
+	color: var(--fg3);
+}
+.status {
+	flex: none;
+	white-space: nowrap;
+}
+.mono {
+	flex: none;
+	font-family: var(--mono-family);
+	font-size: calc(var(--text-11) - 0.5px);
+}
+.pr {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	flex: none;
+	color: var(--fg2);
+}
+.pr > [data-glyph='pr-branch'],
+.pr[data-state='pass'] > [data-glyph='badge-pass'] {
+	color: var(--green);
+}
+.pr[data-state='fail'] > [data-glyph='badge-fail'] {
+	color: var(--red);
+}
+.pr[data-state='pending'] > [data-glyph='check-pending'] {
+	color: var(--amber);
+}
+.lock {
+	display: inline-flex;
+	flex: none;
+	color: var(--amber);
+}
+/* spec/notifications-slack-notes-and-schedules#notice-chips: in a repo heading the lock carries the number of the other tasks. */
+.lock[data-count] {
+	align-items: center;
+	gap: 3px;
+	font-size: var(--text-11);
+	font-weight: 500;
+	white-space: nowrap;
+}
+.counts {
+	flex: none;
+	font-family: var(--mono-family);
+	font-size: calc(var(--text-11) - 0.5px);
+	white-space: nowrap;
+}
+
+/* ── The «Repos k/n» popover ───────────────────────────────────────────────────────────────────────────────── */
+.list {
+	display: flex;
+	flex-direction: column;
+	padding: 4px 0;
+}
+.hint {
+	margin: 0;
+	padding: 6px 12px;
+	font-size: var(--text-12);
+	color: var(--fg2);
+}
+.row {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin: 0 4px;
+	padding: 5px 8px 6px;
+	border-radius: 6px;
+	min-width: 0;
+}
+.row[data-unavailable] {
+	opacity: 0.55;
+}
+.rowFirst,
+.rowSecond {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+}
+.tally {
+	margin-left: 4px;
+	font-weight: 400;
+	color: var(--fg3);
+}
+.rowFirst {
+	gap: 6px;
+	height: 20px;
+	font-size: var(--text-12);
+}
+.rowName {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.row .rowName {
+	font-weight: 500;
+}
+.rowSecond {
+	gap: 5px;
+	height: 16px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.space {
+	flex: 1 1 0;
+	min-width: 0;
+}
+.kind {
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	height: 16px;
+	padding: 0 7px;
+	border-radius: 5px;
+	background: var(--tint);
+	color: var(--fg2);
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+}
+.prChip {
+	--pill: var(--tint);
+	--pill-inset: 3px;
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	margin: -2px 0;
+	padding: 0 7px;
+	border: 0;
+	border-radius: 5px;
+	color: var(--fg2);
+	font: inherit;
+}
+.prChip:hover {
+	--pill: var(--tint2);
+	color: var(--fg);
+}
+.more {
+	flex: none;
+	margin: -2px -2px -2px 0;
+}
+.branchButton,
+.branchText {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex: 0 1 auto;
+	min-width: 0;
+	color: var(--fg2);
+}
+.branchText {
+	height: 16px;
+}
+.branchButton {
+	--pill-inset: 4px;
+	margin: -4px 0 -4px -4px;
+	padding: 0 4px;
+	border: 0;
+	border-radius: 4px;
+	font: inherit;
+}
+.branchButton:hover,
+.branchButton[aria-expanded='true'] {
+	--pill: var(--segment-hover);
+	color: var(--fg);
+}
+.branchButton > svg,
+.branchText > svg {
+	flex: none;
+}
+.branchButton [data-branch-name],
+.branchText [data-branch-name] {
+	color: var(--fg3);
+}
+.outside {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 26px;
+	padding: 0 8px 0 12px;
+	font-size: var(--text-12);
+	color: var(--fg3);
+}
+.addFolder,
+.panelAdd {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	flex: none;
+	border: 0;
+	background: none;
+	color: var(--fg2);
+	font: inherit;
+	font-size: var(--text-12);
+	text-align: left;
+	transition:
+		background-color var(--motion-fast) var(--motion-ease),
+		color var(--motion-fast) var(--motion-ease);
+}
+.addFolder {
+	width: calc(100% - 8px);
+	height: 28px;
+	margin: 0 4px 4px;
+	padding: 0 8px;
+	border-radius: 6px;
+	color: var(--fg);
+	font-size: calc(var(--text-13) - 0.5px);
+}
+/* A row of the popover's menu part: the menu's hover (spec/appearance#popover-shell). */
+.addFolder:not(:disabled):hover,
+.addFolder:focus-visible {
+	background: var(--accent-fill);
+	color: var(--selfg);
+	outline: none;
+}
+.addFolder > svg,
+.panelAdd > svg {
+	flex: none;
+}
+
+/* ── The panel's roots ────────────────────────────────────────────────────────────────────────────────────── */
+.rootAction {
+	margin: -3px -2px -3px 0;
+}
+.rootBranch {
+	--pill-inset: 4px;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex: 0 1 auto;
+	min-width: 0;
+	margin: -4px 0 -4px -4px;
+	padding: 0 4px;
+	border: 0;
+	border-radius: 4px;
+	color: inherit;
+	font: inherit;
+}
+.rootBranch:hover,
+.rootBranch[aria-expanded='true'] {
+	--pill: var(--segment-hover);
+	color: var(--fg);
+}
+.rootBranch > svg {
+	flex: none;
+}
+.mark {
+	--pill-inset: 4px;
+	flex: none;
+	min-width: 24px;
+	margin: -4px 0;
+	padding: 0 3px;
+	border: 0;
+	border-radius: 4px;
+	color: var(--fg2);
+	font-family: var(--mono-family);
+	font-size: calc(var(--text-11) - 0.5px);
+}
+.mark:hover:not(:disabled) {
+	--pill: var(--segment-hover);
+	color: var(--fg);
+}
+/* «Add folder…» under the roots: 28 px, hovered whole (rule 15). */
+.panelAdd {
+	width: calc(100% - 12px);
+	height: 28px;
+	margin: 4px 6px 0;
+	padding: 0 8px 0 10px;
+	border-radius: 7px;
+}
+.panelAdd:not(:disabled):hover {
+	background: var(--hover);
+	color: var(--fg);
+}
+.prCounter {
+	display: inline-flex;
+	flex: none;
+}
+.prCounter > button {
+	margin: -4px 0;
+	padding: 0 5px;
+}

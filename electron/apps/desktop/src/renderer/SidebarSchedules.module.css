@@ -1,0 +1,49 @@
+/* spec/notifications-slack-notes-and-schedules#schedules, canvas R3: a schedule row is the task row (rule 17); its Run now · Pause · ⋯ rise over it on hover or focus,
+   above the row's stretched button (rule 15), S 20 in the title line. A paused name is fg2. */
+.row {
+	position: relative;
+}
+.actions {
+	position: absolute;
+	top: 3px;
+	right: 6px;
+	z-index: 1;
+	display: none;
+	align-items: center;
+	gap: 2px;
+}
+.row:hover .actions,
+.row:focus-within .actions {
+	display: inline-flex;
+}
+.actions > button {
+	width: 20px;
+	height: 20px;
+}
+.row [data-paused] {
+	color: var(--fg2);
+}
+.row[data-state='ask'] > button {
+	background: var(--ambersoft);
+}
+.empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 28px 16px;
+	text-align: center;
+	font-size: var(--text-12-5);
+	font-weight: 600;
+	color: var(--fg3);
+}
+.empty span {
+	color: var(--fg);
+}
+.empty small {
+	max-width: 26ch;
+	font-size: var(--text-11-5);
+	font-weight: 400;
+	line-height: 16px;
+	color: var(--fg2);
+}

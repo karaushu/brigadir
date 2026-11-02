@@ -1,0 +1,32 @@
+/* spec/remote-access-and-mobile#phone-pr-list: the segments «Задачі N | PR N ●» under the header, the hairline over the PR list. */
+.segments {
+	flex: none;
+	padding: 0 16px 8px;
+}
+.wide.wide {
+	display: flex;
+	width: 100%;
+}
+.wide.wide > button {
+	gap: 5px;
+}
+.wide.wide > button > span {
+	font-size: 12px;
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+.waiting {
+	flex: none;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--amber);
+}
+.line {
+	flex: none;
+	height: 0.5px;
+	background: var(--sep);
+}
+.search.search {
+	margin-top: 0;
+}

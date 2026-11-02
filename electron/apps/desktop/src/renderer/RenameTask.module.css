@@ -1,0 +1,24 @@
+/* Canvas v3 17.1: the field and the error in the divided ModalDialog's 16 px body; the shell is ModalDialog's. */
+.form {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	line-height: normal;
+}
+.form label {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.form label input {
+	width: 100%;
+	color: var(--fg);
+}
+/* 16 above (under the field) and 12 to the footer, as before the shared shell. */
+.form > p[role='alert'] {
+	margin-bottom: -4px;
+	font-size: var(--text-11);
+	color: var(--red);
+}

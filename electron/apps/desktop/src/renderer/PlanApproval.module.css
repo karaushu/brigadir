@@ -1,0 +1,248 @@
+/* spec/chat-turns-plans-and-questions#plan-approval: the plan for approval. */
+/* spec/appearance#evolution-redesign: a card of the log lifts off it — no frame, the --lift shadow, a 12-px radius;
+   inside, hairlines part the head, the body and the foot. */
+.card {
+	position: relative;
+	margin: 0 16px 16px;
+	border: 0;
+	border-radius: 12px;
+	background: var(--card);
+	box-shadow: var(--lift);
+}
+.head {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	min-height: 36px;
+	box-sizing: border-box;
+	padding: 4px 10px 4px 14px;
+	border-bottom: 1px solid var(--hair);
+}
+.head > svg {
+	flex: none;
+	color: var(--accent);
+}
+.head > strong {
+	flex: none;
+	font-size: var(--text-13);
+	font-weight: 600;
+	color: var(--fg);
+}
+.wait {
+	flex: none;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--amber);
+}
+.spinner {
+	flex: none;
+	width: 11px;
+	height: 11px;
+	box-sizing: border-box;
+	border: 1.6px solid var(--accent-soft);
+	border-top-color: var(--accent);
+	border-radius: 50%;
+	animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.spinner {
+		animation: none;
+	}
+}
+.hint {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.badge {
+	flex: none;
+	padding: 1px 6px;
+	border-radius: 8px;
+	background: var(--amber-soft);
+	color: var(--amber);
+	font-size: var(--text-10);
+}
+.space {
+	flex: 1;
+	min-width: 8px;
+}
+.open {
+	flex: none;
+}
+.open > svg {
+	margin-right: 5px;
+}
+.body {
+	position: relative;
+	padding: 4px 14px 2px;
+	overflow: hidden;
+}
+.body[data-folded='true'] {
+	max-height: 210px;
+}
+.body[data-folded='true']::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 44px;
+	background: linear-gradient(transparent, var(--card));
+	pointer-events: none;
+}
+.body > div > :first-child {
+	padding-left: 0;
+	padding-right: 0;
+}
+.whole {
+	margin: 0 14px 8px calc(14px - var(--c-px));
+}
+.foot {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 7px 10px 7px 14px;
+	border-top: 1px solid var(--hair);
+}
+.path {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg2);
+}
+.feedback {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px 10px 10px 14px;
+	border-top: 1px solid var(--hair);
+}
+.feedback label {
+	font-size: var(--text-12);
+	color: var(--fg2);
+}
+.feedback textarea {
+	box-sizing: border-box;
+	width: 100%;
+}
+.actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.actions small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+/* The folded row; hover covers the whole row (rule 15). */
+/* The folded card is a 30-px tint strip of the log; open, its body stays on the tint. */
+.summary {
+	margin: 0 16px 12px;
+	border: 0;
+	border-radius: 8px;
+	background: var(--tint);
+}
+.summary > summary {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	height: 30px;
+	padding: 0 8px;
+	border-radius: 7px;
+	list-style: none;
+	cursor: default;
+}
+.summary > summary::-webkit-details-marker {
+	display: none;
+}
+.summary > summary:hover {
+	background: var(--segment-hover);
+}
+.summary > summary:active {
+	background: var(--segment-press);
+}
+.summary > summary > svg:first-child {
+	flex: none;
+	color: var(--green);
+}
+.summary[data-plan-approval-summary='revision'] > summary > svg:first-child {
+	color: var(--fg2);
+}
+.summary > summary > svg:last-child {
+	flex: none;
+	color: var(--fg2);
+	transform: rotate(-90deg);
+	transition: transform var(--motion-fast);
+}
+.summary[open] > summary > svg:last-child {
+	transform: none;
+}
+.summary strong {
+	flex: none;
+	font-size: var(--text-12);
+	font-weight: 600;
+	color: var(--fg);
+}
+.title {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-12);
+	color: var(--fg);
+}
+.mode,
+.time {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.time {
+	font-family: var(--mono-family);
+}
+.quote {
+	margin: 0 10px 8px 28px;
+	padding-left: 8px;
+	border-left: 2px solid var(--sep);
+	font-size: var(--text-12);
+	line-height: 1.45;
+	color: var(--fg);
+	white-space: pre-wrap;
+}
+.summary[open] .body {
+	border-top: 0;
+	padding-top: 8px;
+}
+.notice {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 7px 10px 7px 12px;
+	border: 1px solid var(--sep);
+	border-radius: 8px;
+	background: var(--amber-soft);
+}
+.notice > strong {
+	flex: none;
+	font-size: var(--text-12);
+	font-weight: 600;
+	color: var(--fg);
+}

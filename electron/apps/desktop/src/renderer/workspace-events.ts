@@ -1,0 +1,38 @@
+/**
+ * The session events after which the sidebar re-reads the workspace (activity line, state, counts): one list for the
+ * computer's sidebar and the phone's home (spec/remote-access-and-mobile#phone-app).
+ */
+export const workspaceEventKinds: ReadonlySet<string> = new Set([
+	'tool.changed',
+	'rate-limit.changed',
+	'rate-limit.expired',
+	'checkpoint.created',
+	'scopes.changed',
+	'file.saved',
+	'scope.violation',
+	'session.started',
+	'options.changed',
+	'turn.started',
+	'turn.completed',
+	'session.failed',
+	'permission.requested',
+	'permission.resolved',
+	'question.requested',
+	'question.resolved',
+	'task.proposal.requested',
+	'task.proposal.resolved',
+	'host.stopped',
+	'background.started',
+	'background.changed',
+	'crew.worker.created',
+	'crew.part.started',
+	'crew.part.dropped',
+	'crew.plan.requested',
+	'crew.plan.resolved',
+	'crew.report',
+	'crew.review',
+	'crew.accepted',
+	'crew.worker.stopped',
+	'crew.question.requested',
+	'crew.question.resolved',
+]);

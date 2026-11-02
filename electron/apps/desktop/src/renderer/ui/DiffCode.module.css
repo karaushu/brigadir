@@ -1,0 +1,175 @@
+.code {
+	display: flex;
+	min-height: var(--diff-line, 18px);
+	font: var(--diff-size, 11px)/var(--diff-line, 18px) var(--diff-family, ui-monospace);
+	font-variant-ligatures: var(--diff-ligatures, none);
+	/* spec/appearance#evolution-redesign: Geist Mono's ligatures are Stylistic Set 11. */
+	font-feature-settings: var(--diff-features, normal);
+	min-width: 0;
+}
+.code[data-kind='added'] {
+	background: var(--diffAddedBg);
+}
+.code[data-kind='removed'] {
+	background: var(--diffRemovedBg);
+}
+.code[data-kind='gap'] {
+	background: var(--tint);
+}
+.numbers {
+	display: flex;
+	gap: 8px;
+	min-width: 48px;
+	padding: 0 8px;
+	color: var(--fg3);
+	background: var(--diffGutter);
+	text-align: right;
+	flex: none;
+	user-select: none;
+}
+.numbers span {
+	width: 34px;
+}
+.sign {
+	width: 16px;
+	flex: none;
+	color: var(--fg2);
+	user-select: none;
+}
+.text {
+	white-space: pre;
+	tab-size: 4;
+	min-width: 0;
+	padding-right: 12px;
+}
+.code[data-kind='added'] [data-changed='true'] {
+	background: color-mix(in srgb, var(--green) 24%, transparent);
+}
+.code[data-kind='removed'] [data-changed='true'] {
+	background: color-mix(in srgb, var(--red) 24%, transparent);
+}
+.ending {
+	color: var(--fg2);
+}
+button.numbers {
+	border: none;
+	border-radius: 0;
+	font: inherit;
+	min-height: var(--diff-line, 18px);
+	line-height: var(--diff-line, 18px);
+	justify-content: flex-end;
+}
+.code[data-selected='true'] {
+	box-shadow:
+		inset 2px 0 var(--accent),
+		inset 0 var(--selection-top, 0px) var(--accent),
+		inset 0 var(--selection-bottom, 0px) var(--accent);
+}
+.code[data-selection-start='true'] {
+	--selection-top: 1px;
+}
+.code[data-selection-end='true'] {
+	--selection-bottom: -1px;
+}
+.code[data-selected='true'] .numbers {
+	color: var(--fg);
+}
+/* spec/diff-and-review#diff-selection: the native selection shows exactly the dragged characters, as in the editor; accent-soft keeps the diff tint readable. */
+.text::selection,
+.text ::selection {
+	background: var(--accent-soft);
+	color: inherit;
+}
+/* spec/appearance#evolution-redesign: the same characters stay painted while a draft or a quick question has the focus (code-highlight.ts). */
+.text::highlight(code-selection),
+.text ::highlight(code-selection) {
+	background-color: var(--accent-soft);
+	color: inherit;
+}
+[data-mode='sbs'][data-select-side='old'] [data-side='new'],
+[data-mode='sbs'][data-select-side='new'] [data-side='old'] {
+	user-select: none;
+}
+[data-wrap='true'] .text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.code[data-compact='true'] {
+	min-height: var(--diff-line, 18px);
+	font-size: var(--diff-size, 11px);
+	line-height: var(--diff-line, 18px);
+}
+.code[data-compact='true'] .numbers {
+	min-width: 38px;
+	justify-content: flex-end;
+}
+/* spec/projects-and-board#screen-layout: a bare line — the knowledge receipt's addition: no gutter, the sign 10 px
+   wide in the line's colour 6 px from the edge, 8 px to the text, mono 11.5 on 19. */
+.code[data-bare] {
+	gap: 8px;
+	padding-left: 6px;
+	font-size: var(--text-11-5);
+	line-height: 19px;
+	min-height: 19px;
+}
+.code[data-bare] .sign {
+	width: 10px;
+	text-align: center;
+}
+.code[data-bare][data-kind='added'] .sign {
+	color: var(--green);
+}
+.code[data-bare][data-kind='removed'] .sign {
+	color: var(--red);
+}
+
+/* spec/remote-access-and-mobile#phone-task-tools: the phone's diff: one number of 38, the sign of 14, wrapped text with a
+   hanging indent; the number and the sign of an added or removed line in its colour. */
+.code[data-wrap] .numbers {
+	min-width: 38px;
+	width: 38px;
+	padding: 0 8px 0 0;
+	gap: 0;
+	justify-content: flex-end;
+	background: none;
+}
+.code[data-wrap] .sign {
+	width: 14px;
+	color: var(--fg3);
+}
+.code[data-wrap] .text {
+	flex: 1 1 auto;
+	white-space: pre-wrap;
+	word-break: break-all;
+	padding-left: 1.6em;
+	text-indent: -1.6em;
+}
+.code[data-wrap][data-kind='added'] :is(.numbers, .sign) {
+	color: var(--green);
+}
+.code[data-wrap][data-kind='removed'] :is(.numbers, .sign) {
+	color: var(--red);
+}
+/* The folded-lines band: 26 px, tint, chevron 10 and 11.5 px fg2; hover — tint2 and fg. */
+.fold {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	height: 26px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 0;
+	background: var(--tint);
+	color: var(--fg2);
+	font: var(--text-11-5) var(--ui-family);
+	text-align: left;
+	white-space: nowrap;
+	position: sticky;
+	left: 0;
+}
+.fold:hover,
+.fold:focus-visible {
+	background: var(--tint2);
+	color: var(--fg);
+}

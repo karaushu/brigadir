@@ -1,0 +1,51 @@
+/* spec/appearance#one-row-one-height: Esc takes the size of its row. A row that declares `data-size` (a header with a field, segments or a popup) gives
+   it that height; a header with only a title leaves it at S. Never a size of its own next to other controls. */
+.close {
+	--c-h: var(--control-h-s);
+	--c-r: var(--control-r-s);
+	flex: none;
+	height: var(--c-h);
+	min-width: var(--c-h);
+	padding: 0 8px;
+	border-radius: var(--c-r);
+	background-color: transparent;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+[data-size] > .close {
+	--c-h: inherit;
+	--c-r: inherit;
+}
+.close:hover {
+	color: var(--fg);
+}
+/* spec/remote-access-and-mobile#phone-app: the phone's × — a 44 target, the tint circle 28 inside it; pressed darkens the circle, not the target. */
+.close[data-touch] {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	min-width: 44px;
+	height: 44px;
+	padding: 0;
+	border-radius: 22px;
+	color: var(--fg2);
+}
+.close[data-touch]::before {
+	content: '';
+	position: absolute;
+	inset: 8px;
+	border-radius: 14px;
+	background: var(--tint);
+}
+.close[data-touch] > svg {
+	position: relative;
+}
+.close[data-touch]:active::before {
+	background: var(--segment-press);
+}
+.close[data-touch]:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}

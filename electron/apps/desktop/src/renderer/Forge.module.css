@@ -1,0 +1,312 @@
+.scopeActions {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+.badge svg {
+	color: var(--fg2);
+}
+.badge[data-state='pass'] svg {
+	color: var(--green);
+}
+.badge[data-state='fail'] svg {
+	color: var(--red);
+}
+.badge[data-state='pending'] svg {
+	color: var(--amber);
+}
+.badge span {
+	font-size: var(--text-10);
+}
+.dialog {
+	position: fixed;
+	inset: var(--strip-h) 0 auto;
+	margin: 0 auto;
+	box-sizing: border-box;
+	width: min(580px, calc(100vw - 32px));
+	max-height: calc(100vh - 68px);
+	padding: 16px;
+	border: 1px solid var(--sep);
+	border-top: 0;
+	border-radius: 0 0 11px 11px;
+	background: var(--card);
+	color: var(--fg);
+	box-shadow: 0 22px 60px var(--shadow);
+	overflow: auto;
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.dialog[open] {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.dialog[data-kind='push'] {
+	width: min(420px, calc(100vw - 32px));
+}
+.dialog[data-kind='checks'] {
+	width: min(400px, calc(100vw - 32px));
+	padding: 10px;
+	border-top: 1px solid var(--sep);
+	border-radius: 9px;
+	gap: 8px;
+}
+.dialog::backdrop {
+	background: var(--modal-scrim);
+}
+.dialog header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.dialog h2 {
+	font-size: var(--text-14);
+	font-weight: 600;
+	flex: 1;
+	margin: 0;
+}
+.dialog p {
+	margin: 0;
+}
+.dialog footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	border-top: 1px solid var(--sep);
+	padding-top: 12px;
+}
+.dialog footer > span {
+	flex: 1;
+}
+.dialog footer button {
+	white-space: nowrap;
+}
+.dialog .field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+}
+.field small {
+	font-size: var(--text-10);
+	font-weight: 400;
+}
+.descriptionHeading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+/* spec/pull-requests-and-ci#ci-segment: five lines of a description; the field grows by its handle. */
+.dialog .description {
+	height: 114px;
+	min-height: 114px;
+	resize: vertical;
+	font-weight: 400;
+}
+.branch {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--fg2);
+	font: var(--text-11)/1.45 var(--mono-family);
+	overflow-wrap: anywhere;
+}
+.error {
+	color: var(--red);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.warning {
+	background: var(--amber-soft);
+	padding: 8px 10px;
+	border-radius: 7px;
+	font-size: var(--text-11);
+}
+.commits {
+	max-height: 220px;
+	overflow: auto;
+	min-width: 0;
+}
+.commits section + section {
+	border-top: 1px solid var(--sep);
+	padding-top: 8px;
+	margin-top: 6px;
+}
+.pushHeading {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	justify-content: space-between;
+}
+.pushHeading > span {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.commit {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 24px;
+}
+.commit code {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.commit > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.dialog summary {
+	font-size: var(--text-11);
+	color: var(--fg2);
+	cursor: pointer;
+}
+.prSummary {
+	display: flex;
+	gap: 4px 8px;
+	flex-wrap: wrap;
+}
+.prSummary > strong {
+	font-weight: 500;
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.prSummary > span {
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.prSummary > p {
+	flex-basis: 100%;
+}
+.checkCounts {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.checks {
+	max-height: 280px;
+	overflow: auto;
+	border-top: 1px solid var(--sep);
+	padding-top: 8px;
+}
+.check {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	min-height: 24px;
+	padding: 0 4px;
+}
+/* The name takes the row; CIGlyph's own span keeps its width, so the name does not sit mid-row. */
+.check > .checkName {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.check small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+/* The glyph and its colour are CIGlyph's (ui/RunSteps): skipped and cancelled as everywhere else (spec/pull-requests-and-ci#ci). */
+
+.disclosure {
+	align-self: flex-start;
+}
+.dialog .disclosure.disclosure[data-variant] {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+/* spec/pull-requests-and-ci#ci-segment: a disclosure, not a toggle — open, it keeps the ghost look; only the chevron turns. */
+.dialog .disclosure.disclosure[data-variant][aria-expanded='true']:not(:disabled) {
+	background-color: transparent;
+	color: var(--fg2);
+}
+.disclosure > span {
+	display: flex;
+	transform: rotate(-90deg);
+	transition: transform var(--motion-travel) var(--motion-ease);
+}
+.disclosure > span[data-open='true'] {
+	transform: rotate(0);
+}
+.reveal {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows var(--motion-travel) var(--motion-ease),
+		opacity var(--motion-enter-time) var(--motion-ease);
+}
+.reveal[data-open='true'] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+}
+.reveal > div {
+	min-height: 0;
+	overflow: hidden;
+}
+.dialog[data-kind='checks']::backdrop {
+	background: transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+	.reveal,
+	.disclosure > span {
+		transition: none;
+	}
+}
+
+/* S (24 px) actions in the scope rows; the PR glyph keeps its size. */
+.scopeActions svg {
+	flex: none;
+}
+/* spec/pull-requests-and-ci#from-into: `From → Into` — two fields of a row of M, the arrow on the fields' line. */
+.pair {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: end;
+	gap: 8px;
+}
+.end {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+.endLabel {
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+}
+.end > div,
+.end button[aria-haspopup] {
+	width: 100%;
+	min-width: 0;
+}
+.end button[aria-haspopup] > span {
+	font: var(--text-11-5) var(--mono-family);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.arrow {
+	height: var(--c-h);
+	display: flex;
+	align-items: center;
+	color: var(--fg3);
+}
+.ahead {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}

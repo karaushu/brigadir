@@ -1,0 +1,210 @@
+/* spec/tasks#quick-tasks: the «New quick task» sheet and the bar under the main tree. */
+.sheet {
+	width: 480px;
+	max-width: calc(100vw - 32px);
+	margin: 70px auto auto;
+	padding: 14px;
+	box-sizing: border-box;
+	border: 0;
+	border-radius: 12px;
+	background: var(--card);
+	color: var(--fg);
+	box-shadow:
+		0 0 0 1px var(--sep),
+		0 24px 60px var(--shadow);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.sheet:not([open]) {
+	display: none;
+}
+.sheet::backdrop {
+	background: transparent;
+}
+.header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.header > svg {
+	flex: none;
+	color: var(--accent);
+}
+.header h2 {
+	flex: 1;
+	margin: 0;
+	font-size: var(--text-13);
+	font-weight: 600;
+}
+.title {
+	font-weight: 500;
+}
+/* spec/appearance#control-scale: the prompt box is a system field: --tint, no border, the inset ring on focus (frame). */
+.prompt {
+	composes: frame from './ui/Input.module.css';
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	padding: 8px 9px;
+	border-radius: var(--control-r-l);
+	background: var(--tint);
+}
+.prompt textarea {
+	min-height: 38px;
+	resize: none;
+	padding: 0;
+	margin: 0;
+	border: 0;
+	outline: 0;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+	font-size: var(--text-13);
+	line-height: 1.45;
+}
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.fact,
+.barChip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 18px;
+	padding: 0 6px;
+	border-radius: 4px;
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+	background: var(--tint);
+	flex: none;
+	white-space: nowrap;
+}
+.chip > svg,
+.fact > svg,
+.barChip > svg {
+	flex: none;
+}
+/* spec/appearance#control-scale: a context chip carries its own remove button, so the chip is an S row (24) and the button inside it a 24 x 24 target. */
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: var(--control-h-s);
+	padding: 0 0 0 8px;
+	border-radius: var(--control-r-s);
+	font-size: var(--text-11);
+	color: var(--fg2);
+	background: var(--tint);
+	flex: none;
+	white-space: nowrap;
+}
+.remove {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--control-h-s);
+	height: var(--control-h-s);
+	border-radius: var(--control-r-s);
+	color: var(--fg3);
+}
+/* spec/tasks#worktree-preparation: a hovered × fills --tint2 and its glyph turns --fg. */
+.remove:hover:not(:disabled) {
+	background-color: var(--tint2);
+	background-image: none;
+	color: var(--fg);
+}
+.facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.fact {
+	gap: 5px;
+	height: 22px;
+	font-size: var(--text-11);
+}
+/* The agent's fact carries the provider's own glyph colour, as the composer capsule (spec/composer#agent-capsule). */
+.fact[data-provider='claude'] > svg {
+	color: var(--providerClaude);
+}
+.note {
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
+	margin: 0;
+	padding: 7px 9px;
+	border-radius: 6px;
+	background: var(--amber-soft);
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.note > svg {
+	flex: none;
+	margin-top: 2px;
+	color: var(--amber);
+}
+.note code {
+	font-family: var(--mono-family);
+	font-size: var(--text-11-5);
+}
+.error {
+	margin: 0;
+	padding: 7px 9px;
+	border-radius: 6px;
+	background: var(--red-soft);
+	font-size: var(--text-12);
+}
+.footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.space {
+	flex: 1;
+}
+.enter {
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.bar {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 14px 12px;
+	padding: 8px 10px 8px 12px;
+	border: 1px solid var(--sep);
+	border-radius: 12px;
+	background: var(--card);
+	color: var(--fg2);
+	font: inherit;
+	text-align: left;
+}
+.bar:hover {
+	border-color: var(--fg3);
+}
+.bar > svg {
+	flex: none;
+}
+.placeholder {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--text-13);
+	color: var(--fg3);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.kbd {
+	flex: none;
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+	padding: 0 4px;
+	border-radius: 3px;
+	box-shadow: inset 0 0 0 1px var(--sep);
+}

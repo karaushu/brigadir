@@ -1,0 +1,396 @@
+/* spec/pull-requests-and-ci#ci: a GitHub Actions run, its jobs and steps. Sizes: job 28, step 24, deploy band 36. */
+.glyph {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg3);
+}
+.glyph[data-state='pass'] {
+	color: var(--green);
+}
+.glyph[data-state='fail'] {
+	color: var(--red);
+}
+.glyph[data-state='running'] {
+	color: var(--amber);
+}
+.glyph[data-state='cancelled'] {
+	color: var(--fg2);
+}
+
+.head {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px;
+	border-radius: 6px;
+}
+.headLine {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 18px;
+	font-size: var(--text-12);
+	font-weight: 500;
+	color: var(--fg);
+}
+.headTitle {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.number {
+	color: var(--fg2);
+	font-weight: 400;
+}
+.headLine small,
+.rowLine small {
+	flex: none;
+	font-size: var(--text-10);
+	font-weight: 400;
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+.headMeta,
+.rowMeta {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	padding-left: 20px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+}
+.headMeta code {
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+}
+/* spec/pull-requests-and-ci#ci-segment: the branch chip stops at 150 px; a longer branch gives way in the middle (ui/BranchName). */
+.branch {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	max-width: 150px;
+	height: 15px;
+	padding: 0 5px;
+	border-radius: 4px;
+	background: var(--accent-soft);
+	color: var(--accent-text);
+	font: var(--text-10) var(--mono-family);
+}
+
+.deploy {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 36px;
+	box-sizing: border-box;
+	margin: 2px 0 4px;
+	padding: 6px 6px 6px 8px;
+	border-radius: 7px;
+	font-size: var(--text-12);
+	color: var(--fg);
+}
+.deploy[data-ci-deploy='running'] {
+	background: var(--amber-soft);
+}
+.deploy[data-ci-deploy='pass'] {
+	background: var(--green-soft);
+}
+.deploy[data-ci-deploy='fail'] {
+	background: var(--red-soft);
+}
+.deployText {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.deployText b {
+	font-weight: 600;
+}
+.deployText small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.jobs {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.job {
+	display: flex;
+	flex-direction: column;
+	border-radius: 6px;
+}
+.job[data-state='fail']:not([data-open]) {
+	background: var(--red-soft);
+}
+.job[data-open] {
+	background: var(--tint);
+	margin-bottom: 2px;
+}
+.jobLine {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 28px;
+	box-sizing: border-box;
+	padding: 0 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+	font-size: var(--text-12);
+	text-align: left;
+}
+.jobLine:hover:not(:disabled) {
+	background: var(--segment-hover);
+}
+.jobLine:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+.jobLine:disabled {
+	cursor: default;
+	/* A job without steps does not open, yet it is a finished job, not an unavailable one: full ink. */
+	opacity: 1;
+}
+.chevron {
+	display: inline-flex;
+	flex: none;
+	width: 12px;
+	color: var(--fg3);
+	transform: rotate(-90deg);
+	transition: transform var(--motion-fast) var(--motion-ease);
+}
+.job[data-open] .chevron {
+	transform: none;
+}
+.jobLine:disabled .chevron {
+	visibility: hidden;
+}
+.jobName {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--mono-family);
+}
+.jobLine small,
+.step small {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+.env {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+
+.steps {
+	display: flex;
+	flex-direction: column;
+	padding: 0 0 4px;
+	animation: var(--motion-reveal);
+}
+.step {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 24px;
+	box-sizing: border-box;
+	padding: 0 6px 0 26px;
+	font-size: var(--text-12);
+	color: var(--fg);
+}
+.step:hover {
+	background-image: linear-gradient(var(--segment-hover), var(--segment-hover));
+}
+.step[data-state='running'] {
+	background-color: var(--amber-soft);
+}
+.step[data-state='running'] .stepName {
+	font-weight: 500;
+}
+.step[data-state='fail'] {
+	background-color: var(--red-soft);
+}
+.step[data-state='queued'] .stepName,
+.step[data-state='skipped'] .stepName {
+	color: var(--fg3);
+}
+.stepNo {
+	flex: none;
+	width: 14px;
+	text-align: right;
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg3);
+}
+.stepName {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.annotation {
+	margin: 0 6px 4px 48px;
+	padding: 6px 8px;
+	border-radius: 6px;
+	background: var(--card);
+	box-shadow: inset 0 0 0 1px var(--sep);
+	font: var(--text-11)/1.45 var(--mono-family);
+	color: var(--fg);
+	overflow-wrap: anywhere;
+	user-select: text;
+}
+.annotation small {
+	display: block;
+	margin-bottom: 2px;
+	font: var(--text-10) var(--ui-family);
+	color: var(--fg2);
+}
+.actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 2px 6px 6px 48px;
+}
+
+.row {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: 100%;
+	padding: 6px;
+	box-sizing: border-box;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+	text-align: left;
+}
+.row:hover {
+	background: var(--segment-hover);
+}
+.row:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+.rowLine {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 18px;
+	font-size: var(--text-12);
+	font-weight: 500;
+}
+.rowTitle {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.space {
+	flex: 1;
+}
+.bar {
+	display: flex;
+	gap: 2px;
+	height: 3px;
+	margin: 3px 0 1px 20px;
+}
+.bar i {
+	flex: 1;
+	border-radius: 2px;
+	background: var(--fg3);
+	opacity: 0.45;
+}
+.bar i[data-state='pass'] {
+	background: var(--green);
+	opacity: 1;
+}
+.bar i[data-state='running'] {
+	background: var(--amber);
+	opacity: 1;
+}
+.bar i[data-state='fail'] {
+	background: var(--red);
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chevron {
+		transition: none;
+	}
+	.steps {
+		animation: none;
+	}
+}
+
+/* spec/pull-requests-and-ci#ci-bell: the bell in a run's header and the watch mark in a list row. */
+.headLine[data-size='s'] {
+	min-height: 24px;
+}
+.watched {
+	display: inline-flex;
+	flex: none;
+	color: var(--accent);
+}
+
+/* A PR check (CheckRow): 6 px padding, radius 6; failed — red ground with «Log on GitHub»; hover is a layer over the row. */
+.check {
+	padding: 6px;
+	border-radius: 6px;
+}
+.check:hover {
+	background-image: linear-gradient(var(--segment-hover), var(--segment-hover));
+}
+.check[data-state='fail'] {
+	background-color: var(--red-soft);
+}
+.checkLine {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.checkName {
+	flex: 1;
+	min-width: 0;
+	font-family: var(--mono-family);
+	font-size: var(--text-12);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.checkLine small {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+.checkLog {
+	display: flex;
+	gap: 6px;
+	padding: 4px 0 2px 20px;
+}

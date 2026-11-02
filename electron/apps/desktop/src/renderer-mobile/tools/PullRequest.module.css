@@ -1,0 +1,288 @@
+/* spec/remote-access-and-mobile#phone-task-tools: the PR header, chips, cards, comments, mini rows and the comment field. */
+.stack {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding-bottom: 20px;
+}
+.space {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.reviewButton.reviewButton {
+	position: relative;
+	z-index: 2;
+	padding: 0 11px;
+	font-size: 16px;
+	font-weight: 600;
+}
+.head {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px 16px 12px;
+}
+.head h1 {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 700;
+	line-height: 1.25;
+}
+.head h1 span {
+	color: var(--fg2);
+	font-weight: 400;
+}
+.meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 6px;
+	font-size: 13px;
+	color: var(--fg2);
+}
+.meta > svg {
+	flex: none;
+}
+.state {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 22px;
+	padding: 0 7px;
+	border-radius: 6px;
+	background: var(--green-soft);
+	color: var(--green);
+	font-size: 12px;
+	white-space: nowrap;
+}
+.state[data-state='DRAFT'] {
+	background: var(--tint);
+	color: var(--fg2);
+}
+.state[data-state='MERGED'] {
+	background: var(--accent-soft);
+	color: var(--accent-text);
+}
+.state[data-state='CLOSED'] {
+	background: var(--red-soft);
+	color: var(--red);
+}
+.card {
+	margin: 0 16px;
+	border-radius: 12px;
+	background: var(--tint);
+	overflow: hidden;
+}
+.row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 44px;
+	padding: 8px 14px;
+	font-size: 15px;
+}
+.row + .row {
+	box-shadow: inset 0 0.5px 0 var(--sep);
+}
+.row > svg {
+	flex: none;
+}
+.row small {
+	flex: none;
+	font-size: 13px;
+	color: var(--fg2);
+}
+.green {
+	color: var(--green);
+}
+.checkName {
+	font-size: 14px;
+}
+.wide.wide {
+	width: 100%;
+}
+.pair {
+	gap: 8px;
+}
+.pair > button {
+	flex: 1 1 0;
+	min-width: 0;
+}
+.comment {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0 16px;
+	padding: 12px 14px;
+	border-radius: 12px;
+	background: var(--tint);
+}
+.who {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 14px;
+}
+.who small {
+	font-size: 12px;
+	color: var(--fg2);
+}
+.code {
+	overflow: hidden;
+	border: 1px solid var(--sep);
+	border-radius: 8px;
+}
+.place {
+	padding: 5px 10px;
+	background: var(--win);
+	font-size: 12px;
+	color: var(--accent-text);
+}
+.snippet {
+	padding: 3px 10px;
+	font-size: 12px;
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+.snippet[data-kind='added'] {
+	background: var(--diffAddedBg);
+}
+.snippet[data-kind='removed'] {
+	background: var(--diffRemovedBg);
+}
+.body {
+	font-size: 15px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.answer {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 10px 12px;
+	border-left: 3px solid var(--accent);
+	border-radius: 0 8px 8px 0;
+	background: var(--win);
+	font-size: 15px;
+	white-space: pre-wrap;
+}
+.answer small {
+	font-size: 12px;
+	color: var(--fg2);
+}
+.actions {
+	display: flex;
+	gap: 8px;
+}
+.error {
+	margin: 0 16px;
+	font-size: 13px;
+	color: var(--red);
+}
+/* The review sheet below the PR's header, the field and the send at its foot. */
+.sheetBody {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 100%;
+}
+.fieldLabel {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 14px 16px 0;
+	font-size: 13px;
+	color: var(--fg2);
+}
+.field {
+	height: 88px;
+	padding: 12px;
+	border: 0;
+	border-radius: 12px;
+	outline: none;
+	resize: none;
+	background: var(--tint);
+	color: var(--fg);
+	font: inherit;
+	font-size: 16px;
+	line-height: 1.4;
+}
+.field:focus {
+	background: var(--field);
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.draftPlace {
+	font-size: 13px;
+}
+.send {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 12px 16px 4px;
+}
+.center {
+	padding: 0;
+	text-align: center;
+}
+/* The merge: the commits that go, the two answers of the confirm. */
+.commit {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-height: 44px;
+	padding: 8px 16px;
+	font-size: 14px;
+}
+.commit + .commit {
+	box-shadow: inset 0 0.5px 0 var(--sep);
+}
+.commit :global(.mono) {
+	flex: none;
+	font-size: 12.5px;
+	color: var(--fg2);
+}
+.mergeButtons {
+	display: flex;
+	gap: 8px;
+	padding: 12px 16px 4px;
+}
+.mergeButtons > button {
+	flex: 1 1 0;
+}
+.line {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* spec/remote-access-and-mobile#phone-pr-list: a PR from the project's list — Review with an agent with its caption, PR task, the
+   conflict's Resolve conflicts in the merge card. */
+.agentReview {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 0 16px 4px;
+}
+.agentCaption.agentCaption {
+	padding: 0;
+}
+.spark {
+	flex: none;
+	color: var(--accent);
+}
+.column.column {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+}
+.column small {
+	white-space: normal;
+}
+.taskRow.taskRow {
+	margin-bottom: 0;
+}
+.lead.lead {
+	padding: 0 16px 12px;
+	color: var(--fg);
+	line-height: 1.4;
+}

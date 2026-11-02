@@ -1,0 +1,21 @@
+/* spec/appearance#evolution-redesign: the banner over the Changes list. */
+.banners {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin: 6px 8px 2px;
+}
+.banners b {
+	font-weight: 600;
+}
+.where {
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+	min-width: 0;
+	white-space: nowrap;
+}
+.where > span {
+	flex: none;
+}

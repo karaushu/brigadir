@@ -1,0 +1,338 @@
+{
+  "session": {
+    "sessionId": "fixture-session",
+    "modes": {
+      "currentModeId": "auto",
+      "availableModes": [
+        {
+          "id": "auto",
+          "name": "Auto",
+          "description": "Use a model classifier to approve/deny permission prompts"
+        },
+        {
+          "id": "default",
+          "name": "Manual",
+          "description": "Standard behavior, prompts for dangerous operations"
+        },
+        {
+          "id": "acceptEdits",
+          "name": "Accept Edits",
+          "description": "Auto-accept file edit operations"
+        },
+        {
+          "id": "plan",
+          "name": "Plan Mode",
+          "description": "Planning mode, no actual tool execution"
+        },
+        {
+          "id": "dontAsk",
+          "name": "Don't Ask",
+          "description": "Don't prompt for permissions, deny if not pre-approved"
+        },
+        {
+          "id": "bypassPermissions",
+          "name": "Bypass Permissions",
+          "description": "Bypass all permission checks"
+        }
+      ]
+    },
+    "configOptions": [
+      {
+        "id": "mode",
+        "name": "Mode",
+        "description": "Session permission mode",
+        "category": "mode",
+        "type": "select",
+        "currentValue": "auto",
+        "options": [
+          {
+            "value": "auto",
+            "name": "Auto",
+            "description": "Use a model classifier to approve/deny permission prompts"
+          },
+          {
+            "value": "default",
+            "name": "Manual",
+            "description": "Standard behavior, prompts for dangerous operations"
+          },
+          {
+            "value": "acceptEdits",
+            "name": "Accept Edits",
+            "description": "Auto-accept file edit operations"
+          },
+          {
+            "value": "plan",
+            "name": "Plan Mode",
+            "description": "Planning mode, no actual tool execution"
+          },
+          {
+            "value": "dontAsk",
+            "name": "Don't Ask",
+            "description": "Don't prompt for permissions, deny if not pre-approved"
+          },
+          {
+            "value": "bypassPermissions",
+            "name": "Bypass Permissions",
+            "description": "Bypass all permission checks"
+          }
+        ]
+      },
+      {
+        "id": "model",
+        "name": "Model",
+        "description": "AI model to use",
+        "category": "model",
+        "type": "select",
+        "currentValue": "claude-fable-5[1m]",
+        "options": [
+          {
+            "value": "default",
+            "name": "Default (recommended)",
+            "description": "Opus (1M context)"
+          },
+          {
+            "value": "opus[1m]",
+            "name": "Opus (1M context)",
+            "description": "Opus 5 with 1M context · Best for everyday, complex tasks"
+          },
+          {
+            "value": "claude-fable-5[1m]",
+            "name": "Fable",
+            "description": "Fable 5 · Most capable for your hardest and longest-running tasks"
+          },
+          {
+            "value": "sonnet",
+            "name": "Sonnet",
+            "description": "Sonnet 5 · Efficient for routine tasks"
+          },
+          {
+            "value": "haiku",
+            "name": "Haiku",
+            "description": "Haiku 4.5 · Fastest for quick answers"
+          }
+        ]
+      },
+      {
+        "id": "effort",
+        "name": "Effort",
+        "description": "Available effort levels for this model",
+        "category": "thought_level",
+        "type": "select",
+        "currentValue": "high",
+        "options": [
+          {
+            "value": "default",
+            "name": "Default"
+          },
+          {
+            "value": "low",
+            "name": "Low"
+          },
+          {
+            "value": "medium",
+            "name": "Medium"
+          },
+          {
+            "value": "high",
+            "name": "High"
+          },
+          {
+            "value": "xhigh",
+            "name": "Xhigh"
+          },
+          {
+            "value": "max",
+            "name": "Max"
+          }
+        ]
+      }
+    ]
+  },
+  "updates": [
+    {
+      "sessionUpdate": "available_commands_update",
+      "availableCommands": [
+        {
+          "name": "deep-research",
+          "description": "Deep research harness — fan-out web searches, fetch sources, adversarially verify claims, synthesize a cited report. (dynamic workflow)",
+          "input": null
+        },
+        {
+          "name": "figma:figma-code-connect",
+          "description": "(figma) Creates and maintains Figma Code Connect template files that map Figma components to code snippets. Use when the user mentions Code Connect, Figma component mapping, design-to-code translation, or asks to create/update .figma.ts or .figma.js files.",
+          "input": null
+        }
+      ]
+    },
+    {
+      "sessionUpdate": "config_option_update",
+      "configOptions": [
+        {
+          "id": "mode",
+          "name": "Mode",
+          "description": "Session permission mode",
+          "category": "mode",
+          "type": "select",
+          "currentValue": "default",
+          "options": [
+            {
+              "value": "auto",
+              "name": "Auto",
+              "description": "Use a model classifier to approve/deny permission prompts"
+            },
+            {
+              "value": "default",
+              "name": "Manual",
+              "description": "Standard behavior, prompts for dangerous operations"
+            },
+            {
+              "value": "acceptEdits",
+              "name": "Accept Edits",
+              "description": "Auto-accept file edit operations"
+            },
+            {
+              "value": "plan",
+              "name": "Plan Mode",
+              "description": "Planning mode, no actual tool execution"
+            },
+            {
+              "value": "dontAsk",
+              "name": "Don't Ask",
+              "description": "Don't prompt for permissions, deny if not pre-approved"
+            },
+            {
+              "value": "bypassPermissions",
+              "name": "Bypass Permissions",
+              "description": "Bypass all permission checks"
+            }
+          ]
+        },
+        {
+          "id": "model",
+          "name": "Model",
+          "description": "AI model to use",
+          "category": "model",
+          "type": "select",
+          "currentValue": "claude-fable-5[1m]",
+          "options": [
+            {
+              "value": "default",
+              "name": "Default (recommended)",
+              "description": "Opus (1M context)"
+            },
+            {
+              "value": "opus[1m]",
+              "name": "Opus (1M context)",
+              "description": "Opus 5 with 1M context · Best for everyday, complex tasks"
+            },
+            {
+              "value": "claude-fable-5[1m]",
+              "name": "Fable",
+              "description": "Fable 5 · Most capable for your hardest and longest-running tasks"
+            },
+            {
+              "value": "sonnet",
+              "name": "Sonnet",
+              "description": "Sonnet 5 · Efficient for routine tasks"
+            },
+            {
+              "value": "haiku",
+              "name": "Haiku",
+              "description": "Haiku 4.5 · Fastest for quick answers"
+            }
+          ]
+        },
+        {
+          "id": "effort",
+          "name": "Effort",
+          "description": "Available effort levels for this model",
+          "category": "thought_level",
+          "type": "select",
+          "currentValue": "high",
+          "options": [
+            {
+              "value": "default",
+              "name": "Default"
+            },
+            {
+              "value": "low",
+              "name": "Low"
+            },
+            {
+              "value": "medium",
+              "name": "Medium"
+            },
+            {
+              "value": "high",
+              "name": "High"
+            },
+            {
+              "value": "xhigh",
+              "name": "Xhigh"
+            },
+            {
+              "value": "max",
+              "name": "Max"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "sessionUpdate": "usage_update",
+      "used": 27207,
+      "size": 1000000
+    },
+    {
+      "sessionUpdate": "agent_message_chunk",
+      "content": {
+        "type": "text",
+        "text": "I will make a todo list, then do the steps."
+      },
+      "messageId": "msg_011CeFtoQiC9s9Xu74tcjoaL"
+    },
+    {
+      "toolCallId": "toolu_01QDr3a5PRSZ95D9ZrNMruzX",
+      "sessionUpdate": "tool_call",
+      "rawInput": {},
+      "status": "pending",
+      "title": "ToolSearch",
+      "kind": "other",
+      "content": []
+    },
+    {
+      "toolCallId": "toolu_01QDr3a5PRSZ95D9ZrNMruzX",
+      "sessionUpdate": "tool_call_update",
+      "rawInput": {
+        "query": "select:TaskCreate,TaskUpdate"
+      },
+      "title": "ToolSearch",
+      "kind": "other"
+    },
+    {
+      "sessionUpdate": "plan",
+      "entries": [
+        {
+          "content": "Create hello.txt with \"hi\"",
+          "status": "pending",
+          "priority": "medium"
+        }
+      ]
+    },
+    {
+      "toolCallId": "toolu_01FKbpNQiwvesdrZZFzQaxCx",
+      "sessionUpdate": "tool_call_update",
+      "status": "completed",
+      "rawOutput": "hi",
+      "content": [
+        {
+          "type": "content",
+          "content": {
+            "type": "text",
+            "text": "```console\nhi\n```"
+          }
+        }
+      ]
+    }
+  ]
+}

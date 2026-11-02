@@ -1,0 +1,25 @@
+/* Canvas `.mtag`: 16 px high, 4 px radius, --tint fill, the remote glyph 11 px and the name 10/500 in --fg2. */
+.tag {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 4px;
+	box-sizing: border-box;
+	max-width: 140px;
+	height: 16px;
+	padding: 0 5px 0 4px;
+	border-radius: 4px;
+	background: var(--tint);
+	color: var(--fg2);
+	font: 500 var(--text-10) / 1 var(--ui-family);
+	white-space: nowrap;
+	pointer-events: auto;
+}
+.tag > svg {
+	flex: none;
+}
+.name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}

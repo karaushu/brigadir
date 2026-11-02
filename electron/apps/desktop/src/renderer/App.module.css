@@ -1,0 +1,1168 @@
+.window {
+	height: 100vh;
+	display: flex;
+	flex-direction: column;
+	overflow: clip;
+}
+.layout {
+	flex: 1;
+	display: flex;
+	min-height: 0;
+	/* spec/sidebar#width: the saved width; a narrow window takes it back first, down to the 220 px floor. */
+	--sidebar-w: min(var(--sidebar-width, 280px), max(220px, 100vw - 540px));
+	/* spec/sidebar#section-rail: the sections rail left of the sidebar; the sidebar's own positions start after it. */
+	--rail-w: 48px;
+}
+.sidebar {
+	width: var(--sidebar-w);
+	flex: none;
+	background: var(--sb);
+	border-right: 1px solid var(--sep);
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.sidebarChrome {
+	height: var(--strip-h);
+	flex: none;
+	-webkit-app-region: drag;
+}
+/* spec/sidebar#section-rail: one strip over the rail and the list, the --sep hairline under both, on the line of
+   the main area's header. */
+.sidebar > .sidebarChrome {
+	box-sizing: border-box;
+	border-bottom: 1px solid var(--sep);
+	margin-bottom: 8px;
+}
+/* spec/appearance#evolution-redesign: the project groups scroll under the filter and «All projects». */
+.projectList {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 0 0 4px;
+}
+/* A project is a framed group, collapsed or open: 10 px corners, a hairline inside, its rows flush. */
+.project {
+	position: relative;
+	margin: 0 8px 8px;
+	border-radius: 10px;
+	box-shadow: inset 0 0 0 1px var(--hair);
+	overflow: hidden;
+}
+/* The header: 32 px, the whole row hovers and selects (rule 15); its buttons sit above with their own hover. */
+.projectHeader {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	height: 32px;
+	padding: 0 4px 0 8px;
+	font-size: var(--text-12);
+	font-weight: 600;
+	transition: background-color var(--motion-fast) ease;
+}
+.projectHeader:hover {
+	background: var(--hover);
+}
+/* spec/sidebar#layout: an open project highlights its header with the same fill as All projects; hover does not clear it. */
+.projectHeader[data-selected='true'] {
+	background: var(--sel);
+}
+.projectHeader > :is(button, span):not(h3) {
+	position: relative;
+	z-index: 1;
+}
+.projectHeader h3 {
+	flex: 1;
+	min-width: 0;
+	font: inherit;
+	color: var(--fg);
+}
+.project .projectDisclosure > div > :last-child:is(.muted) {
+	margin-bottom: 0;
+}
+/* A task row: full width in its group, no card of its own; the fill is hover or selection only. */
+.task {
+	position: relative;
+	border: 0;
+	background: transparent;
+	display: flex;
+	gap: 8px;
+	text-align: left;
+	width: 100%;
+	margin: 0;
+	padding: 6px 10px 7px;
+	border-radius: 0;
+	align-items: flex-start;
+	color: var(--fg);
+}
+.task:hover {
+	background: transparent;
+}
+.task::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	pointer-events: none;
+}
+.task:hover::after {
+	background: var(--hover);
+}
+.taskCopy {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-size: var(--text-12-5);
+	line-height: 16px;
+	font-weight: 400;
+}
+.taskCopy > span {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.taskCopy small,
+.workerCopy small {
+	color: var(--fg2);
+	font-size: var(--text-11);
+	font-weight: 400;
+}
+.task[data-status='needs-you'] small {
+	color: var(--amber);
+}
+.task[aria-pressed='true'] .taskTitle {
+	font-weight: 500;
+}
+.provider {
+	display: flex;
+	color: var(--fg3);
+	flex: none;
+}
+.muted {
+	color: var(--fg2);
+	font-size: var(--text-11);
+	padding: 8px;
+}
+.project .muted {
+	padding: 2px 10px 9px 34px;
+	font-size: var(--text-12);
+	color: var(--fg3);
+}
+/* spec/appearance#evolution-redesign: the footer is the quota rings, 38 px over a hairline. */
+.footer {
+	display: flex;
+	align-items: center;
+	flex: none;
+	height: 38px;
+	padding: 0 10px;
+	border-top: 1px solid var(--hair);
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.content {
+	position: relative;
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.titlebar {
+	-webkit-app-region: drag;
+	height: var(--strip-h);
+	flex: none;
+	padding: 0 14px;
+	background: var(--strip-bg);
+	border-bottom: 1px solid var(--sep);
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	font-weight: 600;
+}
+.titlebar > span {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.titlebar button {
+	-webkit-app-region: no-drag;
+}
+.empty {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 13px;
+	padding: 40px;
+}
+.empty > svg {
+	color: var(--fg3);
+}
+.empty h1 {
+	font-size: var(--text-15);
+	font-weight: 600;
+}
+.empty p {
+	font-size: var(--text-11);
+	line-height: 1.5;
+	color: var(--fg2);
+}
+.issues {
+	background: var(--amber-soft);
+	padding: 12px;
+	font-size: var(--text-12);
+}
+.issues h2 {
+	font-size: var(--text-12);
+	margin-bottom: 8px;
+}
+.issues p {
+	padding: 3px 0;
+}
+
+/* spec/appearance#evolution-redesign: «Filter tasks» is always there, the status filter's glyph beside it. */
+.taskFilter {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: none;
+	padding: 0 8px 6px 10px;
+}
+.taskFilterField {
+	flex: 1;
+	min-width: 0;
+}
+.sidebar {
+	position: relative;
+	overflow: hidden;
+	transition: opacity var(--motion-fast) var(--motion-ease);
+}
+.layout[data-sidebar-hidden='true'] .sidebar {
+	opacity: 0;
+	pointer-events: none;
+}
+.layout[data-sidebar-present='false'] .sidebar {
+	width: 0;
+	border: 0;
+}
+.layout[data-sidebar-present='false'] .content > header,
+.layout[data-sidebar-present='false'] .content > section > header:first-child,
+.layout[data-sidebar-present='false'] .content > section > [data-task-main] > header:first-child {
+	/* spec/sidebar#section-rail: the rail stays; the title clears the traffic lights and the toggle (116 from the window's edge). */
+	padding-left: calc(116px - var(--rail-w));
+}
+/* spec/sidebar#width: the grab zone on the sidebar's border, out of the window drag region; ResizeHandle draws the rest (spec/task-window#resize-handles). */
+.sidebarResize {
+	position: absolute;
+	z-index: 3;
+	top: 0;
+	bottom: 0;
+	left: calc(var(--rail-w) + var(--sidebar-w) - 4.5px);
+	width: 8px;
+	display: flex;
+	justify-content: center;
+	-webkit-app-region: no-drag;
+}
+/* One toggle for both states (spec/sidebar#layout): on the sidebar's top edge while it is open, after the window buttons once it is gone. */
+.layout {
+	position: relative;
+}
+.sidebarToggle {
+	position: absolute;
+	z-index: 2;
+	top: calc((var(--strip-h) - var(--control-h-m)) / 2);
+	left: calc(var(--rail-w) + var(--sidebar-w) - 10px - var(--control-h-m));
+	width: var(--control-h-m);
+	height: var(--control-h-m);
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: var(--control-r-m);
+	background: transparent;
+	color: var(--fg2);
+	-webkit-app-region: no-drag;
+}
+.sidebarToggle:hover {
+	color: var(--fg);
+}
+.layout[data-sidebar-present='false'] .sidebarToggle {
+	left: 84px;
+}
+/* spec/remote-access-and-mobile#remote-button: with the sidebar gone Remote follows the toggle, 6 after it (RemoteChrome.module.css);
+   the title moves over by it and keeps its 4 after. */
+.layout[data-sidebar-present='false'][data-chip-shown] .content > header,
+.layout[data-sidebar-present='false'][data-chip-shown] .content > section > header:first-child,
+.layout[data-sidebar-present='false'][data-chip-shown]
+	.content
+	> section
+	> [data-task-main]
+	> header:first-child {
+	padding-left: calc(
+		84px + var(--control-h-m) + 6px + var(--remote-chip-w) + 6px + var(--control-h-m) + 4px
+	);
+}
+
+/* «All projects» — 30 px, the whole row hovers and selects, the archive counter and «Add a project…» above it. */
+.allProjectsRow {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex: none;
+	height: 30px;
+	margin: 0 8px 4px;
+	padding: 0 3px 0 0;
+	border-radius: 7px;
+	transition: background-color var(--motion-fast) ease;
+}
+.allProjectsRow:hover {
+	background: var(--hover);
+}
+.allProjectsRow[data-selected='true'] {
+	background: var(--sel);
+}
+.allProjectsRow > :not(.allProjects) {
+	position: relative;
+	z-index: 1;
+}
+.allProjects:hover {
+	background: transparent;
+}
+.allProjects {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	flex: 1;
+	min-width: 0;
+	height: 100%;
+	padding: 0 8px;
+	background: transparent;
+	text-align: left;
+	font-size: var(--text-12-5);
+	font-weight: 500;
+}
+.allProjects::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+}
+
+.projectSelect {
+	display: block;
+	width: 100%;
+	min-height: var(--control-h-s);
+	padding: 0;
+	text-align: left;
+	font: inherit;
+	color: inherit;
+	background: transparent;
+	border: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.projectSelect:hover {
+	background: transparent;
+}
+/* The select button stretches over the header, so the empty space opens the board too (rule 15). */
+.projectSelect::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+}
+/* spec/appearance#evolution-redesign: the icon tile is its own button (the picker), raised over the stretched select. */
+.projectIconButton {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 24px;
+	height: 24px;
+	margin: 0 -3px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+}
+.projectIconButton:hover,
+.projectIconButton[aria-expanded='true'] {
+	background: var(--tint2);
+}
+.projectPicking {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	color: var(--accent);
+}
+.projectPickingText {
+	flex: none;
+	padding-right: 6px;
+	font-size: var(--text-11);
+	font-weight: 400;
+	color: var(--fg3);
+	white-space: nowrap;
+}
+
+.unread {
+	width: 6px;
+	height: 6px;
+	flex: none;
+	border-radius: 50%;
+	background: var(--accent);
+}
+.projectCollapse {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	height: 24px;
+	width: 24px;
+	margin: 0 -5px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--control-r-s);
+	background: transparent;
+	color: var(--fg3);
+}
+.projectCollapse svg {
+	transform: rotate(-90deg);
+	transition: transform var(--motion-travel) var(--motion-ease);
+}
+.projectCollapse[aria-expanded='true'] svg {
+	transform: rotate(0);
+}
+.projectCollapse:hover {
+	color: var(--fg);
+	background: transparent;
+}
+/* A collapsed project shows only how many wait for the person. */
+.projectAttention {
+	display: flex;
+	gap: 3px;
+	align-items: center;
+	flex: none;
+	padding-right: 6px;
+	color: var(--amber);
+	font-size: var(--text-11);
+	font-weight: 500;
+}
+.projectDisclosure {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows var(--motion-travel) var(--motion-ease),
+		opacity var(--motion-enter-time) var(--motion-ease);
+}
+.projectDisclosure[data-open='true'] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+}
+.projectDisclosure > div {
+	overflow: hidden;
+	min-height: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+	.projectCollapse svg,
+	.projectDisclosure {
+		transition: none;
+	}
+}
+
+/* SidebarBranch, spec/appearance#evolution-redesign: title, the live line, then the branch — whole, the middle squeezed, the
+   row's own font in --fg3 — with the changes, the PR and «not reviewed» at the right. */
+.taskCopy > .taskHead {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	overflow: visible;
+}
+.taskHead > .taskTitle {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.taskCopy small,
+.workerCopy small {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	line-height: 15px;
+}
+.taskCopy > .taskTree {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	overflow: visible;
+	font-size: var(--text-11);
+	font-weight: 400;
+	line-height: 15px;
+	color: var(--fg2);
+}
+.taskTree > svg {
+	flex: none;
+}
+/* The line gives way in order, nothing ever overlaps (spec/appearance#evolution-redesign): the middle of the branch first, then the PR, and the
+   tail of the branch, and the counts (already short, `34.2k`) only when nothing else is left; the prefix (`brigadir/`) and
+   the «not reviewed» mark keep their size. ui/BranchName's parts take their turns in this row (`display: contents`); the tail
+   pushes the rest to the right end. Each keeps the 6 px gap. */
+.taskTree > .taskBranchName {
+	display: contents;
+	color: var(--fg3);
+}
+.taskBranchName > [data-branch-middle] + [data-branch-tail],
+.taskBranchName > [data-branch-prefix] + [data-branch-tail] {
+	margin-left: -6px;
+}
+.taskBranchName > [data-branch-prefix] + [data-branch-middle] {
+	margin-left: -6px;
+}
+.taskBranchName > [data-branch-tail] {
+	margin-right: auto;
+}
+/* The turns as shrink weights (a total under 1 would shrink only a part of the overflow, so the last one weighs 1). */
+.taskTree > .taskBranchName > [data-branch-middle] {
+	flex-shrink: 1000000000000;
+}
+.taskTree > .taskBranchName > [data-branch-tail] {
+	flex-shrink: 1000000;
+}
+.taskBranch {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	color: var(--fg3);
+}
+.taskBranch[data-detached] {
+	color: var(--amber);
+	font-weight: 600;
+}
+/* The counts, already short, give way only after everything else (a 220 px sidebar with a long prefix), and then whole:
+   −M first, then +N — each wraps onto a hidden second line, never cut in the middle. */
+.taskCounts {
+	display: inline-flex;
+	flex: 0 1 auto;
+	flex-wrap: wrap;
+	column-gap: 1ch;
+	min-width: 0;
+	height: 15px;
+	overflow: hidden;
+	white-space: nowrap;
+	font-family: var(--mono-family);
+	font-variant-numeric: tabular-nums;
+}
+.taskPR {
+	flex: 0 1000000000 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--mono-family);
+	color: var(--fg2);
+}
+.taskUnreviewed {
+	display: flex;
+	flex: none;
+	color: var(--fg2);
+}
+.taskCopy .noBranch {
+	color: var(--fg3);
+}
+.task > span[role='img'] {
+	margin-top: 1px;
+}
+
+/* spec/appearance#evolution-redesign: the crew — a card in its group, the foreman's header with the helmet, the worker
+   count and the providers when collapsed; the workers in the «tray», a lighter plate inside the card, no tree line. */
+/* spec/sidebar#project-groups: the tray sits 6 px from the card's left, right and bottom edges, 2 px under the
+   header; the header's icon and text start where the workers' icon and text do (tray 6 + its padding 2 + row padding 6). */
+.crewCard {
+	--crew-tone: var(--tint);
+	/* The deck's tone as an ink and its strength, so a stripe can be that tone made opaque (box-shadows). */
+	--deck-ink: var(--tint-ink);
+	--deck-a: var(--tint-a);
+	position: relative;
+	margin: 4px 4px 6px;
+	padding: 0 0 6px;
+	border-radius: 9px;
+	background: var(--crew-tone);
+}
+.crewCard[data-status='needs-you'] {
+	--crew-tone: var(--amber-soft);
+	--deck-ink: var(--amber);
+	--deck-a: var(--amber-soft-a);
+}
+.crewHeader {
+	position: relative;
+}
+.crewHeader > .task {
+	padding-left: 14px;
+	border-radius: 9px 9px 0 0;
+}
+/* A selected expanded crew is selected whole — --sel over the card, header and the area around
+   the tray; the header's button stretches over the card (rule 15), so its hover covers the same area. The tray and the
+   chevron lie above it with their own hover. */
+.crewCard:not([data-collapsed='true']) > .crewHeader,
+.crewCard:not([data-collapsed='true']) > .crewHeader > .task {
+	position: static;
+}
+.crewCard:not([data-collapsed='true']) > .crewHeader > .task::after {
+	border-radius: 9px;
+	pointer-events: auto;
+}
+.crewCard:not([data-collapsed='true']) > .crewHeader > .task[aria-pressed='true'] {
+	background: transparent;
+}
+.crewCard:not([data-collapsed='true']):has(> .crewHeader > .task[aria-pressed='true']) {
+	background: linear-gradient(var(--sel), var(--sel)), var(--crew-tone);
+}
+.crewChevronSpace {
+	flex: none;
+	width: 18px;
+	height: 18px;
+}
+/* The foreman's name 600 and its activity line 500 while open, selected or not; folded both 400. The title
+   row is 18 high (the chevron's box), so the header is 48. */
+.crewCard .crewHeader .taskTitle {
+	font-weight: 600;
+}
+.crewCard .crewHeader .taskCopy > small {
+	font-weight: 500;
+}
+.crewCard[data-collapsed='true'] .crewHeader .taskTitle,
+.crewCard[data-collapsed='true'] .crewHeader .taskCopy > small {
+	font-weight: 400;
+}
+/* spec/crew#attention: a waiting worker lifts needs-you onto the foreman header; the fill shows on the header only as a flash. */
+/* spec/sidebar#selection: selection is the soft --sel fill alone (spec/appearance#evolution-redesign), no accent border. */
+.task[aria-pressed='true'],
+.crewHeader > .task[aria-pressed='true'] {
+	background: var(--sel);
+}
+.crewHelmet {
+	display: flex;
+	flex: none;
+	color: var(--fg);
+}
+/* The worker count: a 16 px high pill, at least 24 wide (16 + its 4 px sides). */
+.crewCount {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	min-width: 24px;
+	height: 16px;
+	padding: 0 4px;
+	box-sizing: border-box;
+	border-radius: 8px;
+	background: var(--tint2);
+	font-size: var(--text-10);
+	font-weight: 400;
+	line-height: 1;
+	color: var(--fg2);
+}
+/* The 10 px chevron on the title row, its centre 19 px from the card's right edge and level with the title; a
+   24 px target without a box at rest, --tint under the pointer. The mouse does not focus it (no ring after a click); the
+   keyboard does, and only then the ring shows (:focus-visible). */
+.crewChevron {
+	position: absolute;
+	z-index: 1;
+	right: 7px;
+	top: 3px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--fg2);
+}
+.crewChevron svg {
+	transition: transform var(--motion-travel) var(--motion-ease);
+}
+.crewChevron[aria-expanded='false'] svg {
+	transform: rotate(-90deg);
+}
+.crewChevron:hover {
+	color: var(--fg);
+	background: var(--tint);
+}
+.crewChevron:focus:not(:focus-visible) {
+	outline: none;
+}
+.crewProvider {
+	display: flex;
+	flex: none;
+	color: var(--fg3);
+}
+/* The tray: the workers on a lighter plate 6 px inside the card; each row 26 px, hovers whole. */
+.crewWorkers {
+	position: relative;
+	z-index: 1;
+	margin: 2px 6px 0;
+	padding: 2px;
+	border-radius: 7px;
+	background: var(--tray);
+}
+.workerRow {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 26px;
+	padding: 0 6px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	text-align: left;
+	font-size: var(--text-12);
+	color: var(--fg);
+}
+.workerRow:hover {
+	background: var(--tint);
+}
+.workerRow[aria-pressed='true'] {
+	background: var(--sel);
+}
+/* The worker's status glyph is 12, centred in a 14 px slot under the header's 14 px glyph, so the texts line up. */
+.workerIcon {
+	display: flex;
+	flex: none;
+	width: 14px;
+	justify-content: center;
+}
+/* spec/agents-and-providers#tools-awareness: the worker's title and, while it waits for the simulator, the activity line of a task card under it. */
+.workerCopy {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-block: 5px;
+}
+.workerTitle {
+	flex: none;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.workerTitle > span {
+	color: var(--fg2);
+}
+.workerProvider {
+	display: flex;
+	flex: none;
+	color: var(--fg3);
+}
+/* A collapsed crew is a «deck»: two stripes under the card, drawn as two
+   shadows of the card's own rounded shape, 3 px in and 6 px down (3 px seen), 6 px in and 11 px down (2 px seen) — so
+   they are centred, round at the ends and show in the card's bottom corners too; 14 px to the next card. Each stripe is
+   the header's tone made opaque: the first over the sidebar, the second over the window and weaker on the dark theme
+   (--deck-fade), so it is lighter still; amber for needs-you, --sel when selected (spec/sidebar#selection). */
+.crewCard[data-collapsed='true'] {
+	--deck-one: color-mix(in srgb, var(--deck-ink) var(--deck-a), var(--sb));
+	--deck-two: color-mix(
+		in srgb,
+		var(--deck-ink) calc(var(--deck-a) * var(--deck-fade)),
+		var(--win)
+	);
+	margin-bottom: 14px;
+	padding: 0;
+	background: transparent;
+}
+.crewCard[data-collapsed='true'] > .crewHeader {
+	border-radius: 9px;
+	background: var(--crew-tone);
+	box-shadow:
+		0 6px 0 -3px var(--deck-one),
+		0 11px 0 -6px var(--deck-two);
+}
+.crewCard[data-collapsed='true'] > .crewHeader > .task {
+	border-radius: 9px;
+}
+.crewCard:has(> .crewHeader > .task[aria-pressed='true']) {
+	--deck-ink: var(--accent);
+	--deck-a: var(--sel-opacity);
+}
+/* A nested foreman: its helmet stands before its status glyph, --fg, 12 px. */
+.workerHelmet {
+	display: flex;
+	flex: none;
+	color: var(--fg);
+}
+/* spec/notifications-slack-notes-and-schedules#macos-permission: permission banner at the top of the sidebar — neutral, because amber here means a task waiting for you. */
+/* spec/notifications-slack-notes-and-schedules#macos-permission, the flash: one wave on a turn end, two amber rings when you are needed; only on a live change.
+   No forward fill: when an animation ends the row's own state (selection, status fill) shows again. */
+@media (prefers-reduced-motion: no-preference) {
+	.task[data-attention='turn-ended'] {
+		animation: attention-wave 1100ms cubic-bezier(0.2, 0.7, 0.3, 1);
+	}
+	.task[data-attention='turn-ended'] > span[role='img'],
+	.workerRow[data-attention='turn-ended'] [role='img'] {
+		animation: attention-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1);
+	}
+	.task[data-attention='turn-ended'] .taskHead > .unread,
+	.workerRow[data-attention='turn-ended'] > .unread {
+		animation: attention-pop 380ms 260ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
+	}
+	.task[data-attention='needs-you'] {
+		animation: attention-amber 600ms ease-out;
+	}
+	.task[data-attention='needs-you'] > span[role='img'],
+	.workerRow[data-attention='needs-you'] [role='img'] {
+		position: relative;
+	}
+	.task[data-attention='needs-you'] > span[role='img']::after,
+	.workerRow[data-attention='needs-you'] [role='img']::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		box-shadow: 0 0 0 2px var(--amber);
+		opacity: 0;
+		pointer-events: none;
+		animation: attention-ring 900ms 150ms ease-out 2 backwards;
+	}
+	.projectAttention[data-attention] {
+		animation: attention-pop 420ms 300ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
+	}
+}
+@keyframes attention-wave {
+	0% {
+		background: var(--accent-soft);
+		box-shadow: inset 0 0 0 1px var(--accent);
+	}
+	100% {
+		background: transparent;
+		box-shadow: inset 0 0 0 1px transparent;
+	}
+}
+@keyframes attention-pop {
+	0% {
+		transform: scale(0.4);
+		opacity: 0;
+	}
+	100% {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+/* A peak of amber at ≈150 ms that fades over ≈450 ms back to the row's own calm (no resting fill). */
+@keyframes attention-amber {
+	0% {
+		background: transparent;
+	}
+	25% {
+		background: color-mix(in srgb, var(--amber) 24%, transparent);
+	}
+	100% {
+		background: transparent;
+	}
+}
+@keyframes attention-ring {
+	0% {
+		transform: scale(0.9);
+		opacity: 0.9;
+	}
+	100% {
+		transform: scale(2.3);
+		opacity: 0;
+	}
+}
+/* spec/crew#attention: the repeat of a waiting row; another keyframe name per beat restarts the same flash. */
+.task[data-attention-beat='1'] {
+	animation-name: attention-amber-again;
+}
+.task[data-attention-beat='1'] > span[role='img']::after,
+.workerRow[data-attention-beat='1'] [role='img']::after {
+	animation-name: attention-ring-again;
+}
+@keyframes attention-amber-again {
+	0% {
+		background: transparent;
+	}
+	25% {
+		background: color-mix(in srgb, var(--amber) 24%, transparent);
+	}
+	100% {
+		background: transparent;
+	}
+}
+@keyframes attention-ring-again {
+	0% {
+		transform: scale(0.9);
+		opacity: 0.9;
+	}
+	100% {
+		transform: scale(2.3);
+		opacity: 0;
+	}
+}
+/* spec/agents-and-providers#sign-in-recovery: the sign-in line in the sidebar card. */
+.taskCopy small[data-sign-in] {
+	color: var(--amber);
+	font-family: inherit;
+}
+/* No traffic lights: with the sidebar gone the toggle follows ☰ (10 + 28 + 10), the title follows the toggle (48 + 28 + 8). */
+:root:is([data-platform='win32'], [data-platform='linux'])
+	.layout[data-sidebar-present='false']
+	.sidebarToggle {
+	left: calc(var(--rail-w) + 10px);
+}
+:root:is([data-platform='win32'], [data-platform='linux'])
+	.layout[data-sidebar-present='false']
+	.content
+	> header,
+:root:is([data-platform='win32'], [data-platform='linux'])
+	.layout[data-sidebar-present='false']
+	.content
+	> section
+	> header:first-child,
+:root:is([data-platform='win32'], [data-platform='linux'])
+	.layout[data-sidebar-present='false']
+	.content
+	> section
+	> [data-task-main]
+	> header:first-child {
+	/* spec/sidebar#section-rail: ☰ stays at the top of the rail; the toggle stands 10 after the rail, the title 8 after the toggle. */
+	padding-left: calc(10px + var(--control-h-m) + 8px);
+}
+/* spec/remote-access-and-mobile#remote-button: ☰ · toggle · Remote, the title 8 after Remote as it is 8 after the toggle without it. */
+:root:is([data-platform='win32'], [data-platform='linux'])
+	.layout[data-sidebar-present='false'][data-chip-shown]
+	:is(
+		.content > header,
+		.content > section > header:first-child,
+		.content > section > [data-task-main] > header:first-child
+	) {
+	padding-left: calc(
+		48px + var(--control-h-m) + 6px + var(--remote-chip-w) + 6px + var(--control-h-m) + 8px
+	);
+}
+:root:is([data-platform='win32'], [data-platform='linux']) .titlebar {
+	padding-right: calc(var(--os-controls-right) + 6px);
+}
+
+/* spec/sidebar#section-rail: the Pull requests section — the count of PRs waiting for you in a row's tail, a PR row's second line. */
+.sectionWaiting {
+	flex: none;
+	padding: 0 8px 0 4px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--accent);
+	font-variant-numeric: tabular-nums;
+}
+.projectHeader > .sectionWaiting {
+	position: relative;
+	z-index: 1;
+}
+/* spec/sidebar#section-rail: the Notes section — a group's count of notes, a note row's glyph in the status slot. */
+.sectionGroupCount {
+	position: relative;
+	z-index: 1;
+	flex: none;
+	padding: 0 8px 0 4px;
+	font-size: var(--text-11);
+	font-weight: 400;
+	color: var(--fg3);
+	font-variant-numeric: tabular-nums;
+}
+.noteGlyph {
+	display: inline-flex;
+	flex: none;
+	margin-top: 1px;
+	color: var(--fg2);
+}
+.task[aria-pressed='true'] > .noteGlyph {
+	color: var(--accent);
+}
+.prLine {
+	font-size: var(--text-11);
+	line-height: 14px;
+	color: var(--fg3);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.prLine > b {
+	font-weight: 500;
+	color: var(--amber);
+}
+.task > [data-pr-state] {
+	flex: none;
+	margin-top: 1px;
+}
+
+/* spec/tasks#backlog-edit: a backlog card's second line — «no branch · queued», then the clip of its attachments at the end. */
+.taskCopy > .backlogLine {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	line-height: 14px;
+}
+.backlogLine > small {
+	flex: 0 1 auto;
+	min-width: 0;
+}
+.taskClip {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	flex: none;
+	font-size: var(--text-10);
+	line-height: 14px;
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+.taskClip > svg {
+	flex: none;
+}
+
+/* spec/sidebar#done-rows: completed tasks are quiet 28 px rows at the end of the group, under a hairline (or a 4 px gap
+   when nothing is in progress). */
+.doneSep {
+	height: 1px;
+	background: var(--hair);
+}
+.doneGap {
+	height: 4px;
+}
+.doneRow {
+	position: relative;
+	box-sizing: border-box;
+	height: 28px;
+	color: var(--fg2);
+	font-size: var(--text-12);
+}
+.doneRow:hover {
+	background: var(--hover);
+}
+.doneRow[data-selected='true'] {
+	background: var(--sel);
+	color: var(--fg);
+}
+.doneMain {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	padding: 0 10px;
+	border-radius: 0;
+	color: inherit;
+	font-size: inherit;
+	text-align: left;
+}
+.doneMain:hover {
+	background: transparent;
+}
+.doneTitle {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.doneAge {
+	flex: none;
+	color: var(--fg3);
+	font-size: var(--text-11);
+	font-variant-numeric: tabular-nums;
+}
+.doneMain .doneSoon {
+	margin: 0 -4px 0 0;
+}
+.doneUnread {
+	width: 6px;
+	height: 6px;
+	flex: none;
+	border-radius: 50%;
+	background: var(--accent);
+}
+/* Scoped to the row: `.doneArchive` alone weighs as much as the button's own `display` (ui/Controls), and the order of the
+   CSS chunks decides — after the rail's imports (spec/sidebar#section-rail) the button would win and show on every row over the age. */
+.doneRow .doneSlot,
+.doneRow .doneArchive {
+	display: none;
+}
+.doneRow .doneSlot {
+	flex: none;
+	width: 22px;
+	height: 22px;
+	margin-right: -5px;
+}
+.doneRow .doneArchive {
+	position: absolute;
+	z-index: 1;
+	top: 3px;
+	right: 5px;
+	width: 22px;
+	height: 22px;
+}
+/* The age (and the clock) give way to the button under the pointer and on keyboard focus; a click's focus ring-less focus keeps the age. */
+.doneRow[data-archivable='true']:is(:hover, :has(:focus-visible)) :is(.doneAge, .doneSoon) {
+	display: none;
+}
+.doneRow[data-archivable='true']:is(:hover, :has(:focus-visible)) .doneSlot {
+	display: block;
+}
+.doneRow[data-archivable='true']:is(:hover, :has(:focus-visible)) .doneArchive {
+	display: inline-flex;
+}
+
+/* spec/chat-turns-plans-and-questions#background-commands: the turn is over, work goes on in the background — a quiet line with its own sign under the title; the card keeps
+   the sign of a finished turn and no fill (spec/sidebar#layout: the fill means the agent works). */
+.taskCopy small.taskBackground {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+}
+.taskBackground > svg {
+	flex: none;
+	color: var(--fg2);
+	animation: spin 1.6s steps(8) infinite;
+}
+.taskBackground > span {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.taskBackground > svg {
+		animation: none;
+	}
+}
+
+/* spec/notifications-slack-notes-and-schedules#schedules: a quiet scheduled run, shown by the status filter's «Quiet scheduled runs» — a pale row. */
+.task[data-quiet-run] {
+	opacity: 0.7;
+}

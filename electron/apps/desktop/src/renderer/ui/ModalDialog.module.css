@@ -1,0 +1,144 @@
+/* A modal card (the look of MergeDialog.module.css): card 11, header 14/16 with Esc (rule 14), body 0 16 14,
+   footer on --tint under a hairline. Width and the distance from the top come from the caller. */
+.dialog {
+	width: min(var(--modal-w, 460px), calc(100vw - 48px));
+	max-height: calc(100vh - var(--modal-top, 96px) - 24px);
+	inset: var(--modal-top, 96px) auto auto 50%;
+	transform: translateX(-50%);
+	margin: 0;
+	padding: 0;
+	border: 1px solid var(--sep);
+	border-radius: var(--modal-r, 11px);
+	background: var(--card);
+	color: var(--fg);
+	box-shadow: var(--shadow-modal);
+	animation: var(--motion-enter);
+	outline: none;
+}
+.dialog[open] {
+	display: flex;
+	flex-direction: column;
+}
+.dialog::backdrop {
+	background: var(--modal-scrim);
+}
+.header {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 14px 16px 10px;
+}
+/* Own title only: a popover in the header (`Review with an agent ▾`) keeps its 12 px title and Esc at the edge. */
+.header > h2 {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-14);
+	font-weight: 600;
+}
+.header > h2 .note {
+	margin-left: 8px;
+	font-size: var(--text-11);
+	font-weight: 400;
+	color: var(--fg2);
+}
+.header > h2 .icon {
+	display: inline-flex;
+	vertical-align: -2px;
+	margin-right: 7px;
+}
+.back {
+	margin-left: -6px;
+}
+.body {
+	min-height: 0;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 0 16px 14px;
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.body p {
+	margin: 0;
+}
+.footer {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 11px 16px;
+	border-top: 1px solid var(--sep);
+	border-radius: 0 0 10px 10px;
+	background: var(--tint);
+}
+/* spec/appearance#evolution-redesign: almost the whole window; the header 44 px, M controls, a hairline under it;
+   the body is the host's own layout. */
+.dialog[data-large] {
+	width: calc(100vw - 48px);
+	height: calc(100vh - 48px);
+	max-height: none;
+	inset: 24px auto auto 50%;
+	border-radius: 12px;
+	overflow: hidden;
+}
+.dialog[data-large] .header {
+	height: 44px;
+	box-sizing: border-box;
+	padding: 0 8px 0 14px;
+	border-bottom: 1px solid var(--hair);
+}
+.dialog[data-large] .header > h2 {
+	flex: 0 1 auto;
+	font-size: var(--text-13);
+}
+.dialog[data-large] .header > h2 .icon {
+	color: var(--fg2);
+	vertical-align: -2.5px;
+	margin-right: 8px;
+}
+.dialog[data-large] .body {
+	flex: 1;
+	padding: 0;
+	gap: 0;
+	overflow: hidden;
+	line-height: normal;
+}
+/* `top="center"`: in the middle of the window (the UA dialog's fit-content height between inset 0 and auto margins). */
+.dialog[data-center] {
+	inset: 0 auto 0 50%;
+	margin: auto 0;
+	max-height: 80vh;
+}
+/* spec/appearance#dialogs (Rename, the document viewer): a hairline under a 12/16 header, the name 13/600 and
+   wrapped in full, a 16 px body that scrolls alone, the footer 12/16 on --tint. */
+.dialog[data-divided] {
+	width: min(var(--modal-w, 460px), calc(100vw - 32px));
+	overflow: hidden;
+}
+.dialog[data-divided] .header {
+	gap: 12px;
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--sep);
+}
+.dialog[data-divided] .header > h2 {
+	overflow-wrap: anywhere;
+	white-space: normal;
+	font-size: var(--text-13);
+}
+.dialog[data-divided] .body {
+	display: block;
+	padding: 16px;
+	overscroll-behavior: contain;
+	line-height: 1.5;
+}
+.dialog[data-divided] .footer {
+	padding: 12px 16px;
+	border-radius: 0;
+}

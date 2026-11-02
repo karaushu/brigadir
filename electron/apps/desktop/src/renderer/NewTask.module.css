@@ -1,0 +1,538 @@
+/* The window sheet, 580px wide, attached below the window's top strip. */
+.sheet {
+	position: fixed;
+	inset: var(--strip-h) 0 auto;
+	margin: 0 auto;
+	width: min(780px, calc(100vw - 32px));
+	max-height: calc(100vh - 68px);
+	padding: 0;
+	color: var(--fg);
+	background: var(--card);
+	border: 1px solid var(--sep);
+	border-top: 0;
+	/* spec/tasks#sheet-rail: the sheet's lower corners are 12, as the cards. */
+	border-radius: 0 0 12px 12px;
+	box-shadow: 0 22px 60px var(--shadow);
+}
+.sheet::backdrop {
+	background: var(--modal-scrim);
+}
+.body {
+	min-width: 0;
+	margin: 0;
+	padding: 16px 16px 12px;
+	border: 0;
+}
+.heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+.heading .name {
+	flex: 1;
+	min-width: 0;
+	font-weight: 600;
+}
+.heading h1.name {
+	font-size: var(--text-14);
+}
+.project {
+	flex: none;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.body textarea {
+	display: block;
+	width: 100%;
+	min-height: 84px;
+	max-height: 50vh;
+}
+.body textarea::placeholder {
+	color: var(--fg3);
+}
+.footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 16px;
+	border-top: 1px solid var(--sep);
+	background: var(--tint);
+}
+.error {
+	margin-top: 12px;
+	color: var(--red);
+	font-size: var(--text-12);
+	overflow-wrap: anywhere;
+}
+
+.loading,
+.loadError {
+	margin: 0;
+	padding: 0 16px 12px;
+	font-size: var(--text-12);
+}
+.loading {
+	color: var(--fg2);
+}
+.loadError button {
+	margin-top: 8px;
+}
+
+.details {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows var(--motion-travel) var(--motion-ease);
+}
+.details[data-open='true'] {
+	grid-template-rows: 1fr;
+}
+.details > div {
+	overflow: hidden;
+	min-height: 0;
+}
+.settings {
+	padding: 14px 0 0;
+	border: 0;
+	margin: 0;
+	min-width: 0;
+	font-size: var(--text-12);
+}
+.setting {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 10px 0;
+}
+.setting > span {
+	width: 120px;
+	flex: none;
+	color: var(--fg2);
+}
+.setting > input {
+	flex: 1;
+	min-width: 0;
+}
+.scope,
+.scopeHeader {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 95px 115px;
+	align-items: center;
+	gap: 8px;
+	min-height: 30px;
+}
+.scopeHeader {
+	color: var(--fg3);
+	font-size: var(--text-10);
+}
+.scope input {
+	justify-self: center;
+	accent-color: var(--accent-fill);
+}
+.scope code {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* spec/tasks#sheet-rail: the rail's small text is 11 on 15 px lines. */
+.caption {
+	color: var(--fg3);
+	font-size: var(--text-11);
+	line-height: 15px;
+	margin-top: 12px;
+	margin-bottom: 0;
+}
+/* spec/tasks#sheet-rail: without git, the reason worktree is impossible is red, 6 px under the fields. */
+.caption[role='alert'] {
+	margin-top: 6px;
+	color: var(--red);
+}
+
+.relay {
+	display: flex;
+	gap: 7px;
+	align-items: center;
+	margin-bottom: 9px;
+	padding: 4px 9px;
+	background: var(--accent-soft);
+	border-radius: 6px;
+	font-size: var(--text-11-5);
+}
+.relay > svg {
+	color: var(--accent);
+	flex: none;
+}
+.relay > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Type segment in the header; crew row with popup and «Налаштувати…»; roster indented 52px under the row. */
+.type {
+	flex: none;
+}
+.type button svg {
+	flex: none;
+}
+.crewRoster {
+	margin: 0 0 10px 52px;
+}
+/* spec/crew-templates-and-editor#editor-inspector: a warning wraps under its text, the glyph on the first line. spec/tasks#sheet-rail:
+   11 on 15 px lines, as the rail's other small text. */
+.crewHint {
+	margin: 6px 0 0;
+	font-size: var(--text-11);
+	line-height: 15px;
+	color: var(--fg2);
+}
+.crewWarning {
+	display: flex;
+	align-items: flex-start;
+	gap: 5px;
+	margin-top: 6px;
+	font-size: var(--text-11);
+	line-height: 15px;
+	color: var(--amber);
+}
+.crewWarning svg {
+	flex: none;
+	margin-top: 2px;
+}
+
+/* spec/tasks#sheet-layout: two columns. The task text on the left, a 248 px rail on the right. */
+.columns {
+	display: flex;
+	align-items: stretch;
+	margin: 0 -16px -12px;
+}
+.left {
+	flex-grow: 1;
+	min-width: 0;
+	padding: 0 16px 12px;
+	display: flex;
+	flex-direction: column;
+}
+/* The rail runs down to the footer with the same 14px inside at the top and bottom. */
+.rail {
+	width: 248px;
+	flex: none;
+	box-sizing: border-box;
+	padding: 14px;
+	border-left: 1px solid var(--sep);
+	background: var(--tint);
+}
+.group {
+	margin-top: 14px;
+}
+.rail > :first-child,
+.rail > .settings:first-child > .group:first-child {
+	margin-top: 0;
+}
+/* spec/tasks#sheet-rail: a group's name is 11 `--fg2` on a 16 px line, 6 px over its control. */
+.railLabel {
+	display: block;
+	margin-bottom: 6px;
+	font-size: var(--text-11);
+	line-height: 16px;
+	color: var(--fg2);
+}
+.rail [role='radiogroup'] {
+	display: flex;
+	width: 100%;
+}
+.rail [role='radiogroup'] button {
+	flex-grow: 1;
+	justify-content: center;
+}
+.rail > .settings {
+	padding: 0;
+	border: 0;
+	margin: 0;
+	min-width: 0;
+}
+.group > button[aria-haspopup],
+.group > div {
+	margin-top: 6px;
+}
+/* spec/crew#compose: «Set up…» stands under the Crew popup with the same 6 px as the rail's other stacked controls.
+   spec/tasks#sheet-rail: it spans the rail, as the popup over it. */
+[data-crew-row] > button {
+	width: 100%;
+	justify-content: center;
+	margin-top: 6px;
+}
+.group > .railLabel {
+	margin-top: 0;
+}
+
+/* With «на місці» the branch and base ref do not disappear but dim (spec/tasks#sheet-layout). */
+/* spec/tasks#isolation: without isolation there are no worktree fields — the rows collapse rather than dim (revises spec/tasks#sheet-layout). */
+.worktree {
+	display: grid;
+	grid-template-rows: 0fr;
+	/* The single column must not grow to the content's nowrap width: a long branch would push the rail's controls out. */
+	grid-template-columns: minmax(0, 1fr);
+	opacity: 0;
+	transition:
+		grid-template-rows var(--motion-travel) var(--motion-ease),
+		opacity var(--motion-enter-time) var(--motion-ease),
+		margin-top var(--motion-travel) var(--motion-ease);
+}
+.worktree[data-open='true'] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	margin-top: 6px;
+}
+/* Collapsed clips; expanded releases overflow after the animation — otherwise the `від` list would be clipped. */
+.worktreeBody {
+	min-height: 0;
+	overflow: hidden;
+	transition: overflow 0s;
+	transition-behavior: allow-discrete;
+}
+.worktree[data-open='true'] > .worktreeBody {
+	overflow: visible;
+	transition-delay: var(--motion-travel);
+}
+.fromRow {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin-top: 6px;
+}
+.fromRow > span {
+	flex: none;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+/* Branch, base ref and setup command span the rail. */
+.fromRow > div {
+	flex: 1;
+	min-width: 0;
+}
+.worktreeBody > .ref {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+}
+/* spec/tasks#sheet-rail: git refs and the setup command are mono 11.5 — the branch
+   field, the setup field (its placeholder too) and the base ref, closed and in its list. */
+.ref.ref {
+	font-family: var(--mono-family);
+	font-size: var(--text-11-5);
+}
+.fromRow button[aria-haspopup] > span {
+	font: var(--text-11-5) var(--mono-family);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* spec/tasks#sheet-repos: repos and folders are a row of chips, not a table. */
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.chips code {
+	font-size: inherit;
+}
+.chips small {
+	font-size: inherit;
+	color: var(--fg2);
+}
+/* spec/tasks#sheet-rail: «Add folder…» is a chip of the row with a dashed edge and no fill. */
+.chips .addFolder {
+	background: transparent;
+	border: 1px dashed var(--fg3);
+}
+/* spec/notifications-slack-notes-and-schedules#message-classes T*: a failed «Add folder…» stays under the chips until the next attempt. */
+.fieldError {
+	margin: 6px 0 0;
+	color: var(--red);
+	font-size: var(--text-11);
+	line-height: 15px;
+	overflow-wrap: anywhere;
+}
+
+/* spec/tasks#sheet-layout: the prompt has no box; the left column reads as a document. */
+.mentionHint {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	margin-top: 6px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.at {
+	flex: none;
+	font-size: var(--text-12);
+	line-height: 1;
+}
+
+/* spec/tasks#sheet-footer, spec/appearance#control-scale: the backlog toggle is a size M button (aria-pressed draws the chosen state). */
+.backlog {
+	margin-right: auto;
+}
+.crewRoster.crewRoster {
+	margin: 8px 0 0;
+}
+.setupCommand.setupCommand {
+	margin-top: 6px;
+}
+/* spec/git#worktree-env: the switch and its name are one target; the name toggles too. spec/tasks#sheet-rail: the row
+   is 12, its hover a `--tint` field reaching 5 px past the rail's column; the switch S stands flush with the fields above. */
+.envRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px -5px 0;
+	padding: 0 5px;
+	border-radius: 6px;
+	font-size: var(--text-12);
+	color: var(--fg);
+	cursor: default;
+}
+.envRow:hover {
+	background: var(--tint);
+}
+.envRow > button[role='switch'] {
+	margin: 0 -6px;
+}
+.inherited {
+	margin: 0 0 12px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* spec/agents-and-providers#usage: the limits button sits right in the label row of the rail's first group; a negative margin keeps
+   the group's height. spec/tasks#sheet-rail: the row is the label's 16 px, the button stands 3 px out above and below. */
+.group > .railLabelRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 16px;
+	margin: 0 0 6px;
+}
+.railLabelRow > .railLabel {
+	flex: 1;
+	min-width: 0;
+	margin-bottom: 0;
+}
+.railLabelRow > :not(.railLabel) {
+	margin: -3px 0;
+}
+
+/* spec/tasks#backlog-edit: «+», the mention hint and the paste hint in one row, 8 px apart; «+» stands 6 px out so its glyph lines up with the text.
+   spec/tasks#sheet-rail: the row follows the text at once (11 `--fg2`, `@` 12), it wraps on a narrow
+   sheet; the column's empty rest under it focuses the text. */
+.left {
+	position: relative;
+}
+.mentionHint[data-attachable] {
+	flex-wrap: wrap;
+	gap: 2px 8px;
+}
+.hintGroup {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	white-space: nowrap;
+}
+.hintGroup svg {
+	flex: none;
+}
+.attach {
+	margin: 0 -2px 0 -4px;
+}
+.attachError {
+	margin: 6px 0 0;
+	font-size: var(--text-11-5);
+	color: var(--red);
+}
+/* spec/composer#paste: the composer's drop zone, over the text column under the sheet's header; the rail and the footer take no drop. */
+.dropZone {
+	position: absolute;
+	inset: -4px 8px 8px;
+	z-index: 4;
+	border-radius: 10px;
+	background: var(--card);
+	pointer-events: none;
+	opacity: 0;
+	visibility: hidden;
+	transition:
+		opacity var(--motion-fast) ease,
+		visibility 0s linear var(--motion-fast);
+}
+.left[data-drop-over] > .dropZone {
+	opacity: 1;
+	visibility: visible;
+	transition: opacity var(--motion-fast) ease;
+}
+.dropZone > div {
+	position: absolute;
+	inset: 0;
+	border-radius: 10px;
+	border: 1.5px dashed var(--accent);
+	background: var(--accent-soft);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+}
+.dropZone span {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-13);
+	font-weight: 600;
+	color: var(--fg);
+}
+.dropZone span > svg {
+	flex: none;
+	color: var(--accent);
+}
+.dropZone small {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+@media (prefers-reduced-motion: reduce) {
+	.dropZone,
+	.left[data-drop-over] > .dropZone {
+		transition: none;
+	}
+}
+/* spec/tasks#backlog-edit: «Почати задачу» in the edit sheet takes the backlog toggle's place and look; it is an action, not a toggle. */
+.startNow {
+	margin-right: auto;
+}
+/* spec/crew-templates-and-editor#editor-inspector: the crew list's glyph slot, as wide as its widest glyph (generate 11), so every name starts in one column. */
+.crewGlyph {
+	display: inline-flex;
+	justify-content: center;
+	width: 11px;
+	flex: none;
+}
+
+/* spec/notifications-slack-notes-and-schedules#schedules: the When field — the rule in words, full width like the rail's popups; red ring while the rule can't run. */
+.whenField {
+	width: 100%;
+	justify-content: flex-start;
+}
+.whenField > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-align: left;
+}
+.whenField[data-invalid] {
+	box-shadow: inset 0 0 0 1px var(--red);
+}

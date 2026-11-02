@@ -1,0 +1,27 @@
+/* spec/architecture-and-platform#window-frame: ☰ on Windows and Linux, where macOS has its traffic lights; the app menu opens under it. Hover and the
+   open menu follow the board AStates: tint, then accent-soft. Fixed, so the Kit route and the client's list of machines
+   (spec/remote-access-and-mobile#identity-and-keys) have it too. */
+.button {
+	position: fixed;
+	z-index: 2;
+	top: calc((var(--strip-h) - var(--control-h-m)) / 2);
+	left: 10px;
+	width: var(--control-h-m);
+	height: var(--control-h-m);
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: var(--control-r-m);
+	background: transparent;
+	color: var(--fg2);
+	-webkit-app-region: no-drag;
+}
+.button:hover {
+	color: var(--fg);
+}
+.button[aria-expanded='true'] {
+	background: var(--accent-soft);
+	color: var(--accent);
+}

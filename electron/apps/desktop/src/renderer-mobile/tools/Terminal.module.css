@@ -1,0 +1,37 @@
+/* spec/remote-access-and-mobile#phone-task-tools: the terminal box and To the end; the tabs are `ui/Chip`. */
+.dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--green);
+}
+.body {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	background: var(--term);
+}
+.output {
+	position: absolute;
+	inset: 10px 0 0 16px;
+}
+.output :global(.xterm-viewport) {
+	background: var(--term) !important;
+	overscroll-behavior: contain;
+}
+.end.end {
+	position: absolute;
+	z-index: 3;
+	left: 50%;
+	bottom: 14px;
+	transform: translateX(-50%);
+	border-radius: 22px;
+	background: var(--sheet);
+	box-shadow: 0 6px 20px var(--shadow);
+}
+.none {
+	flex: 1 1 auto;
+}
+.caption {
+	padding: 12px 16px 6px;
+}

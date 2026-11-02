@@ -1,0 +1,141 @@
+/* spec/composer#capsule-squeeze, spec/composer#agent-capsule (canvas 3.6): the island's footer — full width, 26 tall under a --hair line, 11 px --fg2, no fill.
+   Without isolation it stays unfilled too: only the glyph and the branch turn amber. Not positioned itself, so the repos popover
+   anchors to the island (the form) and opens above it. The whole footer is one button and hovers as a whole (rule 15): the
+   button's own hover layer is off, the bar's --accent 10 % is the hover. */
+.root {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	height: 27px;
+	border-top: 1px solid var(--hair);
+	border-radius: 0 0 13px 13px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+	white-space: nowrap;
+	transition: background-color var(--motion-fast) ease;
+}
+.root:has(> .open:hover),
+.root[data-open='true'] {
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.root:has(> .open:active) {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+.open {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1;
+	min-width: 0;
+	height: 26px;
+	padding: 0 16px;
+	border-radius: 0 0 13px 13px;
+	color: inherit;
+	font: inherit;
+	white-space: nowrap;
+	text-align: left;
+}
+.open:hover,
+.open:active {
+	background-image: none;
+}
+.open > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.root[data-isolation='in-place'] .open > svg,
+.root[data-isolation='in-place'] .branch {
+	color: var(--amber);
+}
+.branch {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.root[data-detached] .branch {
+	color: var(--amber);
+	font-weight: 600;
+}
+.counts {
+	flex: none;
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+	font-variant-numeric: tabular-nums;
+}
+.base,
+.repos {
+	flex: none;
+	color: var(--fg2);
+}
+.repos {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.dot {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--amber);
+}
+.popover ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.popover li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 5px 8px;
+	border-radius: 5px;
+}
+.popover li > svg {
+	flex: none;
+	color: var(--fg3);
+}
+.popover li[data-in-place] > svg,
+.popover li small {
+	color: var(--amber);
+}
+.popover li small {
+	flex: none;
+	font-size: var(--text-10);
+}
+.popover p {
+	margin: 0;
+	padding: 5px 8px;
+	color: var(--fg2);
+}
+.name {
+	flex: none;
+	width: 120px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg);
+}
+.repoBranch {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.popover .counts {
+	font-size: var(--text-10);
+}
+.root[data-notices-only] {
+	justify-content: flex-end;
+	padding-right: 8px;
+}
+/* spec/notifications-slack-notes-and-schedules#notice-chips: the class S chips stand right of the footer button, 8 px from the island's edge; the branch gives way first. */
+.root > :not(.open):not([popover]) {
+	flex: none;
+}
+.root:not([data-notices-only]) > :last-child:not(.open) {
+	margin-right: 8px;
+}

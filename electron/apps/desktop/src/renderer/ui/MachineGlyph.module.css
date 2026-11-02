@@ -1,0 +1,51 @@
+/* spec/remote-access-and-mobile#remote-button: the machine and its reach mark, in the menu and in Settings. */
+.glyph {
+	position: relative;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: inherit;
+}
+.glyph[data-tile] {
+	width: 28px;
+	height: 28px;
+	border-radius: 7px;
+	background: var(--tint);
+	color: var(--fg2);
+}
+.glyph[data-dashed] {
+	box-sizing: border-box;
+	border: 1px dashed var(--sep);
+	background: transparent;
+}
+.dot {
+	position: absolute;
+	right: -2px;
+	bottom: -1px;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--fg3);
+	box-shadow: 0 0 0 1.5px var(--card);
+	transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.glyph[data-tile] > .dot {
+	right: -1px;
+	bottom: -1px;
+	width: 8px;
+	height: 8px;
+	box-shadow: 0 0 0 2px var(--card);
+}
+.dot[data-dot='on'] {
+	background: var(--green);
+}
+.spin {
+	position: absolute;
+	right: -4px;
+	bottom: -4px;
+	display: inline-flex;
+	border-radius: 50%;
+	background: var(--card);
+	color: var(--fg2);
+}

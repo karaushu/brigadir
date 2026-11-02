@@ -1,0 +1,239 @@
+/* spec/git#merge: History in the changes panel. Colours are semantic tokens only (spec/appearance#theme). */
+.root {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+}
+.spacer {
+	flex: 1;
+}
+.selectors {
+	display: flex;
+	gap: 6px;
+	padding: 8px;
+	border-bottom: 1px solid var(--hair);
+}
+.selectors > div {
+	flex: 1;
+	min-width: 0;
+}
+/* spec/editor#line-author: one file's history — the chip under the selectors takes their bottom border. */
+.selectors[data-filtered='true'] {
+	border-bottom: 0;
+}
+.filter {
+	display: flex;
+	padding: 0 8px 8px;
+	border-bottom: 1px solid var(--hair);
+}
+.chip {
+	flex: 1;
+	min-width: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	box-sizing: border-box;
+	height: var(--c-h);
+	padding: 0 0 0 8px;
+	border-radius: var(--c-r);
+	background: var(--accent-soft);
+	color: var(--fg);
+}
+.chip > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.chipLabel {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.chipName {
+	flex: none;
+	font: 600 var(--text-11) var(--mono-family);
+}
+.chipDir {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg2);
+}
+.more {
+	flex: none;
+	display: flex;
+	justify-content: flex-end;
+	padding: 8px 12px;
+	border-top: 1px solid var(--hair);
+}
+.hint {
+	margin: 0;
+	padding: 20px 12px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+/* spec/notifications-slack-notes-and-schedules#message-classes class B: the history did not read — the reason in place of the list, Retry under it. */
+.failure {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 20px 12px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.failure p {
+	margin: 0;
+}
+.meta {
+	margin: 0;
+	padding: 6px 12px 2px;
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.commits {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding-bottom: 8px;
+}
+.commit {
+	position: relative;
+	display: flex;
+	gap: 9px;
+	padding: 6px 12px 6px 10px;
+}
+/* spec/task-window#panel, rule 15: the hover covers the whole commit, an open one is --sel. */
+.commit:has(> .body > .head:hover):not([data-open='true']) {
+	background: var(--hover);
+}
+.commit[data-open='true'] {
+	background: var(--sel);
+}
+.rail {
+	position: relative;
+	width: 10px;
+	flex: none;
+	display: flex;
+	justify-content: center;
+}
+.rail::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: -12px;
+	width: 1px;
+	background: var(--sep);
+}
+.rail[data-first='true']::before {
+	top: 8px;
+}
+.rail[data-last='true']::before {
+	bottom: auto;
+	height: 8px;
+}
+.rail > span {
+	position: relative;
+	margin-top: 5px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	border: 1.5px solid var(--fg3);
+	background: var(--content);
+	box-sizing: border-box;
+}
+.commit[data-open='true'] .rail > span {
+	border-color: var(--accent);
+	background: var(--accent);
+}
+.body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	height: var(--c-h);
+	padding: 0;
+	color: var(--fg);
+	text-align: left;
+	font-size: var(--text-12);
+}
+/* The subject's button stretches over the commit row; the files of an open commit lie above it with their own hover. */
+.head::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+}
+.head:hover,
+.head:active {
+	background-image: none;
+}
+.subject {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.head code {
+	flex: none;
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg2);
+}
+.byline {
+	color: var(--fg2);
+	font-size: var(--text-10);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.files {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin-top: 4px;
+}
+/* A file row is a button across the whole card: small text is hard to hit with the mouse. */
+.file {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: calc(100% + 8px);
+	height: var(--c-h);
+	margin-left: -8px;
+	padding: 0 8px;
+	border-radius: 5px;
+	color: var(--fg);
+	text-align: left;
+	font-size: var(--text-11);
+}
+.path {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+}
+.counts {
+	font: var(--text-10) var(--mono-family);
+}
+
+/* The commit's files scroll inside their card. */
+.files {
+	position: relative;
+	z-index: 1;
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}

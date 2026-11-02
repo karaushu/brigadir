@@ -1,0 +1,182 @@
+/* spec/composer#island, spec/composer#glass-overlay, spec/composer#agent-capsule: the composer island — one look for the task chat and the intro's sample window (spec/settings-modules-and-onboarding#intro-steps).
+   The feature places it (margins, width); the look lives here. */
+/* spec/appearance#evolution-redesign, spec/composer#agent-capsule: glass without a shadow — a 1 px --sep frame, radius 14. */
+.island {
+	composes: frame from './Input.module.css';
+	position: relative;
+	border: 1px solid var(--sep);
+	border-radius: 14px;
+	background: var(--card);
+	box-shadow: none;
+}
+/* spec/composer#agent-capsule: the row is M — attach, the context, the capsule and the Send circle are all 28. */
+.bar {
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 2px;
+	padding: 4px 10px 8px;
+	min-width: 0;
+}
+.bar > small {
+	color: var(--fg2);
+	align-self: center;
+}
+/* spec/composer#mentions: the composer text is the sheet's editor; spec/composer#agent-capsule: 13.5 / 21, padding 12 16 2, one line
+   empty, growing to 240 and scrolling inside. */
+.text {
+	position: relative;
+	min-width: 0;
+}
+.text :global(.cm-editor) {
+	background: transparent;
+}
+.text :global(.cm-editor.cm-focused) {
+	outline: none;
+}
+.text :global(.cm-scroller),
+.still {
+	max-height: 240px;
+	overflow: auto;
+	font: calc(13.5px * var(--ui-scale)) / calc(21px * var(--ui-scale)) var(--ui-family);
+}
+.text :global(.cm-content),
+.still {
+	min-height: 35px;
+	padding: 12px 16px 2px;
+	caret-color: var(--fg);
+	color: var(--fg);
+}
+.text :global(.cm-line) {
+	padding: 0;
+}
+.text :global(.cm-placeholder),
+.still {
+	color: var(--fg3);
+}
+/* A shown island (the intro's sample): the placeholder alone, no editor behind it. */
+.still {
+	margin: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+/* spec/composer#agent-capsule: the ghost suggestion shows the key that takes it, framed after the text. */
+.text :global(.cm-placeholder) [data-placeholder-key] {
+	margin-left: 8px;
+	padding: 0 4px;
+	border-radius: 3px;
+	box-shadow: inset 0 0 0 1px var(--sep);
+	font: var(--text-10) / 15px var(--mono-family);
+	vertical-align: 1px;
+	color: var(--fg2);
+}
+.text :global(.cm-content[aria-disabled='true']),
+.text :global(.cm-content[contenteditable='false']) {
+	color: var(--fg3);
+}
+/* The pill and the inline image at the composer's 14 px. */
+.text [data-mention-pill] {
+	margin: 0 1px;
+	font-size: var(--text-12);
+	line-height: 18px;
+	vertical-align: 1px;
+}
+.text [data-mention-pill][data-mono] {
+	font-size: 11.5px;
+}
+.text [data-mention-image] {
+	width: 39px;
+	height: 26px;
+	vertical-align: -8px;
+}
+.space {
+	flex: 1;
+	min-width: 4px;
+}
+.island > [data-attachments] {
+	margin-inline: 10px;
+}
+/* spec/composer#island: the island. One focus frame (spec/composer#glass-overlay) with a soft ring and no shadow (spec/appearance#evolution-redesign); `+` on the left, context, capsule and send on the right. */
+.island.island:focus-within {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.bar > button[aria-label] {
+	flex: none;
+}
+/* spec/composer#capsule-squeeze: context, capsule and send stay together and the row never wraps; the capsule squeezes instead. */
+.controls {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	margin-left: auto;
+}
+.island.island {
+	background: color-mix(in srgb, var(--card) 68%, transparent);
+	-webkit-backdrop-filter: blur(22px) saturate(1.8);
+	backdrop-filter: blur(22px) saturate(1.8);
+}
+@media (prefers-reduced-transparency: reduce) {
+	.island.island {
+		background: var(--card);
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+	}
+}
+/* spec/composer#paste: a file over the island gives it a dashed accent frame and lays the
+   drop zone over the whole card. The zone never takes events; the form below it does the dropping. */
+.island.island[data-drop-over] {
+	border: 1.5px dashed var(--accent);
+	box-shadow: none;
+}
+.dropZone {
+	position: absolute;
+	inset: 0;
+	z-index: 3;
+	border-radius: 14px;
+	background: var(--card);
+	pointer-events: none;
+	opacity: 0;
+	visibility: hidden;
+	transition:
+		opacity var(--motion-fast) ease,
+		visibility 0s linear var(--motion-fast);
+}
+.island[data-drop-over] > .dropZone {
+	opacity: 1;
+	visibility: visible;
+	transition: opacity var(--motion-fast) ease;
+}
+.dropZone > div {
+	position: absolute;
+	inset: 0;
+	border-radius: 14px;
+	background: var(--accent-soft);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+}
+.dropZone span {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-13);
+	font-weight: 600;
+	color: var(--fg);
+}
+.dropZone span > svg {
+	flex: none;
+	color: var(--accent);
+}
+.dropZone small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+/* spec/tasks#archive: an archived task reads as before; its composer waits for Restore. */
+.island[data-archived='true'] {
+	opacity: 0.5;
+}

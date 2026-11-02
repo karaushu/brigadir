@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  node-pty: true
+  electron: true
+  esbuild: true
+  electron-winstaller: false
+minimumReleaseAgeExclude:
+  - electron@44.3.0

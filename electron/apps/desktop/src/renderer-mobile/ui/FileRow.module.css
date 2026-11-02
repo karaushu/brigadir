@@ -1,0 +1,55 @@
+/* The phone's file row and its change mark. */
+.row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-height: 52px;
+	padding: 6px 14px 6px 16px;
+	text-align: left;
+}
+.row + .row {
+	box-shadow: inset 52px 0.5px 0 -52px var(--sep);
+}
+.row:active {
+	background: var(--segment-press);
+}
+.row > svg {
+	flex: none;
+}
+.two {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+.two b {
+	font-size: 15px;
+	font-weight: 500;
+}
+.two small {
+	font-size: 12px;
+	color: var(--fg2);
+}
+.chevron {
+	color: var(--fg3);
+}
+.mark {
+	flex: none;
+	width: 18px;
+	font-size: 11px;
+	font-weight: 600;
+	text-align: center;
+	color: var(--fg2);
+}
+.mark[data-mark='M'] {
+	color: var(--amber-text);
+}
+.mark[data-mark='A'] {
+	color: var(--green);
+}
+.mark[data-mark='D'] {
+	color: var(--red);
+}

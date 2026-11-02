@@ -1,0 +1,170 @@
+/* The same .menu as popups (spec/tasks#sheet-layout); here only the width, group captions and rows. */
+.menu.menu {
+	position: absolute;
+	width: 280px;
+	animation: var(--motion-fade);
+}
+.menu.menu[data-mention-tabs] {
+	width: 360px;
+	gap: 0;
+}
+/* spec/composer#mentions: five `/` tabs with longer names need more room than four `@` ones. */
+.menu.menu[data-mention-tabs='5'] {
+	width: 480px;
+}
+/* spec/composer#mentions: the list scrolls under the tabs; the tabs stay. */
+.list {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	max-height: 292px;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.menu[data-mention-tabs] .list {
+	max-height: 280px;
+}
+/* spec/composer#mention-menu: the shared `.menu > [role=listbox] { display: contents }` (Popup) beat `.list`, so the cap never applied and the
+   whole list grew past the window. The list is a real scroll box here; MentionMenu lowers the cap to what the window leaves. */
+.menu.menu > .list {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 1px;
+	padding: 0;
+	border-radius: 0;
+}
+/* Each row is a direct column row of the list: the shared `.menu > [role=listbox] > div` rule must not turn the wrapper into
+   a flex row, or the group caption sits beside the first option and the highlight stops short of the edges. */
+.menu.menu .item {
+	display: contents;
+}
+.group {
+	padding: 6px 8px 3px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.option {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	font-size: var(--text-12);
+	white-space: nowrap;
+}
+.option[data-active='true'] {
+	background: var(--accent-fill);
+	color: var(--selfg);
+}
+.option svg {
+	flex: none;
+}
+.label {
+	flex: none;
+}
+.mono {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+}
+.tail {
+	flex: 0 100 auto;
+	min-width: 0;
+	margin-left: auto;
+	padding-left: 12px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.option[data-active='true'] .tail {
+	color: inherit;
+	opacity: 0.7;
+}
+.check {
+	display: flex;
+	margin-left: auto;
+	color: var(--accent);
+}
+.tail + .check {
+	margin-left: 6px;
+}
+.option[data-active='true'] .check {
+	color: inherit;
+}
+.status {
+	padding: 4px 8px;
+	font-size: var(--text-12);
+	color: var(--fg2);
+	white-space: normal;
+	line-height: 1.4;
+}
+/* spec/composer#mentions: segment tabs on top — a 24 px track of --tint, 20 px segments, the active one a --card chip. */
+.menu.menu > .tabsRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 36px;
+	padding: 0 4px 6px;
+	border-radius: 0;
+	font-size: var(--text-12);
+}
+/* spec/appearance#control-scale, rule 17: the tabs are ui/Controls `Segments` at size M (`keepFocus` tablist). Here only their place: the track
+   shrinks to what the row leaves beside the hint and scrolls sideways (TabStrip `.tabs` + `.fade`). */
+.tabsRow > .tabs {
+	display: flex;
+	flex: 0 1 auto;
+	box-sizing: border-box; /* the 2 px padding inside the 28 px track, or it grows to 32 and the row cuts its bottom */
+	min-width: 0;
+	gap: 1px;
+}
+.tabsRow > .tabs > button {
+	flex: none;
+}
+.count {
+	font-size: var(--text-10);
+	color: var(--fg3);
+	font-variant-numeric: tabular-nums;
+}
+[aria-selected='true'] > .count {
+	color: var(--fg2);
+}
+.hint {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	margin-left: auto;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.hint kbd {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-width: 18px;
+	height: 16px;
+	padding: 0 4px;
+	border: 1px solid var(--sep);
+	border-radius: 4px;
+	font: inherit;
+	font-size: var(--text-10);
+	line-height: 1;
+	color: var(--fg2);
+}
+.esc {
+	margin-left: 6px;
+}
+/* spec/composer#slash-menu: what kind of list it is, above the first group caption; never picked. */
+.menu.menu .note {
+	display: block;
+	padding: 4px 8px 0;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	white-space: nowrap;
+}

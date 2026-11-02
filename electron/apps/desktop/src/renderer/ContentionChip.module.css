@@ -1,0 +1,43 @@
+/* spec/notifications-slack-notes-and-schedules#repo-contention: the contention popover's own rows — the tasks of a repo. The chip, the popover frame and the shared sections
+   (lede, repo row, count) are ui/NoticeChip (spec/notifications-slack-notes-and-schedules#notice-chips). */
+.task {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	box-sizing: border-box;
+	height: 28px;
+	min-height: 28px;
+	margin: 0;
+	padding: 0 8px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+	font-size: var(--text-12);
+	text-align: left;
+}
+.task > svg {
+	flex: none;
+	color: var(--fg3);
+}
+.task small {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+button.task:hover {
+	background: var(--segment-hover);
+	background-image: none;
+}
+button.task:active {
+	background: var(--segment-press);
+}
+.title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

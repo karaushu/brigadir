@@ -1,0 +1,93 @@
+/* spec/remote-access-and-mobile#module-and-settings: the code 4 + 4 at 34 px, the countdown under it, the device's details to confirm. */
+.code {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 6px 0;
+}
+.code span {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 2px;
+	font: 600 34px var(--mono-family);
+	letter-spacing: 6px;
+	color: var(--fg);
+}
+.code span[data-gap] {
+	margin-left: 28px;
+}
+.code[data-dead] span {
+	color: var(--fg3);
+	text-decoration: line-through;
+	text-decoration-thickness: 2px;
+}
+.timer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-11);
+	font-variant-numeric: tabular-nums;
+	color: var(--fg2);
+}
+.timer[data-dead] {
+	color: var(--amber-text);
+}
+.bar {
+	flex: 1;
+	height: 3px;
+	overflow: hidden;
+	border-radius: 2px;
+	background: var(--tint);
+}
+.bar > i {
+	display: block;
+	height: 100%;
+	background: var(--accent);
+	transition: width 1s linear;
+}
+.wait {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-12);
+	color: var(--fg2);
+}
+.spin {
+	display: inline-flex;
+	color: var(--accent);
+}
+.kv {
+	display: grid;
+	grid-template-columns: 96px 1fr;
+	align-items: center;
+	gap: 6px 10px;
+	font-size: var(--text-12);
+}
+.kv > span:nth-child(odd) {
+	text-align: right;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.kvField {
+	display: flex;
+}
+.kvField > input {
+	flex: 1;
+}
+.mono {
+	font-family: var(--mono-family);
+}
+.mono[data-small] {
+	font-size: var(--text-11);
+}
+.hint {
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+.tries {
+	font-size: var(--text-11);
+	color: var(--amber-text);
+}

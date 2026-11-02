@@ -1,0 +1,56 @@
+.dialog header h2 {
+	margin: 0;
+	font-size: var(--text-13);
+	font-weight: 600;
+}
+.dialog header small {
+	flex: 1;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.note {
+	padding: 8px 12px !important;
+	background: var(--amber-soft);
+	color: var(--fg) !important;
+	font-size: var(--text-11) !important;
+}
+.results section + section {
+	margin-top: 6px;
+}
+.results h3 {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	margin: 0;
+	padding: 4px 8px;
+	font: 600 var(--text-11)/1.5 var(--mono-family);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.results h3 small {
+	font-family: var(--ui-family);
+	font-weight: 400;
+}
+.results button {
+	font-family: var(--editor-family, ui-monospace);
+	font-size: var(--text-12);
+}
+.results button > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.results button > small.line {
+	flex: none;
+	min-width: 3ch;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.results button:focus-visible {
+	outline: 1px solid var(--accent);
+	outline-offset: -1px;
+}

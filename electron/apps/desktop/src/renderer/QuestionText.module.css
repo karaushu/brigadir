@@ -1,0 +1,9 @@
+/* spec/chat-turns-plans-and-questions#question-card: the card gives the question its inset; the heading's rhythm, not the log row's padding (doubled as MarkdownPreview's .doc). */
+.text.text {
+	padding: 0;
+	line-height: 1.45;
+}
+/* In the chat every block is a row of the log; in the card the blocks of one question stand 6 px apart, as on the phone. */
+.text.text > * + * {
+	margin-top: 6px;
+}

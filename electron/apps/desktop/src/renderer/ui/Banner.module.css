@@ -1,0 +1,92 @@
+/* A banner (spec/git#commit-dialog, spec/appearance#evolution-redesign): the agent working, proposed (Undo) or failed; a merge that stopped or is
+   resolved. Moved from CommitDialog (rule 17). */
+.banner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 36px;
+	padding: 4px 4px 4px 10px;
+	box-sizing: border-box;
+	border-radius: 8px;
+	background: var(--accent-soft);
+	font-size: var(--text-12);
+	line-height: 16px;
+	color: var(--fg);
+	flex: none;
+	animation: var(--motion-fade);
+}
+.banner > svg {
+	flex: none;
+	color: var(--accent);
+}
+.banner > div {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+.banner small {
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.banner[data-tone='error'] {
+	background: var(--red-soft);
+}
+.banner[data-tone='error'] > svg {
+	color: var(--red);
+}
+.banner[data-tone='warning'] {
+	background: var(--amber-soft);
+}
+.banner[data-tone='warning'] > svg {
+	color: var(--amber);
+}
+.banner[data-tone='success'] {
+	background: var(--green-soft);
+}
+.banner[data-tone='success'] > svg {
+	color: var(--green);
+}
+.banner[data-tone='quiet'] {
+	background: var(--tint);
+	color: var(--fg2);
+}
+.banner[data-tone='quiet'] > svg {
+	color: var(--fg3);
+}
+.banner > span:first-child {
+	flex: none;
+	display: inline-flex;
+}
+@media (prefers-reduced-motion: reduce) {
+	.banner {
+		animation: none;
+	}
+}
+/* `s` (spec/appearance#evolution-redesign, canvas `.k6r-nt`): 28 px, radius 7, 11.5 px; a long text wraps and the action stays at the top. */
+.banner[data-banner='s'] {
+	min-height: 28px;
+	padding: 4px 6px 4px 10px;
+	border-radius: 7px;
+	font-size: var(--text-11-5);
+	align-items: flex-start;
+}
+.banner[data-banner='s'] > svg,
+.banner[data-banner='s'] > span:first-child {
+	margin-top: 1.5px;
+}
+/* A reason without a failure sits centred, like the canvas's quiet `.k6r-nt`. */
+.banner[data-banner='s'][data-tone='quiet'] {
+	align-items: center;
+}
+.banner[data-banner='s'][data-tone='quiet'] > svg,
+.banner[data-banner='s'][data-tone='quiet'] > span:first-child {
+	margin-top: 0;
+}
+.banner[data-banner='s'] > div {
+	padding-block: 2px;
+	align-self: center;
+}
+.banner[data-banner='s'] > button {
+	margin-block: -1px;
+}

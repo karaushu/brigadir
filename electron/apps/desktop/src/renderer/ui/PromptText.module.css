@@ -1,0 +1,99 @@
+/* spec/composer#mentions: the composer's pills and inline thumbnails in the person's message. */
+.pill {
+	min-height: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	margin: 0 1px;
+	padding: 0 5px;
+	border: 0;
+	border-radius: 4px;
+	background: var(--accent-soft);
+	color: var(--accent);
+	font: inherit;
+	font-size: var(--text-12);
+	line-height: 18px;
+	vertical-align: 1px;
+	white-space: nowrap;
+	box-shadow: none;
+	filter: none;
+}
+.pill[data-kind='file'],
+.pill[data-kind='model'] {
+	font-family: var(--mono-family);
+	font-size: 11.5px;
+}
+.pill svg {
+	flex: none;
+}
+/* spec/composer#slash-highlight: a command or a skill the `/` list knows is text on the pill's tint, monospace. */
+.command {
+	padding: 1px 3px;
+	margin: 0 -1px;
+	border-radius: 4px;
+	background: var(--accent-soft);
+	color: var(--accent);
+	font-family: var(--mono-family);
+	font-size: 0.9em;
+}
+button.pill {
+	cursor: pointer;
+}
+button.pill:hover {
+	background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.image {
+	min-height: 0;
+	display: inline-flex;
+	box-sizing: border-box;
+	width: 39px;
+	height: 26px;
+	margin: 0 1px;
+	padding: 0;
+	vertical-align: -8px;
+	border: 1px solid var(--sep);
+	border-radius: 4px;
+	overflow: hidden;
+	background: var(--term, var(--tint));
+	cursor: zoom-in;
+	filter: none;
+	box-shadow: none;
+}
+.image:hover {
+	border-color: var(--accent);
+}
+.image img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.image[data-state='loading'] {
+	background: linear-gradient(
+		110deg,
+		var(--tint) 30%,
+		color-mix(in srgb, var(--fg) 9%, transparent) 50%,
+		var(--tint) 70%
+	);
+}
+.image[data-state='missing'] {
+	border-style: dashed;
+	background: transparent;
+	cursor: default;
+}
+/* spec/composer#formatting: the message is Markdown, drawn as an answer is; the box around it keeps its own padding and rhythm, and a single line break
+   (the renderer makes it a <br>) is the only break the text itself carries, so the box pre-wrap must not show the markup newlines. */
+.text {
+	white-space: normal;
+}
+.markdown.markdown {
+	padding: 0;
+	font-size: inherit;
+	line-height: inherit;
+}
+.markdown > * + * {
+	margin-top: 4px;
+}
+.markdown > p + p {
+	margin-top: 10px;
+}

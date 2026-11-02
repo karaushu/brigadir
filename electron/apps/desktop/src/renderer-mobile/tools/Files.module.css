@@ -1,0 +1,142 @@
+/* spec/remote-access-and-mobile#phone-task-tools: the crumbs, the file icons, the code, the Markdown preview and the segments. */
+.crumbs {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 40px;
+	padding: 0 16px;
+	border-bottom: 0.5px solid var(--sep);
+	font-size: 14px;
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+}
+.crumbs > svg,
+.crumb > svg {
+	flex: none;
+}
+.crumbs button {
+	min-width: 0;
+	height: 40px;
+}
+.crumbs b {
+	color: var(--fg);
+	font-weight: 600;
+}
+.root {
+	display: inline-flex;
+	align-items: center;
+	color: var(--fg2);
+}
+.crumb {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+}
+.space {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.changed {
+	flex: none;
+	font-size: 12px;
+}
+.list {
+	padding: 6px 0 calc(20px + var(--safe-bottom));
+}
+.folder {
+	color: var(--accent);
+}
+.file {
+	color: var(--fg2);
+}
+/* The read-only code's place; CodeMirror and its theme live in the shadow root (Code.tsx). */
+.code {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+.wideSegments.wideSegments {
+	display: flex;
+	width: 100%;
+}
+.segments {
+	flex: none;
+	padding: 0 16px 8px;
+	border-bottom: 0.5px solid var(--sep);
+}
+/* The preview — the chat's Markdown at a document's scale. */
+.markdown {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px 16px calc(24px + var(--safe-bottom));
+	font-size: 16px;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.markdown > * {
+	margin: 0;
+}
+.markdown h1 {
+	font-size: 26px;
+	font-weight: 700;
+	line-height: 1.25;
+}
+.markdown h2 {
+	margin-top: 6px;
+	font-size: 20px;
+	font-weight: 650;
+	line-height: 1.3;
+}
+.markdown h3 {
+	font-size: 17px;
+	font-weight: 650;
+}
+.markdown :is(ul, ol) {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding-left: 22px;
+}
+.markdown code {
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: var(--tint);
+	font-family: var(--mono-family);
+	font-size: 13px;
+}
+.markdown pre {
+	padding: 12px 14px;
+	border-radius: 10px;
+	background: var(--term);
+	font-family: var(--mono-family);
+	font-size: 13px;
+	white-space: pre-wrap;
+}
+.markdown pre code {
+	padding: 0;
+	background: none;
+}
+.markdown a {
+	color: var(--accent-text);
+}
+.markdown blockquote {
+	padding-left: 12px;
+	border-left: 3px solid var(--sep);
+	color: var(--fg2);
+}
+.markdown table {
+	border-collapse: collapse;
+	font-size: 14px;
+}
+.markdown :is(th, td) {
+	padding: 4px 8px;
+	border: 0.5px solid var(--sep);
+}
+.sheetCaption {
+	padding: 10px 18px 6px;
+}

@@ -1,0 +1,62 @@
+/* spec/pull-requests-and-ci#pr-summary: the crumb over a PR file opened from the summary. */
+.crumb {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	/* A 32 px row of S controls, «Back to …» 6 px from the right edge. */
+	height: calc(var(--control-h-s) + 8px);
+	padding: 0 6px 0 10px;
+	box-sizing: border-box;
+	border-bottom: 1px solid var(--sep);
+	background: var(--accent-soft);
+	font-size: var(--text-12);
+}
+.crumb > svg {
+	flex: none;
+	color: var(--accent);
+}
+.crumb > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* spec/pull-requests-and-ci#pr-files: a PR file between the click and its diff. The line sits where the first diff row starts. */
+/* spec/appearance#loading: the diff's place as skeleton lines and the small status line under them. */
+.opening {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 12px;
+}
+.openError {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 10px 12px;
+	/* A read failure: 36 px with Retry 6 px from the right edge. */
+	height: 36px;
+	padding: 0 6px 0 10px;
+	box-sizing: border-box;
+	border-radius: 7px;
+	background: var(--red-soft);
+	color: var(--fg);
+	font-size: var(--text-12);
+}
+.openError > svg {
+	flex: none;
+	color: var(--red);
+}
+.openError > span {
+	flex: 1;
+	min-width: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+	.opening > svg {
+		animation: none;
+	}
+}

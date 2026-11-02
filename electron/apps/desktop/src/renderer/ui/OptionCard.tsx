@@ -1,0 +1,52 @@
+import { Choice } from './Controls';
+import { Glyph } from './Glyph';
+import s from './OptionCard.module.css';
+
+type Glyphs = Parameters<typeof Glyph>[0]['name'];
+/**
+ * A choice as a card: a radio, a sign and a name, the consequence under it. The whole card is
+ * the label (rule 15: it hovers as a whole); chosen — the accent ring on a soft accent. The review's Verdict (spec/appearance#evolution-redesign).
+ */
+export function OptionCard({
+	name,
+	checked,
+	disabled = false,
+	glyph,
+	title,
+	description,
+	onChange,
+}: {
+	name: string;
+	checked: boolean;
+	disabled?: boolean;
+	glyph: Glyphs;
+	title: string;
+	description: string;
+	onChange(): void;
+}) {
+	return (
+		<label
+			className={s.card}
+			data-checked={checked || undefined}
+			data-disabled={disabled || undefined}
+			data-option-card>
+			<span className={s.radio} data-size="s">
+				<Choice
+					type="radio"
+					label={title}
+					name={name}
+					checked={checked}
+					disabled={disabled}
+					onChange={onChange}
+				/>
+			</span>
+			<span className={s.copy}>
+				<b>
+					<Glyph name={glyph} size={13} />
+					{title}
+				</b>
+				<small>{description}</small>
+			</span>
+		</label>
+	);
+}

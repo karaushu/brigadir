@@ -1,0 +1,143 @@
+/* The app's waiting shapes (rule 17): a spinning ring, skeleton bars and rows, and the place a list holds while it loads. */
+.spin {
+	display: inline-flex;
+	flex: none;
+	color: var(--accent);
+}
+.spin > svg {
+	animation: loading-spin 900ms linear infinite;
+}
+@keyframes loading-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+.skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	padding: 4px 0;
+}
+.skeleton > i {
+	height: 8px;
+	border-radius: 4px;
+	background: var(--tint2);
+	animation: loading-pulse 1.4s ease-in-out infinite alternate;
+}
+@keyframes loading-pulse {
+	to {
+		opacity: 0.45;
+	}
+}
+/* A row's place: a list row's height, the name and the line under it as bars. */
+.row {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	height: 34px;
+	padding: 0 8px;
+}
+.row > .skeleton {
+	gap: 5px;
+	padding: 0;
+}
+/* A panel, diff or editor that loads: text bars across the frame's width, from its top, whatever the frame centres. */
+.text {
+	flex: 1 1 auto;
+	align-self: stretch;
+	justify-self: stretch;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 10px 12px;
+	text-align: left;
+}
+/* A list that loads: its rows in place, the spinning status in the middle of what is left. */
+.placeholder {
+	flex: 1 0 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.status {
+	margin: auto;
+	padding: 16px 8px;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--text-12);
+	color: var(--fg2);
+}
+/* Under the rows, not down in the empty middle of a tall panel: the status stays beside what it speaks of. */
+.placeholder > .status {
+	margin: 4px auto 0;
+}
+/* Under skeleton blocks: the small line at the start, beside what it speaks of. */
+.status[data-under] {
+	margin: 0;
+	padding: 2px 0;
+}
+/* A board while it is read (spec/appearance#loading): the columns of the board (tint, 8 px corners, 248 px at least) with their
+   headings, 12 px apart; skeleton cards the height of a real card (state, title, preview, meta). */
+.board {
+	display: flex;
+	align-items: stretch;
+	gap: 12px;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+.column {
+	flex: 1;
+	min-width: 248px;
+	display: flex;
+	flex-direction: column;
+	background: var(--tint);
+	border-radius: 8px;
+}
+.columnHeading {
+	flex: none;
+	min-height: 37px;
+	padding: 8px 8px 6px 12px;
+	display: flex;
+	align-items: center;
+	font-size: var(--text-11);
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	line-height: 18px;
+	color: var(--fg2);
+}
+.cards {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 0 8px 8px;
+	min-height: 0;
+}
+.card {
+	flex: none;
+	padding: 12px 10px;
+	border-radius: 7px;
+	background: var(--card);
+	border: 1px solid var(--sep);
+}
+.card .skeleton > i:first-child {
+	height: 6px;
+}
+.board[data-view='list'] {
+	flex-direction: column;
+	gap: 16px;
+}
+.board[data-view='list'] .column {
+	flex: none;
+	min-width: 0;
+	background: transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+	.skeleton > i,
+	.spin > svg {
+		animation: none;
+	}
+}

@@ -1,0 +1,130 @@
+/* spec/git#main-tree-branches: the group sits under «Isolation», a row per chosen git repo.
+   spec/tasks#sheet-rail: repos 10 px apart, the label 16 px high and 6 px over the first. */
+.group {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding-top: 8px;
+}
+.label {
+	margin-bottom: -4px;
+	font-size: var(--text-11);
+	line-height: 16px;
+	color: var(--fg2);
+}
+.repo {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.row {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+}
+.repoName {
+	width: 72px;
+	flex: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: var(--text-11) var(--mono-family);
+	color: var(--fg2);
+}
+.popup {
+	flex: 1;
+	min-width: 0;
+}
+.popup > div {
+	width: 100%;
+	min-width: 0;
+}
+.popup button[aria-haspopup] {
+	width: 100%;
+}
+/* spec/tasks#sheet-rail: a git ref is mono 11.5. */
+.popup button[aria-haspopup] > span {
+	font: var(--text-11-5) var(--mono-family);
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* A branch other than the current one is the change the start will make. */
+.popup[data-changed] button[aria-haspopup] > span {
+	color: var(--accent-text, var(--accent));
+	font-weight: 600;
+}
+/* spec/tasks#sheet-rail: what the start does — 11.5 on 16 px lines. */
+.line {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	margin: 0;
+	font-size: var(--text-11-5);
+	line-height: 16px;
+	color: var(--fg2);
+}
+.line > svg {
+	flex: none;
+	margin-top: 2px;
+}
+.line b {
+	font-weight: 600;
+	color: var(--fg);
+}
+.line[data-tone='amber'] {
+	color: var(--fg);
+}
+.line[data-tone='amber'] > svg {
+	color: var(--amber);
+}
+.dirtyRow {
+	display: flex;
+}
+.repo [role='radiogroup'] {
+	display: flex;
+	width: 100%;
+}
+.repo [role='radiogroup'] button {
+	flex-grow: 1;
+	justify-content: center;
+}
+.commit {
+	display: flex;
+	margin: -4px 0 0 -8px;
+}
+.commit > button.commit,
+.commit > button {
+	color: var(--amber-text, var(--amber));
+}
+.repo .commit > button:not(:disabled) {
+	color: var(--amber-text, var(--amber));
+}
+.pull {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	font-size: var(--text-11-5);
+	line-height: 16px;
+	color: var(--fg2);
+}
+.pull > svg {
+	flex: none;
+	margin-top: 2px;
+}
+.pull > span {
+	flex: 1;
+	min-width: 0;
+}
+.pull b {
+	font-weight: 600;
+	color: var(--fg);
+}
+.pull > label,
+.pull > button {
+	flex: none;
+}
+/* The switch S keeps its 24 px target but not the line's height: it stands at the end of the first line. */
+.pull > button[role='switch'] {
+	margin: -4px -6px -4px 0;
+}

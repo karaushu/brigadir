@@ -1,0 +1,149 @@
+.toolDiff {
+	margin: 5px 0 0 24px;
+	border: 1px solid var(--sep);
+	border-radius: 5px;
+	overflow: hidden;
+}
+.toolDiff header {
+	padding: 4px 8px;
+	color: var(--fg2);
+	font: var(--text-10) var(--mono-family);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.toolDiff p {
+	padding: 6px 8px;
+	color: var(--fg2);
+}
+.code {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+.fileChip {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	height: 20px;
+	padding: 0 7px;
+	border: 0;
+	border-radius: 5px;
+	background-color: var(--tint);
+	color: var(--fg2);
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+}
+.fileChip:hover {
+	background-image: linear-gradient(var(--segment-hover), var(--segment-hover));
+}
+.fileChip:active {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+.fileChip:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+.fileChip > span:first-child {
+	max-width: 200px;
+	overflow: hidden;
+}
+
+.code[role='button'] {
+	cursor: pointer;
+}
+.code[role='button']:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+.elapsed {
+	margin-left: 8px;
+	color: var(--fg2);
+	font-size: var(--text-10);
+	font-weight: 400;
+	white-space: nowrap;
+}
+.toolDiff {
+	animation: var(--motion-fade);
+}
+
+/* spec/appearance#evolution-redesign: the turn's footer is a muted line under the answer, no rule above it — «Done · 19s» mono
+   10.5 in fg3, a 22-px copy and more, then the file chips (20 px, tint, mono 10.5) on the right while they fit one line;
+   in two lines they follow the buttons. The footer closes the turn: the next prompt stands 34 px under it. */
+.turnFooter {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	row-gap: 6px;
+	margin: 6px 16px 0;
+	color: var(--fg3);
+	font-size: var(--text-11);
+}
+.turnFooter > span:first-child {
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+	white-space: nowrap;
+}
+.turnFooter > button[aria-label] {
+	color: var(--fg3);
+}
+.turnFooter > button[aria-label]:hover:not(:disabled) {
+	color: var(--fg);
+}
+.footSpacer {
+	flex: 1 0 0;
+}
+.turnFooter > .chip {
+	height: 20px;
+	padding: 0 7px;
+	border-radius: 5px;
+	font: calc(10.5px * var(--ui-scale)) var(--ui-family);
+}
+.turnFooter > .chip[aria-expanded='true'] {
+	background: color-mix(in srgb, var(--accent) 13%, transparent);
+	color: var(--accent);
+}
+.toolDiff:only-of-type > header {
+	display: none;
+}
+/* The preview line is one band — the added/removed tint runs under the numbers too, the sign is 14 px in the
+   added/removed-line colour. */
+.toolDiff [data-compact='true'] > :first-child {
+	background: transparent;
+}
+.toolDiff [data-compact='true'] > :nth-child(2) {
+	width: 14px;
+}
+.toolDiff [data-compact='true'][data-kind='added'] > :nth-child(2) {
+	color: var(--diffAddedFg);
+}
+.toolDiff [data-compact='true'][data-kind='removed'] > :nth-child(2) {
+	color: var(--diffRemovedFg);
+}
+/* spec/chat-turns-plans-and-questions#background-commands: the chip «in background N» — 22 px, tint, the sign and a mono count in fg3; failed is red. */
+.backgroundChip.backgroundChip {
+	gap: 5px;
+	height: 22px;
+	padding: 0 7px;
+	border-radius: 6px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.backgroundChip > span:first-child {
+	display: flex;
+}
+.backgroundChip small {
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+	color: var(--fg3);
+	font-variant-numeric: tabular-nums;
+}
+.backgroundChip[data-background-chip='failed'] {
+	background: var(--red-soft);
+	color: var(--diffRemovedFg);
+}
+.backgroundChip[data-background-chip='interrupted'] {
+	color: var(--fg3);
+}
+.backgroundChip:disabled {
+	opacity: 1;
+}

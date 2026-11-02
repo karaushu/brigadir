@@ -1,0 +1,24 @@
+.path {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	flex: 1;
+	/* spec/editor#editor-chrome: the interface font 12, the folder --fg2 and the name 500. */
+	font: var(--text-12) var(--ui-family);
+}
+.directory {
+	direction: rtl;
+	text-align: left;
+	unicode-bidi: plaintext;
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.path strong {
+	color: var(--fg);
+	font: 500 var(--text-12) var(--ui-family);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}

@@ -1,0 +1,17 @@
+/* spec/composer#island / spec/composer-steering-queue-and-ghost#steering-hold, spec/composer#agent-capsule: the island's right end — Stop and Send, M (28) circles 8 px apart. Look is the system's: Send is
+   primary solid, Stop is primary solid too, and steps back to neutral (--tint2) while there is text to send; disabled is the system's one opacity. */
+.send {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+}
+.button.button {
+	width: var(--c-h);
+	padding: 0;
+	border-radius: 50%;
+}
+.button.button[data-appearance='neutral'] {
+	background-color: var(--tint2);
+}

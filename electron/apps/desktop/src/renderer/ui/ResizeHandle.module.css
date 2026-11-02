@@ -1,0 +1,50 @@
+/* spec/task-window#resize-handles: the handle takes no room in the layout. The column's own border is the line you see; the grab zone lies 4 px
+   over both neighbours, and the accent line shows on hover and keyboard focus only. */
+.handle {
+	flex: none;
+	width: 0;
+	align-self: stretch;
+	cursor: col-resize;
+	touch-action: none;
+	position: relative;
+	z-index: 5;
+	outline: none;
+}
+.handle::before {
+	content: '';
+	position: absolute;
+	inset: 0 -4px;
+}
+.handle::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -0.5px;
+	width: 2px;
+	background: var(--accent);
+	opacity: 0;
+	transition: opacity var(--motion-fast) var(--motion-ease);
+	pointer-events: none;
+}
+.handle[aria-orientation='horizontal'] {
+	width: auto;
+	height: 0;
+	cursor: row-resize;
+}
+.handle[aria-orientation='horizontal']::before {
+	inset: -4px 0;
+}
+.handle[aria-orientation='horizontal']::after {
+	top: -0.5px;
+	bottom: auto;
+	left: 0;
+	right: 0;
+	width: auto;
+	height: 2px;
+}
+.handle:hover::after,
+.handle:focus-visible::after,
+body[data-resizing='true'] .handle:active::after {
+	opacity: 1;
+}

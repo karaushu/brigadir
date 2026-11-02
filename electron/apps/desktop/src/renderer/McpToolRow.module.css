@@ -1,0 +1,216 @@
+/* spec/chat#mcp-calls: an MCP call, two lines. The hover tints the whole summary — both lines and the empty space (rule 15). */
+.summary.summary {
+	align-items: flex-start;
+	height: auto;
+	white-space: normal;
+	margin: 0 -6px;
+	padding: 3px 6px;
+	border-radius: 6px;
+	line-height: 18px;
+}
+.summary.summary:hover {
+	background: var(--tint);
+}
+.summary.summary > svg,
+.summary.summary > [role='img'] {
+	margin-top: 4.5px;
+}
+.summary.summary > [role='img'] {
+	margin-top: 2.5px;
+}
+.body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	height: 18px;
+}
+.sign {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg2);
+	--bgdot: var(--content);
+}
+.summary .title.title {
+	flex: none;
+	color: var(--fg);
+	font-size: calc(12.5px * var(--ui-scale));
+	font-weight: 400;
+	white-space: nowrap;
+}
+.who {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg3);
+	font-size: var(--text-11);
+}
+.spacer {
+	flex: 1;
+	min-width: 8px;
+}
+.detail {
+	display: block;
+	min-width: 0;
+	padding-left: 18px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg3);
+	font-size: var(--text-11);
+	line-height: 15px;
+}
+.detail[data-failed] {
+	color: var(--diffRemovedFg);
+}
+.detail [data-kind='code'] {
+	font-family: var(--mono-family);
+}
+.detail [data-kind='added'] {
+	color: var(--green);
+}
+.detail [data-kind='removed'] {
+	color: var(--red);
+	margin-left: 0.3em;
+}
+.result {
+	margin: 6px 0 2px 20px;
+	padding: 8px 10px;
+	border: 1px solid var(--sep);
+	border-radius: 5px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: var(--text-12);
+	color: var(--fg);
+}
+.fields {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	column-gap: 14px;
+	row-gap: 4px;
+	margin: 0;
+}
+.fields > div {
+	display: contents;
+}
+.fields dt {
+	color: var(--fg2);
+}
+.fields dd {
+	margin: 0;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.result pre.text,
+.raw pre {
+	margin: 0;
+	padding: 7px 10px;
+	max-height: 280px;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	background: var(--term);
+	border: 1px solid var(--sep);
+	border-radius: 5px;
+	font: var(--text-11)/17px var(--mono-family);
+	color: var(--fg2);
+}
+.json {
+	align-self: flex-start;
+	margin-left: calc(-1 * var(--c-px));
+}
+.raw {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.raw small {
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.files {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.files li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.path {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font: var(--text-11) var(--mono-family);
+	color: var(--fg);
+}
+.state {
+	flex: none;
+	width: 12px;
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg2);
+}
+.added,
+.removed {
+	flex: none;
+	font: var(--text-10) var(--mono-family);
+}
+.added {
+	color: var(--green);
+}
+.removed {
+	color: var(--red);
+	margin-left: -4px;
+}
+.more {
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.message {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.message small {
+	color: var(--fg2);
+	font-size: var(--text-10);
+}
+.message p {
+	margin: 0;
+	max-height: 120px;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	line-height: 1.45;
+}
+.result pre.text[data-failed] {
+	border-color: color-mix(in srgb, var(--red) 45%, var(--sep));
+	background: color-mix(in srgb, var(--red) 8%, transparent);
+	color: var(--red);
+}
+.text [data-line='hunk'] {
+	color: var(--fg3);
+}
+.text [data-line='added'] {
+	color: var(--green);
+}
+.text [data-line='removed'] {
+	color: var(--red);
+}

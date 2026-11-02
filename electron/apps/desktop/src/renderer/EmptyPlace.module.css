@@ -1,0 +1,24 @@
+/* spec/task-window-workspace#empty-work-area: placement only (rule 17) — canvas «MainTreeEmpty», «TaskAllHidden»: centred in its place, the helmet 44 px --fg3
+   at .6, 18 px above a 248 px column of action rows 1 px apart. */
+.empty {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 18px;
+	background: var(--content);
+}
+.helmet {
+	display: inline-flex;
+	color: var(--fg3);
+	opacity: 0.6;
+}
+.actions {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	width: 248px;
+}

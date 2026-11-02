@@ -1,0 +1,214 @@
+.tree {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+/* spec/task-window#panel: the filter row sits under the panel's tabs without a line, 8 px in. */
+.tree.tree > header {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 8px 8px 6px;
+	flex: none;
+}
+/* spec/appearance#control-scale: the filter is a system field of the header's size (M): --tint, no border, an inset ring on focus (frame). */
+.search {
+	composes: frame from './ui/Input.module.css';
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: 1;
+	min-width: 0;
+	height: var(--c-h);
+	padding: 0 var(--c-px);
+	border: 0;
+	border-radius: var(--c-r);
+	background: var(--tint);
+}
+.search.search input {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+}
+.search > svg,
+.search kbd {
+	color: var(--fg3);
+	flex: none;
+}
+.search kbd {
+	font: var(--text-10) var(--mono-family);
+}
+.tree > p {
+	padding: 8px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+/* spec/task-window#files-look: scope header 34 px out of the scroll, rows 24 px at 13/500. */
+/* spec/appearance#evolution-redesign: the repo roots are rows of the tree (ui/RepoRoot); a selected root keeps the tree's selection look. */
+.root[aria-selected='true'] {
+	background: var(--sel);
+}
+/* «Add folder…» closes the list, 4 px under the last row and 6 px above the list's end. */
+.add {
+	padding-bottom: 6px;
+}
+/* spec/task-window#panel: rows of 26 px at Geist 12.5/400, radius 6; hover --hover over the whole row. */
+.item {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: calc(var(--control-h-s) + 2px);
+	margin: 0 6px;
+	border-radius: 6px;
+	padding-right: 8px;
+	cursor: default;
+	color: var(--fg);
+	font: 400 var(--text-12-5)/18px var(--ui-family);
+}
+.item:hover {
+	background: var(--hover);
+}
+.item[aria-selected='true'] {
+	background: var(--accent-fill);
+	color: var(--selfg);
+}
+.item[aria-disabled='true'] {
+	opacity: 0.5;
+}
+.guide {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+	background: var(--tree-guide);
+	pointer-events: none;
+}
+.guide[data-active='true'] {
+	background: var(--tree-guide-on);
+}
+.item[aria-selected='true'] > .guide {
+	background: color-mix(in srgb, var(--selfg) 35%, transparent);
+}
+.item button,
+.disclosure {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	color: var(--fg2);
+}
+.disclosure {
+	width: 14px;
+	height: var(--control-h-s);
+}
+/* spec/appearance#control-scale: the row's chevron is a 24 × 24 target inside the 28 px row; the margins keep the 14 px disclosure column. */
+.item button {
+	width: var(--control-h-s);
+	height: var(--control-h-s);
+	margin: 0 -5px;
+	border-radius: var(--control-r-s);
+}
+.name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* spec/task-window#files-look: the git status colours the name, a folder with such descendants too; spec/appearance#evolution-redesign: and the letter. */
+.item[data-status='modified'] .name,
+.item[data-status='renamed'] .name,
+.letter[data-status='modified'],
+.letter[data-status='renamed'] {
+	color: var(--accent);
+}
+.item[data-status='added'] .name,
+.item[data-status='untracked'] .name,
+.letter[data-status='added'],
+.letter[data-status='untracked'] {
+	color: var(--green);
+}
+.item[data-status='deleted'] .name,
+.letter[data-status='deleted'] {
+	color: var(--red);
+}
+.item[data-status='conflict'] .name,
+.letter[data-status='conflict'] {
+	color: var(--amber);
+}
+.item[data-ignored='true'] .name {
+	color: var(--tree-ignored);
+}
+.item[aria-selected='true'] .name {
+	color: var(--selfg);
+}
+.spacer {
+	flex: 1;
+}
+.item .badge {
+	flex: none;
+	padding: 0 4px;
+	border: 1px solid var(--sep);
+	border-radius: 3px;
+	font: var(--text-9) var(--mono-family);
+	color: var(--fg2);
+}
+.item .branch {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 150px;
+	font: 400 var(--text-12)/18px var(--ui-family);
+	color: var(--fg2);
+}
+.item .branch > svg {
+	flex: none;
+}
+.item .branch > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* spec/appearance#evolution-redesign: the letter closes the row after the badge and branch, as wide as itself, Geist 12/500. */
+.letter {
+	flex: none;
+	margin-left: auto;
+	font-size: var(--text-12);
+	font-weight: 500;
+}
+.item[aria-selected='true'] button,
+.item[aria-selected='true'] small,
+.item[aria-selected='true'] .branch,
+.item[aria-selected='true'] .letter {
+	color: var(--selfg);
+}
+/* spec/task-window#panel: a quiet 28 px foot over a hairline, 11 px --fg3. */
+.tree.tree > footer {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 29px;
+	padding: 0 4px 0 12px;
+	border-top: 1px solid var(--hair);
+	flex: none;
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+.tree > footer > span {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.tree {
+	animation: var(--motion-fade);
+}
+.item {
+	transition: background-color var(--motion-fast) ease;
+}
+.item button svg {
+	transition: rotate var(--motion-travel) var(--motion-ease);
+}

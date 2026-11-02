@@ -1,0 +1,156 @@
+/* spec/remote-access-and-mobile#module-and-settings: the window's Remote button, the cover, the device window's states. */
+
+/* spec/appearance#evolution-redesign, spec/remote-access-and-mobile#remote-button: Remote is the `remote` icon button in the window's top strip, the same
+   in this machine's window and in a window of another machine. Placed absolutely like the sidebar toggle, after the drag
+   regions. Over the sidebar it stands 4 px before the toggle (S on macOS, M on Windows and Linux). */
+.chip {
+	position: absolute;
+	z-index: 2;
+	top: calc((var(--strip-h) - var(--c-h)) / 2);
+	left: calc(var(--sidebar-w, 280px) - 10px - var(--control-h-m) - 4px - var(--c-h));
+	display: inline-flex;
+	-webkit-app-region: no-drag;
+}
+/* With the sidebar gone it follows «Show sidebar» in the window strip (M): window buttons · toggle · Remote, and the dot is
+   ringed in the strip's --win instead of the sidebar's --sb. The toggle stays where it is without Remote (App.module.css). */
+:global([data-sidebar-present='false']) > .chip {
+	left: calc(84px + var(--control-h-m) + 6px);
+	--dot-ring: var(--win);
+}
+/* Windows and Linux: ☰ · toggle · Remote — the toggle follows ☰ at 48. */
+:root:is([data-platform='win32'], [data-platform='linux'])
+	:global([data-sidebar-present='false'])
+	> .chip {
+	left: calc(48px + var(--control-h-m) + 6px);
+}
+
+/* spec/sidebar#section-rail: in the sections rail the button stands in the column. */
+.railChip {
+	display: inline-flex;
+}
+
+/* The cover: the whole window, the window's own background; a drag strip where the title bar was. */
+.cover {
+	position: fixed;
+	inset: 0;
+	width: 100vw;
+	max-width: none;
+	height: 100vh;
+	max-height: none;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: var(--win);
+	color: var(--fg);
+	outline: none;
+}
+.cover[open] {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.cover::backdrop {
+	background: var(--win);
+}
+.drag {
+	position: absolute;
+	inset: 0 0 auto;
+	height: var(--strip-h);
+	-webkit-app-region: drag;
+}
+.card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	width: 380px;
+	text-align: center;
+	animation: var(--motion-enter);
+}
+.coverIcon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 52px;
+	height: 52px;
+	border-radius: 14px;
+	background: var(--accent-soft);
+	color: var(--accent-text);
+}
+.card h1 {
+	margin: 6px 0 0;
+	font-size: var(--text-20);
+	font-weight: 600;
+}
+.card p {
+	font-size: var(--text-12);
+	line-height: 1.5;
+	color: var(--fg2);
+}
+.acts {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+.runs {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	width: 100%;
+	margin-top: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--sep);
+	border-radius: 9px;
+	text-align: left;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.runs b {
+	font-weight: 500;
+	color: var(--fg);
+}
+
+/* Lost: the content under the bar dims and takes no input until the link is back. Both layers start under the window
+   strip and its 1 px line (spec/remote-access-and-mobile#remote-button). */
+.dim {
+	position: absolute;
+	z-index: 25;
+	inset: calc(var(--strip-h) + 1px) 0 0 0;
+	background: var(--win);
+	opacity: 0.55;
+}
+/* Taken back on the machine, or closed by it: a card over the content, the sidebar stays readable. */
+.taken {
+	position: absolute;
+	z-index: 30;
+	inset: calc(var(--strip-h) + 1px) 0 0 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(in srgb, var(--win) 88%, transparent);
+	animation: var(--motion-enter);
+}
+.takenCard {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 380px;
+	padding: 18px;
+	border: 1px solid var(--sep);
+	border-radius: 10px;
+	background: var(--card);
+	box-shadow: 0 10px 30px var(--shadow);
+}
+.takenCard > b {
+	font-size: var(--text-14);
+	font-weight: 600;
+}
+.takenCard > span {
+	font-size: var(--text-12);
+	line-height: 1.5;
+	color: var(--fg2);
+}
+.takenActions {
+	display: flex;
+	gap: 8px;
+}

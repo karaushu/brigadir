@@ -1,0 +1,993 @@
+:root,
+[data-palette='light'] {
+	--win: #ffffff;
+	--tb: #e9e9eb;
+	--sb: #f2f2f4;
+	--content: #ffffff;
+	--card: #ffffff;
+	--field: #ffffff;
+	--sep: #dcdcde;
+	--fg: rgba(0, 0, 0, 0.85);
+	--fg2: rgba(0, 0, 0, 0.6);
+	--fg3: rgba(0, 0, 0, 0.42);
+	--accent: #0064e1;
+	--selfg: #ffffff;
+	--knob: #ffffff;
+	--amber: #a35200;
+	--red: #d70015;
+	--green: #1a7f37;
+	--amber-fill: #a35200;
+	--on-amber: #ffffff;
+	--red-fill: #d70015;
+	--on-red: #ffffff;
+	--tint: rgba(0, 0, 0, 0.045);
+	/* --tint and --amber-soft as an ink and its strength: a colour made opaque over a surface (the crew deck, spec/sidebar#project-groups). */
+	--tint-ink: #000000;
+	--tint-a: 4.5%;
+	--amber-soft-a: 10%;
+	--tint2: rgba(0, 0, 0, 0.08);
+	--hover: rgba(0, 0, 0, 0.03);
+	/* spec/composer#agent-capsule, spec/appearance#evolution-redesign: a hairline inside a surface (the island's environment row, a project group, the
+	   footer) and the crew card's lighter tray. */
+	--hair: rgba(0, 0, 0, 0.07);
+	--tray: color-mix(in srgb, var(--win) 70%, transparent);
+	--term: #f6f6f7;
+	/* spec/chat#layout: a code block's surface and a floating card's lift. */
+	--code: rgba(0, 0, 0, 0.04);
+	--lift: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 4px 18px rgba(0, 0, 0, 0.08);
+	--segment-hover: rgba(0, 0, 0, 0.055);
+	--segment-press: rgba(0, 0, 0, 0.09);
+	/* spec/appearance#segments: the chosen segment — on the light theme the card over the track's grey. */
+	--segment-on: var(--card);
+	--segment-on-shadow: 0 1px 2px var(--shadow);
+	--amber-soft: rgba(163, 82, 0, 0.1);
+	--amber-text: #a35200;
+	--amber-hover: rgba(163, 82, 0, 0.17);
+	--amber-press: rgba(163, 82, 0, 0.25);
+	--purple: #8250df;
+	--purple-soft: rgba(130, 80, 223, 0.12);
+	--green-soft: rgba(26, 127, 55, 0.1);
+	--red-soft: rgba(215, 0, 21, 0.08);
+	--shadow: rgba(0, 0, 0, 0.18);
+	--diffAddedBg: #e6f7ea;
+	--diffRemovedBg: #fdeaec;
+	--diffAddedFg: #1a7f37;
+	--diffRemovedFg: #cf222e;
+	--diffGutter: #fafafa;
+	--accent-opacity: 14%;
+	--sel-opacity: 12%;
+	/* The second stripe of a collapsed crew's deck (spec/sidebar#project-groups): its tone at this share of its strength over --win. */
+	--deck-fade: 1;
+	/* spec/task-window-workspace#layout-switch: the Layout glyphs — one opaque colour and the opacity on the whole glyph, as --fg2 / --fg. */
+	--column-ink: #000000;
+	--column-rest: 0.5;
+	--column-hover: 0.85;
+	color-scheme: light;
+}
+:root[data-theme='dark'],
+[data-palette='dark'] {
+	--win: #1e1e1e;
+	--tb: #2c2c2e;
+	--sb: #232323;
+	--content: #1e1e1e;
+	--card: #2a2a2a;
+	--field: #1e1e1e;
+	--sep: #3a3a3c;
+	--fg: rgba(255, 255, 255, 0.87);
+	--fg2: rgba(255, 255, 255, 0.62);
+	--fg3: rgba(255, 255, 255, 0.4);
+	--accent: #0a84ff;
+	--selfg: #ffffff;
+	--knob: #ffffff;
+	--amber: #ff9f0a;
+	--red: #ff453a;
+	--green: #32d74b;
+	--amber-fill: #ff9f0a;
+	--on-amber: rgba(0, 0, 0, 0.85);
+	--red-fill: #d4322a;
+	--on-red: #ffffff;
+	--tint: rgba(255, 255, 255, 0.06);
+	--tint-ink: #ffffff;
+	--tint-a: 6%;
+	--amber-soft-a: 13%;
+	--tint2: rgba(255, 255, 255, 0.1);
+	--hover: rgba(255, 255, 255, 0.035);
+	--hair: rgba(255, 255, 255, 0.07);
+	--tray: rgba(0, 0, 0, 0.22);
+	--term: #141414;
+	--code: rgba(255, 255, 255, 0.05);
+	--lift: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 6px 22px rgba(0, 0, 0, 0.45);
+	--segment-hover: rgba(255, 255, 255, 0.07);
+	--segment-press: rgba(255, 255, 255, 0.11);
+	/* spec/appearance#segments: --card (#2a2a2a) sat on the track's ≈#2b2b2b; the chosen segment is lighter, with a hairline rim. */
+	/* spec/appearance#segments: a light layer over the track, not a solid grey — on the main surface it is #454547,
+	   on a lighter surface (the New task sheet's column, popovers) it stays a step lighter than the track instead of melting in. */
+	--segment-on: rgba(255, 255, 255, 0.12);
+	--segment-on-shadow: 0 1px 2px var(--shadow), inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
+	--amber-soft: rgba(255, 159, 10, 0.13);
+	--amber-text: #ff9f0a;
+	--amber-hover: rgba(255, 159, 10, 0.22);
+	--amber-press: rgba(255, 159, 10, 0.3);
+	--purple: #bf5af2;
+	--purple-soft: rgba(191, 90, 242, 0.16);
+	--green-soft: rgba(50, 215, 75, 0.14);
+	--red-soft: rgba(255, 69, 58, 0.14);
+	--shadow: rgba(0, 0, 0, 0.45);
+	--diffAddedBg: #16351f;
+	--diffRemovedBg: #3a1a1d;
+	--diffAddedFg: #3fb950;
+	--diffRemovedFg: #f85149;
+	--diffGutter: #181818;
+	--accent-opacity: 20%;
+	--sel-opacity: 22%;
+	--deck-fade: 0.6;
+	--column-ink: #ffffff;
+	--column-rest: 0.55;
+	--column-hover: 0.87;
+	color-scheme: dark;
+}
+
+/* Accent (spec/appearance#accent, docs/design-tokens.md, spec/editor#editor-principles): --accent draws text, lines and small marks on a surface;
+   --accent-fill is a surface under --selfg. `system` keeps the macOS colour set inline by App.
+   --accent-soft is only ever mixed here: a static value in a theme block outranked this rule and kept dark-theme blue.
+   spec/appearance#evolution-redesign: --sel is the soft accent of a selected row or card (12 % / 22 %) under --fg; a menu item under the
+   pointer and a row chosen by keyboard stay a solid --accent-fill under --selfg, as ui/Popover (spec/appearance#popover-shell). */
+:root,
+[data-palette] {
+	/* spec/appearance#component-details: three shadows of the surfaces over the window — menus and popovers; modals and sheets; toasts and
+	   floating panels. Each theme's --shadow (.18 light, .45 dark) is their dark variant. */
+	--shadow-menu: 0 10px 30px var(--shadow);
+	--shadow-modal: 0 16px 48px var(--shadow);
+	--shadow-float: 0 8px 24px var(--shadow);
+	--accent-fill: var(--accent);
+	--accent-soft: color-mix(in srgb, var(--accent-fill) var(--accent-opacity), transparent);
+	--sel: color-mix(in srgb, var(--accent) var(--sel-opacity), transparent);
+}
+/* spec/notifications-slack-notes-and-schedules#message-classes: accent as small text on --card (toast actions). On the dark theme --accent lightens by 22 %: #0a84ff on --card is 3.8:1. */
+:root,
+[data-palette] {
+	--accent-text: var(--accent);
+}
+:root[data-theme='dark'],
+[data-palette='dark'] {
+	--accent-text: color-mix(in srgb, var(--accent) 78%, #ffffff);
+}
+:root[data-accent='system'][data-accent-text='dark'] {
+	--selfg: rgba(0, 0, 0, 0.85);
+}
+:root[data-accent='blue'],
+:root[data-accent='blue'] [data-palette='light'] {
+	--accent: #0064e1;
+	--accent-fill: #0064e1;
+	--selfg: #ffffff;
+}
+:root[data-theme='dark'][data-accent='blue'],
+:root[data-accent='blue'] [data-palette='dark'] {
+	--accent: #0a84ff;
+	--accent-fill: #0a84ff;
+	--selfg: #ffffff;
+}
+:root[data-accent='indigo'],
+:root[data-accent='indigo'] [data-palette='light'] {
+	--accent: #5856d6;
+	--accent-fill: #5856d6;
+	--selfg: #ffffff;
+}
+:root[data-theme='dark'][data-accent='indigo'],
+:root[data-accent='indigo'] [data-palette='dark'] {
+	--accent: #7d7aff;
+	--accent-fill: #7d7aff;
+	--selfg: #ffffff;
+}
+:root[data-accent='purple'],
+:root[data-accent='purple'] [data-palette='light'] {
+	--accent: #9a3fc8;
+	--accent-fill: #9a3fc8;
+	--selfg: #ffffff;
+}
+:root[data-theme='dark'][data-accent='purple'],
+:root[data-accent='purple'] [data-palette='dark'] {
+	--accent: #bf5af2;
+	--accent-fill: #bf5af2;
+	--selfg: #ffffff;
+}
+:root[data-accent='pink'],
+:root[data-accent='pink'] [data-palette='light'] {
+	--accent: #d0357a;
+	--accent-fill: #d0357a;
+	--selfg: #ffffff;
+}
+:root[data-theme='dark'][data-accent='pink'],
+:root[data-accent='pink'] [data-palette='dark'] {
+	--accent: #ee4f94;
+	--accent-fill: #ee4f94;
+	--selfg: #ffffff;
+}
+:root[data-accent='teal'],
+:root[data-accent='teal'] [data-palette='light'] {
+	--accent: #0a7d93;
+	--accent-fill: #0a7d93;
+	--selfg: #ffffff;
+}
+:root[data-theme='dark'][data-accent='teal'],
+:root[data-accent='teal'] [data-palette='dark'] {
+	--accent: #40c8e0;
+	--accent-fill: #40c8e0;
+	--selfg: rgba(0, 0, 0, 0.85);
+}
+:root[data-accent='yellow'],
+:root[data-accent='yellow'] [data-palette='light'] {
+	--accent: #946d00;
+	--accent-fill: #f5bd00;
+	--selfg: rgba(0, 0, 0, 0.85);
+	--accent-opacity: 18%;
+}
+:root[data-theme='dark'][data-accent='yellow'],
+:root[data-accent='yellow'] [data-palette='dark'] {
+	--accent: #f8c500;
+	--accent-fill: #f8c500;
+	--selfg: rgba(0, 0, 0, 0.85);
+	--accent-opacity: 20%;
+}
+:root[data-accent='graphite'],
+:root[data-accent='graphite'] [data-palette='light'] {
+	--accent: #6e6e73;
+	--accent-fill: #6e6e73;
+	--selfg: #ffffff;
+}
+:root[data-theme='dark'][data-accent='graphite'],
+:root[data-accent='graphite'] [data-palette='dark'] {
+	--accent: #8a8a8f;
+	--accent-fill: #8a8a8f;
+	--selfg: #ffffff;
+}
+/* Swatches in Settings ▸ Appearance show each accent fill in the current theme (spec/appearance#accent). */
+:root {
+	--swatch-blue: #0064e1;
+	--swatch-indigo: #5856d6;
+	--swatch-purple: #9a3fc8;
+	--swatch-pink: #d0357a;
+	--swatch-teal: #0a7d93;
+	--swatch-yellow: #f5bd00;
+	--swatch-graphite: #6e6e73;
+}
+:root[data-theme='dark'] {
+	--swatch-blue: #0a84ff;
+	--swatch-indigo: #7d7aff;
+	--swatch-purple: #bf5af2;
+	--swatch-pink: #ee4f94;
+	--swatch-teal: #40c8e0;
+	--swatch-yellow: #f8c500;
+	--swatch-graphite: #8a8a8f;
+}
+/* Controls system (spec/appearance#control-scale): one size sets height, padding, radius, font, icon and gap for every control.
+   `data-size` (s|m|l|xl) on a control or on a group of them publishes the --c-* set below; a control with no size is M. */
+:root {
+	/* spec/task-window#repo-line: the window's top strip — sidebar header, task toolbar, project header,
+	   the Windows/Linux caption buttons' overlay (main/window-chrome.ts titleStripHeight); one value, no literal elsewhere. */
+	--strip-h: 48px;
+	/* spec/task-window#repo-line: the strip right of the sidebar is the window's own colour; the OS buttons follow it. */
+	--strip-bg: var(--win);
+	/* spec/appearance#evolution-redesign: keyboard focus of a pill or a row that lights whole — a soft accent ring at its edge. */
+	--ring-soft: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+	--control-h-s: 24px;
+	--control-h-m: 28px;
+	--control-h-l: 32px;
+	--control-h-xl: 40px;
+	--control-px-s: 10px;
+	--control-px-m: 12px;
+	--control-px-l: 14px;
+	--control-px-xl: 18px;
+	--control-r-s: 6px;
+	--control-r-m: 7px;
+	--control-r-l: 8px;
+	--control-r-xl: 10px;
+	/* --control-fs-* are text: they live with the --text-N tokens below, which the chat redefines (spec/appearance#chat-text-size). */
+	--control-icon-s: 14px;
+	--control-icon-m: 16px;
+	--control-icon-l: 16px;
+	--control-icon-xl: 18px;
+	--control-gap-s: 5px;
+	--control-gap-m: 6px;
+	--control-gap-l: 6px;
+	--control-gap-xl: 8px;
+	--control-box-s: 14px;
+	--control-box-m: 16px;
+	--control-box-l: 18px;
+	--control-box-xl: 20px;
+	--control-sw-w-s: 28px;
+	--control-sw-w-m: 34px;
+	--control-sw-w-l: 40px;
+	--control-sw-w-xl: 48px;
+	--control-sw-h-s: 16px;
+	--control-sw-h-m: 20px;
+	--control-sw-h-l: 24px;
+	--control-sw-h-xl: 28px;
+	--control-seg-r-s: 4px;
+	--control-seg-r-m: 5px;
+	--control-seg-r-l: 6px;
+	--control-seg-r-xl: 8px;
+	--control-disabled: 0.4;
+	--control-min-target: 24px;
+	--c-h: var(--control-h-m);
+	--c-px: var(--control-px-m);
+	--c-r: var(--control-r-m);
+	--c-fs: var(--control-fs-m);
+	--c-ic: var(--control-icon-m);
+	--c-gap: var(--control-gap-m);
+	--c-box: var(--control-box-m);
+	--c-sw-w: var(--control-sw-w-m);
+	--c-sw-h: var(--control-sw-h-m);
+	--c-seg-r: var(--control-seg-r-m);
+}
+[data-size='s'] {
+	--c-h: var(--control-h-s);
+	--c-px: var(--control-px-s);
+	--c-r: var(--control-r-s);
+	--c-fs: var(--control-fs-s);
+	--c-ic: var(--control-icon-s);
+	--c-gap: var(--control-gap-s);
+	--c-box: var(--control-box-s);
+	--c-sw-w: var(--control-sw-w-s);
+	--c-sw-h: var(--control-sw-h-s);
+	--c-seg-r: var(--control-seg-r-s);
+}
+[data-size='m'] {
+	--c-h: var(--control-h-m);
+	--c-px: var(--control-px-m);
+	--c-r: var(--control-r-m);
+	--c-fs: var(--control-fs-m);
+	--c-ic: var(--control-icon-m);
+	--c-gap: var(--control-gap-m);
+	--c-box: var(--control-box-m);
+	--c-sw-w: var(--control-sw-w-m);
+	--c-sw-h: var(--control-sw-h-m);
+	--c-seg-r: var(--control-seg-r-m);
+}
+[data-size='l'] {
+	--c-h: var(--control-h-l);
+	--c-px: var(--control-px-l);
+	--c-r: var(--control-r-l);
+	--c-fs: var(--control-fs-l);
+	--c-ic: var(--control-icon-l);
+	--c-gap: var(--control-gap-l);
+	--c-box: var(--control-box-l);
+	--c-sw-w: var(--control-sw-w-l);
+	--c-sw-h: var(--control-sw-h-l);
+	--c-seg-r: var(--control-seg-r-l);
+}
+[data-size='xl'] {
+	--c-h: var(--control-h-xl);
+	--c-px: var(--control-px-xl);
+	--c-r: var(--control-r-xl);
+	--c-fs: var(--control-fs-xl);
+	--c-ic: var(--control-icon-xl);
+	--c-gap: var(--control-gap-xl);
+	--c-box: var(--control-box-xl);
+	--c-sw-w: var(--control-sw-w-xl);
+	--c-sw-h: var(--control-sw-h-xl);
+	--c-seg-r: var(--control-seg-r-xl);
+}
+/* Appearance: the colour set a solid, soft, ghost or outline control draws with. Warning and danger text mixes towards --fg so a soft one stays readable;
+   --ap-line is the appearance's own colour for an outline's text and 1 px edge (spec/tasks#archive-window). */
+[data-appearance='primary'] {
+	--ap: var(--accent-fill);
+	--ap-fg: var(--selfg);
+	--ap-text: var(--accent);
+	--ap-soft: var(--accent-soft);
+	--ap-line: var(--accent);
+}
+[data-appearance='neutral'] {
+	--ap: var(--fg);
+	--ap-fg: var(--win);
+	--ap-text: var(--fg);
+	--ap-soft: var(--tint);
+	--ap-line: var(--fg2);
+}
+[data-appearance='warning'] {
+	--ap: var(--amber-fill);
+	--ap-fg: var(--on-amber);
+	--ap-text: color-mix(in srgb, var(--amber) 72%, var(--fg));
+	--ap-soft: var(--amber-soft);
+	--ap-line: var(--amber-text);
+}
+[data-appearance='danger'] {
+	--ap: var(--red-fill);
+	--ap-fg: var(--on-red);
+	--ap-text: color-mix(in srgb, var(--red) 72%, var(--fg));
+	--ap-soft: var(--red-soft);
+	--ap-line: var(--red);
+}
+:root {
+	--modal-scrim: rgba(0, 0, 0, 0.42);
+}
+/* spec/architecture-and-platform#window-frame: on Windows and Linux the OS buttons lie over the right end of the window's top strip. Their width comes from the
+   Window Controls Overlay; a Mac previewing the layout (BRIGADIR_CHROME_PLATFORM) has no overlay and keeps 3 × 46 px. */
+:root:is([data-platform='win32'], [data-platform='linux']) {
+	--os-controls-right: calc(
+		100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px))
+	);
+	--os-strip: var(--strip-h);
+}
+/* spec/appearance#evolution-redesign: Geist and Geist Mono, the app's own fonts on every OS (fonts/README.md, SIL OFL 1.1). Variable, one file per
+   style; `block` because they are local files, so text never flashes in the OS font first. */
+@font-face {
+	font-family: 'Geist';
+	src: url('./fonts/Geist-Variable.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: block;
+}
+@font-face {
+	font-family: 'Geist';
+	src: url('./fonts/Geist-Italic-Variable.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: italic;
+	font-display: block;
+}
+@font-face {
+	font-family: 'Geist Mono';
+	src: url('./fonts/GeistMono-Variable.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: block;
+}
+@font-face {
+	font-family: 'Geist Mono';
+	src: url('./fonts/GeistMono-Italic-Variable.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: italic;
+	font-display: block;
+}
+/* Interface font (spec/appearance#interface-font): --ui-family is the chosen family before the system stack; every UI font size is a --text-N token scaled by --ui-scale = size / 13.
+   Only text scales; icons, paddings and control heights stay. Terminal, diff and editor keep their own sizes (spec/appearance#fonts).
+   spec/appearance#evolution-redesign: with no choice it is Geist; --mono-family is the mono of the interface itself (paths, branches, hashes,
+   code in the chat), Geist Mono — the three code surfaces keep their own --terminal/--diff/--editor-family. */
+:root {
+	--ui-family: 'Geist', -apple-system, 'SF Pro Text', system-ui, sans-serif;
+	--mono-family: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	--ui-scale: 1;
+	/* spec/appearance#chat-text-size: the chat's own scale (chat size / 13.5) and the interface's, kept apart so a chat can hand menus back to it.
+	   apply-appearance.ts sets --chat-scale; until then the chat follows the interface. */
+	--chat-scale: var(--ui-scale);
+	--interface-scale: var(--ui-scale);
+	/* A find hit in the log is marker yellow, the current one solid under dark text, in both themes. */
+	--find-hit: rgba(255, 200, 61, 0.45);
+	--find-current: #ffc83d;
+	--on-find: #1b1b1f;
+}
+/* A custom property with var() is computed where it is declared, so a descendant inherits the number, not the formula:
+   the text tokens are declared again on every root that scales differently — a chat (spec/appearance#chat-text-size) and a menu inside it. */
+:root,
+:where([data-chat-text], [data-chat-text] [popover]) {
+	--text-7: calc(7px * var(--ui-scale));
+	--text-8: calc(8px * var(--ui-scale));
+	--text-9: calc(9px * var(--ui-scale));
+	--text-10: calc(10px * var(--ui-scale));
+	/* A section caption in a picker («Suggested», «All icons», «Colour»). */
+	--text-10-5: calc(10.5px * var(--ui-scale));
+	--text-11: calc(11px * var(--ui-scale));
+	/* The find panel's counter; the diff's fold band «Show unchanged lines». */
+	--text-11-5: calc(11.5px * var(--ui-scale));
+	--text-12: calc(12px * var(--ui-scale));
+	--text-12-5: calc(12.5px * var(--ui-scale));
+	--text-13: calc(13px * var(--ui-scale));
+	/* spec/appearance#evolution-redesign: the chat's text, 13.5 / 22. */
+	--text-chat: calc(13.5px * var(--ui-scale));
+	--text-14: calc(14px * var(--ui-scale));
+	--text-15: calc(15px * var(--ui-scale));
+	--text-19: calc(19px * var(--ui-scale));
+	--text-20: calc(20px * var(--ui-scale));
+	--control-fs-s: var(--text-12);
+	--control-fs-m: var(--text-13);
+	--control-fs-l: var(--text-13);
+	--control-fs-xl: var(--text-14);
+}
+/* spec/appearance#chat-text-size: the transcript, the composer and the rows over it (`[data-chat-text]` on Conversation and Quick ask) scale
+   by the chat's size; every `calc(Npx * var(--ui-scale))` inside follows, as do the controls' fonts. A menu opened from the
+   chat keeps the interface's size, as the sidebar, toolbar, tabs, panel and modals do. Zero specificity: a `data-size`
+   or a module class on the same element wins. */
+:where([data-chat-text]) {
+	--ui-scale: var(--chat-scale);
+	--c-fs: var(--control-fs-m);
+	font-size: var(--text-13);
+}
+:where([data-chat-text] [popover]) {
+	--ui-scale: var(--interface-scale);
+	--c-fs: var(--control-fs-m);
+	font-size: var(--text-13);
+}
+:root {
+	font-family: var(--ui-family);
+	font-size: var(--text-13);
+	color: var(--fg);
+	background: var(--win);
+}
+* {
+	box-sizing: border-box;
+}
+body {
+	margin: 0;
+	-webkit-font-smoothing: antialiased;
+}
+/* Modals and popovers sit in the top layer over the top-strip titlebars, which are window drag regions: macOS
+   takes clicks there before the page does (the Esc button of a tall Settings dialog). Every open
+   top-layer surface carves its rect out of the drag region (rule 14). */
+dialog[open],
+[popover]:popover-open {
+	-webkit-app-region: no-drag;
+}
+button,
+input,
+textarea {
+	font: inherit;
+	color: var(--fg);
+}
+textarea {
+	resize: none;
+}
+button {
+	border: 0;
+	border-radius: var(--c-r);
+	background: transparent;
+	padding: 0;
+	min-height: 0;
+}
+/* spec/appearance#control-scale: one hover and one pressed for every button. They are layers over the button's own fill, never in place of it:
+   `button:hover` outranks a module's single class, and a `background` here turned every filled button see-through (spec/appearance#hover).
+   A module that draws its own hover (`.x:hover { background: … }`) outranks this and replaces the layer. */
+button:hover {
+	background-image: linear-gradient(var(--segment-hover), var(--segment-hover));
+}
+button:active {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+button:disabled,
+button[aria-disabled='true'],
+input:disabled,
+textarea:disabled,
+select:disabled {
+	opacity: var(--control-disabled);
+}
+button:focus-visible,
+input[type='checkbox']:focus-visible,
+input[type='radio']:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+/* A focus ring marks only a control. Scrollers, logs, lists and popup containers take focus for keyboard scrolling
+   (Chromium makes every scroller focusable) but draw no ring; zero specificity, so a module's own :focus-visible wins. */
+:where(
+	:focus-visible:not(
+		button,
+		a[href],
+		input,
+		textarea,
+		select,
+		summary,
+		[contenteditable]:not([contenteditable='false']),
+		[role='button'],
+		[role='link'],
+		[role='tab'],
+		[role='option'],
+		[role='radio'],
+		[role='checkbox'],
+		[role='switch'],
+		[role='menuitem'],
+		[role='menuitemradio'],
+		[role='menuitemcheckbox'],
+		[role='treeitem'],
+		[role='row'],
+		[role='gridcell'],
+		[role='slider'],
+		[role='separator'],
+		[role='combobox'],
+		[role='spinbutton']
+	)
+) {
+	outline: none;
+}
+h1,
+h2,
+h3,
+p {
+	margin: 0;
+}
+code {
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+}
+
+input::placeholder {
+	color: var(--fg3);
+}
+button {
+	cursor: default;
+}
+button:disabled {
+	pointer-events: none;
+}
+
+/* [data-palette]: the kit's light and dark columns (spec/appearance#bundled-fonts) draw the Brigadir code theme in their own palette. */
+:root,
+[data-palette='light'] {
+	--syntaxKeyword: #a626a4;
+	--syntaxString: #27702d;
+	--syntaxComment: #727272;
+	--syntaxNumber: #965800;
+	--syntaxType: #006b80;
+	--syntaxFunction: #005cc5;
+	--syntaxProperty: #874411;
+}
+:root[data-theme='dark'],
+[data-palette='dark'] {
+	--syntaxKeyword: #d9a0df;
+	--syntaxString: #a9d38c;
+	--syntaxComment: #929292;
+	--syntaxNumber: #eab776;
+	--syntaxType: #75d3db;
+	--syntaxFunction: #85bfff;
+	--syntaxProperty: #e1b38a;
+}
+/* spec/settings-modules-and-onboarding#intro: the light that runs over the helmet on the intro's hello. */
+:root {
+	--introGlint: rgba(255, 255, 255, 0.7);
+	--providerClaude: #d97757;
+}
+/* spec/settings-modules-and-onboarding#intro: swatches of each code theme for its picker (keyword, string, function, type, comment). */
+:root {
+	--codeSwatch-brigadir-1: #a626a4;
+	--codeSwatch-brigadir-2: #27702d;
+	--codeSwatch-brigadir-3: #005cc5;
+	--codeSwatch-brigadir-4: #006b80;
+	--codeSwatch-brigadir-5: #727272;
+	--codeSwatch-vscode-1: #0000ff;
+	--codeSwatch-vscode-2: #a31515;
+	--codeSwatch-vscode-3: #795e26;
+	--codeSwatch-vscode-4: #267f99;
+	--codeSwatch-vscode-5: #008000;
+	--codeSwatch-intellij-1: #0033b3;
+	--codeSwatch-intellij-2: #067d17;
+	--codeSwatch-intellij-3: #00627a;
+	--codeSwatch-intellij-4: #000000;
+	--codeSwatch-intellij-5: #8c8c8c;
+}
+:root[data-theme='dark'] {
+	--codeSwatch-brigadir-1: #d9a0df;
+	--codeSwatch-brigadir-2: #a9d38c;
+	--codeSwatch-brigadir-3: #85bfff;
+	--codeSwatch-brigadir-4: #75d3db;
+	--codeSwatch-brigadir-5: #929292;
+	--codeSwatch-vscode-1: #569cd6;
+	--codeSwatch-vscode-2: #ce9178;
+	--codeSwatch-vscode-3: #dcdcaa;
+	--codeSwatch-vscode-4: #4ec9b0;
+	--codeSwatch-vscode-5: #6a9955;
+	--codeSwatch-intellij-1: #cf8e6d;
+	--codeSwatch-intellij-2: #6aab73;
+	--codeSwatch-intellij-3: #56a8f5;
+	--codeSwatch-intellij-4: #bcbec4;
+	--codeSwatch-intellij-5: #7a7e85;
+}
+:root[data-code-theme='vscode'] {
+	--syntaxKeyword: #0000ff;
+	--syntaxString: #a31515;
+	--syntaxComment: #008000;
+	--syntaxNumber: #098658;
+	--syntaxType: #267f99;
+	--syntaxFunction: #795e26;
+	--syntaxProperty: #001080;
+}
+:root[data-code-theme='vscode'][data-theme='dark'] {
+	--syntaxKeyword: #569cd6;
+	--syntaxString: #ce9178;
+	--syntaxComment: #6a9955;
+	--syntaxNumber: #b5cea8;
+	--syntaxType: #4ec9b0;
+	--syntaxFunction: #dcdcaa;
+	--syntaxProperty: #9cdcfe;
+}
+:root[data-code-theme='intellij'] {
+	--syntaxKeyword: #0033b3;
+	--syntaxString: #067d17;
+	--syntaxComment: #8c8c8c;
+	--syntaxNumber: #1750eb;
+	--syntaxType: #000000;
+	--syntaxFunction: #00627a;
+	--syntaxProperty: #871094;
+}
+:root[data-code-theme='intellij'][data-theme='dark'] {
+	--syntaxKeyword: #cf8e6d;
+	--syntaxString: #6aab73;
+	--syntaxComment: #7a7e85;
+	--syntaxNumber: #2aacb8;
+	--syntaxType: #bcbec4;
+	--syntaxFunction: #56a8f5;
+	--syntaxProperty: #c77dbb;
+}
+@media (prefers-contrast: more) {
+	:root[data-code-theme] {
+		--syntaxComment: #555555;
+	}
+	:root[data-code-theme][data-theme='dark'] {
+		--syntaxComment: #b0b0b0;
+	}
+}
+.syntax-keyword {
+	color: var(--syntaxKeyword);
+}
+.syntax-string {
+	color: var(--syntaxString);
+}
+.syntax-comment {
+	color: var(--syntaxComment);
+}
+.syntax-number {
+	color: var(--syntaxNumber);
+}
+.syntax-type {
+	color: var(--syntaxType);
+}
+.syntax-function {
+	color: var(--syntaxFunction);
+}
+.syntax-property {
+	color: var(--syntaxProperty);
+}
+/* spec/editor-code-intelligence#font-styles: font styles, as in IntelliJ — bold keywords, italic comments — in every highlighted surface and every code theme.
+   No synthesis: a font without bold or italic shows code plain rather than smeared or slanted; monospace widths hold. */
+:root:not([data-syntax-styles='off']) .syntax-keyword {
+	font-weight: 700;
+	font-synthesis: none;
+}
+:root:not([data-syntax-styles='off']) .syntax-comment {
+	font-style: italic;
+	font-synthesis: none;
+}
+
+.cm-review-note {
+	margin: 6px 12px 10px 50px;
+	max-width: min(620px, calc(100% - 64px));
+	font: var(--text-12)/1.45 var(--ui-family);
+	white-space: normal;
+	color: var(--fg);
+}
+
+[data-focused-row='true'] {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+	background: var(--accent-soft);
+}
+
+/* Shared motion: spec/appearance#motion. Animate controls, never native selection geometry. */
+:root {
+	--motion-fast: 120ms;
+	--motion-enter-time: 180ms;
+	--motion-travel: 240ms;
+	--motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--motion-enter: brigadir-rise var(--motion-enter-time) var(--motion-ease) both;
+	--motion-reveal: brigadir-reveal var(--motion-enter-time) var(--motion-ease) both;
+	--motion-fade: brigadir-fade var(--motion-enter-time) var(--motion-ease) both;
+}
+@keyframes brigadir-rise {
+	from {
+		opacity: 0;
+		translate: 0 6px;
+	}
+	to {
+		opacity: 1;
+		translate: 0 0;
+	}
+}
+@keyframes brigadir-reveal {
+	from {
+		opacity: 0;
+		clip-path: inset(0 0 14% 0 round 7px);
+	}
+	to {
+		opacity: 1;
+		clip-path: inset(0 round 7px);
+	}
+}
+@keyframes brigadir-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+button {
+	transition:
+		background-color var(--motion-fast) ease,
+		color var(--motion-fast) ease,
+		border-color var(--motion-fast) ease,
+		box-shadow var(--motion-fast) ease;
+}
+dialog {
+	opacity: 0;
+	translate: 0 8px;
+	transition:
+		opacity var(--motion-enter-time) var(--motion-ease),
+		translate var(--motion-travel) var(--motion-ease),
+		display var(--motion-travel) allow-discrete,
+		overlay var(--motion-travel) allow-discrete;
+}
+dialog[open] {
+	opacity: 1;
+	translate: 0 0;
+}
+dialog::backdrop {
+	opacity: 0;
+	transition:
+		opacity var(--motion-enter-time) ease,
+		display var(--motion-travel) allow-discrete,
+		overlay var(--motion-travel) allow-discrete;
+}
+dialog[open]::backdrop {
+	opacity: 1;
+}
+@starting-style {
+	dialog[open] {
+		opacity: 0;
+		translate: 0 8px;
+	}
+	dialog[open]::backdrop {
+		opacity: 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--motion-fast: 0ms;
+		--motion-enter-time: 0ms;
+		--motion-travel: 0ms;
+		--motion-enter: none;
+		--motion-fade: none;
+		--motion-reveal: none;
+	}
+	dialog,
+	dialog[open] {
+		translate: none;
+	}
+}
+
+/* Semantic project identity dots; deliberately exclude status red/amber and selection blue. */
+/* Nine dots that read apart in pairs: hue spread plus one desaturated slate, tan and periwinkle. No red, orange or blue (spec/sidebar#layout). */
+:root {
+	--project-0: #8e44ad;
+	--project-1: #0f8f88;
+	--project-2: #7c8f1a;
+	--project-3: #c2337f;
+	--project-4: #2e8b45;
+	--project-5: #a68a00;
+	--project-6: #5f7a92;
+	--project-7: #8c6444;
+	--project-8: #6b6fc2;
+}
+:root[data-theme='dark'] {
+	--project-0: #bf5af2;
+	--project-1: #3ad4cb;
+	--project-2: #c8dc46;
+	--project-3: #f26cad;
+	--project-4: #4fcf7a;
+	--project-5: #e6c23a;
+	--project-6: #9cb0bd;
+	--project-7: #c99a76;
+	--project-8: #a8abf0;
+}
+/* spec/appearance#evolution-redesign: the nine colours of a project icon — one palette in both themes; the tile is the colour at 16 %. */
+:root {
+	--icon-red: #ef4444;
+	--icon-orange: #f59e0b;
+	--icon-yellow: #eab308;
+	--icon-green: #22c55e;
+	--icon-teal: #14b8a6;
+	--icon-blue: #3b82f6;
+	--icon-purple: #8b5cf6;
+	--icon-pink: #ec4899;
+	--icon-gray: #71717a;
+}
+/* spec/pull-requests-and-ci#pr-panel: PR author avatars — one palette in both themes, white initials read on each. */
+:root {
+	--avatar-0: #2f9e44;
+	--avatar-1: #d9480f;
+	--avatar-2: #9c36b5;
+	--avatar-3: #1971c2;
+	--avatar-4: #c2255c;
+	--avatar-5: #0c8599;
+	--avatar-fg: #ffffff;
+}
+
+/* spec/task-window#files-look: the Files tree. Indent guides, ignored names and the file format icons; format colours do not follow the accent.
+   spec/task-window#panel: guides are a hairline, the active folder's guide --fg3, ignored names --fg3. */
+:root {
+	--tree-guide: rgba(0, 0, 0, 0.07);
+	--tree-guide-on: rgba(0, 0, 0, 0.42);
+	--tree-ignored: rgba(0, 0, 0, 0.42);
+	--ft-ts: #3178c6;
+	--ft-tsfill: #3178c6;
+	--ft-react: #0a8fb0;
+	--ft-js: #9a7400;
+	--ft-jsfill: #f0c419;
+	--ft-json: #8e55d0;
+	--ft-md: #4f6b86;
+	--ft-docker: #1d7fd8;
+	--ft-git: #d4521f;
+	--ft-env: #0f8f88;
+	--ft-rc: #c2337f;
+	--ft-yml: #b0452a;
+	--ft-img: #2e8b45;
+	--ft-sh: #5f7a92;
+	--ft-lock: #8c6444;
+	--ft-lib: #c47400;
+	--ft-tstext: #ffffff;
+	--ft-jstext: #1d1a00;
+}
+:root[data-theme='dark'] {
+	--tree-guide: rgba(255, 255, 255, 0.07);
+	--tree-guide-on: rgba(255, 255, 255, 0.4);
+	--tree-ignored: rgba(255, 255, 255, 0.4);
+	--ft-ts: #4d9df5;
+	--ft-tsfill: #3b7fe0;
+	--ft-react: #4cc9e8;
+	--ft-js: #f2cc3d;
+	--ft-jsfill: #e9c43a;
+	--ft-json: #b98cf0;
+	--ft-md: #93a9bf;
+	--ft-docker: #4aa8f5;
+	--ft-git: #f07a4b;
+	--ft-env: #3ad4cb;
+	--ft-rc: #f26cad;
+	--ft-yml: #f08a6c;
+	--ft-img: #4fcf7a;
+	--ft-sh: #9cb0bd;
+	--ft-lock: #c99a76;
+	--ft-lib: #f0a030;
+}
+
+/* spec/appearance#control-scale: filled warning and danger keep 4.5:1 and better with High Contrast on. The text over them is --on-amber and --on-red. */
+@media (prefers-contrast: more) {
+	:root,
+	[data-palette='light'] {
+		--amber-fill: #8a4600;
+		--red-fill: #b3000f;
+		--on-amber: #ffffff;
+		--on-red: #ffffff;
+	}
+	:root[data-theme='dark'],
+	[data-palette='dark'] {
+		--amber-fill: #ffb340;
+		--red-fill: #b52a22;
+		--on-amber: rgba(0, 0, 0, 0.85);
+		--on-red: #ffffff;
+	}
+}
+
+/* spec/task-window-workspace#layout-switch: a Layout glyph is drawn in one opaque colour; the opacity is the glyph's, so the fill and the frame meet
+   without the lighter seams a translucent --fg2 left where they overlap. Hover and press take the --fg strength. */
+svg[data-column='true'] {
+	color: var(--column-ink);
+	opacity: var(--column-rest);
+	transition: opacity var(--motion-fast) ease;
+}
+:hover > svg[data-column='true'],
+:active > svg[data-column='true'],
+[aria-expanded='true'] > svg[data-column='true'],
+[role^='menuitem']:focus > * > svg[data-column='true'] {
+	opacity: var(--column-hover);
+}
+/* spec/task-window-workspace#work-area: the spinner of a tab the agent acts on. */
+svg[data-spin='true'] {
+	color: var(--accent);
+	animation: brigadir-spin 0.9s linear infinite;
+}
+@keyframes brigadir-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	svg[data-spin='true'] {
+		animation-duration: 2.4s;
+	}
+}

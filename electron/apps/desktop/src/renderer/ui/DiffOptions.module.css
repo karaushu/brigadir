@@ -1,0 +1,134 @@
+.options {
+	position: relative;
+	flex: none;
+}
+/* spec/git#commit-dialog, the snapshot picker: quiet text at rest (fg3, 10.5), tint on hover, tint2 while the
+   popover is open — not the accent of a selected toggle; the name shrinks with «…», the chevron stays. */
+.pickerRoot {
+	display: flex;
+	flex: 0 1 auto;
+	min-width: 0;
+}
+button.picker.picker[data-variant='ghost'] {
+	flex: 0 1 auto;
+	gap: 4px;
+	min-width: 0;
+	padding: 0 6px;
+	color: var(--fg3);
+	font-size: var(--text-10-5);
+	font-weight: inherit;
+}
+button.picker.picker[data-variant='ghost']:hover:not(:disabled) {
+	color: var(--fg);
+}
+button.picker.picker[data-variant='ghost'][aria-expanded='true']:not(:disabled) {
+	background-color: var(--tint2);
+	color: var(--fg);
+}
+.picker > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.timeline {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 2px 8px 8px;
+}
+.empty {
+	margin: 0;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+button.all {
+	gap: 10px;
+	width: 100%;
+	justify-content: flex-start;
+	text-align: left;
+	white-space: normal;
+}
+.all > span:last-child {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.all strong {
+	font-size: var(--text-12);
+	font-weight: 600;
+}
+.all small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.allIcon {
+	display: grid;
+	place-items: center;
+	flex: none;
+	color: var(--fg2);
+}
+.all[aria-pressed='true'] .allIcon {
+	color: var(--accent);
+}
+.range {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.checkpoint {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	min-width: 0;
+}
+.label {
+	font-size: var(--text-10);
+	color: var(--fg2);
+	font-weight: 600;
+}
+.checkpoint > div {
+	min-width: 0;
+}
+.checkpoint button[aria-haspopup='listbox'] {
+	font-variant-numeric: tabular-nums;
+}
+.checkpoint button > span {
+	gap: 8px;
+	white-space: nowrap;
+}
+.badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 30px;
+	height: 23px;
+	padding: 0 5px;
+	border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--sep));
+	border-radius: 5px;
+	background: var(--accent-soft);
+	color: var(--accent);
+	font: 600 var(--text-11)/1 var(--mono-family);
+	flex: none;
+}
+.checkpoint[data-endpoint='current'] .badge {
+	color: var(--green);
+	border-color: color-mix(in srgb, var(--green) 40%, var(--sep));
+	background: color-mix(in srgb, var(--green) 10%, transparent);
+}
+.checkpoint [role='listbox'] {
+	left: 0;
+	right: 0;
+	min-width: 0;
+	max-height: 200px;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	font-variant-numeric: tabular-nums;
+}
+.checkpoint [role='option'] {
+	gap: 8px;
+}
+.checkpoint [role='option'][data-active='true'] .badge {
+	color: inherit;
+	border-color: currentColor;
+	background: transparent;
+}

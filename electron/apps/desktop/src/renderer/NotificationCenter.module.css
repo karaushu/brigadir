@@ -1,0 +1,227 @@
+/* spec/notifications-slack-notes-and-schedules#notification-center: the bell in the window's top strip and its popover. */
+
+/* Over the sidebar the bell stands 4 px before Remote, or before the toggle without it (S on macOS, M on Windows and Linux),
+   placed absolutely after the drag regions like both of them (RemoteChrome.module.css, App.module.css). */
+.slot {
+	position: absolute;
+	z-index: 2;
+	top: calc((var(--strip-h) - var(--c-h)) / 2);
+	left: calc(var(--sidebar-w, 280px) - 10px - var(--control-h-m) - 4px - var(--c-h));
+	display: inline-flex;
+	-webkit-app-region: no-drag;
+	--dot-ring: var(--sb);
+}
+:global([data-chip-shown]) > .slot {
+	left: calc(
+		var(--sidebar-w, 280px) - 10px - var(--control-h-m) - 4px - var(--remote-chip-w) - 4px -
+			var(--c-h)
+	);
+}
+/* With the sidebar gone: window buttons · toggle · Remote · bell, in the window strip. */
+:global([data-sidebar-present='false']) > .slot {
+	left: calc(84px + var(--control-h-m) + 6px);
+	--dot-ring: var(--win);
+}
+:global([data-sidebar-present='false'][data-chip-shown]) > .slot {
+	left: calc(84px + var(--control-h-m) + 6px + var(--remote-chip-w) + 6px);
+}
+:root:is([data-platform='win32'], [data-platform='linux'])
+	:global([data-sidebar-present='false'])
+	> .slot {
+	left: calc(48px + var(--control-h-m) + 6px);
+}
+:root:is([data-platform='win32'], [data-platform='linux'])
+	:global([data-sidebar-present='false'][data-chip-shown])
+	> .slot {
+	left: calc(48px + var(--control-h-m) + 6px + var(--remote-chip-w) + 6px);
+}
+
+.railSlot {
+	display: inline-flex;
+}
+.list {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	max-height: 480px;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.section {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 24px;
+	margin: 0;
+	padding: 4px 8px 0;
+	box-sizing: border-box;
+	font-size: 10.5px;
+	font-weight: 600;
+	color: var(--fg2);
+}
+.section b {
+	font-weight: 600;
+	color: var(--amber);
+}
+.rows,
+.needs {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.needs {
+	margin: 2px 0 4px;
+	padding: 2px;
+	border-radius: 8px;
+	background: var(--amber-soft);
+}
+
+/* Rule 15: the row's main button covers it, hover and press fill the whole row; the actions sit above it. */
+.row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 40px;
+	padding: 4px 6px 4px 8px;
+	box-sizing: border-box;
+	border-radius: 6px;
+}
+.row:hover,
+.row:has(.main:focus-visible) {
+	background: var(--segment-hover);
+}
+.row:has(.main:active) {
+	background: var(--segment-press);
+}
+.main {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	outline: none;
+}
+.main:is(:hover, :active, :focus-visible) {
+	background: none;
+	box-shadow: none;
+	outline: none;
+}
+.main::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+}
+/* The keyboard ring goes round the whole row, as its hover does. */
+.row:has(.main:focus-visible) {
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.glyph {
+	flex: none;
+	display: inline-flex;
+	margin-top: 1px;
+}
+.lines {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.title {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	height: 16px;
+	min-width: 0;
+	font-size: 12.5px;
+	line-height: 16px;
+	white-space: nowrap;
+}
+.name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.row[data-unread] .name {
+	font-weight: 600;
+}
+.body {
+	font-size: 11.5px;
+	line-height: 15px;
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.tail {
+	flex: none;
+	align-self: flex-start;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 24px;
+	font-size: 11px;
+	color: var(--fg3);
+}
+.dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 3px;
+	background: var(--accent);
+}
+/* At rest the tail shows the time; on hover or focus the actions take its place. */
+.actions {
+	position: relative;
+	z-index: 1;
+	flex: none;
+	display: none;
+	align-items: center;
+	gap: 4px;
+}
+.actions[data-always],
+.row:hover > .actions,
+.row:has(:focus-visible) > .actions {
+	display: flex;
+}
+.row:hover > .tail,
+.row:has(:focus-visible) > .tail {
+	display: none;
+}
+
+.empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 28px 16px 30px;
+	text-align: center;
+	color: var(--fg3);
+}
+.empty strong {
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--fg);
+}
+.footer {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: none;
+	margin-top: 4px;
+	padding: 5px 3px 0;
+	border-top: 1px solid var(--sep);
+}
+.footer > span {
+	flex: 1;
+}

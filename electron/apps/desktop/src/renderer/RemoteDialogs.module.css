@@ -1,0 +1,9 @@
+/* P1 (spec/remote-access-and-mobile#browser-from-device): «Don't show more dialogs from this page» — the row is the target, the box the control's own. */
+.mute {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: var(--c-h);
+	color: var(--fg2);
+	cursor: default;
+}

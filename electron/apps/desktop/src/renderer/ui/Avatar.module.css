@@ -1,0 +1,29 @@
+.avatar {
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: calc(7.5px * var(--ui-scale));
+	font-weight: 700;
+	color: var(--avatar-fg);
+}
+.avatar[data-size='m'] {
+	width: 18px;
+	height: 18px;
+	font-size: calc(9px * var(--ui-scale));
+}
+/* spec/remote-access-and-mobile#phone-task-tools: the phone's 22 (canvas `.av`). */
+.avatar[data-size='l'] {
+	width: 22px;
+	height: 22px;
+	font-size: 11px;
+}
+/* spec/remote-access-and-mobile#phone-pr-list: the phone's PR row takes `m` at 16 (canvas `.av.s16`). */
+:root[data-touch] .avatar[data-size='m'] {
+	width: 16px;
+	height: 16px;
+	font-size: 9px;
+}

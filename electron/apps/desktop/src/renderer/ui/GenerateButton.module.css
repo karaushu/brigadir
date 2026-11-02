@@ -1,0 +1,11 @@
+/* spec/appearance#generate-actions: the mark and the label centred on the button's height, 5 px apart. */
+.generate {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+}
+.generate > svg {
+	flex: none;
+	display: block;
+}

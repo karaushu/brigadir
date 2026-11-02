@@ -1,0 +1,261 @@
+/* The phone's chat: messages, answers, thoughts, tool rows and groups, the turn's status and progress. */
+.log {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.row {
+	padding: 5px 16px;
+}
+.user {
+	padding: 10px 12px;
+	border-left: 3px solid var(--accent);
+	border-radius: 0 6px 6px 0;
+	background: var(--tint);
+	font-size: 15px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.user[data-held] {
+	opacity: 0.7;
+}
+.held {
+	display: block;
+	margin-top: 4px;
+	font-size: 12px;
+	color: var(--fg2);
+}
+.answer {
+	font-size: 15px;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}
+.answer > :first-child {
+	margin-top: 0;
+}
+.answer > :last-child {
+	margin-bottom: 0;
+}
+.answer p {
+	margin: 0;
+}
+.answer :global(code) {
+	padding: 1px 5px;
+	border-radius: 5px;
+	background: var(--tint);
+	font-family: var(--mono-family);
+	font-size: 13px;
+	letter-spacing: 0;
+}
+.answer :global(pre) {
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: 10px;
+	background: var(--term);
+	overflow-x: auto;
+}
+.answer :global(pre code) {
+	padding: 0;
+	background: none;
+}
+.answer :global(a) {
+	color: var(--accent-text);
+}
+.think {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 32px;
+	font-size: 13px;
+	color: var(--fg2);
+}
+.thought {
+	padding: 0 4px 4px 20px;
+	font-size: 14px;
+	color: var(--fg2);
+	white-space: pre-wrap;
+}
+.chevron {
+	flex: none;
+	color: var(--fg3);
+}
+.tool {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 44px;
+	padding: 6px 4px;
+	border-radius: 10px;
+	font-size: 14px;
+}
+.tool:active {
+	background: var(--segment-press);
+}
+.tool[data-sub] {
+	margin-left: 10px;
+	width: calc(100% - 10px);
+	min-height: 40px;
+	padding-left: 12px;
+	border-left: 1.5px solid var(--sep);
+	border-radius: 0 10px 10px 0;
+}
+.tool b {
+	font-weight: 600;
+}
+.tool > span[role='img'] {
+	width: 16px;
+	height: 16px;
+}
+.group {
+	display: flex;
+	flex-direction: column;
+}
+.two {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+.target {
+	font-size: 12.5px;
+	color: var(--fg2);
+}
+.note {
+	font-size: 13px;
+	color: var(--fg2);
+}
+.grow {
+	flex: 1 1 auto;
+}
+.errors {
+	font-size: 13px;
+	color: var(--red);
+}
+.error,
+.failed {
+	color: var(--red);
+}
+.failed {
+	flex: none;
+}
+.toolsIcon {
+	flex: none;
+	color: var(--fg2);
+}
+.time {
+	flex: none;
+	margin-left: auto;
+	font-size: 12px;
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+.output {
+	max-height: 240px;
+	margin: 0 0 6px 32px;
+	padding: 8px 10px;
+	overflow: auto;
+	border-radius: 8px;
+	background: var(--term);
+	font-family: var(--mono-family);
+	font-size: 12px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+.progress {
+	display: inline-flex;
+	gap: 3px;
+}
+.progress > i {
+	display: block;
+	width: 12px;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--fg3);
+}
+.progress > i[data-on] {
+	background: var(--accent);
+}
+.planItems {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 10px 0 0;
+	padding: 0 4px 4px 32px;
+	list-style: none;
+	font-size: 14px;
+}
+.planItems > li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.planItems > li > span[role='img'] {
+	flex: none;
+	width: 16px;
+	height: 16px;
+}
+.planItems > li[data-status='completed'] {
+	color: var(--fg2);
+}
+.status {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	font-size: 13px;
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.status > span:not(.statusTarget) {
+	flex: none;
+}
+.status > span[role='img'] {
+	width: 16px;
+	height: 16px;
+}
+.status b {
+	font-weight: 500;
+	color: var(--fg);
+}
+.status[data-limit] {
+	color: var(--amber-text);
+}
+.status[data-limit] b {
+	color: var(--amber-text);
+}
+.statusTarget {
+	font-size: 12px;
+}
+.failure {
+	font-size: 14px;
+	color: var(--red);
+}
+/* A failed turn: the machine's message, then «Повторити» (retryTurn) while it is the last thing in the chat. */
+.turnFailed {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+}
+/* spec/chat-turns-plans-and-questions#plan-approval: the plan document in the chat's typography, headings a step above the text. */
+.planDocument :global(h1),
+.planDocument :global(h2),
+.planDocument :global(h3) {
+	margin: 12px 0 4px;
+	font-size: 16px;
+	font-weight: 600;
+}
+.planDocument :global(p),
+.planDocument :global(ul),
+.planDocument :global(ol) {
+	margin: 0 0 6px;
+}
+.planDocument :global(ul),
+.planDocument :global(ol) {
+	padding-left: 20px;
+}

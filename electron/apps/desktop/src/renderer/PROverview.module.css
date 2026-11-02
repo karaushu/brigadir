@@ -1,0 +1,660 @@
+/* spec/pull-requests-and-ci#pr-overview: Overview. */
+.page {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	background: var(--content);
+	animation: var(--motion-fade);
+}
+.header {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 14px 22px 12px;
+	border-bottom: 1px solid var(--sep);
+}
+.titleRow {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+/* The title gives way to the buttons only down to 120 px, then ends in «…» (its full text is the tooltip). */
+.titleRow h1 {
+	flex: 0 1 auto;
+	margin: 0;
+	min-width: 120px;
+	font-size: calc(16px * var(--ui-scale));
+	font-weight: 700;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* spec/appearance#evolution-redesign: the summary agent's capsule beside ✦ keeps its width; the title gives way first. */
+.titleRow > :global([data-helper-capsule]) {
+	flex: none;
+}
+.number {
+	flex: none;
+	font-size: calc(16px * var(--ui-scale));
+	color: var(--fg2);
+}
+.space {
+	flex: 1;
+	min-width: 0;
+}
+/* A narrow Overview (`cardsNarrow` or the narrow header in PROverview.tsx, a tab of about 400 px): the cards in a column. */
+.page[data-narrow] .cards {
+	flex-direction: column;
+}
+/* spec/pull-requests-and-ci#merge: the state of a merged or closed PR, the height of the row like the button it replaces. */
+.stateChip {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--c-gap);
+	box-sizing: border-box;
+	height: var(--c-h);
+	padding: 0 var(--c-px);
+	border-radius: var(--c-r);
+	font-size: var(--c-fs);
+	font-weight: 500;
+	white-space: nowrap;
+}
+.stateChip[data-state='MERGED'] {
+	background: var(--purple-soft);
+	color: var(--purple);
+}
+.stateChip[data-state='CLOSED'] {
+	background: var(--red-soft);
+	color: var(--red);
+}
+.card > [data-ready],
+.card > .resolve {
+	align-self: flex-start;
+}
+/* spec/pull-requests-and-ci#resolve-conflicts: a narrow Merge card (the PR panel beside it) keeps the split button inside: «Розвести ▾» instead of the full words. */
+.mergeCard {
+	container: merge-card / inline-size;
+}
+.narrow {
+	display: none;
+}
+@container merge-card (max-width: 210px) {
+	.wide {
+		display: none;
+	}
+	.narrow {
+		display: inline;
+	}
+}
+.meta {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 7px;
+	font-size: var(--text-12);
+	color: var(--fg2);
+}
+.meta b {
+	color: var(--fg);
+	font-weight: 600;
+}
+.meta code,
+.event code,
+.quote code,
+.check code {
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+	padding: 1px 4px;
+	border-radius: 3px;
+	background: var(--tint);
+	color: var(--fg);
+}
+.cards {
+	display: flex;
+	align-items: stretch;
+	gap: 10px;
+}
+.card {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	padding: 9px 11px;
+	border-radius: 8px;
+	box-shadow: inset 0 0 0 1px var(--sep);
+}
+.card h2 {
+	margin: 0;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	letter-spacing: 0.02em;
+}
+.reviewer,
+.fact {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-12);
+	min-width: 0;
+}
+.fact > svg {
+	flex: none;
+}
+.fact[data-state='pass'] > svg {
+	color: var(--green);
+}
+.fact[data-state='fail'] > svg {
+	color: var(--red);
+}
+.fact[data-state='pending'] > svg {
+	color: var(--amber);
+}
+.fact[data-state='wait'] {
+	color: var(--fg2);
+}
+.fact small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.reviewerState {
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	color: var(--fg2);
+}
+.reviewerState[data-state='APPROVED'] {
+	color: var(--green);
+}
+.reviewerState[data-state='CHANGES_REQUESTED'] {
+	color: var(--amber);
+}
+.dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--amber);
+}
+.cap {
+	margin: 0;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	line-height: 1.45;
+}
+.body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 14px 22px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.description {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 12px 14px;
+	border-radius: 8px;
+	box-shadow: inset 0 0 0 1px var(--sep);
+}
+.who {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-12);
+}
+.who b {
+	font-weight: 600;
+}
+.who small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.text {
+	font-size: var(--text-13);
+	line-height: 1.55;
+}
+.column .text {
+	font-size: var(--text-12);
+	line-height: 1.5;
+}
+.filterRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.timeline {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.entry {
+	display: flex;
+	gap: 10px;
+}
+.entry[data-resolved='true'] {
+	opacity: 0.7;
+}
+.column {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.resolved {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+.review[data-state='APPROVED'] {
+	color: var(--green) !important;
+}
+.review[data-state='CHANGES_REQUESTED'] {
+	color: var(--amber) !important;
+}
+.quote {
+	border: 1px solid var(--sep);
+	border-radius: 6px;
+	overflow: hidden;
+}
+.place {
+	display: block;
+	width: 100%;
+	height: var(--c-h);
+	padding: 0 8px;
+	border-radius: 0;
+	background: var(--tint);
+	color: var(--accent);
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+	text-align: left;
+}
+.code {
+	padding: 3px 8px;
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+	white-space: pre;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.code[data-sign='+'] {
+	background: var(--diffAddedBg);
+}
+.code[data-sign='-'] {
+	background: var(--diffRemovedBg);
+}
+.quoteText {
+	padding: 6px 8px;
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.reply {
+	display: flex;
+	gap: 7px;
+	padding: 6px 8px;
+	border-top: 1px solid var(--sep);
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.reply > div {
+	flex: 1;
+	min-width: 0;
+}
+.reply small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 4px;
+}
+.inline {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 4px;
+}
+.inline textarea,
+textarea.agentEdit {
+	min-height: 48px;
+	resize: vertical;
+}
+.agent {
+	margin-top: 6px;
+	padding: 8px 10px;
+	border-radius: 7px;
+	/* spec/pull-requests-and-ci#pr-detail: the agent's answer and the summary are --sel (12 % / 22 %). */
+	background: var(--sel);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.agent[data-error] {
+	background: var(--red-soft);
+}
+.agentHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-11);
+	font-weight: 600;
+}
+.agentHead > svg {
+	flex: none;
+	color: var(--accent);
+}
+.agentText {
+	font-size: var(--text-12);
+	line-height: 1.5;
+}
+.agent .row {
+	margin-top: 0;
+}
+.event {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-left: 36px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.event > svg {
+	flex: none;
+}
+.event[data-state='fail'] > svg {
+	color: var(--red);
+}
+.event[data-state='pending'] > svg {
+	color: var(--amber);
+}
+.event small {
+	font-size: var(--text-10);
+}
+button.event {
+	width: 100%;
+	height: var(--c-h);
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0 6px 0 36px;
+	border-radius: 6px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	text-align: left;
+}
+.commits {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding-left: 30px;
+}
+.hint {
+	margin: 0;
+	padding: 12px 0;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.summary {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	padding: 12px 14px;
+	border-radius: 8px;
+	background: var(--sel);
+}
+.summaryHead {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+}
+.summaryHead > svg {
+	flex: none;
+	color: var(--accent);
+}
+.summaryHead h2 {
+	margin: 0;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--text-12);
+	font-weight: 600;
+	white-space: nowrap;
+}
+.summaryHead > :global([data-helper-capsule]) {
+	flex: none;
+}
+/* spec/appearance#evolution-redesign: one line — the name, the capsule, `N files · s`; the count gives way first. */
+.summaryHead small {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.summaryHead > button {
+	flex: none;
+}
+.section {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+.section h3 {
+	margin: 0;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	letter-spacing: 0.02em;
+}
+.item,
+.watch {
+	margin: 0;
+	font-size: var(--text-12);
+	line-height: 1.55;
+}
+.watch {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+}
+.watch > svg {
+	flex: none;
+	margin-top: 3px;
+	color: var(--amber);
+}
+.link {
+	display: inline-flex;
+	align-items: center;
+	height: var(--c-h);
+	vertical-align: middle;
+	color: var(--accent);
+	font-family: var(--mono-family);
+	font-size: var(--text-12);
+	text-decoration: underline;
+	text-decoration-style: dotted;
+	text-underline-offset: 3px;
+}
+.lines {
+	margin-left: 3px;
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.composer {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 22px;
+	border-top: 1px solid var(--sep);
+	background: var(--card);
+}
+.field {
+	flex: 1;
+	min-width: 0;
+}
+.merge {
+	width: 440px;
+	max-width: calc(100vw - 32px);
+	margin: 90px auto auto;
+	padding: 14px;
+	box-sizing: border-box;
+	border: 0;
+	border-radius: 12px;
+	background: var(--card);
+	color: var(--fg);
+	box-shadow:
+		0 0 0 1px var(--sep),
+		0 24px 60px var(--shadow);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.merge:not([open]) {
+	display: none;
+}
+.merge::backdrop {
+	background: var(--modal-scrim);
+}
+.goes code {
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+	color: var(--fg2);
+	flex: none;
+}
+.mergeHead {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.mergeHead > svg {
+	flex: none;
+	color: var(--purple);
+}
+.mergeHead h2 {
+	flex: 1;
+	margin: 0;
+	font-size: var(--text-13);
+	font-weight: 600;
+}
+.methods {
+	display: flex;
+	flex-direction: column;
+}
+.method {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: var(--c-h);
+	font-size: var(--text-12);
+}
+.method small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.goes {
+	display: flex;
+	flex-direction: column;
+	padding: 6px 0;
+	border-top: 1px solid var(--sep);
+	border-bottom: 1px solid var(--sep);
+}
+.goes h3 {
+	margin: 0;
+	padding-bottom: 3px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	letter-spacing: 0.02em;
+}
+.goesRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 0;
+	font-size: var(--text-12);
+	min-width: 0;
+}
+.goesRow span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.goes small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: var(--c-h);
+	font-size: var(--text-12);
+}
+.mergeError {
+	margin: 0;
+	padding: 7px 9px;
+	border-radius: 6px;
+	background: var(--red-soft);
+	font-size: var(--text-12);
+}
+/* spec/pull-requests-and-ci#ci: the deploy row in the «Мердж» card of a merged PR — the whole card width hovers and leads to the Checks tab. */
+.deployFact {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	width: calc(100% + 8px);
+	margin: 0 -4px;
+	padding: 2px 4px;
+	box-sizing: border-box;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+	text-align: left;
+}
+.deployFact:hover {
+	background: var(--segment-hover);
+}
+.deployFact:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 0;
+}
+.deployLine {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-size: var(--text-12);
+}
+.deployLine > span:nth-child(2) {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.deployLine small {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--amber-text);
+	font-variant-numeric: tabular-nums;
+}
+.deployNote {
+	padding-left: 18px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}

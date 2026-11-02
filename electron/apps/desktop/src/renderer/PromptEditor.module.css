@@ -1,0 +1,156 @@
+/* spec/tasks#sheet-layout: a prompt without a box, the left column reads as a document. spec/tasks#sheet-rail: the text of the
+   composer, 13.5 / 21, from the column's top; at least 84 px, and the hint row follows it at once. */
+.wrapper {
+	position: relative;
+	min-height: 84px;
+}
+.editor :global(.cm-editor) {
+	background: transparent;
+}
+.editor :global(.cm-editor.cm-focused) {
+	outline: none;
+}
+.editor :global(.cm-scroller) {
+	font: var(--text-chat) / calc(21px * var(--ui-scale)) var(--ui-family);
+	max-height: 50vh;
+}
+.editor :global(.cm-content) {
+	padding: 0;
+	min-height: 84px;
+	caret-color: var(--fg);
+	color: var(--fg);
+}
+.editor :global(.cm-line) {
+	padding: 0;
+}
+.editor :global(.cm-placeholder) {
+	color: var(--fg3);
+}
+.strong {
+	font-weight: 600;
+}
+/* spec/composer#formatting: inline code is 12 px mono on a tint, so it does not read small beside the composer's 14 px text. */
+.code {
+	padding: 0 4px;
+	border-radius: 3px;
+	background: var(--tint);
+	font-family: var(--mono-family);
+	font-size: var(--text-12);
+}
+.em {
+	font-style: italic;
+}
+/* spec/composer#slash-highlight: a command or a skill the `/` list knows is text on the pill's tint, monospace. */
+.command {
+	padding: 1px 3px;
+	margin: 0 -1px;
+	border-radius: 4px;
+	background: var(--accent-soft);
+	color: var(--accent);
+	font-family: var(--mono-family);
+	font-size: 0.9em;
+}
+/* spec/composer#formatting: muted Markdown syntax that stays visible: the number, `>`, `[ ]`, a link's brackets and address, code fences. */
+.syn {
+	color: var(--fg3);
+}
+/* The item marker takes a column wider than itself, so a wrapped item line hangs under its text, not under the marker.
+   `text-indent` is inherited, so the column resets it. The doubled class outranks the surface's `.cm-line { padding: 0 }`. */
+.hang.hang:global(.cm-line) {
+	padding-left: var(--hang);
+	text-indent: calc(-1 * var(--hang));
+}
+.marker {
+	display: inline-flex;
+	justify-content: space-between;
+	box-sizing: border-box;
+	text-indent: 0;
+	white-space: pre;
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+/* The space after the marker sits at the column's right edge: an empty item's caret stands where its text will start. */
+.markerGap {
+	white-space: pre;
+}
+.bullet {
+	display: inline-block;
+	box-sizing: border-box;
+	text-indent: 0;
+	white-space: pre;
+	color: var(--fg2);
+}
+/* A code block: the fences and the lines between them lie on a tint strip; the font is in a nested span so a line keeps its text's height. */
+.fence.fence:global(.cm-line) {
+	margin: 0 -6px;
+	padding: 0 6px;
+	background: var(--tint);
+}
+.fenceFirst.fenceFirst:global(.cm-line) {
+	border-radius: 6px 6px 0 0;
+}
+.fenceLast.fenceLast:global(.cm-line) {
+	border-radius: 0 0 6px 6px;
+}
+.fenceText {
+	font-family: var(--mono-family);
+	font-size: 0.89em;
+}
+/* A mention is a pill: accent-soft on accent, a 10 px glyph (spec/tasks#sheet-layout). spec/tasks#sheet-rail:
+   18 px high, 12, a file or a folder mono 11.5 — in the sheet and the composer alike. */
+.mention {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 0 5px;
+	border-radius: 4px;
+	background: var(--accent-soft);
+	color: var(--accent);
+	font-size: var(--text-12);
+	line-height: 18px;
+	vertical-align: baseline;
+}
+.mention[data-kind='file'],
+.mention[data-mono] {
+	font-family: var(--mono-family);
+	font-size: var(--text-11-5);
+}
+.mention svg {
+	flex: none;
+}
+.mention[data-missing] {
+	background: transparent;
+	box-shadow: inset 0 0 0 1px var(--fg3);
+	color: var(--fg2);
+}
+/* spec/composer#mentions, spec/appearance#control-scale: an image in the line — its thumbnail, 36 × 24 (a click target is at least 24 high), radius 4, cropped to the centre. */
+.image {
+	display: inline-flex;
+	box-sizing: border-box;
+	width: 36px;
+	height: var(--control-min-target);
+	margin: 0 1px;
+	vertical-align: -7px;
+	border: 1px solid var(--sep);
+	border-radius: 4px;
+	overflow: hidden;
+	background: var(--term, var(--tint));
+}
+.image img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.image[data-loading] {
+	background: linear-gradient(
+		110deg,
+		var(--tint) 30%,
+		color-mix(in srgb, var(--fg) 9%, transparent) 50%,
+		var(--tint) 70%
+	);
+}
+.image[data-missing] {
+	border-style: dashed;
+	background: transparent;
+}

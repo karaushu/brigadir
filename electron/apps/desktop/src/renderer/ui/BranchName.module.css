@@ -1,0 +1,33 @@
+/* spec/appearance#evolution-redesign: the prefix (`brigadir/`, `fix/`) always whole; the middle gives way first with `…`; only when nothing
+   else is left the tail gives way from its start (`…support`, the end stays) — never cut mid-letter. The shrink weights
+   make the turns: the middle takes all of it, then the tail. */
+.name {
+	display: inline-flex;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	white-space: nowrap;
+}
+.prefix {
+	flex: none;
+}
+.middle {
+	flex: 0 1000000000 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* The tail's `…` comes at its start: the box runs right-to-left, the name inside stays left-to-right. */
+.tail {
+	flex: 0 1 auto;
+	/* Its `…` stays, so a cut name always shows it was cut. */
+	min-width: 1em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	direction: rtl;
+	text-align: left;
+}
+.tailText {
+	direction: ltr;
+	unicode-bidi: isolate;
+}

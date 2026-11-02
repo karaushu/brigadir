@@ -1,0 +1,32 @@
+/* spec/pull-requests-and-ci#repo-counter: the repo-row PR counter. */
+.counter {
+	gap: 3px;
+	padding: 0 8px;
+}
+.counter > svg,
+.closed > svg {
+	flex: none;
+	display: block;
+}
+.number {
+	font-family: var(--mono-family);
+	font-variant-numeric: tabular-nums;
+}
+.waiting {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--amber);
+	flex: none;
+	margin-left: -1px;
+}
+.closed {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	margin-left: 3px;
+	color: var(--fg3);
+}
+.counter > .closed:first-child {
+	margin-left: 0;
+}

@@ -1,0 +1,96 @@
+.root {
+	margin-top: 9px;
+}
+.chips {
+	display: flex;
+	gap: 7px;
+	flex-wrap: wrap;
+	align-items: center;
+}
+/* spec/tasks#worktree-preparation: a 24 px pill with a 1 px edge, radius 7; the label is --fg, the count
+   --fg2 11. An open preview rings the whole chip in the accent instead of filling the label button. */
+.chip {
+	display: inline-flex;
+	align-items: center;
+	max-width: 100%;
+	border-radius: 7px;
+	background: var(--content);
+	box-shadow: inset 0 0 0 1px var(--sep);
+	overflow: hidden;
+	animation: var(--motion-reveal);
+}
+.chip > button:first-child {
+	flex: 1;
+	min-width: 0;
+}
+/* Tripled class: outranks the ghost button's own and its `aria-expanded` accent (ui/Controls), which this chip replaces
+   with the ring above. */
+.chip.chip.chip > button:first-child:not(:disabled) {
+	color: var(--fg);
+	background-color: transparent;
+}
+.chip.chip.chip > button:first-child:hover:not(:disabled) {
+	background-color: var(--tint);
+}
+.chip > button > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.chip small {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.chip[data-open='true'] {
+	box-shadow: inset 0 0 0 1px var(--accent);
+}
+.chip[data-failed='true'] {
+	box-shadow: inset 0 0 0 1px var(--amber);
+}
+.full {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-height: var(--c-h);
+	font-size: var(--text-11-5);
+	color: var(--fg2);
+}
+.hint {
+	margin-top: 7px;
+	font-size: var(--text-11);
+	line-height: 16px;
+	color: var(--fg2);
+}
+/* The warning: 11.5 / 17 amber; «Generate again» stands 8 px after the sentence and wraps under it when narrow. */
+.warning {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 7px;
+	font-size: var(--text-11-5);
+	color: var(--amber);
+	line-height: 17px;
+}
+.preview {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows var(--motion-travel) var(--motion-ease);
+}
+.preview[data-open='true'] {
+	grid-template-rows: 1fr;
+}
+.preview > div {
+	overflow: hidden;
+	min-height: 0;
+}
+.preview pre {
+	font: var(--text-11)/1.45 var(--mono-family);
+	max-height: 160px;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	background: var(--tint);
+	padding: 8px;
+	margin: 8px 0 0;
+	border-radius: 6px;
+}

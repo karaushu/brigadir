@@ -1,0 +1,154 @@
+/* A repo root: two lines, 5 px 8 px 5 px 6 px, radius 7 inside a 6 px margin; the whole row hovers. */
+.root {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin: 0 6px;
+	padding: 5px 8px 5px 6px;
+	border-radius: 7px;
+	color: var(--fg);
+	outline: none;
+	transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.root:hover {
+	background: var(--hover);
+}
+.root:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* spec/tasks#quick-tasks: the main tree's current repo: the soft selection. */
+.root[data-current] {
+	background: var(--sel);
+}
+.root[data-unavailable] {
+	opacity: 0.55;
+}
+.first,
+.second {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+}
+.first {
+	gap: 7px;
+	height: 18px;
+	font-size: calc(var(--text-13) - 0.5px);
+}
+.toggle {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 24px;
+	/* A 24 px target in the 18 px line; the whole row is its target anyway (::after). */
+	height: 24px;
+	margin: -3px 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: default;
+}
+/* The disc's button is the row's target: hover and click cover the name, the changes and the branch line alike. */
+.toggle::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+}
+.disc {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: var(--tint2);
+	color: var(--fg2);
+	transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.disc > svg {
+	transform: rotate(-90deg);
+	transition: transform var(--motion-travel) var(--motion-ease);
+}
+.root[data-expanded='true'] .disc {
+	background: var(--accent-fill);
+	color: var(--selfg);
+}
+.root[data-expanded='true'] .disc > svg {
+	transform: none;
+}
+.name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 600;
+}
+.root[data-outside] {
+	color: var(--fg3);
+}
+.root[data-outside] .name {
+	font-weight: 400;
+}
+.kind {
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	height: 16px;
+	padding: 0 7px;
+	border-radius: 5px;
+	background: var(--tint);
+	color: var(--fg2);
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+}
+.space {
+	flex: 1 1 0;
+	min-width: 0;
+}
+.counts {
+	flex: none;
+	font-family: var(--mono-family);
+	font-size: calc(var(--text-11) - 0.5px);
+}
+.actions {
+	position: relative;
+	z-index: 1;
+	display: inline-flex;
+	flex: none;
+	margin: -1px -4px -1px 0;
+	opacity: 0;
+	transition: opacity var(--motion-fast) var(--motion-ease);
+}
+.root:hover .actions,
+.root:focus-within .actions,
+.actions:has([aria-expanded='true']),
+.root[data-outside] .actions {
+	opacity: 1;
+}
+.second {
+	gap: 6px;
+	height: 16px;
+	padding-left: 25px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.root[data-outside] .second {
+	color: var(--fg3);
+}
+.second > svg {
+	flex: none;
+}
+/* Only the second line's controls sit above the row's target; its text clicks through to it. */
+.second button {
+	position: relative;
+	z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+	.disc > svg {
+		transition: none;
+	}
+}

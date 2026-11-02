@@ -1,0 +1,32 @@
+/* spec/task-window-workspace#work-area (canvas work_area.py .toolsbtn): Tools — the glyph, the count, the agent's dot, ▾. */
+.tools.tools {
+	gap: 5px;
+	padding: 0 7px 0 8px;
+}
+/* Open, it is pressed in the toolbar's grey (canvas WorkAreaToolsMenu: --segment-press, --fg), not the accent of a selection. */
+.tools.tools.tools.tools[aria-expanded='true']:not(:disabled) {
+	background-color: var(--segment-press);
+	background-image: none;
+	color: var(--fg);
+}
+.count {
+	font-size: var(--text-11);
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	color: var(--fg);
+}
+.agentMark {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--accent);
+	box-shadow: 0 0 0 3px var(--accent-soft);
+	flex: none;
+}
+.agentDot {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--accent);
+}

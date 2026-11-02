@@ -1,0 +1,1228 @@
+/* Controls system (spec/appearance#control-scale). Size comes from `data-size` (tokens.css publishes --c-h, --c-px, --c-r, --c-fs, --c-ic, --c-gap, …),
+   colour from `data-appearance` (--ap, --ap-fg, --ap-text, --ap-soft, --ap-line), look from `data-variant` (solid | soft | ghost | outline).
+   A control with no size inherits the size of its group and falls back to M. Hover and pressed are layers (tokens.css), focus is one ring. */
+
+/* ── Button ───────────────────────────────────────────────────────────────────────────────────────────── */
+.button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--c-gap);
+	height: var(--c-h);
+	padding: 0 var(--c-px);
+	border: 0;
+	border-radius: var(--c-r);
+	font-size: var(--c-fs);
+	/* spec/remote-access-and-mobile#phone-app: the touch scale sets the weight per size; the computer keeps 400 / 500. */
+	font-weight: var(--c-fw, 400);
+	white-space: nowrap;
+	flex: none;
+	background-color: var(--ap-soft, var(--tint));
+	color: var(--ap-text, var(--fg));
+}
+.button[data-variant='solid'] {
+	background-color: var(--ap, var(--accent-fill));
+	color: var(--ap-fg, var(--selfg));
+	font-weight: var(--c-fw-solid, 500);
+}
+.button[data-variant='ghost'] {
+	background-color: transparent;
+	color: var(--ap-text, var(--fg));
+}
+.button[data-variant='ghost'][data-appearance='neutral'] {
+	color: var(--fg2);
+}
+.button[data-variant='ghost']:hover:not(:disabled) {
+	background-color: var(--ap-soft, var(--tint));
+	background-image: none;
+}
+.button[data-variant='ghost'][data-appearance='neutral']:hover:not(:disabled) {
+	color: var(--fg);
+}
+.button[data-variant='ghost']:active:not(:disabled) {
+	background-color: var(--ap-soft, var(--tint));
+	background-image: linear-gradient(var(--segment-hover), var(--segment-hover));
+}
+/* Outline (spec/appearance#control-scale, spec/tasks#archive-window): no fill, the appearance's colour for text and a 1 px edge inside; hover and pressed are
+   the solid step (fill --ap, text --ap-fg), pressed adds the press layer. A destructive action that should not shout at rest. */
+.button[data-variant='outline'] {
+	background-color: transparent;
+	color: var(--ap-line, var(--fg2));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ap-line, var(--fg2)) 45%, transparent);
+}
+.button[data-variant='outline']:hover:not(:disabled),
+.button[data-variant='outline']:active:not(:disabled) {
+	background-color: var(--ap, var(--accent-fill));
+	color: var(--ap-fg, var(--selfg));
+	box-shadow: none;
+}
+.button[data-variant='outline']:hover:not(:disabled) {
+	background-image: none;
+}
+/* Selected: a toggle button (aria-pressed), a chosen option (aria-checked, aria-selected) or data-selected; open
+   (aria-expanded) — unless it is a disclosure or opens a popover, which have their own open look below. */
+.button[aria-pressed='true'],
+.button[aria-checked='true'],
+.button[aria-selected='true'],
+.button[aria-expanded='true']:where(:not([data-disclosure], [data-opens-popover])),
+.button[data-selected='true'] {
+	background-color: var(--accent-soft);
+	color: var(--accent);
+	font-weight: inherit;
+}
+.button.button[data-variant='ghost'][aria-pressed='true']:not(:disabled),
+.button.button[data-variant='ghost'][aria-checked='true']:not(:disabled),
+.button.button[data-variant='ghost'][aria-selected='true']:not(:disabled),
+.button.button[data-variant='ghost'][aria-expanded='true']:not(
+		:disabled,
+		[data-disclosure],
+		[data-opens-popover]
+	),
+.button.button[data-variant='ghost'][data-selected='true']:not(:disabled) {
+	background-color: var(--accent-soft);
+	background-image: none;
+	color: var(--accent);
+}
+/* spec/tasks#worktree-preparation, spec/appearance#component-details: an open disclosure keeps its rest look, soft or ghost; the chevron says it is open.
+   A ghost one is out of the selected rule above, so its rest, hover and press are the ghost's own. */
+.button.button[data-disclosure][data-variant='soft'][aria-expanded='true'] {
+	background-color: var(--ap-soft, var(--tint));
+	color: var(--ap-text, var(--fg));
+}
+/* spec/appearance#component-details (spec/sidebar#project-groups): a ghost button that opens a popover (the quota rings) holds its hover look while the
+   popover is open — --tint, not the selected accent-soft; a press still adds its layer. */
+.button.button[data-opens-popover][data-variant='ghost'][aria-expanded='true']:not(:disabled) {
+	background-color: var(--ap-soft, var(--tint));
+	color: var(--ap-text, var(--fg));
+}
+.button svg {
+	flex: none;
+}
+/* A glyph inside a button is the size's icon (S 14, M 16, XL 18); a 10 × 10 chevron keeps its own. */
+.button > svg:not([viewBox='0 0 10 10']):not([data-keep-size]) {
+	width: var(--c-ic);
+	height: var(--c-ic);
+}
+.button[data-shape='auto'] {
+	width: auto;
+}
+
+/* ── Icon button: a square h × h; shape="auto" is for a chevron or a label next to the glyph ─────────────── */
+.iconButton {
+	width: var(--c-h);
+	padding: 0;
+}
+/* spec/sidebar#status-filter: a dot over the glyph's top-right corner, ringed in the surface so it reads apart from the glyph. */
+.iconButton[data-dot] {
+	position: relative;
+}
+.dot {
+	position: absolute;
+	/* spec/sidebar#section-rail: the rail's XL tiles move the dot onto the glyph's corner. */
+	top: var(--dot-inset, 3px);
+	right: var(--dot-inset, 3px);
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--dot, transparent);
+	box-shadow: 0 0 0 1.5px var(--dot-ring, var(--sb));
+	pointer-events: none;
+	transform: scale(0);
+	opacity: 0;
+	transition:
+		transform var(--motion-enter-time) var(--motion-ease),
+		opacity var(--motion-fast) var(--motion-ease),
+		background-color var(--motion-fast) var(--motion-ease);
+}
+.iconButton[data-dot-at='bottom'] > .dot {
+	top: auto;
+	bottom: var(--dot-inset-bottom, 4px);
+	right: var(--dot-inset-bottom, 4px);
+}
+.iconButton[data-dot='true'] > .dot {
+	transform: scale(1);
+	opacity: 1;
+}
+/* spec/remote-access-and-mobile#remote-button, reconnecting: the amber plate and spinner, no hover or press over it; the hint stays.
+   Weighed to outrank the ghost hover (.button[data-variant][data-appearance]:hover:not(:disabled)). */
+.iconButton.iconButton[data-lost][aria-disabled='true'][aria-busy='true'] {
+	background-color: var(--amber-soft);
+	background-image: none;
+	color: var(--amber);
+	opacity: 1;
+}
+.iconButton[data-shape='auto'] {
+	width: auto;
+	min-width: var(--c-h);
+	padding: 0 calc(var(--c-px) - 4px);
+}
+
+/* ── Split button: one capsule, the main action and a 24 px chevron (the least target, spec/appearance#control-scale) (or a square glyph) behind a 1 px line ──────────── */
+.split {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+	border-radius: var(--c-r);
+}
+.split > .splitMain {
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+.split > .splitSecond {
+	width: auto;
+	padding: 0 7px;
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+	box-shadow: inset 1px 0 0 var(--sep);
+}
+.split > .splitSecond[data-variant='solid'] {
+	box-shadow: inset 1px 0 0 color-mix(in srgb, var(--ap-fg, #fff) 28%, transparent);
+}
+.split > .splitSecond[data-content] {
+	/* The agent part is quieter than the action — 11.5 px, --fg2, 6 px sides. */
+	padding: 0 6px;
+	font-size: 11.5px;
+	color: var(--fg2);
+	gap: 4px;
+	max-width: 160px;
+}
+.split > .splitSecond[data-content] > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.split > .splitSecond[data-icon] {
+	width: var(--c-h);
+	padding: 0;
+}
+/* The open menu keeps the part's own fill (not the selected tint of a lone button) and presses it. */
+.split > .splitSecond[aria-expanded='true'][data-variant='solid'] {
+	background-color: var(--ap, var(--accent-fill));
+	color: var(--ap-fg, var(--selfg));
+}
+.split > .splitSecond[aria-expanded='true'][data-variant='soft'] {
+	background-color: var(--ap-soft, var(--tint));
+	color: var(--ap-text, var(--fg));
+}
+.split > .splitSecond[aria-expanded='true'] {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+/* The agent part with its menu open is the capsule's open look — accent on accent-soft. */
+.split > .splitSecond[data-content][aria-expanded='true'] {
+	background-color: var(--accent-soft);
+	background-image: none;
+	color: var(--accent);
+}
+/* Hover and press light the whole capsule; the focus ring goes round it, the focused part keeps the hover layer. */
+.split:hover > button:not(:disabled),
+.split > button:focus-visible {
+	background-image: linear-gradient(var(--segment-hover), var(--segment-hover));
+}
+.split:has(> button:active:not(:disabled)) > button:not(:disabled) {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+.split > button:focus-visible {
+	outline: none;
+}
+.split:has(> button:focus-visible) {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* ── Switch: the button is the whole row-high target, the track is drawn inside it ───────────────────────── */
+.toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	height: var(--c-h);
+	width: calc(var(--c-sw-w) + 12px);
+	padding: 0;
+	border: 0;
+	border-radius: var(--c-r);
+	background: transparent;
+}
+/* spec/remote-access-and-mobile#remote-button: a text baseline in the middle of the switch's line — a label beside it (a settings row aligned on its
+   control's first baseline) stands level with the switch, not with its bottom edge. */
+.toggle::before {
+	content: '\200b';
+	width: 0;
+	overflow: hidden;
+	font-size: var(--text-12);
+	line-height: 1.35;
+}
+.track {
+	position: relative;
+	display: block;
+	flex: none;
+	width: var(--c-sw-w);
+	height: var(--c-sw-h);
+	border-radius: 999px;
+	background: var(--tint);
+	box-shadow: inset 0 0 0 1px var(--sep);
+	transition: background-color var(--motion-fast) ease;
+}
+.track::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: calc(var(--c-sw-h) - 4px);
+	height: calc(var(--c-sw-h) - 4px);
+	border-radius: 50%;
+	background: var(--fg3);
+	transition:
+		transform var(--motion-travel) var(--motion-ease),
+		background-color var(--motion-fast) ease;
+}
+.toggle[aria-checked='true'] .track,
+.track[data-on='true'] {
+	background: var(--accent-fill);
+	box-shadow: none;
+}
+.toggle[aria-checked='true'] .track::after,
+.track[data-on='true']::after {
+	background: var(--knob);
+	transform: translateX(calc(var(--c-sw-w) - var(--c-sw-h)));
+}
+
+/* ── Segments ─────────────────────────────────────────────────────────────────────────────────────────── */
+.segments {
+	display: inline-flex;
+	padding: 2px;
+	border-radius: var(--c-r);
+	background: var(--tint);
+	flex: none;
+	height: var(--c-h);
+}
+.segments button {
+	display: flex;
+	align-items: center;
+	gap: var(--c-gap);
+	height: calc(var(--c-h) - 4px);
+	padding: 0 calc(var(--c-px) - 2px);
+	border: 0;
+	border-radius: var(--c-seg-r);
+	color: var(--fg2);
+	font-size: var(--c-fs);
+	background: transparent;
+	white-space: nowrap;
+}
+.segments [data-segment-short] {
+	display: none;
+}
+/* spec/task-window#panel: the capsule fills its row, the segments share it evenly, 2 px apart. */
+.segments[data-stretch] {
+	display: flex;
+	width: 100%;
+	gap: 2px;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.segments[data-stretch] > button {
+	flex: 1 1 0;
+	justify-content: center;
+	padding: 0 6px;
+}
+/* spec/remote-access-and-mobile#remote-button: a segment's count — the label's size, a step dimmer. */
+.segmentTail {
+	font-size: var(--text-11);
+	color: var(--fg3);
+	font-variant-numeric: tabular-nums;
+}
+.segments button[aria-checked='true'] .segmentTail,
+.segments button[aria-selected='true'] .segmentTail {
+	color: var(--fg2);
+}
+.segments[data-icon-only='true'] button {
+	padding: 0 4px;
+	min-width: calc(var(--c-h) - 4px);
+	justify-content: center;
+}
+.segments button[aria-checked='true'],
+.segments button[aria-selected='true'] {
+	background: var(--segment-on);
+	color: var(--fg);
+	box-shadow: var(--segment-on-shadow);
+}
+.segments[data-tabs='true'] {
+	background: transparent;
+	gap: 2px;
+}
+.segments[data-tabs='true'] button[aria-checked='true'],
+.segments[data-tabs='true'] button[aria-selected='true'] {
+	background: var(--accent-soft);
+	color: var(--accent);
+	box-shadow: none;
+}
+.segments {
+	position: relative;
+	isolation: isolate;
+}
+.segments > button {
+	position: relative;
+	z-index: 1;
+}
+.segmentIndicator {
+	pointer-events: none;
+	position: absolute;
+	z-index: 0;
+	left: 0;
+	top: 2px;
+	width: var(--segment-width, 0px);
+	height: var(--segment-height, 20px);
+	transform: translateX(var(--segment-x, 2px));
+	border-radius: var(--c-seg-r);
+	background: var(--segment-on);
+	box-shadow: var(--segment-on-shadow);
+	opacity: 0;
+}
+/* spec/appearance#segments: at rest the chosen button paints itself, the same token and shadow in every group (sheet, popover, Settings,
+   intro); the indicator stands in for it only while it slides (`data-moving`, set by Segments for one travel). The
+   underline tabs keep theirs: their mark is the 2 px line, not a fill. */
+.segments[data-moving][data-selected='true'] .segmentIndicator,
+.segments[data-underline][data-selected='true'] .segmentIndicator {
+	opacity: 1;
+}
+.segments[data-motion-ready='true'] .segmentIndicator {
+	transition:
+		transform var(--motion-travel) var(--motion-ease),
+		width var(--motion-travel) var(--motion-ease),
+		height var(--motion-travel) var(--motion-ease),
+		background-color var(--motion-fast) ease;
+}
+.segments[data-moving][data-selected] button[aria-checked='true'],
+.segments[data-moving][data-selected] button[aria-selected='true'] {
+	background: transparent;
+	box-shadow: none;
+}
+.segments[data-tabs='true'] .segmentIndicator {
+	background: var(--accent-soft);
+	box-shadow: none;
+}
+/* spec/projects-and-board#pr-mode: tabs as tall as their row; the indicator is a 2 px accent line on the row's
+   hairline, a hovered tab shows a grey one over its whole width, the keyboard focus a ring inside the tab. */
+.segments[data-underline] {
+	align-self: stretch;
+	height: auto;
+	padding: 0;
+	gap: 0;
+	border-radius: 0;
+	background: transparent;
+}
+.segments[data-underline] > button {
+	height: 100%;
+	padding: 0 10px;
+	border-radius: 0;
+	font-size: var(--text-13);
+}
+.segments[data-underline] > button[aria-selected='true'],
+.segments[data-underline] > button[aria-checked='true'] {
+	background: transparent;
+	box-shadow: none;
+	color: var(--fg);
+	font-weight: 500;
+}
+/* spec/projects-and-board#screen-layout: a tab's count stays regular and `--fg2`, chosen or not. */
+.segments[data-underline] .segmentTail {
+	font-weight: 400;
+	color: var(--fg2);
+}
+.segments[data-underline] .segmentIndicator {
+	top: auto;
+	bottom: 0;
+	height: 2px;
+	border-radius: 0;
+	background: var(--accent);
+	box-shadow: none;
+}
+.segments[data-underline] > button:not([aria-checked='true']):not([aria-selected='true']):hover,
+.segments[data-underline] > button:not([aria-checked='true']):not([aria-selected='true']):active {
+	background: transparent;
+	box-shadow: inset 0 -2px 0 var(--sep);
+}
+.segments[data-underline] > button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -8px;
+	border-radius: 12px;
+}
+/* Rule 15, spec/task-window#layout-overview: a segment not chosen shows hover and press over its whole box. A deselectable group (the toolbar
+   panels) fades its chosen segment while pressed: that click hides the panel, so it reads as letting go. */
+.segments > button:not([aria-checked='true']):not([aria-selected='true']):hover {
+	background: var(--segment-hover);
+	background-image: none;
+	color: var(--fg);
+}
+.segments > button:not([aria-checked='true']):not([aria-selected='true']):active {
+	background: var(--segment-press);
+	background-image: none;
+	color: var(--fg);
+}
+.segments > button:hover,
+.segments > button:active {
+	background-image: none;
+}
+.segments[data-deselectable='true'] > button[aria-checked='true']:active,
+.segments[data-deselectable='true'] > button[aria-selected='true']:active {
+	background-color: color-mix(in srgb, var(--segment-on) 70%, transparent);
+}
+/* Electron native hit testing ignores pointer-events when building drag regions. */
+.segments,
+.segments * {
+	-webkit-app-region: no-drag;
+}
+/* spec/editor#markdown-views: a group that cannot change now (the preview of a large file); the native title says why. */
+.segments[data-disabled='true'] button {
+	color: var(--fg2);
+}
+
+/* ── Switches (spec/task-window-workspace#layout-switch): Segments' capsule with independent on/off parts; the state is the glyph's own fill ──────────── */
+.switches {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	flex: none;
+	height: var(--c-h);
+	box-sizing: border-box;
+	padding: 2px;
+	border-radius: var(--c-r);
+	background: var(--tint);
+	-webkit-app-region: no-drag;
+}
+.switches > button {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+	height: calc(var(--c-h) - 4px);
+	min-width: calc(var(--c-h) - 2px);
+	box-sizing: border-box;
+	padding: 0 5px;
+	border: 0;
+	border-radius: var(--c-seg-r);
+	background: transparent;
+	color: var(--fg2);
+	-webkit-app-region: no-drag;
+	transition:
+		background-color var(--motion-fast) ease,
+		transform var(--motion-fast) ease;
+}
+.switches > button:hover {
+	background: var(--segment-hover);
+	color: var(--fg);
+}
+.switches > button:active,
+.switches > button[aria-expanded='true'] {
+	background: var(--segment-press);
+	color: var(--fg);
+}
+.switches > button:active {
+	transform: scale(0.96);
+}
+.switches > button[data-menu] {
+	min-width: 18px;
+	padding: 0 3px;
+}
+.switchTail [data-unsaved] {
+	color: var(--amber);
+}
+.switchTail {
+	font-size: var(--text-10);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: var(--fg);
+}
+
+/* ── Popup (dropdown): a field the height of its size ─────────────────────────────────────────────────── */
+.popupRoot {
+	position: relative;
+	min-width: 170px;
+}
+.popup {
+	display: flex;
+	align-items: center;
+	gap: var(--c-gap);
+	height: var(--c-h);
+	width: 100%;
+	padding: 0 var(--c-px);
+	border: 0;
+	border-radius: var(--c-r);
+	background: var(--tint);
+	font-size: var(--c-fs);
+	color: var(--fg);
+}
+.popup > span {
+	flex: 1;
+	text-align: left;
+	display: flex;
+	align-items: center;
+	gap: var(--c-gap);
+	min-width: 0;
+}
+.popup > svg {
+	color: var(--fg2);
+	flex: none;
+}
+/* A field's leading glyph (the Helper agent's provider) is --fg2 like its chevron. */
+.popupRoot:not([data-chip='true']):not([data-ghost]) .popup > span > svg {
+	color: var(--fg2);
+	flex: none;
+}
+/* spec/task-window#panel: the value is one line whatever its length (a long branch wrapped onto two in History). */
+.popupText {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.popup[aria-expanded='true'] {
+	background: var(--field);
+	box-shadow: inset 0 0 0 2px var(--accent);
+	background-image: none;
+}
+.popup:focus-visible {
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.popupRoot[data-chip='true'] {
+	min-width: 0;
+	max-width: 220px;
+}
+/* spec/crew#activity: a chip is a --tint pill as wide as its value, glyph and name 5 px apart;
+   hover --tint2, open --sel without the field's ring. */
+.popupRoot[data-chip='true'] .popup {
+	gap: 5px;
+	padding: 0 8px;
+	background: var(--tint);
+	color: var(--fg);
+	transition: background-color var(--motion-fast) ease;
+}
+.popupRoot[data-chip='true'] .popup:not(:disabled):hover {
+	background-color: var(--tint2);
+	background-image: none;
+}
+.popupRoot[data-chip='true'] .popup[aria-expanded='true'] {
+	background: var(--sel);
+	box-shadow: none;
+}
+.popupRoot[data-chip='true'] .popup:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.popupRoot[data-chip='true'] .popup > span {
+	gap: 5px;
+	overflow: hidden;
+}
+.popupRoot[data-chip='true'] .popup > span > svg {
+	flex: none;
+}
+.popupRoot[data-chip='true'] .menu {
+	overflow: auto;
+}
+.popupRoot[data-ghost='true'] {
+	min-width: 0;
+}
+.popupRoot[data-ghost='true'] .popup {
+	background: transparent;
+	transition: background-color var(--motion-fast) ease;
+}
+.popupRoot[data-ghost='true'] .popup:not(:disabled):hover,
+.popupRoot[data-ghost='true'] .popup[aria-expanded='true'] {
+	background: var(--tint);
+	background-image: none;
+	box-shadow: none;
+}
+/* spec/pull-requests-and-ci#ci-segment: a filter trigger as wide as its text; the ✓ of the chosen option stays in its list, the
+   trigger keeps the tint and the common hover layer. */
+.popupRoot[data-fit='true'] {
+	min-width: 0;
+}
+.popupRoot[data-fit='true'] .popup {
+	width: auto;
+}
+.popupRoot[data-fit='true'] .popup > span {
+	flex: none;
+}
+.popupRoot[data-marks='true']:not([data-fit]):not([data-chip='true'])
+	.popup:not(:disabled):not([aria-expanded='true']):hover {
+	background: color-mix(in srgb, var(--field), var(--fg) 6%);
+}
+
+/* ── Menu of a Popup ──────────────────────────────────────────────────────────────────────────────────── */
+/* spec/appearance#component-details (rule 17): one menu look — the ui/Popover shell's metrics: radius 9, padding 5, a row 0 8 with the
+   radius r − 2, the menus' shadow. */
+.menu {
+	position: absolute;
+	z-index: 10;
+	top: calc(100% + 6px);
+	left: 0;
+	/* spec/settings-modules-and-onboarding#settings-window: never narrower than its trigger, so a 240 field (Settings, `wide`) never opens a 200 list. */
+	min-width: max(200px, 100%);
+	background: var(--card);
+	border: 1px solid var(--sep);
+	border-radius: 9px;
+	padding: 5px;
+	box-shadow: var(--shadow-menu);
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	outline: none;
+}
+.menu > div,
+.menu > [role='listbox'] > div {
+	display: flex;
+	align-items: center;
+	gap: var(--c-gap);
+	min-height: var(--c-h);
+	padding: 0 8px;
+	border-radius: calc(var(--c-r) - 2px);
+	font-size: var(--c-fs);
+	white-space: nowrap;
+}
+.menu > div[data-active='true'],
+.menu > [role='listbox'] > div[data-active='true'] {
+	background: var(--accent-fill);
+	color: var(--selfg);
+}
+.menu {
+	opacity: 1;
+	translate: 0 0;
+	transition:
+		opacity var(--motion-enter-time) var(--motion-ease),
+		translate var(--motion-enter-time) var(--motion-ease);
+}
+.menu[data-open='false'] {
+	opacity: 0;
+	translate: 0 4px;
+	pointer-events: none;
+}
+@starting-style {
+	.menu[data-open='true'] {
+		opacity: 0;
+		translate: 0 6px;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.menu,
+	.menu[data-open='false'] {
+		translate: none;
+	}
+}
+.menu[data-align='end'] {
+	left: auto;
+	right: 0;
+}
+.menu > div[aria-disabled='true'],
+.menu > [role='listbox'] > div[aria-disabled='true'] {
+	color: var(--fg3);
+}
+.menu > div[aria-disabled='true'][data-active='true'],
+.menu > [role='listbox'] > div[aria-disabled='true'][data-active='true'] {
+	background: var(--tint);
+	color: var(--fg3);
+}
+/* The list scrolls itself and opens towards the side with room (Popup measures it); a long list gets a filter on top. */
+.menu {
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+.menu[data-side='top'] {
+	top: auto;
+	bottom: calc(100% + 6px);
+}
+.menu > [role='listbox'] {
+	display: contents;
+}
+.menuSearch {
+	position: sticky;
+	top: -5px;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: var(--c-gap);
+	margin: -5px -5px 3px;
+	padding: 0 13px;
+	min-height: var(--c-h);
+	border-bottom: 1px solid var(--sep);
+	background: var(--card);
+	color: var(--fg2);
+}
+.menuSearch input {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	outline: none;
+	font-size: var(--c-fs);
+	color: var(--fg);
+}
+.menuEmpty {
+	margin: 0;
+	padding: 6px 8px;
+	font-size: var(--c-fs);
+	color: var(--fg2);
+}
+@starting-style {
+	.menu[data-side='top'][data-open='true'] {
+		translate: 0 -6px;
+	}
+}
+.menu[data-side='top'][data-open='false'] {
+	translate: 0 -4px;
+}
+/* spec/composer-steering-queue-and-ghost#ghost-headless: groups of a Popup — a header per provider, a line between groups; headers are not options and take no hover.
+   spec/pull-requests-and-ci#from-into: with a search field the rows sit in `[role=listbox]` — the header and the line there too, not as an option. */
+.menu > .menuHead,
+.menu > [role='listbox'] > .menuHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 0;
+	padding: 5px 8px 3px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+	border-radius: 0;
+}
+.menu > .menuHead > svg,
+.menu > [role='listbox'] > .menuHead > svg {
+	flex: none;
+}
+/* A capped list scrolls; its group headers keep their 22 px instead of shrinking to the padding. */
+.menu > .menuHead,
+.menu > .menuSep,
+.menu > [role='listbox'] > .menuHead,
+.menu > [role='listbox'] > .menuSep {
+	flex-shrink: 0;
+}
+.menu > .menuHead > small,
+.menu > [role='listbox'] > .menuHead > small {
+	font-size: var(--text-11);
+	font-weight: 400;
+	color: var(--fg3);
+}
+.menu > .menuSep,
+.menu > [role='listbox'] > .menuSep {
+	flex: none;
+	height: 1px;
+	margin: 4px 6px;
+	background: var(--sep);
+}
+/* spec/composer-steering-queue-and-ghost#ghost-headless: Settings popups — ✓ on the chosen option in its own column. */
+.mark {
+	width: 10px;
+	flex: none;
+	display: flex;
+	align-items: center;
+}
+.optionText {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 2px 0;
+}
+.optionDescription {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+[role='option'][data-active='true'] .optionDescription {
+	color: inherit;
+	opacity: 0.75;
+}
+/* spec/pull-requests-and-ci#from-into: a label that gives way — a git ref is mono 11.5 and loses its middle first (BranchName). */
+.optionLabel {
+	display: flex;
+	min-width: 0;
+}
+.optionLabel[data-branch] {
+	font: var(--text-11-5) var(--mono-family);
+}
+.optionText {
+	min-width: 0;
+}
+.optionTail {
+	flex: none;
+	margin-left: auto;
+	padding-left: 12px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+[role='option'][data-active='true'] .optionTail {
+	color: inherit;
+	opacity: 0.7;
+}
+/* spec/task-window-workspace#tool-tab-look, the device picker: a running option — a green dot on its icon's bottom-right. */
+.optionLive {
+	position: relative;
+	display: inline-flex;
+	flex: none;
+}
+.optionLive > i {
+	position: absolute;
+	right: -3px;
+	bottom: -2px;
+	width: 6px;
+	height: 6px;
+	border-radius: 3px;
+	background: var(--green);
+	box-shadow: 0 0 0 1.5px var(--card);
+}
+[role='option'][data-active='true'] .optionLive > i {
+	box-shadow: 0 0 0 1.5px var(--accent-fill);
+}
+/* The row's own action: 24 px, quiet at rest, its own hover and press over the row's fill. */
+.optionAction {
+	flex: none;
+	width: 24px;
+	height: 24px;
+	margin: 0 -6px 0 auto;
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	color: var(--fg2);
+}
+.optionAction:hover,
+.optionAction:active {
+	background-image: none;
+	color: var(--fg);
+}
+.optionAction:hover {
+	background-color: var(--tint2);
+}
+.optionAction:active {
+	background-color: color-mix(in srgb, var(--fg) 18%, transparent);
+}
+[role='option'][data-active='true'] .optionAction {
+	color: inherit;
+}
+[role='option'][data-active='true'] .optionAction:hover {
+	background-color: color-mix(in srgb, var(--selfg) 22%, transparent);
+}
+[role='option'][data-active='true'] .optionAction:active {
+	background-color: color-mix(in srgb, var(--selfg) 36%, transparent);
+}
+.optionAction:focus-visible {
+	outline: none;
+	box-shadow: inset 0 0 0 2px var(--selfg);
+	background-color: color-mix(in srgb, var(--selfg) 22%, transparent);
+}
+
+/* ── Stepper ──────────────────────────────────────────────────────────────────────────────────────────── */
+.stepper {
+	composes: frame from './Input.module.css';
+	height: var(--c-h);
+	display: inline-flex;
+	align-items: stretch;
+	border-radius: var(--c-r);
+	overflow: hidden;
+	background: var(--tint);
+}
+.stepper input[type] {
+	width: 60px;
+	height: 100%;
+	min-width: 0;
+	padding: 0 var(--c-px);
+	font-size: var(--c-fs);
+	font-variant-numeric: tabular-nums;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	appearance: textfield;
+	box-shadow: none;
+}
+/* A text value (Unlimited) takes 100; a fractional step stays a 60 px number (spec/settings-modules-and-onboarding#settings-window). */
+.stepper[data-automatic='true'] input[type] {
+	width: 100px;
+}
+.stepper input::-webkit-inner-spin-button {
+	appearance: none;
+}
+.stepper > span {
+	display: flex;
+	flex-direction: row;
+}
+.stepper button {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 100%;
+	padding: 0;
+	line-height: 1;
+	border: 0;
+	border-radius: 0;
+	font-size: 15px;
+	font-weight: 500;
+	color: var(--fg2);
+	background: transparent;
+}
+.stepper[data-disabled='true'] input {
+	color: var(--fg3);
+}
+.stepper:focus-within {
+	background: var(--field);
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* ── Checkbox and radio: the indicator scales with the size; the row around it (label) is the target ───────── */
+.choice {
+	appearance: none;
+	width: var(--c-box);
+	height: var(--c-box);
+	flex: none;
+	padding: 0;
+	margin: 0;
+	border: 0;
+	border-radius: 5px;
+	background: var(--tint);
+	box-shadow: inset 0 0 0 1px var(--sep);
+	display: inline-grid;
+	place-content: center;
+}
+.choice:checked {
+	background: var(--accent-fill);
+	box-shadow: none;
+}
+/* spec/search-menus-and-commands#command-editor, rule 15: a box answers the hover of its label row, wherever the pointer is on it — the ring darkens to
+   --fg2. */
+label:hover > .choice:not(:checked):not(:disabled) {
+	box-shadow: inset 0 0 0 1px var(--fg2);
+}
+.choice[type='checkbox']:checked::after {
+	content: '';
+	width: calc(var(--c-box) * 0.42);
+	height: calc(var(--c-box) * 0.22);
+	border-left: 1.5px solid var(--selfg);
+	border-bottom: 1.5px solid var(--selfg);
+	transform: translateY(-1px) rotate(-45deg);
+}
+.choice[type='radio'] {
+	border-radius: 50%;
+}
+.choice[type='radio']:checked::after {
+	content: '';
+	width: calc(var(--c-box) * 0.36);
+	height: calc(var(--c-box) * 0.36);
+	border-radius: 50%;
+	background: var(--selfg);
+}
+.choice:disabled {
+	opacity: var(--control-disabled);
+}
+
+/* ── Field (labelled input) ───────────────────────────────────────────────────────────────────────────── */
+.field {
+	composes: frame from './Input.module.css';
+	display: flex;
+	align-items: center;
+	gap: var(--c-gap);
+	min-height: var(--c-h);
+	padding: 0 var(--c-px);
+	border-radius: var(--c-r);
+	background: var(--tint);
+}
+.field > span {
+	font-size: var(--text-10);
+	color: var(--fg2);
+	flex: none;
+}
+.field .fieldError {
+	color: var(--red);
+}
+.field input {
+	min-width: 0;
+	flex: 1;
+	border: 0;
+	height: calc(var(--c-h) - 4px);
+	padding: 0;
+	font-size: var(--c-fs);
+	border-radius: 0;
+	outline: none;
+	background: transparent;
+	box-shadow: none;
+}
+.field input[spellcheck='false'] {
+	font-family: var(--mono-family);
+}
+.field[data-invalid='true']:not(:focus-within) {
+	box-shadow: inset 0 0 0 1px var(--red);
+}
+.field:focus-within {
+	background: var(--field);
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* ── Chip (clickable) and Badge, Tag (labels) ─────────────────────────────────────────────────────────── */
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: var(--control-h-s);
+	padding: 0 var(--control-px-s);
+	border: 0;
+	border-radius: var(--control-r-s);
+	font-size: var(--text-11);
+	background: var(--tint);
+	color: var(--fg2);
+	/* The `fresh` ring fades in colour, not in size. */
+	box-shadow: 0 0 0 2px transparent;
+	transition:
+		background-color var(--motion-fast) ease,
+		color var(--motion-fast) ease,
+		box-shadow var(--motion-travel) ease;
+}
+/* spec/crew-templates-and-editor#editor-inspector: a chip that is only a glyph («+» of a chip row) is square. */
+.chip[data-square='true'] {
+	width: var(--control-h-s);
+	padding: 0;
+	justify-content: center;
+}
+/* spec/tasks#sheet-rail: under the pointer a plain chip's text comes up to `--fg`. */
+.chip[data-tone='normal']:not(:disabled):hover {
+	color: var(--fg);
+}
+/* Rule 15, spec/tasks#worktree-preparation: a selected chip hovers too —
+   the shared hover and press layers (`button:hover`, tokens.css) over its accent fill, on the whole chip; the text stays
+   accent. Only `background-color` here: the `background` shorthand would reset those layers and leave the chip without a hover. */
+.chip[data-tone='selected'] {
+	background-color: var(--accent-soft);
+	color: var(--accent);
+}
+/* spec/tasks#worktree-preparation: a chip just added — a folder from «Add folder…» —
+   carries an accent ring outside; when the caller drops `fresh` after ~2 s, the ring fades out (`.chip` transition). */
+.chip[data-fresh='true'] {
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.status {
+	display: inline-flex;
+	width: var(--status-size, 16px);
+	height: var(--status-size, 16px);
+	flex: none;
+	color: var(--fg2);
+}
+.status[data-status='working'],
+.status[data-status='preparing'] {
+	color: var(--accent);
+}
+.status[data-status='needs-you'] {
+	color: var(--amber);
+}
+.status[data-status='failed'] {
+	color: var(--red);
+}
+.status[data-status='done'] {
+	color: var(--green);
+}
+.status[data-status='completed'] {
+	color: var(--fg3);
+} /* spec/sidebar#done-rows: the quiet tick */
+.status[data-sign-in] {
+	color: var(--amber);
+}
+.status[data-status='working'] svg,
+.status[data-status='preparing'] svg {
+	animation: spin 1s steps(8) infinite;
+	transform-origin: 50% 50%;
+}
+.spin {
+	transform-origin: 8px 8px;
+	animation: spin 1s linear infinite;
+}
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.spin {
+		animation: none;
+	}
+	.status[data-status='working'] svg,
+	.status[data-status='preparing'] svg {
+		animation: none;
+	}
+	.track::after {
+		transition: none;
+	}
+}
+.badge {
+	display: inline-flex;
+	align-items: center;
+	height: 16px;
+	padding: 0 6px;
+	border-radius: 8px;
+	font-size: var(--text-10);
+	background: var(--accent-soft);
+}
+.badge[data-warning='true'] {
+	color: var(--amber);
+	background: var(--amber-soft);
+	font-weight: 600;
+}
+.tag {
+	border: 1px solid var(--sep);
+	border-radius: 3px;
+	padding: 0 3px;
+	font-size: var(--text-9);
+	color: var(--fg2);
+}
+/* spec/settings-modules-and-onboarding#row-hover: a settings row whose control is a switch is one target (rule 15). The switch's ::after spans the row, so a click
+   on the label column, the text, the explanation or empty space toggles it; the row hovers --tint and presses
+   --segment-press, the switch has no hover of its own. Nested buttons and the install command lie above it with their own
+   hover; a disabled switch (pointer-events: none) leaves the row inert. Rows compose this class. */
+.switchRow:has([role='switch']) {
+	position: relative;
+	transition: background-color var(--motion-fast) ease;
+}
+.switchRow [role='switch']::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+}
+.switchRow [role='switch']:hover,
+.switchRow [role='switch']:active {
+	background-image: none;
+}
+.switchRow:has([role='switch']:not(:disabled)):hover,
+.switchRow:has([role='switch']:focus-visible) {
+	background: var(--tint);
+}
+.switchRow:has([role='switch']:not(:disabled):active) {
+	background: var(--segment-press);
+}
+.switchRow:has([role='switch']) :is(button:not([role='switch']), a, input, select, textarea, code) {
+	position: relative;
+	z-index: 1;
+}
+
+/* ChoiceButton: an XL action with its consequence under it (MergeDialog, spec/git#main-tree-branches). */
+.button.choiceButton {
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	gap: 1px;
+	width: 100%;
+	height: auto;
+	min-height: var(--c-h);
+	padding-block: 4px;
+	text-align: left;
+	white-space: normal;
+}
+.choiceButton strong {
+	font-size: var(--text-12);
+	font-weight: 600;
+}
+.choiceButton small {
+	font-size: var(--text-10);
+	color: inherit;
+	opacity: 0.78;
+}

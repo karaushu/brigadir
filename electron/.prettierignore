@@ -1,0 +1,17 @@
+node_modules/
+**/out/
+dist/
+.runtime/
+.launch/
+test-results/
+playwright-report/
+coverage/
+pnpm-lock.yaml
+
+# Vendored assets and canonical test data.
+apps/desktop/resources/
+apps/desktop/src/renderer/lucide/*.json
+**/fixtures/**
+
+# Local live-test output.
+test-results/

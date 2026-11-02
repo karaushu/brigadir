@@ -1,0 +1,292 @@
+.actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: calc(var(--review-available, 100cqi) - var(--review-inset, 44px) - 10px);
+	max-width: calc(100% - var(--review-inset, 44px) - 10px);
+	margin: 6px 10px 4px var(--review-inset, 44px);
+	padding: 6px 8px;
+	border: 1px solid var(--accent);
+	border-radius: 7px;
+	background: var(--card);
+	font: var(--text-12) var(--ui-family);
+	flex-wrap: wrap;
+	position: sticky;
+	left: var(--review-inset, 44px);
+}
+.floatAnchor {
+	position: relative;
+	height: 0;
+	z-index: 30;
+}
+.float {
+	position: absolute;
+	top: 4px;
+	left: 44px;
+	width: max-content;
+	pointer-events: none;
+}
+.float > * {
+	pointer-events: auto;
+}
+.float[data-held] {
+	visibility: hidden;
+}
+/* A pill as wide as its content; SelectionFloat places it and caps it at the visible code. */
+.float .actions {
+	width: auto;
+	max-width: 100%;
+	margin: 0;
+	position: static;
+	flex-wrap: nowrap;
+	box-shadow: var(--shadow-float);
+}
+.float .actions > span {
+	margin-left: 6px;
+	max-width: none;
+}
+.float > p {
+	width: max-content;
+	max-width: 100%;
+	margin: 4px 0 0;
+	position: static;
+	padding: 4px 8px;
+	border-radius: 6px;
+	background: var(--card);
+	color: var(--fg2);
+	font: var(--text-11) var(--ui-family);
+	box-shadow: var(--shadow-float);
+}
+.actions > span {
+	margin-left: auto;
+	min-width: 0;
+	max-width: 240px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.actions > button:not([data-appearance='primary']) svg {
+	color: var(--fg2);
+}
+.draft,
+.comment {
+	width: calc(var(--review-available, 100cqi) - var(--review-inset, 44px) - 10px);
+	max-width: calc(100% - var(--review-inset, 44px) - 10px);
+	position: sticky;
+	left: var(--review-inset, 44px);
+	margin: 0 10px 6px var(--review-inset, 44px);
+	padding: 0;
+	border: 1px solid var(--sep);
+	border-radius: 7px;
+	background: var(--card);
+	font: var(--text-12) var(--ui-family);
+	overflow: hidden;
+}
+
+.draft > header,
+.comment > header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 9px;
+	border-bottom: 1px solid var(--sep);
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.draft header strong,
+.comment header strong {
+	color: var(--fg);
+	font-size: var(--text-11);
+}
+.draft header small {
+	margin-left: auto;
+}
+.draft header small,
+.comment header small {
+	font-size: var(--text-10);
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--tint);
+	white-space: nowrap;
+}
+.draft .avatar,
+.comment .avatar {
+	width: 18px;
+	height: 18px;
+	display: grid;
+	place-items: center;
+	border-radius: 50%;
+	background: var(--accent-soft);
+	color: var(--fg);
+	font-size: var(--text-9);
+	font-weight: 700;
+	flex: none;
+	margin: 0;
+}
+/* spec/appearance#evolution-redesign: the lines a draft or a comment anchors to, `109–111`. */
+.lineCount {
+	font: var(--text-11) var(--mono-family);
+	color: var(--fg2);
+	white-space: nowrap;
+}
+/* The selected code a draft or a comment quotes. */
+.quote {
+	margin: 8px 9px 0;
+	padding: 2px 0 2px 8px;
+	border-left: 2px solid color-mix(in srgb, var(--accent) 45%, var(--sep));
+	font: var(--text-11) / 16px var(--mono-family);
+	color: var(--fg2);
+	min-width: 0;
+}
+.draft .quote {
+	margin-top: 7px;
+}
+.quote > div {
+	white-space: pre;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.quote > small {
+	display: block;
+	font: var(--text-10-5) var(--ui-family);
+	color: var(--fg3);
+}
+.draft textarea {
+	display: block;
+	width: 100%;
+	min-height: 50px;
+	height: 50px;
+}
+.draft footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	padding: 6px 9px;
+	border-top: 1px solid var(--sep);
+	gap: 6px;
+	flex-wrap: wrap;
+}
+.draft footer > button:first-child {
+	margin-right: auto;
+}
+.draft footer > button svg {
+	color: var(--fg2);
+}
+.comment {
+	margin-block: 6px;
+}
+.comment header > span:not(.avatar) {
+	margin-right: auto;
+}
+.comment p {
+	margin: 0;
+	padding: 8px 9px;
+	min-height: 34px;
+	max-height: 160px;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	line-height: 1.45;
+}
+.comment [data-outdated='true'] {
+	color: var(--amber);
+}
+.footer {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	border-top: 1px solid var(--sep);
+	background: var(--sb);
+	font-size: var(--text-11);
+}
+.footerActions {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin-left: auto;
+	flex: none;
+}
+.warning {
+	color: var(--amber);
+	flex: 1;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.footer {
+	flex-wrap: wrap;
+	flex: none;
+}
+.generalNote {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-basis: 100%;
+}
+.generalNote textarea {
+	flex: 1;
+	min-height: 30px;
+	max-height: 96px;
+}
+.footer {
+	padding: 8px 10px;
+	gap: 7px;
+	background: var(--card);
+}
+.generalNote {
+	order: 2;
+}
+.summary {
+	display: flex;
+	align-items: center;
+	gap: 0;
+}
+
+.generalNote[hidden] {
+	display: none;
+}
+.generalNote textarea {
+	min-width: 0;
+}
+
+.collapse[aria-expanded='false'] svg {
+	transform: rotate(180deg);
+}
+/* ^ is a disclosure, not a toggle — expanded it keeps the ghost look, only the chevron turns. */
+.summary .collapse.collapse[aria-expanded='true']:not(:hover):not(:active):not(:disabled) {
+	background-color: transparent;
+	color: inherit;
+}
+
+.actions,
+.draft {
+	animation: var(--motion-reveal);
+}
+.collapse svg {
+	transition: transform var(--motion-travel) var(--motion-ease);
+}
+.generalNote {
+	height: auto;
+	interpolate-size: allow-keywords;
+	opacity: 1;
+	overflow: hidden;
+	transition:
+		height var(--motion-travel) var(--motion-ease),
+		opacity var(--motion-enter-time) ease,
+		display var(--motion-travel) allow-discrete;
+}
+.generalNote[hidden] {
+	height: 0;
+	opacity: 0;
+}
+@starting-style {
+	.generalNote:not([hidden]) {
+		height: 0;
+		opacity: 0;
+	}
+}

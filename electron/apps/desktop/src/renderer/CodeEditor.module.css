@@ -1,0 +1,226 @@
+.editor {
+	container-type: inline-size;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.editor > header {
+	display: flex;
+	gap: 8px;
+	padding: 10px 12px;
+	align-items: center;
+	border-bottom: 1px solid var(--sep);
+}
+.editor > header > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.mount {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+.editor > footer {
+	/* spec/editor#editor-chrome: 24 px, 10.5 --fg2 on a hair. */
+	flex: none;
+	height: 24px;
+	box-sizing: border-box;
+	padding: 0 12px;
+	line-height: 24px;
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+	border-top: 1px solid var(--hair);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.notice {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
+	padding: 6px 12px;
+	background: var(--amber-soft);
+	line-height: 1.7;
+}
+/* spec/appearance#evolution-redesign: closing tabs with unsaved edits — 12 / 18 text, the buttons in the row's S. */
+.notice[data-closing-notice] {
+	padding: 5px 12px;
+	font-size: var(--text-12);
+	line-height: 18px;
+}
+.empty {
+	margin: auto;
+	padding: 24px;
+	color: var(--fg2);
+}
+
+.annotation {
+	display: flow-root;
+	font-family: var(--ui-family);
+}
+.annotation > p {
+	padding: 6px 12px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.notes {
+	display: flex;
+	flex-direction: column;
+	height: 150px;
+	max-height: 25%;
+	flex: none;
+	min-height: 0;
+	border-top: 1px solid var(--sep);
+}
+
+.comparison {
+	height: 240px;
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	border-bottom: 1px solid var(--sep);
+}
+.comparison header {
+	padding: 8px 12px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	justify-content: space-between;
+}
+.comparison pre {
+	margin: 0;
+	padding: 0 12px;
+	font: var(--editor-size, 12px)/var(--editor-line, 19px) var(--editor-family, ui-monospace);
+}
+.comparison pre[data-kind='added'] {
+	background: var(--diffAddedBg);
+}
+.comparison pre[data-kind='removed'] {
+	background: var(--diffRemovedBg);
+}
+.editor > header {
+	/* spec/editor#editor-chrome: the file header is a row S (rule 16), 32 px, 0 6 0 12, on a hair. */
+	padding: 0 6px 0 12px;
+	gap: 2px;
+	height: 32px;
+	box-sizing: border-box;
+	flex: none;
+	border-bottom-color: var(--hair);
+}
+.editor > header > .viewSwitch {
+	margin-right: 4px;
+}
+
+.selectionWidget {
+	display: flow-root;
+	background: var(--content);
+}
+.selectionWidget > .annotation {
+	width: var(--review-available);
+	max-width: var(--review-available);
+	position: sticky;
+	left: 0;
+}
+.editor > footer .codeNotice {
+	color: var(--fg);
+}
+.noticeLink {
+	padding: 0;
+	border: none;
+	background: none;
+	font: inherit;
+	color: var(--accent);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+
+/* spec/editor#markdown-views: Markdown views. «Code | Side by side | Preview» with labels; a narrow editor keeps the icons.
+   Side by side halves the column; Preview keeps the code's search panel, not its text. */
+.viewSwitch {
+	flex: none;
+}
+.viewSwitch .viewIcon {
+	display: none;
+}
+/* spec/appearance#control-scale: the shared icon-only segment is a square; here it carries a label next to the glyph until the editor is narrow. */
+.viewSwitch.viewSwitch[data-icon-only='true'] > button {
+	width: auto;
+	min-width: calc(var(--c-h) - 4px);
+	padding: 0 calc(var(--c-px) - 2px);
+}
+.viewSwitch .viewIcon > svg {
+	display: block;
+}
+@container (max-width: 440px) {
+	.viewSwitch .viewIcon {
+		display: inline-flex;
+	}
+	.viewSwitch .viewLabel {
+		display: none;
+	}
+	.viewSwitch.viewSwitch[data-icon-only='true'] > button {
+		width: calc(var(--c-h) - 4px);
+		padding: 0;
+	}
+}
+.markdownLayout {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.markdownLayout[data-view='code'] > .mount {
+	flex: 1;
+}
+.markdownLayout[data-view='side'] {
+	flex-direction: row;
+}
+.markdownLayout[data-view='side'] > .mount {
+	flex: none;
+	width: 50%;
+	min-width: 0;
+	border-right: 1px solid var(--sep);
+}
+.markdownLayout[data-view='preview'] > .mount {
+	flex: none;
+}
+.markdownLayout[data-view='preview'] > .mount :global(.cm-editor) {
+	height: auto;
+}
+.markdownLayout[data-view='preview'] > .mount :global(.cm-scroller) {
+	display: none !important;
+}
+/* spec/editor#editor-chrome: in the preview the code is hidden but its find panel floats over the rendered text (no replace there:
+   ⌥⌘F switches to the code). The mount has no height then, so it must not clip the card. */
+.markdownLayout[data-view='preview'] > .mount {
+	position: relative;
+	z-index: 3;
+	overflow: visible;
+}
+.markdownLayout[data-view='preview'] :global(.cm-change-map) {
+	display: none;
+}
+.editor :global(.cm-md-flash) {
+	animation: md-flash-line 900ms var(--motion-ease) both;
+}
+@keyframes md-flash-line {
+	0%,
+	50% {
+		background-color: var(--accent-soft);
+	}
+	100% {
+		background-color: transparent;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.editor :global(.cm-md-flash) {
+		animation: none;
+		background-color: var(--accent-soft);
+	}
+}

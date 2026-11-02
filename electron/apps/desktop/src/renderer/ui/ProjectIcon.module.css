@@ -1,0 +1,36 @@
+/* spec/appearance#evolution-redesign: a tile of the icon's colour at 16 %, the glyph or the letters in the colour itself. */
+.tile {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: var(--icon-size);
+	height: var(--icon-size);
+	border-radius: var(--icon-radius);
+	overflow: hidden;
+	background: color-mix(in srgb, var(--icon-tone) 16%, transparent);
+	color: var(--icon-tone);
+}
+.tile[data-project-icon='monogram'] {
+	background: color-mix(in srgb, var(--icon-tone) 18%, transparent);
+}
+.tile[data-project-icon='repo'],
+.tile[data-project-icon='image'] {
+	background: transparent;
+}
+.lucide {
+	flex: none;
+	display: block;
+}
+.image {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.letters {
+	font-size: var(--icon-letters);
+	line-height: 1;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}

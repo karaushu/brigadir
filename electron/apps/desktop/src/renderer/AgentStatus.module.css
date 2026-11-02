@@ -1,0 +1,31 @@
+.wrap {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+.status {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.status[data-state='login'],
+.status[data-state='failed'] {
+	color: var(--amber);
+}
+.status[data-state='missing'] {
+	color: var(--red);
+}
+.hint {
+	flex-basis: 100%;
+	box-sizing: border-box;
+	padding: 6px 9px;
+	border-radius: 6px;
+	/* spec/appearance#component-details: the command to copy — code background, a hairline inside, mono 11. */
+	background: var(--code);
+	box-shadow: inset 0 0 0 1px var(--hair);
+	color: var(--fg);
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+	user-select: text;
+}

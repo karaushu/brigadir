@@ -1,0 +1,11 @@
+/* spec/settings-modules-and-onboarding#intro-remote: the simulator's tools not found — the status in amber after «iOS and Android ·». */
+.miss {
+	color: var(--amber-text);
+}
+/* spec/settings-modules-and-onboarding#module-settings-popup: the ⚙ of a module with settings (M ghost, 28 × 28) before its switch, on the row's M line (rule 16). */
+.controls {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 8px;
+}

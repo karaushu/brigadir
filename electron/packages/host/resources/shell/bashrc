@@ -1,0 +1,26 @@
+[[ -r "$HOME/.bashrc" ]] && source "$HOME/.bashrc"
+_brigadir_running=0
+_brigadir_preexec() {
+  if [[ $_brigadir_running == 0 && $BASH_COMMAND != _brigadir_precmd* ]]; then
+    _brigadir_running=1
+    local brigadir_command
+    brigadir_command=$(HISTTIMEFORMAT= builtin history 1)
+    brigadir_command=${brigadir_command#*[0-9]  }
+    printf '\033]777;brigadir;%s\007\033]133;C\007' "$(printf '%s\0%s' "$brigadir_command" "$PWD" | /usr/bin/base64)"
+  fi
+}
+_brigadir_precmd() {
+  local brigadir_code=$?
+  printf '\033]133;D;%d\007\033]133;A\007' "$brigadir_code"
+  _brigadir_running=1
+}
+_brigadir_ready() { _brigadir_running=0; }
+# Prepend our status capture; keep the user's prompt command and DEBUG trap.
+if [[ -z $(trap -p DEBUG) ]]; then
+  if [[ ${BASH_VERSINFO[0]} -ge 5 ]]; then
+    PROMPT_COMMAND=(_brigadir_precmd "${PROMPT_COMMAND[@]}" _brigadir_ready)
+  else
+    PROMPT_COMMAND="_brigadir_precmd${PROMPT_COMMAND:+; $PROMPT_COMMAND}; _brigadir_ready"
+  fi
+  trap '_brigadir_preexec' DEBUG
+fi

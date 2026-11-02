@@ -1,0 +1,69 @@
+/* The board card's relations: S tint buttons with an accent glyph (spec/appearance#evolution-redesign). */
+.links {
+	display: flex;
+	gap: 5px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+.links > button {
+	min-width: 0;
+	max-width: 100%;
+	color: var(--fg);
+}
+.links > button > svg {
+	color: var(--accent);
+	flex: none;
+}
+.links > button > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.links > span {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+
+/* spec/appearance#evolution-redesign: the relation in the task header's second line — ui/HeaderChip placed 4 px out to the
+   left. It shrinks a thousand times faster than the repo chip, so its name truncates while the repo line stays whole;
+   only a window too narrow for both lets the repo chip give way. */
+.dot {
+	flex: none;
+	color: var(--fg3);
+}
+.chip {
+	flex: 0 1000 auto;
+	margin-left: -4px;
+	overflow: hidden;
+}
+.chip > svg {
+	color: var(--accent);
+}
+.label {
+	flex: none;
+	color: var(--fg2);
+}
+.name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg);
+}
+.more {
+	margin-left: -4px;
+}
+.gone {
+	flex: none;
+	white-space: nowrap;
+	color: var(--fg3);
+}
+.menu [data-relay-item] svg {
+	color: var(--accent);
+}
+.itemText {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

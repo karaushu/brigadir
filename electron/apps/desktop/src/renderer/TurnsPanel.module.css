@@ -1,0 +1,146 @@
+/* spec/pull-requests-and-ci#pr-panel: Turns as the third mode of the changes panel. */
+.panel {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	animation: var(--motion-fade);
+}
+/* spec/task-window#panel, a turn selected: the chosen turn's changes follow the list. Rows' viewport is
+   size-contained (no height of its own), so the list asks for its rows' height (45 px each) and gives way down to two
+   rows when the changes need the room — with `flex: none` the list would be 0 px tall and hide every turn. */
+.turns {
+	flex: 0 1 calc(var(--turn-rows, 1) * 45px);
+	min-height: min(90px, calc(var(--turn-rows, 1) * 45px));
+	display: flex;
+	flex-direction: column;
+}
+.turns:only-child {
+	flex: 1;
+}
+.turn {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	padding: 7px 12px;
+	box-sizing: border-box;
+	border-radius: 0;
+	color: var(--fg);
+	font: inherit;
+	text-align: left;
+}
+/* spec/task-window#panel: hover --hover over the whole row, the chosen turn --sel with the accent edge. */
+.turn:hover {
+	background-color: var(--hover);
+	background-image: none;
+}
+.turn[aria-pressed='true'] {
+	background-color: var(--sel);
+	box-shadow: inset 2px 0 0 var(--accent);
+}
+.turn:focus-visible {
+	outline-offset: -2px;
+}
+.line {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+}
+.line strong {
+	font-size: calc(11.5px * var(--ui-scale));
+	font-weight: 500;
+	color: var(--fg);
+	white-space: nowrap;
+}
+.line small {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.icon {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg2);
+}
+.icon > svg {
+	display: block;
+}
+.turn[data-status='running'] .icon {
+	color: var(--accent);
+}
+.turn[data-status='failed'] .icon {
+	color: var(--red);
+}
+.space {
+	flex: 1;
+	min-width: 0;
+}
+.summary {
+	margin: 2px 0 0 20px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.counts {
+	font-family: var(--mono-family);
+	font-size: var(--text-10);
+}
+.changes {
+	flex: 0 1 auto;
+	max-height: 50%;
+	min-height: 0;
+	overflow: auto;
+	border-top: 1px solid var(--sep);
+	padding: 8px 0;
+}
+.changesHead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 12px 6px;
+}
+.tag {
+	font-size: calc(9px * var(--ui-scale));
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	color: var(--fg2);
+	text-transform: uppercase;
+}
+.file {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: var(--control-h-s);
+	padding: 5px 12px;
+	box-sizing: border-box;
+	border-radius: 0;
+	color: var(--fg);
+	font: inherit;
+	text-align: left;
+}
+.file:hover {
+	background-color: var(--hover);
+	background-image: none;
+}
+.file > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.name {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--text-12);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.hint {
+	margin: 0;
+	padding: 12px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}

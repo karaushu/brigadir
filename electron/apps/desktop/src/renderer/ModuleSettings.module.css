@@ -1,0 +1,8 @@
+/* spec/settings-modules-and-onboarding#module-settings-popup: a module's settings in the ModalDialog body — the Settings page's column (spec/appearance#interface-font): sections 16 apart. */
+.page {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	min-width: 0;
+	padding-top: 2px;
+}

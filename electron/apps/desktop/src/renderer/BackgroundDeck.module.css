@@ -1,0 +1,70 @@
+/* spec/chat-turns-plans-and-questions#background-commands: a background command's row in the deck — sign, name, time; the row button stretches over the row (ui/Deck). */
+.row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	height: var(--control-h-s);
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--fg2);
+	font: inherit;
+	font-size: var(--text-12);
+	text-align: left;
+	cursor: default;
+}
+.row > span:first-child {
+	display: flex;
+	flex: none;
+}
+/* The row's own button lies under the row's hover (ui/Deck), not a second layer on top of it. */
+.row.row:hover,
+.row.row:active {
+	background-image: none;
+}
+.name {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg);
+}
+.time {
+	flex: none;
+	font: var(--text-11) var(--mono-family);
+	font-variant-numeric: tabular-nums;
+	color: var(--fg2);
+	white-space: nowrap;
+}
+/* Output: the tail in a terminal box, the newest line at the bottom. */
+.output {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 14px 12px;
+}
+.output pre {
+	margin: 0;
+	max-height: 260px;
+	overflow: auto;
+	padding: 7px 10px;
+	background: var(--term, var(--tint));
+	border: 1px solid var(--sep);
+	border-radius: 6px;
+	font: var(--text-11)/17px var(--mono-family);
+	color: var(--fg2);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	user-select: text;
+}
+.output pre[data-empty] {
+	color: var(--fg3);
+}
+.output p {
+	margin: 0;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}

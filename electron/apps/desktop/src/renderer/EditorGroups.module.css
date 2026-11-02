@@ -1,0 +1,105 @@
+/* spec/editor#editor-groups: editor groups. A split halves its box; the second pane draws the border, the handle lies over it (spec/task-window#resize-handles). */
+.split {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+}
+.split[data-direction='down'] {
+	flex-direction: column;
+}
+.pane {
+	flex: 1 1 0;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.split[data-direction='right'] > .pane[data-second] {
+	border-left: 1px solid var(--sep);
+}
+.split[data-direction='down'] > .pane[data-second] {
+	border-top: 1px solid var(--sep);
+}
+.group {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	position: relative;
+}
+.body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	position: relative;
+}
+.passive {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.mount {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+.mount > :global(.cm-editor) {
+	flex: 1;
+	min-height: 0;
+}
+.passive :global(.cm-content) {
+	cursor: text;
+}
+.empty {
+	margin: auto;
+	padding: 24px;
+	color: var(--fg2);
+}
+/* The drop target covers the group's document while a tab is dragged; the zone shows where the tab lands. */
+.dropTarget {
+	position: absolute;
+	inset: 0;
+	z-index: 6;
+}
+.zone {
+	position: absolute;
+	box-sizing: border-box;
+	border: 2px solid var(--accent);
+	border-radius: 6px;
+	background: var(--accent-soft);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+	transition: inset var(--motion-fast) var(--motion-ease);
+}
+.zone[data-zone='right'] {
+	inset: 6px 6px 6px 50%;
+}
+.zone[data-zone='down'] {
+	inset: 50% 6px 6px 6px;
+}
+.zone[data-zone='center'] {
+	inset: 6px;
+}
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: var(--control-h-s);
+	padding: 0 10px;
+	border-radius: var(--control-r-s);
+	background: var(--accent);
+	color: var(--selfg);
+	font: 500 var(--control-fs-s) var(--ui-family);
+}
+@media (prefers-reduced-motion: reduce) {
+	.zone {
+		transition: none;
+	}
+}

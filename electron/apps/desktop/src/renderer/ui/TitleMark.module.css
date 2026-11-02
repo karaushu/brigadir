@@ -1,0 +1,10 @@
+/* A glyph in a card's title line: the archive clock (VariantCStates 2), the agent's browser off screen (spec/browser-and-simulator#background). */
+.mark {
+	display: inline-flex;
+	flex: none;
+	margin-top: 2px;
+	color: var(--fg3);
+}
+.mark[data-tone='accent'] {
+	color: var(--accent);
+}

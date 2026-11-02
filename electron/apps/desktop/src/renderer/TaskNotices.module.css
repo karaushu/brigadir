@@ -1,0 +1,52 @@
+/* spec/notifications-slack-notes-and-schedules#notice-chips: popover bodies of the class S chips (read-only change, unavailable repos, limit, sign-in). The chip, the
+   popover frame and the shared sections (lede, repo row, count) are ui/NoticeChip (spec/notifications-slack-notes-and-schedules#notice-chips); here only the own rows. */
+.paths {
+	margin: 0;
+	padding: 0 8px;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+}
+.paths li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 24px;
+	font-family: var(--mono-family);
+	font-size: var(--text-11);
+	color: var(--fg);
+}
+/* A long path keeps its file name: it is cut from the left. */
+.paths li > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	direction: rtl;
+	text-align: left;
+}
+.fresh {
+	flex: none;
+	padding: 0 5px;
+	border-radius: 4px;
+	background: var(--amber-hover);
+	color: var(--amber-text);
+	font: 600 var(--text-10)/14px var(--ui-family);
+}
+.more {
+	color: var(--fg2) !important;
+}
+.where {
+	flex: none;
+	max-width: 55%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	direction: rtl;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.cardBody {
+	padding: 0 8px 2px;
+}

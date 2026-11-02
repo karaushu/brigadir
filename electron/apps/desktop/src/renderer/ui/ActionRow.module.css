@@ -1,0 +1,53 @@
+/* spec/task-window-workspace#empty-work-area: an action row — canvas «MainTreeEmpty»: the row's height (M 28), radius 6, glyph 14 --fg2, name 12 --fg, shortcut
+   11 --fg2 on the right; hover and keyboard focus light the whole row with --tint (rule 15). */
+.row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	height: var(--c-h);
+	flex: none;
+	box-sizing: border-box;
+	padding: 0 10px;
+	border: 0;
+	border-radius: var(--control-r-s);
+	background: transparent;
+	color: var(--fg);
+	font-size: var(--text-12);
+	text-align: left;
+	white-space: nowrap;
+}
+.row:hover,
+.row:focus-visible {
+	background: var(--tint);
+}
+/* Canvas v3 5.3: pressed — `--tint2`; keyboard focus — the same fill and a soft ring at the row's edge (spec/appearance#evolution-redesign). */
+.row:active {
+	background: var(--tint2);
+	background-image: none;
+}
+.row:focus-visible {
+	outline: none;
+	box-shadow: var(--ring-soft);
+}
+.icon {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg2);
+}
+.icon > svg {
+	width: 14px;
+	height: 14px;
+}
+.label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.kbd {
+	flex: none;
+	font: inherit;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}

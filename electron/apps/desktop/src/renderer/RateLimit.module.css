@@ -1,0 +1,8 @@
+/* spec/appearance#component-details: the minutes until the limit resets — 11 px, secondary, tabular, never squeezed. */
+.time {
+	flex: none;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}

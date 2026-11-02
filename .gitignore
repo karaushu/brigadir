@@ -1,0 +1,15 @@
+.DS_Store
+.claude/worktrees/
+.claude/settings.local.json
+node_modules/
+
+# Secrets never enter the repository: signing certificates, API keys, local env files.
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile

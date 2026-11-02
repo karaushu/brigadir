@@ -1,0 +1,421 @@
+/* spec/composer-steering-queue-and-ghost#quick-question: the popover lies over the code under the selection and does not shift the lines. */
+.anchor {
+	position: relative;
+	height: 0;
+	z-index: 30;
+}
+.popover {
+	position: absolute;
+	top: 2px;
+	left: var(--review-inset, 44px);
+	width: min(536px, calc(var(--review-available, 100cqi) - var(--review-inset, 44px) - 10px));
+	max-height: min(520px, 70vh);
+	display: flex;
+	flex-direction: column;
+	box-sizing: border-box;
+	border: 1px solid var(--sep);
+	border-radius: 9px;
+	background: var(--card);
+	color: var(--fg);
+	box-shadow: 0 14px 34px var(--shadow);
+	overflow: hidden;
+	font: var(--text-12) var(--ui-family);
+	line-height: 1.45;
+	white-space: normal;
+	cursor: auto;
+	animation: var(--motion-fade);
+}
+.header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	min-height: 20px;
+	padding: 6px 9px;
+	border-bottom: 1px solid var(--sep);
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.header strong {
+	color: var(--fg);
+	font-size: var(--text-11);
+	font-weight: 600;
+	white-space: nowrap;
+}
+.spark {
+	display: flex;
+	color: var(--accent);
+}
+.where {
+	font: var(--text-11) var(--code-family, var(--mono-family));
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+.grow {
+	flex: 1;
+}
+.chip {
+	font-size: var(--text-10);
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--tint);
+	color: var(--fg2);
+	white-space: nowrap;
+	cursor: default;
+}
+.field {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	min-height: var(--control-h-l);
+	padding: 7px 9px;
+	border: 0;
+	border-radius: 0;
+	background: var(--card);
+	color: var(--fg);
+	font: var(--text-12) var(--ui-family);
+	line-height: 1.45;
+	resize: none;
+}
+.field::placeholder {
+	color: var(--fg3);
+}
+/* spec/composer-steering-queue-and-ghost#quick-question: the composer capsule at the left of the «Ask more…» row, one S row (rule 16). */
+.more {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	flex: none;
+	min-height: 38px;
+	padding: 0 9px 0 6px;
+	border-top: 1px solid var(--sep);
+}
+.more > :first-child {
+	margin-top: 7px;
+}
+.more > .field {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	padding: 10px 0 9px;
+	background: transparent;
+}
+.footer > :first-child[role='group'] {
+	margin-left: -3px;
+}
+.hint,
+.locked {
+	margin: 0;
+	padding: 0 9px 7px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.locked {
+	color: var(--amber);
+}
+.footer {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	padding: 6px 9px;
+	border-top: 1px solid var(--sep);
+}
+.note {
+	margin-right: auto;
+	min-width: 0;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.kbd {
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg2);
+	padding: 1px 4px;
+	border-radius: 3px;
+	background: var(--tint);
+	white-space: nowrap;
+}
+.thread {
+	min-height: 0;
+	overflow: auto;
+}
+.message {
+	display: flex;
+	gap: 7px;
+	padding: 7px 9px;
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.message + .message {
+	border-top: 1px solid var(--sep);
+}
+.message > div {
+	flex: 1;
+	min-width: 0;
+}
+.message strong {
+	font-weight: 600;
+}
+.avatar {
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: var(--text-9);
+	font-weight: 700;
+	background: var(--accent-soft);
+	color: var(--fg);
+}
+.agent {
+	color: var(--accent);
+}
+.question {
+	margin: 1px 0 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.body {
+	overflow-wrap: anywhere;
+}
+.popover .markdown {
+	margin-top: 1px;
+	padding: 0;
+	font-size: var(--text-12);
+	line-height: 1.45;
+}
+.popover .markdown code {
+	font-size: var(--text-11);
+}
+.markdown > :first-child {
+	margin-top: 0;
+}
+.markdown > :last-child {
+	margin-bottom: 0;
+}
+.status {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 6px 0 0;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--accent);
+	flex: none;
+}
+.code {
+	margin-top: 6px;
+	border: 1px solid var(--sep);
+	border-radius: 6px;
+	overflow: hidden;
+	background: var(--content);
+}
+.code > header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 4px 2px 8px;
+	border-bottom: 1px solid var(--sep);
+	font: var(--text-10) var(--mono-family);
+	color: var(--fg2);
+	background: var(--tint);
+}
+.code > footer {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 6px;
+	border-top: 1px solid var(--sep);
+	background: var(--card);
+}
+.line {
+	display: flex;
+	font: var(--text-11)/18px var(--code-family, var(--mono-family));
+	white-space: pre;
+	overflow: hidden;
+}
+.line > i {
+	width: 16px;
+	flex: none;
+	text-align: center;
+	font-style: normal;
+}
+.line[data-kind='removed'] {
+	background: var(--diffRemovedBg);
+}
+.line[data-kind='removed'] > i {
+	color: var(--diffRemovedFg);
+}
+.line[data-kind='added'] {
+	background: var(--diffAddedBg);
+}
+.line[data-kind='added'] > i {
+	color: var(--diffAddedFg);
+}
+.applyHint {
+	margin-left: auto;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.stale {
+	margin: 4px 0 0;
+	font-size: var(--text-10);
+	color: var(--amber);
+}
+.code > footer > .stale {
+	margin: 0;
+}
+.applied {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-11);
+	color: var(--diffAddedFg);
+}
+.change {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 6px;
+	padding: 2px 2px 2px 8px;
+	border-radius: 6px;
+	background: var(--tint);
+	font-size: var(--text-11);
+	color: var(--fg);
+	white-space: nowrap;
+}
+.change > svg {
+	color: var(--fg2);
+	flex: none;
+}
+.change b {
+	font-weight: 600;
+}
+.added {
+	font: var(--text-10) var(--mono-family);
+	color: var(--diffAddedFg);
+}
+.removed {
+	font: var(--text-10) var(--mono-family);
+	color: var(--diffRemovedFg);
+}
+.error {
+	margin-top: 6px;
+	padding: 7px 8px;
+	border-radius: 6px;
+	background: var(--red-soft);
+	font-size: var(--text-11);
+}
+.error p {
+	margin: 0;
+	color: var(--red);
+}
+.retry {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 6px;
+}
+.pick {
+	display: block;
+	margin-top: 4px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+/* The divider of a new session in the same thread: «New session · Codex · GPT-6 Codex». */
+.divider {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 9px 0;
+	font-size: var(--text-10);
+	color: var(--fg3);
+	white-space: nowrap;
+}
+.divider::before,
+.divider::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: var(--sep);
+}
+.permission {
+	margin: 0 9px 7px;
+	border: 1px solid color-mix(in srgb, var(--amber) 50%, var(--sep));
+	border-radius: 7px;
+	overflow: hidden;
+}
+.permission > header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 8px;
+	background: var(--amber-soft);
+	font-size: var(--text-11);
+}
+.permission > header > span {
+	font: var(--text-11) var(--mono-family);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.permission > footer {
+	display: flex;
+	gap: 6px;
+	padding: 6px 8px;
+	flex-wrap: wrap;
+}
+@media (prefers-reduced-motion: reduce) {
+	.popover {
+		animation: none;
+	}
+}
+.logRow {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	width: calc(100% - 32px);
+	margin: 0 16px 12px;
+	padding: 5px 8px;
+	box-sizing: border-box;
+	border: 0;
+	border-radius: 6px;
+	background: var(--tint);
+	color: var(--fg);
+	font: var(--text-11) var(--ui-family);
+	text-align: left;
+	min-width: 0;
+	cursor: pointer;
+	transition: background-color var(--motion-fast) ease;
+}
+.logRow > svg {
+	flex: none;
+	color: var(--accent);
+}
+.logRow > small {
+	flex: none;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.logLabel {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.logLabel > span {
+	color: var(--fg2);
+}

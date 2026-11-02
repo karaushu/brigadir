@@ -1,0 +1,9 @@
+For work with three or more steps, keep a step checklist with your todo, task or plan tool (`update_plan` in Codex) and mark each step as you finish it; the person sees that checklist in the chat, so do not repeat it as a list in your messages.
+
+Work in the workspace repositories as they are. Do not create git worktrees yourself (`git worktree add`): if the work needs a separate branch or checkout, ask the person first, since Brigadir runs a task in its own worktree when the person chooses that. A worktree you create at the person's request joins this task, and the app shows its branch and diff.
+
+When the person points at something without naming it ("this", "here", "the selected code", a pull request comment), call editor_state, or pr_state for a pull request, to see what is open and selected in their window.
+
+This app gives you a real browser (browser_open, browser_ui, browser_screenshot, browser_act), the project simulator for a React Native or mobile app (simulator_*), the project's saved commands (commands_*) and the console of this task (console_list, console_read). After a change a person can see, check it yourself: open the page or app, look at it and click through it. Do not ask the person to check what you can check; they see each of your actions.
+
+Before you start a dev server, a watcher or a script yourself, call commands_list: the person may have saved it as a project command. Start a dev server as a project command rather than in your shell: commands_run starts it in the console of this task, where the person sees it, and waits for its local address.

@@ -1,0 +1,134 @@
+/* spec/settings-modules-and-onboarding#intro-remote: the two machines and the facts — the intro's Remote access step and Settings ▸ Remote. */
+.pair {
+	align-self: center;
+	width: 100%;
+	max-width: 400px;
+	display: grid;
+	grid-template-columns: 1fr 96px 1fr;
+	align-items: center;
+	padding: 14px 6px 4px;
+}
+.node {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	text-align: center;
+}
+.node > span {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 12px;
+	background: var(--tint);
+	color: var(--fg);
+}
+.node[data-here] > span {
+	background: var(--accent-soft);
+	color: var(--accent-text);
+}
+.node strong {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-12);
+	font-weight: 600;
+}
+.node small {
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.link {
+	position: relative;
+	align-self: start;
+	height: 44px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.link::before {
+	content: '';
+	position: absolute;
+	left: -6px;
+	right: -6px;
+	top: 50%;
+	border-top: 1.5px dashed var(--fg3);
+}
+.lock {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: var(--card);
+	border: 1px solid var(--sep);
+	color: var(--fg2);
+	transition:
+		color var(--motion-fast) var(--motion-ease),
+		border-color var(--motion-fast) var(--motion-ease);
+}
+.link[data-on] .lock {
+	color: var(--green);
+	border-color: color-mix(in srgb, var(--green) 40%, transparent);
+}
+.run {
+	position: absolute;
+	top: calc(50% - 3px);
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--accent);
+	animation: run 2.4s linear infinite;
+}
+.run + .run {
+	animation-delay: 1.2s;
+	animation-direction: reverse;
+	background: var(--fg2);
+}
+@keyframes run {
+	from {
+		left: -6px;
+		opacity: 0;
+	}
+	10% {
+		opacity: 1;
+	}
+	90% {
+		opacity: 1;
+	}
+	to {
+		left: 100%;
+		opacity: 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.run {
+		display: none;
+	}
+}
+.facts {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.facts li {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+.facts li > svg {
+	flex: none;
+	margin-top: 1px;
+}

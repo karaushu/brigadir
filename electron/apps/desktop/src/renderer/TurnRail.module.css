@@ -1,0 +1,153 @@
+/* Turn rail, spec/chat-turns-plans-and-questions#turn-rail. Marks are painted in TurnRail.tsx. */
+.rail {
+	position: absolute;
+	top: 0;
+	bottom: var(--rows-bottom-inset, 0px);
+	right: 6px;
+	width: 28px;
+	z-index: 2;
+	pointer-events: none;
+}
+.canvas {
+	position: absolute;
+	inset: 0;
+	width: 28px;
+	height: 100%;
+}
+.hit {
+	position: absolute;
+	left: 0;
+	right: 0;
+	pointer-events: auto;
+	cursor: pointer;
+}
+/* The one keyboard stop: a transparent box over the mark in focus; its ring appears only for keyboard focus. */
+.focus {
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 12px;
+	margin: -6px 0 0;
+	border-radius: 4px;
+	pointer-events: none;
+}
+.focus:focus-visible {
+	outline: 2px solid var(--accent-soft);
+	outline-offset: 0;
+}
+
+.card {
+	position: absolute;
+	right: 34px;
+	width: 300px;
+	max-width: calc(100vw - 80px);
+	box-sizing: border-box;
+	padding: 8px 10px 7px;
+	translate: 0 -50%;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	background: var(--card);
+	border: 0;
+	border-radius: 8px;
+	/* The turn card floats on the shared lift, no frame. */
+	box-shadow: var(--lift);
+	pointer-events: none;
+	animation: var(--motion-fade);
+	transition: top var(--motion-fast) var(--motion-ease);
+}
+.card > p {
+	margin: 0;
+	font-size: var(--text-12);
+	line-height: 17px;
+	color: var(--fg);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+.card > footer {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.card time {
+	font-family: var(--mono-family);
+}
+.counts {
+	font-family: var(--mono-family);
+}
+.space {
+	flex: 1;
+}
+.running {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--accent);
+}
+.running svg {
+	width: 12px;
+	height: 12px;
+}
+/* spec/chat-turns-plans-and-questions#rail-scrollbar: the rail is the conversation's scrollbar. The band is the
+   viewport on the rail (behind the marks). spec/chat-turns-plans-and-questions#rail-scrollbar: hidden until the pointer is on the rail; then the rail's full
+   width and at least 20 px tall, darker on the band itself (grab) and while it drags. */
+.band {
+	position: absolute;
+	right: 0;
+	width: 28px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--fg) 7%, transparent);
+	pointer-events: none;
+	opacity: 0;
+	transition:
+		opacity var(--motion-fast) var(--motion-ease),
+		background-color var(--motion-fast) var(--motion-ease);
+}
+.band[data-state] {
+	opacity: 1;
+}
+.band[data-state='grab'] {
+	background: color-mix(in srgb, var(--fg) 13%, transparent);
+}
+.hit[data-on-band] {
+	cursor: grab;
+}
+.hit[data-dragging] {
+	cursor: grabbing;
+}
+/* Fewer than two prompts: no rail, a thin thumb at the edge instead of the system scrollbar. */
+.thumbZone {
+	position: absolute;
+	top: 0;
+	bottom: var(--rows-bottom-inset, 0px);
+	right: 0;
+	width: 12px;
+	z-index: 2;
+}
+.thumb {
+	position: absolute;
+	right: 3px;
+	width: 4px;
+	border-radius: 2px;
+	background: var(--fg3);
+	opacity: 0;
+	transition:
+		opacity var(--motion-fast) var(--motion-ease),
+		width var(--motion-fast) var(--motion-ease),
+		right var(--motion-fast) var(--motion-ease);
+}
+.thumbZone[data-shown] .thumb {
+	opacity: 1;
+}
+.thumbZone[data-active] .thumb {
+	right: 2px;
+	width: 8px;
+	border-radius: 4px;
+	background: var(--fg2);
+}

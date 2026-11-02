@@ -1,0 +1,45 @@
+.content {
+	padding: 6px 8px 8px;
+	max-height: min(420px, 60vh);
+	overflow: auto;
+	overscroll-behavior: contain;
+	user-select: text;
+	overflow-wrap: anywhere;
+	line-height: 1.5;
+}
+.content h3 {
+	margin: 0 0 12px;
+	font-size: var(--text-13);
+	font-weight: 600;
+}
+.content dl {
+	margin: 0;
+	display: grid;
+	gap: 6px;
+}
+.content dl > div {
+	display: grid;
+	grid-template-columns: 90px minmax(0, 1fr);
+	gap: 12px;
+}
+.content dt,
+.content h4 {
+	color: var(--fg2);
+	font-size: var(--text-12);
+	font-weight: 400;
+}
+.content dd {
+	margin: 0;
+}
+.content section {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid var(--sep);
+}
+.content h4 {
+	margin: 0 0 6px;
+}
+.content p {
+	margin: 0;
+	white-space: pre-wrap;
+}

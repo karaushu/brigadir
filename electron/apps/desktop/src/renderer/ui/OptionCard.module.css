@@ -1,0 +1,59 @@
+/* An option card: 9 12 padding, radius 8, a 1 px edge; hover — the segment hover; chosen — 1.5 px accent ring
+   on --sel; off — dimmed. The radio sits on the first line. */
+.card {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	padding: 9px 12px;
+	border-radius: 8px;
+	box-shadow: inset 0 0 0 1px var(--sep);
+	min-width: 0;
+	cursor: default;
+	transition:
+		background var(--motion-fast) ease-out,
+		box-shadow var(--motion-fast) ease-out;
+}
+.card:hover:not([data-disabled]) {
+	background: var(--segment-hover);
+}
+.card[data-checked] {
+	background: var(--sel);
+	box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.card[data-disabled] {
+	opacity: 0.5;
+}
+.card:has(:focus-visible) {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.radio {
+	display: inline-flex;
+	flex: none;
+	margin-top: 1px;
+}
+.copy {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.copy b {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 16px;
+	font-size: var(--text-12-5);
+	font-weight: 600;
+	color: var(--fg);
+}
+.copy b > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.copy small {
+	font-size: var(--text-11-5);
+	line-height: 16px;
+	color: var(--fg2);
+}

@@ -1,0 +1,41 @@
+/* spec/appearance#clear-field: a 24 px target (spec/appearance#control-scale) holding a 16 px circle in --fg3 with the × in the field colour, like the macOS search
+   field; hover anywhere on the target darkens the circle. The negative margin keeps the field's gap to its neighbours. */
+.clear {
+	flex: none;
+	display: inline-grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	min-height: 0;
+	padding: 0;
+	margin: 0 -4px;
+	border: 0;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--field);
+	box-shadow: none;
+	cursor: default;
+	animation: var(--motion-fade);
+}
+.clear > svg {
+	box-sizing: content-box;
+	padding: 3px;
+	border-radius: 50%;
+	background: var(--fg3);
+}
+.clear:hover,
+.clear:focus-visible {
+	background: transparent;
+	box-shadow: none;
+}
+.clear:hover > svg,
+.clear:focus-visible > svg {
+	background: var(--fg2);
+}
+.clear:active > svg {
+	background: var(--fg);
+}
+.clear:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}

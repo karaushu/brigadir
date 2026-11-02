@@ -1,0 +1,491 @@
+/* The board and the list: shared card geometry, three persistent drop targets. */
+.screen {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1;
+}
+.titlebar {
+	height: var(--strip-h);
+	flex: none;
+	background: var(--strip-bg);
+	border-bottom: 1px solid var(--sep);
+	padding: 0 14px;
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	font-weight: 600;
+	-webkit-app-region: drag;
+}
+.titlebar > span {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.titlebar button {
+	-webkit-app-region: no-drag;
+}
+/* spec/architecture-and-platform#window-frame: the OS buttons on Windows and Linux. */
+:root:is([data-platform='win32'], [data-platform='linux']) .titlebar {
+	padding-right: calc(var(--os-controls-right) + 6px);
+}
+.toolbar {
+	/* spec/projects-and-board#pr-mode: one row of tabs and controls, 48 px, its hairline under it; the chosen tab's
+	   accent line lies on it. The tabs' own 10 px padding puts their text on the board's 24 px edge. */
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	height: 48px;
+	padding: 0 24px 0 14px;
+	margin-bottom: 14px;
+	border-bottom: 1px solid var(--hair);
+	flex: none;
+	box-sizing: border-box;
+}
+/* spec/projects-and-board#screen-layout: the tabs reach over the row's hairline, so the chosen tab's line and a hovered
+   tab's grey one lie on it, not a pixel above. */
+.toolbar > [data-underline] {
+	margin-bottom: -1px;
+}
+/* spec/sidebar#section-rail: the section's name and count in place of the tabs, on the board's 24 px edge. */
+.sectionTitle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	padding-left: 10px;
+	font-size: var(--text-13);
+	font-weight: 600;
+	color: var(--fg);
+	white-space: nowrap;
+}
+.sectionTitle > svg {
+	color: var(--fg2);
+}
+.sectionCount {
+	font-weight: 400;
+	color: var(--fg3);
+	font-variant-numeric: tabular-nums;
+}
+.toolbarGap {
+	flex: 1;
+	min-width: 0;
+}
+/* spec/projects-and-board#pr-mode: the repo picker gives way first, its name with an ellipsis; the filter and the buttons stay whole. */
+.repoPicker {
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 260px;
+}
+.board {
+	display: flex;
+	align-items: stretch;
+	gap: 12px;
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 0 24px 20px;
+	animation: var(--motion-fade);
+}
+.column {
+	flex: 1;
+	min-width: 248px;
+	background: var(--tint);
+	border-radius: 8px;
+	display: flex;
+	flex-direction: column;
+	transition:
+		background-color var(--motion-fast),
+		border-color var(--motion-fast);
+}
+.column[data-drop='true'] {
+	outline: 2px dashed var(--accent);
+	outline-offset: -2px;
+	background: var(--accent-soft);
+}
+.columnHeading {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 8px 6px 12px;
+	min-height: 37px;
+	flex: none;
+}
+.columnHeading h2 {
+	flex: 1;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	display: flex;
+	gap: 6px;
+	line-height: 18px;
+	align-items: center;
+}
+.columnHeading h2 span {
+	font-size: var(--text-10);
+	font-weight: 400;
+}
+.limit {
+	font-size: var(--text-10);
+	color: var(--fg2);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+.cards {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 0 8px 8px;
+	overflow: auto;
+	min-height: 0;
+	flex: 1;
+}
+.card {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+	border-radius: 7px;
+	background: var(--card);
+	border: 1px solid var(--sep);
+	/* spec/projects-and-board#screen-layout: the card's own text is 12; its parts set their sizes. */
+	font-size: var(--text-12);
+	cursor: grab;
+	transition:
+		border-color var(--motion-fast),
+		box-shadow var(--motion-fast),
+		opacity var(--motion-fast);
+}
+.card:active {
+	cursor: grabbing;
+}
+.card:hover,
+.card:focus-visible {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.card[data-status='needs-you'],
+.card[data-crew-attention='needs-you'] {
+	border-color: var(--amber);
+	/* spec/projects-and-board#screen-layout: an opaque warm card over the column, not the soft amber over its tint. */
+	background: color-mix(in srgb, var(--amber) 9%, var(--card));
+}
+.card[data-status='needs-you']:hover,
+.card[data-crew-attention='needs-you']:hover {
+	border-color: var(--amber);
+	box-shadow: 0 0 0 3px var(--amber-soft);
+}
+.card[data-dragging='true'],
+.card[aria-busy='true'] {
+	opacity: 0.45;
+}
+.state {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--fg2);
+	min-height: 14px;
+	position: relative;
+}
+.state > span {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: var(--text-10);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	/* spec/projects-and-board#screen-layout: one line, also in the list's 145 px column. */
+	white-space: nowrap;
+}
+.card[data-status='needs-you'] .state > span {
+	color: var(--amber);
+}
+.card[data-status='working'] .state > span {
+	color: var(--accent);
+}
+.card[data-status='failed'] .state > span {
+	color: var(--red);
+}
+.copy {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.copy h3 {
+	font-size: var(--text-13);
+	font-weight: 500;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.copy p {
+	font-size: var(--text-11);
+	color: var(--fg2);
+	line-height: 1.35;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+.options {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.options > button {
+	min-width: 0;
+}
+.options > button > span:first-of-type {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.options > button > svg {
+	flex: none;
+}
+.meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+	min-height: 14px;
+}
+.scope {
+	flex: none;
+	max-width: 45%;
+	font-family: var(--mono-family);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* spec/projects-and-board#screen-layout: on «All projects» the project's name beside its icon is text, 10.5, not a repo in mono. */
+.scope[data-project-name] {
+	font-family: inherit;
+	font-size: var(--text-10-5);
+}
+.provider {
+	display: inline-flex;
+	flex: none;
+}
+.provider[data-provider='claude'] {
+	color: var(--providerClaude);
+}
+.meta time {
+	margin-left: auto;
+	flex: none;
+}
+/* spec/appearance#evolution-redesign: the project icon (14 px) before the project's name on an «All projects» card. */
+.dot {
+	flex: none;
+}
+.cardAction {
+	position: absolute;
+	right: 0;
+	top: -5px;
+	opacity: 0;
+}
+.card:hover .cardAction,
+.card:focus-within .cardAction {
+	opacity: 1;
+}
+.placeholder {
+	border: 1px dashed var(--sep);
+	border-radius: 7px;
+	flex: none;
+	padding: 14px 10px;
+	text-align: center;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.board[data-view='list'] {
+	flex-direction: column;
+	gap: 16px;
+}
+.board[data-view='list'] .column {
+	flex: none;
+	min-width: 0;
+	background: transparent;
+}
+.board[data-view='list'] .cards {
+	overflow: visible;
+}
+.board[data-view='list'] .card {
+	display: grid;
+	grid-template-columns: 145px minmax(100px, 1fr) minmax(140px, auto) 110px;
+	align-items: center;
+	gap: 12px;
+	padding: 7px 10px;
+	background: transparent;
+	border-color: transparent;
+}
+.board[data-view='list'] .card[data-status='needs-you'],
+.board[data-view='list'] .card[data-crew-attention='needs-you'] {
+	border-color: var(--amber);
+	background: var(--amber-soft);
+}
+.board[data-view='list'] .card:hover {
+	border-color: var(--accent);
+	background: var(--card);
+}
+.board[data-view='list'] .copy p {
+	min-height: 0;
+}
+.board[data-view='list'] .meta {
+	flex-wrap: wrap;
+}
+.board[data-view='list'] .state {
+	position: relative;
+}
+.board[data-view='list'] .cardAction {
+	position: absolute;
+	right: 0;
+	top: -5px;
+	background-color: var(--card);
+}
+/* spec/appearance#loading: the waiting board stands where the board will (ui/Loading draws it; here only its place). */
+.skeleton {
+	padding: 0 24px 20px;
+}
+@media (max-width: 1050px) {
+	.board[data-view='list'] .card {
+		grid-template-columns: 130px minmax(100px, 1fr) 150px;
+	}
+	.board[data-view='list'] .meta {
+		grid-column: 2/4;
+	}
+	.toolbar {
+		padding-inline: 6px 16px;
+	}
+	.board,
+	.skeleton {
+		padding-inline: 16px;
+	}
+}
+
+/* spec/projects-and-board#screen-layout: the branch is quiet — `--fg3`, the row's font at 10.5, cut in the middle
+   (`ui/BranchName`, spec/appearance#evolution-redesign) — after its glyph 3 px away. */
+.branch {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	min-width: 0;
+	max-width: 60%;
+	color: var(--fg3);
+	font-size: var(--text-10-5);
+}
+.branch > svg {
+	flex: none;
+}
+.toolbar kbd {
+	font-family: inherit;
+	font-size: var(--text-10);
+	opacity: 0.75;
+}
+
+.state .unread {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--accent);
+	margin-left: auto;
+	margin-right: 28px;
+	flex: none;
+}
+
+.empty {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 13px;
+	padding: 40px;
+}
+.empty > svg {
+	color: var(--fg3);
+}
+.empty h1 {
+	font-size: var(--text-15);
+	font-weight: 600;
+}
+.empty p {
+	color: var(--fg2);
+	font-size: var(--text-11);
+	line-height: 1.5;
+	max-width: 320px;
+	text-align: center;
+}
+.empty > div {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+.empty kbd {
+	font-family: inherit;
+	font-size: var(--text-10);
+	color: var(--fg3);
+}
+
+.board[data-view='list'] .card > [data-relay-links] {
+	grid-column: 2/-1;
+}
+
+/* spec/projects-and-board#board: the type glyph; beside a foreman's helmet, how many workers work now. The board puts it in the
+   state line (13 px, 3 px to the number), the list before the title (12 px, gap 5, 2 px to the number). */
+.type {
+	display: inline-flex;
+	flex: none;
+	font-style: normal;
+	color: var(--fg2);
+}
+.workers {
+	flex: none;
+	margin-left: -3px;
+	font-size: var(--text-10);
+	color: var(--fg2);
+}
+.heading {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+}
+.heading h3 {
+	min-width: 0;
+}
+.board:not([data-view='list']) .heading > .type,
+.board:not([data-view='list']) .heading > .workers,
+.board[data-view='list'] .state > .type,
+.board[data-view='list'] .state > .workers {
+	display: none;
+}
+
+/* spec/tasks#backlog-edit: the clip of a backlog task's attachments, right before the age. */
+.clip {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	flex: none;
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+}
+.clip svg {
+	flex: none;
+}
+.clip + time {
+	margin-left: 0;
+}
+/* spec/notifications-slack-notes-and-schedules#notes: the Notes tab lies flush under its toolbar, like the Notes screen. */
+.screen[data-project-tab='notes'] > [data-project-toolbar] {
+	margin-bottom: 0;
+}

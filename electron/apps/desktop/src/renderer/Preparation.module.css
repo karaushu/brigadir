@@ -1,0 +1,47 @@
+.preparation {
+	padding: 24px;
+	max-width: 720px;
+	width: 100%;
+	margin: 0 auto;
+	overflow: auto;
+}
+.preparation h2 {
+	font-size: var(--text-15);
+	font-weight: 600;
+}
+.preparation p {
+	font-size: var(--text-12);
+	color: var(--fg2);
+	margin: 12px 0;
+	overflow-wrap: anywhere;
+}
+.preparation > div {
+	display: flex;
+	gap: 8px;
+}
+.preparation .log {
+	display: grid;
+	grid-template-rows: 0fr;
+	transition: grid-template-rows var(--motion-travel) var(--motion-ease);
+}
+.log[data-open='true'] {
+	grid-template-rows: 1fr;
+}
+.log > div {
+	min-height: 0;
+	overflow: hidden;
+}
+/* spec/tasks#worktree-preparation (canvas 8.10 `.k8-log`): lines keep their width and the block scrolls sideways, as a code block
+   (spec/chat#layout); 11 / 17 mono on --tint with a 1 px --sep edge inside. */
+.log pre {
+	margin: 16px 0 0;
+	padding: 12px;
+	background: var(--tint);
+	box-shadow: inset 0 0 0 1px var(--sep);
+	border-radius: 6px;
+	max-height: 320px;
+	overflow: auto;
+	white-space: pre;
+	font: var(--text-11)/17px var(--mono-family);
+	color: var(--fg);
+}

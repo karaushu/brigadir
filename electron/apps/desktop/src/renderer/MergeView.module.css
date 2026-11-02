@@ -1,0 +1,343 @@
+/* spec/appearance#evolution-redesign: the manual merge in three columns. Columns sit edge to edge under the toolbar. */
+.note {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 4px;
+	min-width: 0;
+	max-width: calc(100% - 120px);
+	vertical-align: bottom;
+	overflow: hidden;
+}
+.note > span {
+	flex: none;
+}
+.root {
+	display: flex;
+	flex-direction: column;
+	height: calc(100vh - 196px);
+	min-height: 320px;
+	margin: 0 -16px -14px;
+}
+.banner {
+	margin: 0 16px 8px;
+}
+.toolbar {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 40px;
+	padding: 0 12px 0 10px;
+	border-top: 1px solid var(--hair);
+	font-size: var(--text-11-5);
+	color: var(--fg2);
+}
+.counter {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	white-space: nowrap;
+	color: var(--fg2);
+}
+.counter > svg {
+	color: var(--green);
+}
+.rule {
+	width: 1px;
+	height: 16px;
+	margin: 0 4px;
+	background: var(--sep);
+	flex: none;
+}
+.grow {
+	flex: 1;
+	min-width: 0;
+}
+.toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	white-space: nowrap;
+	color: var(--fg);
+}
+.tabs {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	height: 36px;
+	padding: 0 10px;
+	border-top: 1px solid var(--hair);
+	font-size: var(--text-11);
+	color: var(--fg3);
+	min-width: 0;
+}
+.failed {
+	margin: 12px 16px;
+	color: var(--fg2);
+}
+.columns {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	padding-right: 12px;
+	border-top: 1px solid var(--hair);
+}
+.root[data-narrow] .columns {
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+.column {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+.column[hidden] {
+	display: none;
+}
+.column + .column {
+	border-left: 1px solid var(--hair);
+}
+.root[data-narrow] .column + .column {
+	border-left: 0;
+	border-top: 1px solid var(--hair);
+}
+.columnHead {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 8px;
+	border-bottom: 1px solid var(--hair);
+	font-size: var(--text-11-5);
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+}
+.columnHead b {
+	font-weight: 600;
+	color: var(--fg);
+	flex: none;
+}
+.columnHead > :last-child:not(b) {
+	min-width: 0;
+	font-family: var(--mono-family);
+	font-size: var(--text-10-5);
+	color: var(--fg3);
+}
+.editor {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+}
+.code {
+	position: absolute;
+	inset: 0;
+}
+.code :global(.cm-editor) {
+	height: 100%;
+}
+.code :global(.cm-editor.cm-focused) {
+	outline: none;
+}
+/* Chunk tints: conflict red, resolved green, the agent's ✦ accent, a change that does not conflict blue. */
+.code :global(.cm-merge-cf) {
+	background: var(--diffRemovedBg);
+	box-shadow: inset 2px 0 0 var(--red);
+}
+.code :global(.cm-merge-ok) {
+	background: var(--diffAddedBg);
+	box-shadow: inset 2px 0 0 var(--green);
+}
+.code :global(.cm-merge-ag) {
+	background: color-mix(in srgb, var(--accent) 11%, transparent);
+	box-shadow: inset 2px 0 0 var(--accent);
+}
+.code :global(.cm-merge-ap),
+.code :global(.cm-merge-ch) {
+	background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.code :global(.cm-merge-dn) {
+	opacity: 0.5;
+}
+.code :global(.cm-merge-cur.cm-merge-cf),
+.code :global(.cm-merge-cur.cm-merge-ok),
+.code :global(.cm-merge-cur.cm-merge-ag) {
+	box-shadow: inset 3px 0 0 var(--red);
+}
+.code :global(.cm-merge-cur.cm-merge-ok) {
+	box-shadow: inset 3px 0 0 var(--green);
+}
+.code :global(.cm-merge-cur.cm-merge-ag) {
+	box-shadow: inset 3px 0 0 var(--accent);
+}
+.code :global(.cm-merge-word) {
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.code :global(.cm-merge-cf .cm-merge-word) {
+	background: color-mix(in srgb, var(--red) 22%, transparent);
+}
+.code :global(.cm-merge-pad) {
+	background-image: repeating-linear-gradient(135deg, var(--hair) 0 1px, transparent 1px 6px);
+}
+/* Buttons beside each chunk ride over the code at the column's right edge (their own hover, 24 px targets). */
+.overlay {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+.marks {
+	position: absolute;
+	left: 0;
+	right: 6px;
+	height: var(--editor-line, 19px);
+	margin-top: 6px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.marks > * {
+	pointer-events: auto;
+}
+.take,
+.ignore {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	box-sizing: border-box;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: var(--card);
+	box-shadow: 0 0 0 1px var(--sep);
+	font: 13px/1 var(--mono-family);
+	color: var(--fg);
+	cursor: default;
+	transition:
+		background-color var(--motion-fast) var(--motion-ease),
+		color var(--motion-fast) var(--motion-ease);
+}
+.take:hover {
+	background: var(--accent);
+	box-shadow: none;
+	color: var(--selfg);
+}
+.ignore {
+	background: transparent;
+	box-shadow: none;
+	color: var(--fg3);
+}
+.ignore:hover {
+	background: var(--tint2);
+	color: var(--fg);
+}
+.take:focus-visible,
+.ignore:focus-visible,
+.why:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.why {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 18px;
+	margin-left: 2px;
+	color: var(--accent);
+	border-radius: 4px;
+}
+.whyCard {
+	position: absolute;
+	left: 22px;
+	top: -4px;
+	z-index: 2;
+	width: 280px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: var(--card);
+	box-shadow: var(--lift);
+	font-size: var(--text-11-5);
+	line-height: 16px;
+	color: var(--fg2);
+	white-space: normal;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity var(--motion-fast) var(--motion-ease);
+}
+.whyCard b {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 3px;
+	font-weight: 600;
+	color: var(--fg);
+}
+.whyCard b > svg {
+	color: var(--accent);
+}
+.why:hover .whyCard,
+.why:focus-visible .whyCard {
+	opacity: 1;
+	visibility: visible;
+}
+/* All chunks of the Result at their place in the file. */
+.stripe {
+	position: absolute;
+	right: 2px;
+	top: 32px;
+	bottom: 4px;
+	width: 8px;
+	border-radius: 4px;
+	background: var(--tint);
+}
+.mark {
+	position: absolute;
+	left: 1px;
+	right: 1px;
+	height: 4px;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.mark[data-tone='conflict'] {
+	background: var(--red);
+}
+.mark[data-tone='done'] {
+	background: var(--green);
+}
+.mark[data-tone='agent'] {
+	background: var(--accent);
+}
+.footNote {
+	flex: 1;
+	min-width: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.footNote > svg {
+	color: var(--green);
+}
+@media (prefers-reduced-motion: reduce) {
+	.take,
+	.ignore,
+	.whyCard {
+		transition: none;
+	}
+}

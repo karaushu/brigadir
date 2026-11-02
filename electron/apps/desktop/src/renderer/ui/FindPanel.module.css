@@ -1,0 +1,144 @@
+/* spec/appearance#evolution-redesign: a --card over the code with --lift, radius 10, 4 px under the file header and 20 px
+   from the right edge (left of the change map). The host is out of the code's flow: the code under the card does not move. */
+.host {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 0;
+	container: find / inline-size;
+	pointer-events: none;
+}
+.panel {
+	position: absolute;
+	top: 4px;
+	right: 20px;
+	width: min(404px, calc(100% - 34px));
+	box-sizing: border-box;
+	display: flex;
+	gap: 2px;
+	padding: 4px;
+	border-radius: 10px;
+	background: var(--card);
+	box-shadow: var(--lift);
+	color: var(--fg);
+	font: var(--text-12) / 1.4 var(--ui-family);
+	pointer-events: auto;
+	animation: var(--motion-fade);
+}
+.panel > .row {
+	align-self: flex-start;
+}
+.rows {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+/* Rule 16: one row, one height (M 28); the panel's glyphs are 14 as drawn. */
+.row {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+}
+.row[data-size] {
+	--c-ic: 14px;
+}
+/* The field: --tint, the toggles inside it; focus is the inset accent ring, no results tint it --red 12 %. */
+.field {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	height: var(--c-h);
+	padding: 0 3px 0 8px;
+	box-sizing: border-box;
+	border-radius: var(--c-r);
+	background: var(--tint);
+	cursor: text;
+}
+.field:focus-within {
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.field[data-bad] {
+	background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+.field[data-bad]:focus-within {
+	box-shadow: inset 0 0 0 2px var(--red);
+}
+.field > input {
+	flex: 1;
+	min-width: 0;
+	height: 100%;
+	padding: 0;
+	border: 0;
+	outline: none;
+	background: none;
+	color: var(--fg);
+	font: inherit;
+	caret-color: var(--accent);
+}
+.field > input::placeholder {
+	color: var(--fg3);
+}
+/* Aa / ab / .*: 6 px under the row's height; on — accent 16 % and its ring. */
+.toggle {
+	flex: none;
+	display: inline-grid;
+	place-items: center;
+	width: calc(var(--c-h) - 6px);
+	height: calc(var(--c-h) - 6px);
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	background-color: transparent;
+	color: var(--fg2);
+	cursor: pointer;
+}
+.toggle:hover {
+	background-image: none;
+	background-color: var(--tint2);
+	color: var(--fg);
+}
+.toggle[aria-pressed='true'] {
+	background-color: color-mix(in srgb, var(--accent) 16%, transparent);
+	color: var(--accent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.toggle:focus-visible {
+	outline-offset: 0;
+}
+.count {
+	flex: none;
+	padding: 0 6px;
+	font-size: var(--text-11-5);
+	color: var(--fg2);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.count[data-bad] {
+	color: var(--red);
+}
+.short {
+	display: none;
+}
+/* A narrow editor: the card is the editor's width less 34 px, the counter `3/12`, no Select all (⌥↩ stays). */
+@container find (max-width: 459px) {
+	.long {
+		display: none;
+	}
+	.short {
+		display: inline;
+	}
+	.row .selectAll {
+		display: none;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.panel {
+		animation: none;
+	}
+}

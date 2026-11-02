@@ -1,0 +1,72 @@
+/* spec/task-window#repo-line: a frame round its parts. The frame is the row's height (rule 16), the parts 2 px less;
+   the outer parts keep the outer radius, a part meets the next one with a straight edge. */
+.group {
+	-webkit-app-region: no-drag;
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	min-width: 0;
+	height: var(--c-h);
+	padding: 1px;
+	box-sizing: border-box;
+	border-radius: var(--c-r);
+	box-shadow: inset 0 0 0 1px var(--sep);
+}
+.part {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--c-gap);
+	flex: none;
+	width: calc(var(--c-h) - 2px);
+	height: calc(var(--c-h) - 2px);
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+	font-size: calc(var(--c-fs) - 0.5px);
+	white-space: nowrap;
+	transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.part[data-wide] {
+	width: auto;
+	padding: 0 8px;
+}
+.part:first-child {
+	border-radius: calc(var(--c-r) - 1px) 0 0 calc(var(--c-r) - 1px);
+}
+.part:last-child {
+	border-radius: 0 calc(var(--c-r) - 1px) calc(var(--c-r) - 1px) 0;
+}
+.part:only-child {
+	border-radius: calc(var(--c-r) - 1px);
+}
+.part:hover:not(:disabled) {
+	background-color: var(--tint);
+}
+.part:active:not(:disabled),
+.part[aria-expanded='true'] {
+	background-color: var(--tint2);
+}
+.part:disabled {
+	opacity: var(--control-disabled);
+}
+.part:focus-visible {
+	position: relative;
+	z-index: 1;
+}
+.rule {
+	flex: none;
+	width: 1px;
+	height: 14px;
+	background: var(--sep);
+	transition: opacity var(--motion-fast) var(--motion-ease);
+}
+/* The rule hides next to a lit part: the hover keeps its straight edge clean. */
+.part:is(:hover, :active, [aria-expanded='true']) + .rule,
+.rule:has(+ .part:is(:hover, :active, [aria-expanded='true'])) {
+	opacity: 0;
+}

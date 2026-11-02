@@ -1,0 +1,115 @@
+/* spec/composer#queue-deck: a deck standing on the island's top edge — the queue (spec/composer-steering-queue-and-ghost#steering-hold) and the background commands (spec/chat-turns-plans-and-questions#background-commands) share it
+   (rule 17). spec/composer-steering-queue-and-ghost#queue-deck: the island lies over the deck's last pixel, so its own top border is the line between
+   them, and the last row keeps 16 px of air to that border (8 over the first row): the deck reads as a layer behind the
+   island, not as its upper half. spec/appearance#control-scale: a row is as high as its 24 px (S) buttons and the text sits on its middle, so
+   the deck's own padding is the air less the 4.5 that the row already gives the 15-px text line; rows touch, the buttons
+   do not overlap. */
+.deck {
+	flex: none;
+	position: relative;
+	box-sizing: border-box;
+	margin: 0 auto -9px;
+	width: calc(100% - 60px);
+	max-width: calc(var(--conversation-column-width) - 60px);
+	padding: 3.5px 14px 12.5px;
+	border: 1px solid var(--sep);
+	border-bottom: 0;
+	border-radius: 12px 12px 0 0;
+	font-size: var(--text-12);
+	max-height: 190px;
+	overflow: auto;
+	/* spec/composer#agent-capsule: the island's glass — --card at 70 %. */
+	background: color-mix(in srgb, var(--card) 70%, transparent);
+	-webkit-backdrop-filter: blur(18px) saturate(1.6);
+	backdrop-filter: blur(18px) saturate(1.6);
+}
+@media (prefers-reduced-transparency: reduce) {
+	.deck {
+		background: var(--card);
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+	}
+}
+.deck header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.deck header span {
+	flex: 1;
+}
+.list ol {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	column-gap: 8px;
+	row-gap: 0;
+	align-items: center;
+	padding: 0;
+	margin: 0;
+	list-style: none;
+}
+.list li {
+	display: grid;
+	grid-column: 1/-1;
+	grid-template-columns: subgrid;
+	align-items: center;
+}
+.label {
+	font-size: var(--text-10);
+	font-weight: 600;
+	color: var(--fg2);
+	white-space: nowrap;
+}
+.list li > div {
+	min-width: 0;
+}
+.list p {
+	margin: 0;
+	/* The 15-px line (12 × 1.25) the 7 px above count on; Geist's normal line is 16 (spec/appearance#evolution-redesign). */
+	line-height: 1.25;
+	color: var(--fg);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* spec/composer-steering-queue-and-ghost#queue-deck: the actions keep to the right edge, so ✎ and × stand in the same place in every row whether or not a row
+   has «Send now» (the last column ends flush right). */
+.actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 2px;
+	margin-right: -4px;
+}
+/* spec/chat-turns-plans-and-questions#background-commands: a row that opens something takes the hover on its whole width (rule 15), out to the deck's padding; its own
+   buttons lie above it with their own hover. */
+.list li[data-hover] {
+	position: relative;
+	margin: 0 -8px;
+	padding: 0 8px;
+	border-radius: 7px;
+}
+.list li[data-hover]:hover {
+	background: var(--segment-hover);
+}
+.list li[data-hover]:has(> div > button:active) {
+	background: var(--segment-press);
+}
+.list li[data-hover]:has(> div > button:focus-visible) {
+	box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.list li[data-hover] > div > button {
+	outline: none;
+}
+.list li[data-hover] > div > button::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+}
+.list li[data-hover] .actions {
+	position: relative;
+	z-index: 1;
+}

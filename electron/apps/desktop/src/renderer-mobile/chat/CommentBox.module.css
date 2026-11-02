@@ -1,0 +1,15 @@
+/* The composer's island in one row, the field 44 high. */
+.island.island {
+	flex-direction: row;
+	align-items: flex-end;
+	padding: 4px 4px 4px 6px;
+	border-radius: 24px;
+}
+.field.field {
+	flex: 1 1 auto;
+	min-height: 44px;
+	padding: 11px 8px;
+}
+.cancel {
+	color: var(--fg2);
+}

@@ -1,0 +1,370 @@
+@import '../renderer/tokens.css';
+
+/* spec/remote-access-and-mobile#phone-app: the sign-in page — its screens, logo, code cells, state pages, buttons, fields
+   and rows. One side margin of 16. */
+html,
+body {
+	height: 100%;
+	margin: 0;
+	background: var(--win);
+	color: var(--fg);
+	font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif;
+	font-size: 15px;
+	line-height: 1.34;
+	letter-spacing: -0.1px;
+	-webkit-text-size-adjust: 100%;
+	-webkit-tap-highlight-color: transparent;
+}
+#root {
+	height: 100%;
+}
+#root:not([data-state='app']) {
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	max-width: 480px;
+	margin: 0 auto;
+	padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+}
+#root * {
+	box-sizing: border-box;
+}
+.page {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 14px;
+	padding: 28px 16px 20px;
+	text-align: center;
+	overflow-y: auto;
+}
+.page.name {
+	padding: 40px 16px 12px;
+}
+#root[data-state='pair'] .page {
+	padding-bottom: 16px;
+}
+#root[data-state='install'] .page {
+	padding-bottom: 12px;
+}
+.sp {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+.gap70 {
+	flex: none;
+	height: 70px;
+}
+.gap50 {
+	flex: none;
+	height: 50px;
+}
+.gap20 {
+	flex: none;
+	height: 20px;
+}
+.logo {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--accent);
+	color: #fff;
+	box-shadow: 0 6px 20px var(--shadow);
+}
+.logo.s72 {
+	width: 72px;
+	height: 72px;
+	border-radius: 17px;
+}
+.logo.s84 {
+	width: 84px;
+	height: 84px;
+	border-radius: 20px;
+}
+.brand {
+	font-size: 28px;
+	font-weight: 700;
+}
+.where {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 16px;
+	color: var(--fg2);
+}
+.dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--fg3);
+}
+.dot[data-on] {
+	background: var(--green);
+}
+.head {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+}
+.head h1 {
+	margin: 0;
+	font-size: 26px;
+	font-weight: 700;
+	letter-spacing: -0.3px;
+	line-height: 1.34;
+}
+.head p {
+	max-width: 320px;
+	margin: 0;
+	font-size: 15px;
+	line-height: 1.45;
+	color: var(--fg2);
+}
+.cap {
+	margin: 0;
+	padding: 0;
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--fg2);
+	max-width: 320px;
+}
+.cap.left {
+	align-self: stretch;
+	max-width: none;
+	padding: 0 2px;
+	text-align: left;
+}
+.cap.error {
+	color: var(--red);
+}
+.where-code b {
+	color: var(--fg);
+	font-weight: 700;
+}
+.mono {
+	font-family: var(--mono-family);
+	letter-spacing: 0;
+}
+button {
+	font: inherit;
+	color: inherit;
+	border: 0;
+	background: none;
+	padding: 0;
+	margin: 0;
+	letter-spacing: inherit;
+	cursor: default;
+	-webkit-user-select: none;
+	user-select: none;
+}
+.btn {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	height: 44px;
+	padding: 0 16px;
+	border-radius: 12px;
+	background: var(--tint);
+	font-size: 15px;
+	font-weight: 500;
+	white-space: nowrap;
+	flex: none;
+}
+.btn.xl {
+	height: 50px;
+	border-radius: 14px;
+	font-size: 16px;
+	font-weight: 600;
+}
+.btn.solid {
+	background: var(--accent);
+	color: var(--selfg);
+}
+.btn.ghost {
+	background: transparent;
+	color: var(--accent);
+}
+.btn.wide {
+	width: 100%;
+}
+.btn:disabled {
+	opacity: 0.45;
+}
+.btn:active:not(:disabled) {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+.btn.solid:active:not(:disabled) {
+	background-image: linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18));
+}
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+/* The code: eight cells 4 + 4 over one field that takes the typing and the OS's one-time-code. */
+.codeBox {
+	position: relative;
+	flex: none;
+}
+.codeInput {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	opacity: 0;
+	font-size: 16px;
+}
+.code8 {
+	display: flex;
+	gap: 5px;
+	justify-content: center;
+}
+.code8 > span {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 50px;
+	border-radius: 10px;
+	background: var(--tint);
+	font-family: var(--mono-family);
+	font-size: 22px;
+	font-weight: 600;
+}
+.code8 > span.f {
+	background: var(--field);
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.code8.error > span {
+	box-shadow: inset 0 0 0 2px var(--red);
+}
+.code8.ok > span {
+	box-shadow: inset 0 0 0 1.5px var(--green);
+}
+.code8 > i {
+	display: block;
+	width: 10px;
+}
+.caret {
+	display: inline-block;
+	width: 2px;
+	height: 20px;
+	margin-left: 1px;
+	vertical-align: -4px;
+	background: var(--accent);
+	animation: caret 1s steps(1) infinite;
+}
+@keyframes caret {
+	50% {
+		opacity: 0;
+	}
+}
+.matched {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 14px;
+	color: var(--green);
+}
+.nameField {
+	align-self: stretch;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 6px;
+	text-align: left;
+}
+.fld {
+	height: 44px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 12px;
+	outline: none;
+	background: var(--tint);
+	color: var(--fg);
+	font: inherit;
+	font-size: 16px;
+}
+.fld:focus {
+	background: var(--field);
+	box-shadow: inset 0 0 0 2px var(--accent);
+}
+.badge {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 76px;
+	height: 76px;
+	border-radius: 38px;
+	background: var(--tint);
+	color: var(--fg2);
+}
+.grp {
+	align-self: stretch;
+	margin: 6px 0 0;
+	overflow: hidden;
+	border-radius: 12px;
+	background: var(--tint);
+	text-align: left;
+}
+.grp.steps {
+	margin-top: 8px;
+}
+.srow {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-height: 56px;
+	padding: 8px 16px;
+	font-size: 16px;
+}
+.srow + .srow {
+	box-shadow: inset 0 0.5px 0 var(--sep);
+}
+.srow.check {
+	min-height: 48px;
+	font-size: 15px;
+}
+.srow.check > i {
+	flex: none;
+	width: 8px;
+	height: 8px;
+	margin: 0 4px;
+	border: 1.5px solid var(--fg2);
+	border-radius: 4px;
+}
+.ic2 {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 8px;
+	background: var(--tint);
+	color: var(--fg);
+}
+.ic2.accent {
+	color: var(--accent);
+}
+.ic2.mini {
+	background: var(--accent);
+	color: #fff;
+}
+.two {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+.two small {
+	font-size: 13px;
+	color: var(--fg2);
+}

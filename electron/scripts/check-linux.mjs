@@ -197,7 +197,7 @@ export async function checkLinux({ output, packages, archs, version }) {
 				continue;
 			}
 			const list = (
-				await exec('/bin/sh', ['-c', `ar p "$0" ${data} | tar -tvf -`, path], {
+				await exec('/bin/sh', ['-c', `ar p "$0" ${data} | tar${tarOption(data)} -tvf -`, path], {
 					maxBuffer: 64 << 20,
 				})
 			).stdout
@@ -281,4 +281,11 @@ export async function checkLinux({ output, packages, archs, version }) {
 	if (problems.length)
 		throw new Error(`The Linux build failed its check:\n  - ${problems.join('\n  - ')}`);
 	console.log('  Linux check: OK');
+}
+/** GNU tar does not detect the compression of a pipe, so the member's suffix names it; bsdtar on a Mac accepts the same options. */
+function tarOption(member) {
+	if (member.endsWith('.xz')) return ' -J';
+	if (member.endsWith('.zst')) return ' --zstd';
+	if (member.endsWith('.gz')) return ' -z';
+	return '';
 }

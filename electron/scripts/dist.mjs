@@ -55,6 +55,20 @@ const archs = args.includes('--all')
 			),
 		];
 if (!archs.length) archs.push(process.arch === 'x64' ? 'x64' : 'arm64');
+// CI passes a missing secret as an empty variable; electron-builder would read an empty CSC_LINK as a certificate path.
+for (const name of [
+	'CSC_LINK',
+	'CSC_KEY_PASSWORD',
+	'CSC_NAME',
+	'APPLE_API_KEY',
+	'APPLE_API_KEY_ID',
+	'APPLE_API_ISSUER',
+	'APPLE_ID',
+	'APPLE_APP_SPECIFIC_PASSWORD',
+	'APPLE_TEAM_ID',
+	'APPLE_KEYCHAIN_PROFILE',
+])
+	if (process.env[name] === '') delete process.env[name];
 const started = Date.now(),
 	signing = signingFromEnv();
 const desktop = join(workspace, 'apps/desktop'),

@@ -5,8 +5,8 @@
 <h1 align="center">Brigadir</h1>
 
 <p align="center">
-  <b>A desktop workbench for running coding agents and accepting their work.</b><br>
-  Claude Code and Codex in one window: tasks, conversations, a real diff with review, crews, and the tools the agent uses.
+  <b>Run coding agents and review their changes.</b><br>
+  Claude Code and Codex with tasks, chat, diff review and built-in tools.
 </p>
 
 <p align="center">
@@ -19,36 +19,32 @@
   <img src="docs/assets/readme/hero-dark.webp" alt="Brigadir: projects and tasks in the sidebar, the agent's conversation, the diff of a changed file and the Changes panel across three git roots">
 </picture>
 
-Brigadir is named after a foreman: someone who does not do the work themselves but **accepts** it. Agents write the code;
-Brigadir is built around giving them work, watching what they do, and reviewing the result before it lands.
+Brigadir means “foreman.” Assign tasks to agents and review their changes.
 
 ## What it does
 
 ### Tasks and agents
 
-- **Projects and tasks in a sidebar.** Each task is one unit of agent work with its own state: working, needs you,
-  done, interrupted, rate-limited, completed. A board and a list per project, a backlog, archive and filters.
-- **Claude Code and Codex**, through the Agent Client Protocol (ACP), with each provider's own models, effort levels,
-  modes and plans. Brigadir adds no knowledge of its own about agents: what you can pick is what the adapter offers.
-- **GUI or CLI.** A task runs either as a chat (activity view with tool calls, plans, questions and permission cards)
-  or as the agent's own terminal UI in a built-in terminal. Both feed the same turns, diff and review.
-- **Talk to a running agent.** Send a message mid-turn (steering) or queue it for later; answer questions and
-  permissions in place; let an agent propose new tasks.
-- **Agents keep running when the window closes.** Each conversation lives in its own host process with a journal on
-  disk; reopening the app reconnects to it.
+- **Tasks.** Organize projects and tasks in a sidebar, board or list. Track status, filter tasks and manage the backlog
+  and archive.
+- **Claude Code and Codex.** Available models, effort levels and modes come from each provider’s Agent Client Protocol
+  (ACP) adapter.
+- **GUI or CLI.** Use chat with tool calls, plans, questions and permission requests, or the agent’s terminal UI.
+  Both support turns, diff and review.
+- **Messages.** Send messages mid-turn (steering) or queue them. Answer questions, approve permissions and review
+  tasks proposed by agents.
+- **Background work.** Agents keep running after you close the window. Reopen Brigadir to reconnect.
 
 ### Review the diff
 
 ![Diff of cart.ts with two review comments beside the changed lines and the review bar below](docs/assets/readme/review.webp)
 
-- **Snapshot diff.** Changes are measured between snapshots of git trees taken at task start and around every turn,
-  not with `git diff HEAD`, so you see exactly what the task changed, across every repo it touched, without touching
-  your git index.
-- **Unified or side by side**, per turn or for the whole task, with History, Turns and a base you can move.
-- **Review by comments.** Select lines in the diff or the editor, comment, add a general note, and send the batch back
-  to the agent as one message. Comments follow the code as it moves and go from Pending to Sent, Addressed and
-  Resolved; any hunk can answer **Why did this change?** from the snapshot history.
-- **Git without leaving the task:** commit (messages generated on request), push, branch switching, merge and conflict
+- **Snapshot diff.** Compare git tree snapshots from task start or individual turns across repos. The diff leaves your
+  git index unchanged.
+- **Unified or side by side**, per turn or for the whole task, with file history and a selectable base.
+- **Review by comments.** Comment on code or add a general note, then send the comments to the agent together. Track comments
+  from Pending through Sent, Addressed and Resolved. **Why did this change?** shows a hunk’s snapshot history.
+- **Git:** commit (messages generated on request), push, branch switching, merge and conflict
   resolution, file history and blame.
 
 ### Crews
@@ -57,12 +53,12 @@ Brigadir is built around giving them work, watching what they do, and reviewing 
 
 - A **Foreman** task runs an orchestrator that writes no code. It proposes a plan: parts, which agent takes each, which
   files belong to whom. You approve or edit it.
-- **Workers** are ordinary tasks inside the foreman's card. They report with real diffs, ask the foreman questions,
+- **Workers** are ordinary tasks inside the foreman's card. They report with diffs, ask the foreman questions,
   share notes, and go through a reviewer agent before the foreman accepts their work into its branch.
 - Crews are built from **templates** in a crew editor (a tree of agents with roles, models and zones), or the foreman
   composes one itself for the task.
 
-### Monorepos with several git roots, and worktrees
+### Monorepos and worktrees
 
 - A project is a **set of git roots**: the root repo, submodules, nested repos the parent ignores, and worktrees. Brigadir
   finds them, shows each with its own branch and changes, and passes them to the agent as directories of one session.
@@ -70,19 +66,19 @@ Brigadir is built around giving them work, watching what they do, and reviewing 
   agent-chosen branch name, optional `.env` copying and a setup command).
 - Repo **locks** stop two in-place tasks from writing to the same tree at once.
 
-### Built-in tools the agent can drive
+### Built-in tools
 
 ![The editor with cart.ts open, change marks in the gutter, blame on the current line and the Files tree of the monorepo](docs/assets/readme/editor.webp)
 
 - **Editor** (CodeMirror) with language servers: completion, hover, go to definition, references, problems, format on
   save with the project's Prettier, split groups, Markdown preview, blame and file history.
-- **Terminal**: login shells per task, with one-move hand-off of command output to the agent; **project commands**
-  (dev server, tests) on a toolbar button that agents can run too.
-- **Browser**: a real page per task, desktop or phone viewport, element picking, console and network, DevTools.
+- **Terminal**: login shells per task. Send command output to the agent. Run **project commands**, such as a dev server
+  or tests, from the toolbar or through the agent.
+- **Browser**: a browser per task, desktop or phone viewport, element picking, console and network, DevTools.
 - **Simulators**: iOS Simulator and Android Emulator streamed into the task, with touch, keys and rotation.
 
-The agent works on **the same page or device you see**, through the app's own MCP server: it reads and clicks the
-browser page, drives the simulator, reads the console, runs project commands and creates tasks.
+Through Brigadir’s MCP server, agents use the same browser and simulator as you. They can also read console output,
+run project commands and create tasks.
 
 ![The browser tab of a task showing the demo shop's cart page in a phone viewport, next to the agent's conversation](docs/assets/readme/browser.webp)
 
@@ -90,15 +86,16 @@ browser page, drives the simulator, reads the console, runs project commands and
 
 ![A pull request overview: description, reviewers, passing checks, a mergeable state and a review thread, with the PR's comments in the side panel](docs/assets/readme/pull-request.webp)
 
-- Through the GitHub CLI (`gh`): create a PR for each repo of a task, list and open the PRs of every repo in the
-  project, read files and threads, review with drafts, **review with an agent** or a crew, hand reviewer comments to
-  the agent, and merge when GitHub allows it.
-- After a merge: **CI runs**, steps and deployments, with a bell that tells you when a run finishes.
+Uses the GitHub CLI (`gh`).
+
+- **Create PRs** for each repo and browse all PRs in a project.
+- **Review** files and threads, draft comments, or request a review from an agent or crew.
+- **Fix and merge.** Send review comments to the agent. Merge when GitHub allows it.
+- **CI.** View runs, steps and deployments after a merge. Get notified when a run finishes.
 
 ### Modules
 
-Optional parts of the app switch off whole in **Settings ▸ Modules**: the UI, menu items, background work and the
-agent's MCP tools go together.
+Disable modules in **Settings ▸ Modules** to remove their UI, menu items, background work and agent tools.
 
 ![Settings ▸ Modules: Browser, Simulator, Pull requests, Commands and Remote access with their switches](docs/assets/readme/settings-modules.webp)
 
@@ -107,7 +104,7 @@ agent's MCP tools go together.
 | Browser         | Pages in the task window, for you and the agent                                          | on      |
 | Simulator       | iOS and Android simulators in the task window (needs Xcode or the Android SDK)           | off     |
 | Pull requests   | PR list and review from GitHub                                                           | on      |
-| Commands        | A button that runs project commands                                                      | on      |
+| Commands        | Run project commands                                                                     | on      |
 | Remote access   | Control this machine from another computer (access itself stays off until you set it up) | on      |
 | Notes           | Markdown notes with their own agent chat                                                 | on      |
 | Scheduled tasks | Run a task later or on repeat                                                            | on      |
@@ -123,9 +120,15 @@ agent's MCP tools go together.
 
 ### Updates
 
-Packaged builds update themselves from GitHub Releases: they check in the background, download the new version and
-offer a restart, never while a turn is running. **Settings ▸ Language ▸ Updates** has the switch and a Check now
-button; **Check for Updates…** is in the Brigadir menu on macOS and in Help on Linux. Development builds never check.
+Packaged builds check GitHub Releases for updates.
+
+- **Developer ID macOS builds and AppImage** can download updates in the background and install them on restart or
+  quit. Installation waits until active agent turns finish.
+- **Ad-hoc macOS builds, `.deb` and `.rpm`** notify you and open the release page for manual installation.
+- **Development builds** do not check for updates.
+
+Manage updates in **Settings ▸ Language ▸ Updates**. **Check for Updates…** is also in the Brigadir menu on macOS
+and Help on Linux.
 
 <img src="docs/assets/readme/settings-language.webp" width="560" alt="Settings ▸ Language: the interface language and the Updates card with Download in the background and Check now">
 
@@ -155,21 +158,16 @@ Maintainers: building, signing and publishing releases is described in
 
 ## Development quick start
 
-The app lives in `electron/` (a pnpm workspace). Commands run there:
+Install dependencies and start the app:
 
 ```sh
 cd electron
-pnpm install          # dependencies and the pre-commit hook
-pnpm dev              # build the services, start the app with the Vite dev server
-pnpm dev:secondary    # the same, in the background on a secondary display without taking focus
-pnpm start            # full production build, run from a frozen copy of the build
-pnpm typecheck        # strict types
-pnpm test             # unit tests (vitest)
-pnpm test:smoke       # the smoke set of end-to-end tests (Playwright, needs a fresh `pnpm build`)
-pnpm check            # typecheck, unit tests and build
-pnpm format           # Prettier over the workspace
-pnpm dist:mac         # macOS DMGs; `pnpm dist:linux` for Linux packages
+pnpm install
+pnpm dev
 ```
+
+For build, test and packaging commands, see [electron/README.md](electron/README.md),
+[testing](docs/guides/testing.md) and [releasing](docs/guides/releasing.md).
 
 Use `BRIGADIR_DATA_DIR=/absolute/temporary/path` to keep development data away from `~/.brigadir/`, and
 `BRIGADIR_TEST_AGENT="$PWD/packages/transport/fixtures/agent.mjs"` to try the UI with a synthetic agent instead of a

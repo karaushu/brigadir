@@ -58,7 +58,7 @@ jobs:
             args: --linux --x64 --arm64
             artifact: brigadir-linux
             scripts: false
-          - os: macos-15
+          - os: macos-26
             args: --all
             artifact: brigadir-macos
             scripts: true

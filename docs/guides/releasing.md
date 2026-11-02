@@ -165,7 +165,7 @@ Windows is a later full build: `dist.mjs --win` refuses and lists what is missin
 
 | Trigger | What happens |
 | --- | --- |
-| Manual run (`workflow_dispatch`) | builds macOS (`macos-15`, `--all`) and Linux (`ubuntu-22.04`, `--linux --x64 --arm64`) and uploads the packages as workflow artifacts; publishes nothing |
+| Manual run (`workflow_dispatch`) | builds macOS (`macos-26`, `--all`) and Linux (`ubuntu-22.04`, `--linux --x64 --arm64`) and uploads the packages as workflow artifacts; publishes nothing |
 | Tag `v*` | the same builds, published to the releases repository |
 
 On a tag:

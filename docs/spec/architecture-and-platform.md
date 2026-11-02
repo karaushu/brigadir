@@ -364,7 +364,7 @@ Full builds only: macOS (DMG) and Linux (AppImage, `.deb`, `.rpm`). Each build i
 - Native modules are cross-compiled from a Mac (or Linux CI) with `zig cc` / `zig c++` for `x86_64-linux-gnu.2.28` and `aarch64-linux-gnu.2.28` (`scripts/linux-natives.mjs`): `process-owner`, `mcp-relay`, `cli-relay`, and `node-pty/prebuilds/linux-<arch>/pty.node` built from the `node-pty` source (N-API, static libc++, needs glibc ≥ 2.28). macOS-only files never enter the Linux package.
 - `scripts/check-linux.mjs` (helpers in `scripts/package-files.mjs`): every ELF has the right arch, no Mach-O or macOS helper, required services present, `app.asar` without `node_modules`, `app-update.yml` of the releases repository and `latest-linux*.yml` of this version listing an AppImage; inspects `.deb`, `.rpm` and AppImage contents.
 - **AppImage limit.** Hosts run from the AppImage's FUSE mount, so they stop when the app quits and tasks recover on next start as after a crash. Agents that keep working with no window need `.deb` or `.rpm`. A language restart (`settings:restart`) from an AppImage relaunches `$APPIMAGE`.
-- CI: `.github/workflows/release-builds.yml` builds full Linux x64 + arm64 on `ubuntu-22.04` with zig and macOS on `macos-15`; a tag `v*` publishes to the releases repository ([auto-update](#auto-update), [docs/guides/releasing.md](../guides/releasing.md)).
+- CI: `.github/workflows/release-builds.yml` builds full Linux x64 + arm64 on `ubuntu-22.04` with zig and macOS on `macos-26`; a tag `v*` publishes to the releases repository ([auto-update](#auto-update), [docs/guides/releasing.md](../guides/releasing.md)).
 
 <a id="linux-differences"></a>
 ### Linux platform differences

@@ -23,7 +23,9 @@ static size_t escape(char *out, size_t cap, const char *value) {
     if (*c == '"' || *c == '\\') { piece[0] = '\\'; piece[1] = (char)*c; n = 2; }
     else if (*c < 0x20) n = (size_t)snprintf(piece, sizeof(piece), "\\u%04x", *c);
     else { piece[0] = (char)*c; n = 1; }
-    if (used + n >= cap) return 0; memcpy(out + used, piece, n); used += n;
+    if (used + n >= cap) return 0;
+    memcpy(out + used, piece, n);
+    used += n;
   }
   out[used] = 0; return used;
 }

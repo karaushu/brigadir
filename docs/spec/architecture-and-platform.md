@@ -364,7 +364,7 @@ Full builds only: macOS (DMG) and Linux (AppImage, `.deb`, `.rpm`). Each build i
 - Native modules are cross-compiled from a Mac (or Linux CI) with `zig cc` / `zig c++` for `x86_64-linux-gnu.2.28` and `aarch64-linux-gnu.2.28` (`scripts/linux-natives.mjs`): `process-owner`, `mcp-relay`, `cli-relay`, and `node-pty/prebuilds/linux-<arch>/pty.node` built from the `node-pty` source (N-API, static libc++, needs glibc ≥ 2.28). macOS-only files never enter the Linux package.
 - `scripts/check-linux.mjs` (helpers in `scripts/package-files.mjs`): every ELF has the right arch, no Mach-O or macOS helper, required services present, `app.asar` without `node_modules`, `app-update.yml` of the releases repository and `latest-linux*.yml` of this version listing an AppImage; inspects `.deb`, `.rpm` and AppImage contents.
 - **AppImage limit.** Hosts run from the AppImage's FUSE mount, so they stop when the app quits and tasks recover on next start as after a crash. Agents that keep working with no window need `.deb` or `.rpm`. A language restart (`settings:restart`) from an AppImage relaunches `$APPIMAGE`.
-- CI: `.github/workflows/release-builds.yml` builds full Linux x64 + arm64 on `ubuntu-22.04` with zig and macOS on `macos-26`; a tag `v*` publishes to the releases repository ([auto-update](#auto-update), [docs/guides/releasing.md](../guides/releasing.md)).
+- Releases are built and published locally only (`dist.mjs --publish`, `dist-linux.mjs --publish`); there is no CI build.
 
 <a id="linux-differences"></a>
 ### Linux platform differences
@@ -387,7 +387,7 @@ Full builds only: macOS (DMG) and Linux (AppImage, `.deb`, `.rpm`). Each build i
 <a id="auto-update"></a>
 ### Auto-update
 
-Brigadir updates itself from the GitHub Releases of its public repository, so the app needs no token; CI publishes with the workflow's `GITHUB_TOKEN`. The repository is named in one place: the `releases` field (`owner/repo`) of `apps/desktop/package.json`. electron-builder publishes to it (`publish` provider `github`, `packaging/electron-builder.config.mjs`) and writes `app-update.yml` into the package; the app reads the same field for release page links. The field holds the placeholder `OWNER/brigadir-releases` until the repository exists; publishing with the placeholder fails, and an app built with it never checks. Building and publishing: [docs/guides/releasing.md](../guides/releasing.md).
+Brigadir updates itself from the GitHub Releases of its public repository, so the app needs no token; releases are published from a local machine. The repository is named in one place: the `releases` field (`owner/repo`) of `apps/desktop/package.json`. electron-builder publishes to it (`publish` provider `github`, `packaging/electron-builder.config.mjs`) and writes `app-update.yml` into the package; the app reads the same field for release page links. The field holds the placeholder `OWNER/brigadir-releases` until the repository exists; publishing with the placeholder fails, and an app built with it never checks. Building and publishing: [docs/guides/releasing.md](../guides/releasing.md).
 
 **How each build updates** (`updateSupport`, `main/app-updates.ts`):
 

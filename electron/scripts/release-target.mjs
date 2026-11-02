@@ -1,6 +1,6 @@
-// spec/architecture-and-platform#auto-update: `node scripts/release-target.mjs v<version>` — before CI publishes a tag, checks that the tag is the
+// spec/architecture-and-platform#auto-update: `node scripts/release-target.mjs v<version>` — before a release is published, checks that the tag is the
 // version of apps/desktop/package.json and that `releases` names the real releases repository, not the placeholder. Prints
-// `repo=<owner>/<repo>` for $GITHUB_OUTPUT. Needs no installed dependencies.
+// `repo=<owner>/<repo>`. Needs no installed dependencies.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { releasesRepo, workspace } from '../packaging/electron-builder.config.mjs';

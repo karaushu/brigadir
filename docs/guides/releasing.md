@@ -1,7 +1,7 @@
 # Versions, packages and releases
 
 This guide is for whoever builds Brigadir packages for people: the version policy, building and signing locally,
-the CI release flow, and how auto-update works and is tested. The product rules behind it are in
+releasing, and how auto-update works and is tested. The product rules behind it are in
 [Packaging and identity](../spec/architecture-and-platform.md#packaging) and
 [Auto-update](../spec/architecture-and-platform.md#auto-update).
 
@@ -22,8 +22,8 @@ Commands run in `electron/`; paths are relative to it unless they start with `do
 
 ## 2. One-time setup
 
-Auto-update reads the GitHub Releases of this public repository, so the app needs no token, and CI publishes with the
-workflow's own `GITHUB_TOKEN` (`contents: write`).
+Auto-update reads the GitHub Releases of this public repository, so the app needs no token; releases are
+published from a local machine with `GH_TOKEN=$(gh auth token)`.
 
 1. The `releases` field in `apps/desktop/package.json` names the repository (`karaushu/brigadir`). It is the only place
    that does: electron-builder publishes there and writes it into the package's `app-update.yml`, and the app links
@@ -60,7 +60,7 @@ Output goes to `dist/` (ignored by git): `Brigadir-<version>-<arch>.dmg` and `.z
 `latest-linux.yml` and `latest-linux-arm64.yml`. Never commit packages.
 
 `--publish` (both commands) uploads the packages and `latest*.yml` into a release of the releases repository; it needs
-`GH_TOKEN` with write access there and refuses the placeholder `releases`. CI does this; see [section 4](#4-ci-release-flow).
+`GH_TOKEN` with write access there and refuses the placeholder `releases`. See [section 4](#4-releasing).
 
 ### macOS
 
@@ -159,40 +159,29 @@ What people install:
 
 Windows is a later full build: `dist.mjs --win` refuses and lists what is missing.
 
-## 4. CI release flow
+## 4. Releasing
 
-`.github/workflows/release-builds.yml`:
-
-| Trigger | What happens |
-| --- | --- |
-| Manual run (`workflow_dispatch`) | builds macOS (`macos-26`, `--all`) and Linux (`ubuntu-22.04`, `--linux --x64 --arm64`) and uploads the packages as workflow artifacts; publishes nothing |
-| Tag `v*` | the same builds, published to the releases repository |
-
-On a tag:
-
-1. **prepare** — `scripts/release-target.mjs` checks that the tag is `v` + the version of `apps/desktop/package.json` and
-   that `releases` is not the placeholder, and fails clearly otherwise. It opens
-   a **draft** release for the tag in the releases repository.
-2. **build** — each job runs `dist.mjs … --publish` with `GH_TOKEN` = the workflow's `GITHUB_TOKEN`; electron-builder uploads the
-   DMGs, zips, blockmaps, AppImages, `.deb` files and `latest-mac.yml` / `latest-linux.yml` / `latest-linux-arm64.yml`
-   into the draft. The Linux job uploads the `.rpm` files with `gh release upload`. Signing secrets are passed to the
-   macOS job only.
-3. **publish** — after both builds succeed, the release is made public (`draft=false`) and marked latest. Only then do
-   apps see the new version: they never meet a release with half of its files. If a build fails, the release stays a
-   draft; rerun the failed job and the publish job.
-
-Linux installs with `--ignore-scripts` (zig builds `node-pty` from its sources) and sets up zig, nfpm and rpm; macOS
-selects Xcode 26 for `actool`.
-
-To release:
+Releases are built and published **locally only**; there is no CI build. `node scripts/release-target.mjs vX.Y.Z` (in
+`electron/`) checks the tag against the version and the `releases` field before publishing.
 
 ```sh
-# on the main branch, with every change in
+# on main, with every change in
 # bump "version" in electron/apps/desktop/package.json to X.Y.Z
 git commit -am "chore(release): X.Y.Z"
 git tag vX.Y.Z
-git push origin HEAD vX.Y.Z
+cd electron
+GH_TOKEN=$(gh auth token) pnpm dist:mac --all --publish
+GH_TOKEN=$(gh auth token) pnpm dist:linux --x64 --arm64 --publish
+gh release upload vX.Y.Z dist/*.rpm --repo karaushu/brigadir
+gh release edit vX.Y.Z --repo karaushu/brigadir --draft=false --latest
+git push origin main vX.Y.Z
 ```
+
+- `--publish` uploads the DMGs, zips, blockmaps, AppImages, `.deb` files and `latest-mac.yml` / `latest-linux.yml` /
+  `latest-linux-arm64.yml` into a **draft** release; the `.rpm` files (made by nfpm) are uploaded with
+  `gh release upload`. Apps see the version only after `--draft=false`, so they never meet a release with half its files.
+- The Linux packages build on a Mac with `zig`, `nfpm` and `rpm` (`brew install zig nfpm rpm`).
+- Without the Apple secrets in the environment the macOS packages are ad-hoc (section 2).
 
 ## 5. How auto-update works
 

@@ -22,6 +22,7 @@ import {
 	slackAsksQuestion,
 	slackAskAgentOf,
 	slackTitleKey,
+	slackAnswerPrompt,
 } from './slack-mentions';
 
 const projects = [
@@ -273,4 +274,10 @@ it('answers in the request’s language and counts the board’s In progress as 
 	expect(slackLocalize('🗺️ Plan: 1 of 3 · Write tests\n🕒 Updated 5m ago', 'uk')).toBe(
 		'🗺️ План: 1 з 3 · Write tests\n🕒 Оновлено 5 хв тому'
 	);
+});
+
+it('takes «what can you do» in any language as a question and gives the model the bot’s abilities', () => {
+	expect(slackAsksQuestion('расскажи что умеешь, дай полный список своих фич')).toBe(true);
+	expect(slackAsksQuestion('розкажи про себе, що вмієш')).toBe(true);
+	expect(slackAnswerPrompt('what can you do', '', null)).toContain('watch and write in the thread');
 });

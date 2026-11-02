@@ -88,7 +88,7 @@ export function slackIntentPrompt(text: string, thread: string | null): string {
 	return [
 		'You sort one Slack message that mentions a coding-task bot. Answer with exactly one line from this list and nothing else:',
 		'task — the person asks for work on code: fix, build, change, add, investigate',
-		'status — any question about the tasks: how a task is going, what is in progress, where a PR, branch or task stands, why something was done or took long, how long, what was decided, what is left, who, when',
+		'status — any question about the tasks or about the bot itself: how a task is going, what is in progress, where a PR, branch or task stands, why something was done or took long, how long, what was decided, what is left, who, when; what the bot can do, its features, help',
 		'code — a question about how the project’s code works or where something is in it (a flow, a function, a file, an endpoint, a handler, a config), not about a task or its progress',
 		'note thread — the person asks to save this thread as it is',
 		'note summary — the person asks to save a summary, the decision or the conclusion of the thread',
@@ -167,7 +167,7 @@ export function slackIntentFallback(text: string): SlackIntent {
 	return { kind: 'unsure' };
 }
 const questionWords =
-	/(^|[^\p{L}])(чому|навіщо|нащо|скільки|як довго|коли|що|хто|де|why|how long|how come|how|what|when|who|which)(?=[^\p{L}]|$)/iu;
+	/(^|[^\p{L}])(чому|навіщо|нащо|скільки|як довго|коли|що|хто|де|почему|зачем|сколько|когда|что|кто|где|умієш|вмієш|умеешь|можеш|можешь|допоможи|помоги|розкажи|расскажи|help|why|how long|how come|how|what|when|who|which)(?=[^\p{L}]|$)/iu;
 /** A question (a question word, or `?` at the end): it goes to the status answer, never to «not sure» buttons. */
 export function slackAsksQuestion(text: string): boolean {
 	const value = text.trim();
@@ -670,6 +670,17 @@ export function slackFactsText(facts: readonly SlackTaskFacts[], now: number): s
 		})
 		.join('\n');
 }
+/** What the bot can do — the answer to «what can you do?», in the model's own words and the question's language. */
+const slackAbilities = [
+	'start a coding task from a message (the text is the task, the thread is its context; `in <project>:` or the channel picks the project);',
+	'answer how tasks stand — in progress, waiting for you, plans, branches, PRs, CI — from Brigadir’s data;',
+	'ask a task’s agent when the data does not answer (why, what was decided, what is left);',
+	'answer questions about a project’s code through a read-only agent, no code in Slack;',
+	'save a thread, or a summary of it, as a note;',
+	'watch and write in the thread when a PR’s CI ends, a PR is merged or a task is done;',
+	'pass a reply in a task’s thread to its agent; Allow · Deny and answers to the agent’s questions, Run now · Skip for scheduled runs, from buttons;',
+	'post CI results, merged PRs, «needs you» and completed tasks. Push and merge stay in the app.',
+].join(' ');
 /**
  * spec/notifications-slack-notes-and-schedules#slack: the helper model answers a free question about the tasks from Brigadir's
  * facts only, in the question's language, as a short Slack message.
@@ -679,6 +690,7 @@ export function slackAnswerPrompt(question: string, facts: string, thread: strin
 		'You are Brigadir, a bot that runs coding agents. A teammate asked you a question in Slack about their tasks.',
 		'Answer it using ONLY the facts below. Do not invent tasks, states, plans or links. If the facts do not answer it, say so briefly and say what you do know.',
 		'If the facts cannot answer it and the question is about one task listed below — why, what was decided, what is left, how something works, an estimate — reply with exactly one line `ASK_AGENT: <the task title exactly as listed>` and nothing else: Brigadir will ask that task’s agent.',
+		`If the question is about you — what you can do, your features, help — answer from this list (not from the facts): ${slackAbilities}`,
 		'Reply in the language of the question. Write Slack mrkdwn: *bold*, bullet lines starting with •, links as <url|#123>. At most 12 lines. No headings, no code blocks, no greeting, no sign-off.',
 		'Board columns: Backlog — not started; In progress — in work, including Done (the agent finished its turn and waits for review), Needs you and Failed; Completed — closed.',
 		'Say states and columns in the language of the question (in Ukrainian: Backlog → Беклог, In progress → В роботі, Completed → Завершено, Done → Готово, Working → Працює, Needs you → Потрібен ти, Failed → Помилка). Never write the field names of the facts. When you list tasks, list every task that fits and give the right count.',

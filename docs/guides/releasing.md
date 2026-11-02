@@ -173,6 +173,9 @@ cd electron
 GH_TOKEN=$(gh auth token) pnpm dist:mac --all --publish
 GH_TOKEN=$(gh auth token) pnpm dist:linux --x64 --arm64 --publish
 gh release upload vX.Y.Z dist/*.rpm --repo karaushu/brigadir
+# electron-builder uploads both architectures at once and can lose a file; upload whatever the draft lacks
+gh release view vX.Y.Z --repo karaushu/brigadir --json assets --jq '.assets[].name'
+gh release upload vX.Y.Z <missing files from dist/> --repo karaushu/brigadir --clobber
 gh release edit vX.Y.Z --repo karaushu/brigadir --draft=false --latest
 git push origin main vX.Y.Z
 ```

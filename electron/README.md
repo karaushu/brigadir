@@ -60,5 +60,5 @@ commit; a formatting error blocks it.
 | -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | [Running and testing](../docs/guides/testing.md)               | Running without stealing focus, test levels, synthetic providers, live checks |
 | [Building a module](../docs/guides/modules.md)                 | The files a new module touches, in order                                      |
-| [Versions, packages and releases](../docs/guides/releasing.md) | Version policy, signing, local releases, auto-update                           |
+| [Versions, packages and releases](../docs/guides/releasing.md) | Version policy, signing, local releases, auto-update                          |
 | [Architecture](../docs/architecture.md)                        | Modules, layers and build order                                               |

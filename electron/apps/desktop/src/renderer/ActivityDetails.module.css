@@ -74,8 +74,9 @@
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 6px;
-	row-gap: 6px;
+	--foot-gap: 6px;
+	gap: var(--foot-gap);
+	row-gap: var(--foot-gap);
 	margin: 6px 16px 0;
 	color: var(--fg3);
 	font-size: var(--text-11);
@@ -90,8 +91,11 @@
 .turnFooter > button[aria-label]:hover:not(:disabled) {
 	color: var(--fg);
 }
+/* The spacer must not change where the line breaks: its own gap would wrap a line that fits without it, the footer drops
+   the spacer, the line fits again, and the two states flip forever (React #185, 03.11.2026). The negative margin cancels it. */
 .footSpacer {
 	flex: 1 0 0;
+	margin-inline-start: calc(-1 * var(--foot-gap));
 }
 .turnFooter > .chip {
 	height: 20px;

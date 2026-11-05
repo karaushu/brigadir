@@ -2,7 +2,7 @@
 	"name": "@brigadir/desktop",
 	"private": true,
 	"license": "Apache-2.0",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"releases": "karaushu/brigadir",
 	"main": "out/main/index.js",
 	"scripts": {

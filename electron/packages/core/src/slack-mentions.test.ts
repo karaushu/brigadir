@@ -1,6 +1,8 @@
 import { expect, it } from 'vitest';
 import { defaultSlackSettings, isAppToken, isSlackSettings, withSlackDefaults } from './slack';
 import {
+	parseSlackDispatch,
+	slackDispatchPrompt,
 	parseSlackIntent,
 	slackActionOf,
 	slackActiveText,
@@ -280,4 +282,30 @@ it('takes «what can you do» in any language as a question and gives the model 
 	expect(slackAsksQuestion('расскажи что умеешь, дай полный список своих фич')).toBe(true);
 	expect(slackAsksQuestion('розкажи про себе, що вмієш')).toBe(true);
 	expect(slackAnswerPrompt('what can you do', '', null)).toContain('watch and write in the thread');
+});
+
+// spec/notifications-slack-notes-and-schedules#slack-dispatch
+it('reads the dispatch answer: known projects by id or name, once each, and a clean title', () => {
+	const projects = [
+		{ id: 'adm', name: 'admin', folder: 'admin' },
+		{ id: 'cho', name: 'choice', folder: 'chooice.app' },
+	];
+	expect(
+		parseSlackDispatch(
+			'Sure: {"projects": ["Admin", "cho", "adm", "x"], "title": "«Hide chat threads.»"}',
+			projects
+		)
+	).toEqual({ projects: ['adm', 'cho'], title: 'Hide chat threads' });
+	expect(parseSlackDispatch('{"projects": []}', projects)).toEqual({ projects: [], title: null });
+	expect(parseSlackDispatch('task', projects)).toBeNull();
+	expect(parseSlackDispatch(null, projects)).toBeNull();
+	const prompt = slackDispatchPrompt({
+		text: 'создай задачу для админки + чой',
+		thread: 'U1 · можно удалить треды?',
+		projects,
+		channelProject: null,
+	});
+	expect(prompt).toContain('- cho · choice · chooice.app');
+	expect(prompt).toContain('This channel has no project.');
+	expect(prompt).toContain('можно удалить треды?');
 });

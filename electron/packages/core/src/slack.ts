@@ -368,3 +368,20 @@ export function slackText(notice: SlackNotice, mention = ''): string {
 	}
 	return lines.filter((line): line is string => line !== null).join('\n');
 }
+
+/**
+ * spec/notifications-slack-notes-and-schedules#slack-agent-post: a Slack message link as the channel and the `ts` to answer in —
+ * `…/archives/C123/p1793884455669649` → `C123`, `1793884455.669649`; a reply's link answers in its thread (`thread_ts`).
+ */
+export function slackPermalinkTarget(link: string): { channel: string; ts: string } | null {
+	const match =
+		/^https:\/\/[^\s/]+\.slack\.com\/archives\/([CGD][A-Z0-9]+)\/p(\d{10})(\d{6})(?:\?(\S*))?$/.exec(
+			link.trim()
+		);
+	if (!match) return null;
+	const thread = /(?:^|&)thread_ts=([\d.]+)/.exec(match[4] ?? '')?.[1] ?? null;
+	return {
+		channel: match[1]!,
+		ts: thread && /^\d{9,}\.\d{1,9}$/.test(thread) ? thread : `${match[2]}.${match[3]}`,
+	};
+}

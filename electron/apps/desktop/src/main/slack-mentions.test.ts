@@ -282,6 +282,7 @@ it('acks a mention and makes a task in the channel’s project with the thread a
 			context: 'U2CD · 2026-10-30 10:02 UTC\nPhone field drops the plus',
 			start: true,
 			thread: { channel: 'C0DEPLOY', ts: thread, permalink },
+			alsoProjects: [],
 		},
 	]);
 	expect(posts().at(-1)?.body).toMatchObject({
@@ -866,4 +867,209 @@ it('asks which project when a code question names none', async () => {
 	}
 	expect(quick.asks).toEqual([]);
 	expect(posts().at(-1)!.body.text).toContain('*Which project?*');
+});
+
+// spec/notifications-slack-notes-and-schedules#slack-dispatch, #slack-which-project, #slack-agent-post.
+const twoProjects = (root: string) => async () => [
+	{ id: 'p', name: 'business', path: root },
+	{ id: 'adm', name: 'admin', path: join(root, 'admin') },
+	{ id: 'cho', name: 'choice', path: join(root, 'chooice.app') },
+];
+const dispatching = (json: string) => (prompt: string) =>
+	prompt.startsWith('You route a request from Slack')
+		? json
+		: prompt.startsWith('You sort one Slack message')
+			? 'task'
+			: null;
+
+it('lets the dispatch pick the projects by loose names and title the task from the thread', async () => {
+	const test = await setup({}, {});
+	const { root } = test;
+	test.slack.dispose();
+	const { sockets, created, posts, settle } = await listening({ projects: twoProjects(root) });
+	const prompts: string[] = [];
+	const answer = dispatching(
+		'{"projects": ["admin", "cho", "nope"], "title": "Ховати треди чату для бекофісу."}'
+	);
+	helperReply = (prompt) => (prompts.push(prompt), answer(prompt));
+	try {
+		sockets[0]!.emit(mention('U2CD', 'создай задачу для админки + чой', { channel: 'C0OTHER' }));
+		await settle();
+	} finally {
+		helperReply = () => null;
+	}
+	// The dispatch read the projects with their folders and the thread above the mention.
+	const dispatch = prompts.find((prompt) => prompt.startsWith('You route'))!;
+	expect(dispatch).toContain('- cho · choice · chooice.app');
+	expect(dispatch).toContain('Phone field drops the plus');
+	expect(created).toHaveLength(1);
+	expect(created[0]).toMatchObject({
+		projectId: 'adm',
+		alsoProjects: ['cho'],
+		title: 'Ховати треди чату для бекофісу',
+		prompt: 'создай задачу для админки + чой',
+	});
+	expect(posts().at(-1)!.body.text).toContain('admin + choice');
+});
+
+it('asks which project with buttons and finishes the waiting request from the next message in the thread', async () => {
+	const test = await setup({}, {});
+	test.slack.dispose();
+	const { sockets, created, posts, settle, calls } = await listening({
+		projects: twoProjects(test.root),
+	});
+	helperReply = dispatching('{"projects": [], "title": "Hide chat threads"}');
+	try {
+		sockets[0]!.emit(mention('U2CD', 'make a task for this', { channel: 'C0OTHER' }));
+		await settle();
+		const ask = posts().at(-1)!.body;
+		expect(ask.text).toBe('🤔 *Which project?*');
+		expect(ask.blocks[1].elements.map((item: any) => item.text.text)).toEqual([
+			'business',
+			'admin',
+			'choice',
+		]);
+		expect(created).toEqual([]);
+		// Someone else's answer does not finish it; a plain reply of the asker naming a project does.
+		sockets[0]!.emit(
+			threadReply('U1AB', thread, 'admin', { channel: 'C0OTHER', ts: '1793354700.000300' })
+		);
+		await settle();
+		expect(created).toEqual([]);
+		sockets[0]!.emit(
+			threadReply('U2CD', thread, 'admin', { channel: 'C0OTHER', ts: '1793354800.000400' })
+		);
+		await settle();
+	} finally {
+		helperReply = () => null;
+	}
+	expect(created).toHaveLength(1);
+	expect(created[0]).toMatchObject({
+		projectId: 'adm',
+		alsoProjects: [],
+		title: 'Hide chat threads',
+		prompt: 'make a task for this',
+	});
+	// The buttons go once the wait is over.
+	expect(calls.filter((call) => call.method === 'chat.update').at(-1)!.body).toMatchObject({
+		channel: 'C0OTHER',
+		text: '🤔 *Which project?*',
+		blocks: [],
+	});
+	expect(posts().at(-1)!.body.text).toContain('*Task created* — admin');
+});
+
+it('finishes a waiting request from a project button', async () => {
+	const test = await setup({}, {});
+	test.slack.dispose();
+	const { sockets, created, posts, settle } = await listening({ projects: twoProjects(test.root) });
+	helperReply = dispatching('{"projects": []}');
+	try {
+		sockets[0]!.emit(mention('U2CD', 'fix the export'));
+		await settle();
+	} finally {
+		helperReply = () => null;
+	}
+	// The channel's project stands when the dispatch names none.
+	expect(created[0]).toMatchObject({ projectId: 'p', title: 'fix the export' });
+	created.length = 0;
+	helperReply = dispatching('{"projects": []}');
+	try {
+		sockets[0]!.emit(mention('U2CD', 'fix the import', { channel: 'C0OTHER' }));
+		await settle();
+		const ask = posts().at(-1)!;
+		sockets[0]!.emit(
+			click(
+				'U2CD',
+				{ ts: `${posts().length}.0`, text: ask.body.text },
+				ask.body.blocks[1].elements[2],
+				thread
+			)
+		);
+		await settle();
+	} finally {
+		helperReply = () => null;
+	}
+	expect(created).toHaveLength(1);
+	expect(created[0]).toMatchObject({ projectId: 'cho', prompt: 'fix the import' });
+});
+
+function agentFetch(
+	calls: { method: string; body: Record<string, any> }[],
+	post: (body: Record<string, any>) => Record<string, unknown>
+) {
+	return (async (url: string, init: RequestInit) => {
+		const method = url.split('/').pop()!,
+			type = (init.headers as Record<string, string>)['content-type'] ?? '';
+		const body = type.startsWith('application/json')
+			? JSON.parse(String(init.body))
+			: Object.fromEntries(new URLSearchParams(String(init.body)));
+		calls.push({ method, body });
+		const reply =
+			method === 'auth.test'
+				? { ok: true, user: 'brigadir_bot', user_id: 'UBOT', team: 'acme-team' }
+				: method === 'users.info'
+					? { ok: true, user: { real_name: 'Brigadir', profile: { display_name: '' } } }
+					: method === 'conversations.list'
+						? { ok: true, channels: [{ id: 'G0AIDEV', name: 'ai-dev' }] }
+						: method === 'conversations.info'
+							? { ok: true, channel: { name: 'ai-dev' } }
+							: method === 'chat.getPermalink'
+								? { ok: true, permalink: 'https://acme.slack.com/archives/G0AIDEV/p1' }
+								: method === 'chat.postMessage'
+									? post(body)
+									: { ok: true };
+		return new Response(JSON.stringify(reply));
+	}) as typeof fetch;
+}
+
+it('posts an agent’s message as the bot to a channel by name, and says how to invite the bot when it is not there', async () => {
+	const calls: { method: string; body: Record<string, any> }[] = [];
+	let inChannel = false;
+	const { slack } = await setup(
+		{},
+		{
+			fetch: agentFetch(calls, (body) =>
+				inChannel
+					? { ok: true, channel: body.channel, ts: '1793884455.669649' }
+					: { ok: false, error: 'channel_not_found' }
+			),
+		}
+	);
+	await slack.refresh();
+	const task = { projectId: 'p', id: 't1' };
+	expect(await slack.agentTarget(task, { channel: '#ai-dev' })).toEqual({
+		bot: 'Brigadir',
+		label: '#ai-dev',
+		channel: 'G0AIDEV',
+		threadTs: null,
+	});
+	expect(await slack.agentPost(task, { channel: '#ai-dev', text: 'на stage' })).toEqual({
+		posted: false,
+		reason:
+			'The bot @Brigadir is not in #ai-dev. Ask the person to run /invite @Brigadir in that channel, then call slack_post again.',
+	});
+	inChannel = true;
+	expect(await slack.agentPost(task, { channel: '#ai-dev', text: 'на stage' })).toEqual({
+		posted: true,
+		channel: 'G0AIDEV',
+		ts: '1793884455.669649',
+		permalink: 'https://acme.slack.com/archives/G0AIDEV/p1',
+	});
+	expect(calls.filter((call) => call.method === 'chat.postMessage').at(-1)!.body).toMatchObject({
+		channel: 'G0AIDEV',
+		text: 'на stage',
+	});
+	// A reply under a message by its link; a task without a Slack thread needs a channel.
+	await slack.agentPost(task, {
+		thread: 'https://acme.slack.com/archives/G0AIDEV/p1793884455669649',
+		text: 'ще',
+	});
+	expect(calls.filter((call) => call.method === 'chat.postMessage').at(-1)!.body).toMatchObject({
+		channel: 'G0AIDEV',
+		thread_ts: '1793884455.669649',
+	});
+	await expect(slack.agentPost(task, { text: 'x' })).rejects.toThrow(
+		'This task has no Slack thread: name a channel.'
+	);
 });

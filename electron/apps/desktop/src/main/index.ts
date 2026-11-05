@@ -871,6 +871,20 @@ const sessions = new Sessions(
 		}
 		// spec/editor-code-intelligence#language-server-restart: the agent's `editor_restart_language_servers`.
 		if (method === 'code_restart') return restartCode(key);
+		// spec/notifications-slack-notes-and-schedules#slack-agent-post: the agent's `slack_post` — where and as whom, then the post itself.
+		if ((method === 'slack_target' || method === 'slack_post') && isRecord(params)) {
+			if (!appliedSettings.modules.slack) throw new Error(moduleOffMessages.slack);
+			const input = {
+				channel: typeof params.channel === 'string' ? params.channel : undefined,
+				thread: typeof params.thread === 'string' ? params.thread : undefined,
+			};
+			if (method === 'slack_target') {
+				const { bot, label } = await slack.agentTarget(key, input);
+				return { bot, label };
+			}
+			if (typeof params.text !== 'string' || !params.text.trim()) throw new Error('text is empty');
+			return slack.agentPost(key, { ...input, text: params.text });
+		}
 		if (method === 'context' && isRecord(params) && isContextTool(params.tool)) {
 			if (params.tool === 'pr' && !appliedSettings.modules.pullRequests)
 				throw new Error(moduleOffMessages.pullRequests);
@@ -1255,7 +1269,7 @@ const noticeLog = new NoticeLog({
 	changed: (center) => clients.broadcast('notices:changed', center),
 });
 /** spec/notifications-slack-notes-and-schedules#slack: the person's CI bot in Slack; the token is read and kept here, in main. */
-const slack = new Slack({
+const slack: Slack = new Slack({
 	dataRoot: () => resolveDataRoot(process.env.BRIGADIR_DATA_DIR),
 	vault: () => (remoteTestHooks(process.env, app.isPackaged).vault ?? electronVault)(),
 	env: process.env,
@@ -1356,11 +1370,26 @@ const slack = new Slack({
 async function createSlackTask(input: SlackTaskInput) {
 	const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
 		defaults = await launchSettings.read(input.projectId);
+	// spec/notifications-slack-notes-and-schedules#slack-dispatch: the other projects the work is in join as folders from outside.
+	const scopes = [...defaults.scopes];
+	if (input.alsoProjects.length) {
+		for (const id of input.alsoProjects) {
+			const path = await store
+				.project(id)
+				.then((project) => project.path)
+				.catch(() => null);
+			const folder =
+				path &&
+				(await launchSettings.describeFolder(input.projectId, path, scopes).catch(() => null));
+			if (folder && !scopes.some((scope) => scope.id === folder.id)) scopes.push(folder);
+		}
+	}
 	const launch = withAutoBranch(
 		await launchSettings.resolve(input.projectId, {
 			...defaults,
 			isolation: 'worktree',
 			branch: '',
+			scopes,
 		}),
 		input.title,
 		input.prompt,

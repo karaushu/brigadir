@@ -95,6 +95,8 @@ const whenToUse: Record<string, string> = {
 	create_task:
 		'Use it when the person asks for a separate task, or when you find work outside this task that another agent should do.',
 	add_folder: 'Use it when the work needs files outside the project, such as a sibling repository.',
+	slack_post:
+		'Use it when the person asks to post to Slack as Brigadir or as the bot. Never read a Slack token from env files or call the Slack API yourself.',
 	browser_open:
 		'Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.',
 	browser_state: 'Call it to see which page is open and whether it finished loading.',
@@ -234,6 +236,18 @@ const humanTools: Tool[] = [
 			'Add a folder from outside the project to this task. A git repository becomes writable after the human allows it; a folder without git joins read-only at once. The folder shows in the diff and the workspace repositories. Use its absolute path right away; your workspace roots include it from your next turn. Folders inside the project are already in the repo list. Returns added: true with name, path and writable, or added: false with the reason.',
 		shape: { path: z.string().min(1).max(4096) },
 		run: async (args, call, signal) => text(await call('add_folder', args, signal)),
+	},
+	// spec/notifications-slack-notes-and-schedules#slack-agent-post: a message from Brigadir's Slack bot; the token stays in the app.
+	{
+		name: 'slack_post',
+		description:
+			"Post a message to Slack as Brigadir's bot, not as the person. The human sees the text and allows or denies it; the call waits for that. text: Slack mrkdwn. channel: #name, a name, or a channel ID; without it the message goes to this task's Slack thread. thread: the ts or the Slack link of a message to reply under. Returns posted: true with channel, ts and permalink, or posted: false with the reason (for example, the bot is not in the channel).",
+		shape: {
+			text: z.string().trim().min(1).max(12_000),
+			channel: z.string().trim().min(1).max(200).optional(),
+			thread: z.string().trim().min(1).max(500).optional(),
+		},
+		run: async (args, call, signal) => text(await call('slack_post', args, signal)),
 	},
 	...(['open', 'state', 'read', 'console', 'network', 'screenshot'] as const).map((kind): Tool => ({
 		name: `browser_${kind}`,

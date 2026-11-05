@@ -855,6 +855,34 @@ it('asks a new read-only agent in the project’s main tree about its code, and 
 	}
 });
 
+it('looks a deploy question up in the project instead of saying there is no data (spec/notifications-slack-notes-and-schedules#slack-project-questions)', async () => {
+	const { sockets, posts, settle, quick, settings } = await listening();
+	// No channel project: the model names the project by its folder or name.
+	settings.projects = {};
+	helperReply = (prompt) => (prompt.startsWith('You sort') ? 'status' : 'ASK_PROJECT: «business»');
+	codeReply = () => 'Сьогодні в production пішли #1171 і #1216 (деплой о 14:02).';
+	try {
+		sockets[0]!.emit(
+			mention('U1AB', 'что по админке залили сегодня в прод?', { channel: 'C0OTHER' })
+		);
+		await settle();
+	} finally {
+		helperReply = () => null;
+		codeReply = () => '';
+	}
+	expect(quick.asks).toEqual([
+		{
+			key: { projectId: 'p', id: 'main-tree' },
+			mode: 'aboutCode',
+			question: 'что по админке залили сегодня в прод?',
+			id: 's1',
+		},
+	]);
+	const texts = posts().map((post) => post.body.text);
+	expect(texts.at(-2)).toBe('⏳ Питаю агента в business…');
+	expect(texts.at(-1)).toBe('Сьогодні в production пішли #1171 і #1216 (деплой о 14:02).');
+});
+
 it('asks which project when a code question names none', async () => {
 	const { sockets, posts, settle, quick, settings } = await listening();
 	settings.projects = {};

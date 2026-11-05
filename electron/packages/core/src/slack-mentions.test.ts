@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { defaultSlackSettings, isAppToken, isSlackSettings, withSlackDefaults } from './slack';
 import {
 	parseSlackDispatch,
@@ -25,6 +25,7 @@ import {
 	slackAskAgentOf,
 	slackTitleKey,
 	slackAnswerPrompt,
+	slackAskProjectOf,
 } from './slack-mentions';
 
 const projects = [
@@ -126,7 +127,9 @@ it('parses the model’s one word and falls back to keyword rules', () => {
 
 it('tells a question about the project’s code from one about its tasks (spec/notifications-slack-notes-and-schedules#slack)', () => {
 	expect(parseSlackIntent('code')).toEqual({ kind: 'code' });
-	expect(slackIntentPrompt('як працює логін?', null)).toContain('code — a question about how');
+	expect(slackIntentPrompt('як працює логін?', null)).toContain(
+		'code — something to look up in the project itself'
+	);
 	expect(slackIntentFallback('як у business працює авторизація?')).toEqual({ kind: 'code' });
 	expect(slackIntentFallback('де обробляється webhook Stripe?')).toEqual({ kind: 'code' });
 	expect(slackIntentFallback('how does the auth middleware work?')).toEqual({ kind: 'code' });
@@ -308,4 +311,19 @@ it('reads the dispatch answer: known projects by id or name, once each, and a cl
 	expect(prompt).toContain('- cho · choice · chooice.app');
 	expect(prompt).toContain('This channel has no project.');
 	expect(prompt).toContain('можно удалить треды?');
+});
+
+describe('looking it up in the project (spec/notifications-slack-notes-and-schedules#slack-project-questions)', () => {
+	it('reads the helper’s ASK_PROJECT line, with or without a name', () => {
+		expect(slackAskProjectOf('ASK_PROJECT: «admin»')).toBe('admin');
+		expect(slackAskProjectOf('ASK_PROJECT:')).toBe('');
+		expect(slackAskProjectOf('Merged #1171.\nASK_PROJECT: admin')).toBeNull();
+		expect(slackAskProjectOf('Nothing deployed today.')).toBeNull();
+	});
+	it('tells the helper to send what the facts cannot answer to the project', () => {
+		const prompt = slackAnswerPrompt('что залили сегодня в прод?', '', null);
+		expect(prompt).toContain('ASK_PROJECT: <project name>');
+		expect(prompt).toContain('Never answer that there is no data');
+		expect(slackIntentPrompt('возьми и проверь!', null)).toContain('"перевір"');
+	});
 });

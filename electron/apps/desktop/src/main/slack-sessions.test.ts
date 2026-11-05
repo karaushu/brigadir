@@ -103,12 +103,12 @@ it('opens a new session when the old one was closed by its own idle timer, or th
 	sessions.closeAll();
 });
 
-it('stops a turn after two minutes and answers with what came, then closes the session ten minutes later', async () => {
+it('stops a turn after five minutes and answers with what came, then closes the session ten minutes later', async () => {
 	vi.useFakeTimers();
 	const { log, deps } = fake(() => 'hang');
 	const sessions = new SlackSessions(deps);
 	const asked = sessions.askCode('p', input('slow'));
-	await vi.advanceTimersByTimeAsync(120_000);
+	await vi.advanceTimersByTimeAsync(300_000);
 	expect(await asked).toBe('partial');
 	expect(log.stops).toEqual(['s1']);
 	expect(sessions.session('C1', '1.0')).toEqual({ mode: 'aboutCode', projectId: 'p' });

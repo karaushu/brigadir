@@ -10,6 +10,7 @@ import {
 	quickTaskPrompt,
 	quickCodePrompt,
 	quickSlackFollowUpPrompt,
+	quickSlackAgentFollowUpPrompt,
 	quickAskToolPaths,
 	quickAskWrites,
 	quickSlackAllows,
@@ -92,8 +93,11 @@ export class QuickAsks {
 		key: TaskKey,
 		request: QuickAskRequest,
 		mode: QuickAskMode = 'selection',
-		slackThread: string | null = null
+		slackThread: string | null = null,
+		/** spec/notifications-slack-notes-and-schedules#slack-agent: every project the Slack agent may look in, and Brigadir's tasks as text. */
+		context: { projects?: { name: string; path: string }[]; facts?: string } = {}
 	): Promise<void> {
+		const projects = context.projects ?? [];
 		const slack = mode !== 'selection';
 		if (this.threads.has(request.id)) throw new Error('This question already runs');
 		const store = await SessionStore.at(this.deps.dataDir),
@@ -169,13 +173,14 @@ export class QuickAsks {
 		const provider = request.provider ?? taskProvider;
 		try {
 			const directories = [
-				...new Set(
-					(snapshots?.scopes ?? [])
+				...new Set([
+					...(snapshots?.scopes ?? [])
 						.filter(
 							(scope) => scope.kind !== 'root' && visibleToAgent(scope) && scope.available !== false
 						)
-						.map((scope) => scope.path)
-				),
+						.map((scope) => scope.path),
+					...projects.map((item) => item.path).filter((path) => path !== project.path),
+				]),
 			];
 			thread.starting = AgentTransport.start({
 				provider,
@@ -241,6 +246,8 @@ export class QuickAsks {
 							project: project.name,
 							thread: slackThread,
 							today: slackToday(new Date()),
+							...(projects.length ? { projects } : {}),
+							...(context.facts ? { facts: context.facts } : {}),
 						})
 					: mode === 'aboutTask'
 						? quickTaskPrompt({
@@ -283,7 +290,12 @@ export class QuickAsks {
 							readOnly: thread.readOnly,
 							followUp: true,
 						})
-					: quickSlackFollowUpPrompt({ question, language: language ?? thread.request.language }),
+					: thread.mode === 'aboutCode'
+						? quickSlackAgentFollowUpPrompt({
+								question,
+								language: language ?? thread.request.language,
+							})
+						: quickSlackFollowUpPrompt({ question, language: language ?? thread.request.language }),
 				question
 			);
 		} catch (error) {

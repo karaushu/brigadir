@@ -82,30 +82,6 @@ export function slackPRNumbers(text: string): number[] {
 	];
 }
 
-const unwatchWords =
-		/\b(stop watching|unwatch|stop (the )?(updates|notifications|pinging)|don'?t watch|cancel (the |this )?watch(es|ing)?)\b|не стеж|перестань стежити|більше не стеж|не треба стежити|не слідкуй|скасуй стеження|відміни стеження|^\s*(скасуй|cancel)[\s.!?…]*$/i,
-	watchWords =
-		/\b(let me know|ping me|tell me|notify me|message me|write (to )?me|write here|post here|text me|keep me posted)\b[^.!]*\bwhen\b|\bwatch\b|(напиши|повідом|скажи|дай знати|маякни|пінгани|пінгни|відпиши|сповісти|тегни)[^.!]*(коли|як тільки|щойно|як буде)|стеж|слідкуй/i,
-	ciWords =
-		/\b(ci|checks?|builds?|pipelines?|tests?|actions|workflows?)\b|перевірк|білд|збірк|тест|пайплайн|прогін|чек(и|ів)/i,
-	mergedWords = /\bmerg|змерж|змердж|мердж|злит|зіллют|зллють|вллют|влит/i,
-	doneWords =
-		/\b(done|finish(ed|es)?|complete[ds]?|ready|over)\b|закінч|заверш|готов|зробить|зроблен|виконає|виконан/i,
-	taskWords = /\btasks?\b|задач/i;
-/** `let me know when …` / `напиши, коли …` asks for a watch; `stop watching` / `не стеж` cancels the thread's. */
-export function slackWatchWords(text: string): 'watch' | 'unwatch' | null {
-	if (unwatchWords.test(text)) return 'unwatch';
-	return watchWords.test(text) ? 'watch' : null;
-}
-/** What a watch request names by keywords: CI, a merge, a task done; «done» counts only beside a task or alone. */
-export function slackWatchKindsOf(text: string): SlackWatchKind[] {
-	const kinds: SlackWatchKind[] = [];
-	if (ciWords.test(text)) kinds.push('ci');
-	if (mergedWords.test(text)) kinds.push('pr-merged');
-	if (doneWords.test(text) && (taskWords.test(text) || !kinds.length)) kinds.push('task-done');
-	return kinds;
-}
-
 const prLink = (pr: Pick<SlackWatchPR, 'url' | 'number'>) =>
 	pr.url ? `<${pr.url.replace(/[<>|]/g, '')}|#${pr.number}>` : `#${pr.number}`;
 /** One line of what is watched: `🧪 CI finishes — #12`. */

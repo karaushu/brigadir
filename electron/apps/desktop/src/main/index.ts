@@ -1301,15 +1301,29 @@ const slack: Slack = new Slack({
 			return writeHintOneShot(prompt, signal, target, characterLimit, 45_000);
 		},
 		askAgent: (task, question, language, thread) => slackAskAgent(task, question, language, thread),
-		askCode: (projectId, question, language, thread) =>
-			slackSessions.askCode(projectId, {
+		askCode: async (projectId, question, language, thread, agent) => {
+			// spec/notifications-slack-notes-and-schedules#slack-agent: the agent starts in the given project (else the first) and sees every project.
+			const all = (
+					await readWorkspace(
+						process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+					)
+				).projects,
+				home = projectId ?? all[0]?.id;
+			if (!home) return null;
+			return slackSessions.askCode(home, {
 				thread,
 				question,
 				language,
 				// spec/notifications-slack-notes-and-schedules#slack: «Slack: code questions» of Customize per action, else the Default agent.
 				choice: slackCodeChoice() ?? { provider: appliedSettings.agents.provider },
 				context: thread.context,
-			}),
+				...(all.length > 1
+					? { projects: all.map((project) => ({ name: project.name, path: project.path })) }
+					: {}),
+				...(agent?.facts ? { facts: agent.facts } : {}),
+				...(agent?.ack ? { ack: agent.ack } : {}),
+			});
+		},
 		sideSession: (channel, ts) => slackSessions.session(channel, ts),
 		createTask: (input) => createSlackTask(input),
 		// spec/notifications-slack-notes-and-schedules#slack: a reply in the task's thread, and the buttons of Needs you and of a schedule's «Ask».
@@ -1370,7 +1384,7 @@ const slack: Slack = new Slack({
 async function createSlackTask(input: SlackTaskInput) {
 	const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
 		defaults = await launchSettings.read(input.projectId);
-	// spec/notifications-slack-notes-and-schedules#slack-dispatch: the other projects the work is in join as folders from outside.
+	// spec/notifications-slack-notes-and-schedules#slack-agent: the other projects the agent named join as folders from outside.
 	const scopes = [...defaults.scopes];
 	if (input.alsoProjects.length) {
 		for (const id of input.alsoProjects) {

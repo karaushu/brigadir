@@ -30,7 +30,7 @@ export type SlackSessionDeps = {
 	ensureMainTree(projectId: string): Promise<void>;
 	newId(): string;
 	now?(): number;
-	/** One answer's limit: two minutes. */
+	/** One answer's limit: five minutes (a project question may run several gh calls). */
 	answerMs?: number;
 	/** How long a thread's session waits for a follow-up: ten minutes. */
 	idleMs?: number;
@@ -159,7 +159,7 @@ export class SlackSessions {
 			const limit = setTimeout(() => {
 				void this.deps.stop(entry.id).catch(() => {});
 				finish(text.trim() || null);
-			}, this.deps.answerMs ?? 120_000);
+			}, this.deps.answerMs ?? 300_000);
 			this.deps.listen(entry.id, (event) => {
 				if (event.kind === 'text') text += event.text;
 				else if (event.kind === 'done') finish(text.trim() || null);

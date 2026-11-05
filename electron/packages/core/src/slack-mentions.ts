@@ -156,7 +156,7 @@ export function slackIntentPrompt(text: string, thread: string | null): string {
 		'You sort one Slack message that mentions a coding-task bot. Answer with exactly one line from this list and nothing else:',
 		'task — the person asks for work on code: fix, build, change, add, investigate',
 		'status — any question about the tasks or about the bot itself: how a task is going, what is in progress, where a PR, branch or task stands, why something was done or took long, how long, what was decided, what is left, who, when; what the bot can do, its features, help',
-		'code — a question about how the project’s code works or where something is in it (a flow, a function, a file, an endpoint, a handler, a config), not about a task or its progress',
+		'code — something to look up in the project itself, not in the task list: how its code works or where something is in it (a flow, a function, a file, an endpoint, a config); what was merged, released or deployed (to prod, staging) and when; git history, commits, CI runs and their logs, GitHub issues; and any request to check, verify or look something up ("check it", "перевір", "глянь", "проверь")',
 		'note thread — the person asks to save this thread as it is',
 		'note summary — the person asks to save a summary, the decision or the conclusion of the thread',
 		'note unclear — the person asks for a note but does not say which of the two',
@@ -745,7 +745,7 @@ const slackAbilities = [
 	'start a coding task from a message (the text is the task, the thread is its context; `in <project>:` or the channel picks the project);',
 	'answer how tasks stand — in progress, waiting for you, plans, branches, PRs, CI — from Brigadir’s data;',
 	'ask a task’s agent when the data does not answer (why, what was decided, what is left);',
-	'answer questions about a project’s code through a read-only agent, no code in Slack;',
+	'look things up in a project through an agent — how the code works, what was merged or deployed and when, history, CI runs — and answer in words, no code in Slack;',
 	'save a thread, or a summary of it, as a note;',
 	'watch and write in the thread when a PR’s CI ends, a PR is merged or a task is done;',
 	'pass a reply in a task’s thread to its agent; Allow · Deny and answers to the agent’s questions, Run now · Skip for scheduled runs, from buttons;',
@@ -760,6 +760,7 @@ export function slackAnswerPrompt(question: string, facts: string, thread: strin
 		'You are Brigadir, a bot that runs coding agents. A teammate asked you a question in Slack about their tasks.',
 		'Answer it using ONLY the facts below. Do not invent tasks, states, plans or links. If the facts do not answer it, say so briefly and say what you do know.',
 		'If the facts cannot answer it and the question is about one task listed below — why, what was decided, what is left, how something works, an estimate — reply with exactly one line `ASK_AGENT: <the task title exactly as listed>` and nothing else: Brigadir will ask that task’s agent.',
+		'If the facts cannot answer it otherwise — what was deployed or released and when, git history, CI runs, the code, anything the project itself can tell — or the person asks you to check, verify or look again, reply with exactly one line `ASK_PROJECT: <project name>` and nothing else: an agent in that project will look it up with git and GitHub. Never answer that there is no data when the project can tell.',
 		`If the question is about you — what you can do, your features, help — answer from this list (not from the facts): ${slackAbilities}`,
 		'Reply in the language of the question. Write Slack mrkdwn: *bold*, bullet lines starting with •, links as <url|#123>. At most 12 lines. No headings, no code blocks, no greeting, no sign-off.',
 		'Board columns: Backlog — not started; In progress — in work, including Done (the agent finished its turn and waits for review), Needs you and Failed; Completed — closed.',
@@ -781,6 +782,16 @@ export function slackModelAnswer(text: string): string | null {
 	return clean || null;
 }
 
+/**
+ * spec/notifications-slack-notes-and-schedules#slack-project-questions: the helper's `ASK_PROJECT: <name>` — the project to look it up
+ * in (`''` when the model named none); `null` for an ordinary answer.
+ */
+export function slackAskProjectOf(answer: string): string | null {
+	const match = /^\s*ASK_PROJECT:?\s*(.*?)\s*$/m.exec(answer);
+	return match && answer.trim().split('\n').length === 1
+		? match[1]!.trim().replace(/^[„“”"«»'`<]+|[„“”"«»'`>]+$/g, '')
+		: null;
+}
 /** The helper's `ASK_AGENT: <title>` — the task whose agent should answer; `null` for an ordinary answer. */
 export function slackAskAgentOf(answer: string): string | null {
 	const match = /^\s*ASK_AGENT:\s*(.+?)\s*$/m.exec(answer);

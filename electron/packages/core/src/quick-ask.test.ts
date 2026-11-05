@@ -9,6 +9,8 @@ import {
 	quickAskToolPaths,
 	quickAskWrites,
 	quickCodePrompt,
+	quickSlackAllows,
+	slackCommandChangesState,
 	quickSlackFollowUpPrompt,
 } from './quick-ask';
 import { isSessionCommand } from './session';
@@ -284,5 +286,83 @@ describe('a question from Slack about the code (spec/notifications-slack-notes-a
 		};
 		expect(isQuickAskRequest({ ...request, effort: 'high' })).toBe(true);
 		expect(isQuickAskRequest({ ...request, effort: '' })).toBe(false);
+	});
+});
+
+describe('what a Slack side agent may run (spec/notifications-slack-notes-and-schedules#slack-side-commands)', () => {
+	const bash = (command: string) => ({
+		category: 'execute',
+		name: 'Bash',
+		input: JSON.stringify({ command, description: 'x' }),
+	});
+	it('runs commands that read: git and gh lookups, pipes, stderr to /dev/null', () => {
+		for (const command of [
+			'git log --since=midnight --oneline origin/main',
+			'git show --stat HEAD~1',
+			'git branch -a --contains abc123',
+			'git tag --list "v*"',
+			'git fetch origin',
+			'gh pr list --state merged --search "merged:>=2026-11-05" --json number,title,mergedAt',
+			'gh run list --branch main --limit 20',
+			'gh run view 123 --log-failed 2>&1 | tail -50',
+			'gh api repos/choice/admin/deployments?environment=production 2>/dev/null | jq ".[0]"',
+			'gh api -X GET repos/o/r/deployments/1/statuses',
+			'curl -s https://api.github.com/repos/o/r',
+			'rg -n "deploy" .github/workflows',
+		])
+			expect([command, quickSlackAllows(bash(command))]).toEqual([command, true]);
+	});
+	it('declines commands that change state, and edits', () => {
+		for (const command of [
+			'git push origin main',
+			'git -C admin commit -am x',
+			'git checkout -b x',
+			'git tag v1.2.3',
+			'git branch -D old',
+			'gh pr merge 12 --squash',
+			'gh workflow run deploy.yml',
+			'gh run rerun 55',
+			'gh release create v1',
+			'gh api -X POST repos/o/r/dispatches',
+			'gh api repos/o/r/issues -f title=x',
+			'rm -rf dist',
+			'cd x && npm install',
+			"sed -i '' s/a/b/ file",
+			'echo hi > notes.txt',
+			'curl -X POST https://example.com/hook -d x=1',
+			'sudo ls',
+		])
+			expect([command, quickSlackAllows(bash(command))]).toEqual([command, false]);
+		expect(slackCommandChangesState('git log > /tmp/out.txt')).toBe(true);
+		expect(quickSlackAllows({ category: 'edit', name: 'Edit' })).toBe(false);
+		expect(quickSlackAllows({ category: 'other', name: 'mcp__brigadir__create_task' })).toBe(false);
+	});
+	it('reads Codex’s command array and allows plain reads and searches', () => {
+		expect(
+			quickSlackAllows({
+				category: 'execute',
+				input: JSON.stringify({ command: ['bash', '-lc', 'gh pr list --state merged'] }),
+			})
+		).toBe(true);
+		expect(
+			quickSlackAllows({
+				category: 'execute',
+				input: JSON.stringify({ command: ['bash', '-lc', 'git push'] }),
+			})
+		).toBe(false);
+		expect(quickSlackAllows({ category: 'read', name: 'Read' })).toBe(true);
+		expect(quickSlackAllows({ category: 'search', name: 'Grep' })).toBe(true);
+	});
+	it('tells the project agent to look it up itself, with today’s date', () => {
+		const prompt = quickCodePrompt({
+			question: 'what went to prod today?',
+			language: 'en',
+			project: 'admin',
+			today: '2026-11-05 (Thursday), 21:14 UTC+02:00',
+		});
+		expect(prompt).toContain('Find the answer yourself');
+		expect(prompt).toContain('gh api repos/{owner}/{repo}/deployments');
+		expect(prompt).toContain('Now: 2026-11-05 (Thursday), 21:14 UTC+02:00.');
+		expect(prompt).toContain('such commands are declined');
 	});
 });

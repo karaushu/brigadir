@@ -25,6 +25,7 @@ import {
 	slackActive,
 	slackAnswerPrompt,
 	slackAskAgentOf,
+	slackAskProjectOf,
 	slackAgentAnswer,
 	slackFactsText,
 	slackModelAnswer,
@@ -83,7 +84,7 @@ export type SlackBrigadir = SlackAnswering & {
 		language: SlackLanguage,
 		thread?: SlackSideThread
 	): Promise<string | null>;
-	/** spec/notifications-slack-notes-and-schedules#slack: a question about the project's code — a new read-only agent in its main tree; its answer. */
+	/** spec/notifications-slack-notes-and-schedules#slack-project-questions: a question to look up in the project — a new agent in its main tree that runs only commands that read; its answer. */
 	askCode?(
 		projectId: string,
 		question: string,
@@ -800,6 +801,18 @@ export class SlackMentions {
 				.catch(() => null),
 			text = answer ? slackModelAnswer(answer) : null;
 		if (!text) return false;
+		const lookup = this.deps.askCode ? slackAskProjectOf(text) : null;
+		if (lookup !== null) {
+			// spec/notifications-slack-notes-and-schedules#slack-project-questions: the project can tell what the facts cannot.
+			const key = lookup.toLowerCase(),
+				named = key
+					? projects.find((item) =>
+							[item.id, item.name, item.folder ?? ''].some((name) => name.toLowerCase() === key)
+						)
+					: undefined;
+			await this.code(mention, named?.id ?? (ids.length === 1 ? ids[0] : undefined));
+			return true;
+		}
 		const asked = slackAskAgentOf(text);
 		if (asked !== null) {
 			const key = slackTitleKey(asked),

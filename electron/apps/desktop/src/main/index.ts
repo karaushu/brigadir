@@ -1793,7 +1793,7 @@ const quickListeners = new Map<string, (event: QuickAskEvent) => void>();
 /**
  * spec/notifications-slack-notes-and-schedules#slack: the facts do not answer a Slack question about a task — its agent does, in a
  * read-only side session (spec/composer-steering-queue-and-ghost#quick-question) of «Slack: code questions» when that is set, else of the task's own provider. The answer's
- * text when it ends; `null` when it fails or takes over two minutes. A follow-up in the same thread within ten minutes goes to
+ * text when it ends; `null` when it fails or takes over five minutes. A follow-up in the same thread within ten minutes goes to
  * the same session.
  */
 function slackAskAgent(

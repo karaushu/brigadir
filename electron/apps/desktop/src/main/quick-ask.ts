@@ -12,6 +12,7 @@ import {
 	quickSlackFollowUpPrompt,
 	quickAskToolPaths,
 	quickAskWrites,
+	quickSlackAllows,
 	selectOption,
 	visibleToAgent,
 	type AgentEvent,
@@ -239,6 +240,7 @@ export class QuickAsks {
 							language: request.language,
 							project: project.name,
 							thread: slackThread,
+							today: slackToday(new Date()),
 						})
 					: mode === 'aboutTask'
 						? quickTaskPrompt({
@@ -441,9 +443,19 @@ export class QuickAsks {
 		request: PermissionRequest,
 		signal: AbortSignal
 	): Promise<string | null> {
-		// spec/composer-steering-queue-and-ghost#quick-question: a repo another task holds — every write is declined, nothing to ask. spec/notifications-slack-notes-and-schedules#slack: from Slack nobody is
-		// at the window to answer — every permission is declined.
-		if (thread.mode !== 'selection' || (thread.readOnly && quickAskWrites(request.tool)))
+		// spec/notifications-slack-notes-and-schedules#slack-side-commands: from Slack nobody is at the window to answer — main allows
+		// reads and commands that read, and declines the rest.
+		if (thread.mode !== 'selection')
+			return Promise.resolve(
+				(quickSlackAllows(request.tool)
+					? request.options.find((option) => option.kind === 'allow_once')
+					: undefined
+				)?.id ??
+					request.options.find((option) => !writeKinds.has(option.kind))?.id ??
+					null
+			);
+		// spec/composer-steering-queue-and-ghost#quick-question: a repo another task holds — every write is declined, nothing to ask.
+		if (thread.readOnly && quickAskWrites(request.tool))
 			return Promise.resolve(
 				request.options.find((option) => !writeKinds.has(option.kind))?.id ?? null
 			);
@@ -530,4 +542,14 @@ function within(roots: readonly string[], path: string) {
 function firstPrompt(records: readonly EventRecord[]) {
 	const started = records.find((record) => record.event.kind === 'turn.started')?.event;
 	return started?.kind === 'turn.started' ? started.text : '';
+}
+
+/** `2026-11-05 (Thursday), 21:14 UTC+02:00` — «today» for a Slack project question, in the machine's own time zone. */
+function slackToday(now: Date): string {
+	const pad = (n: number) => String(n).padStart(2, '0'),
+		offset = -now.getTimezoneOffset(),
+		sign = offset < 0 ? '-' : '+',
+		abs = Math.abs(offset),
+		day = now.toLocaleDateString('en-US', { weekday: 'long' });
+	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} (${day}), ${pad(now.getHours())}:${pad(now.getMinutes())} UTC${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
 }

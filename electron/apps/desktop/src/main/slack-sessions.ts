@@ -1,5 +1,7 @@
 import {
 	MAIN_TREE_ID,
+	slackAckOf,
+	slackWithoutAck,
 	type QuickAskChoice,
 	type QuickAskEvent,
 	type QuickAskRequest,
@@ -19,7 +21,8 @@ export type SlackSessionDeps = {
 		key: TaskKey,
 		request: QuickAskRequest,
 		mode: SlackSessionMode,
-		thread: string | null
+		thread: string | null,
+		slack?: { projects?: SlackSessionProject[]; facts?: string }
 	): Promise<void>;
 	followUp(key: TaskKey, id: string, question: string, language: SlackLanguage): Promise<void>;
 	stop(id: string): Promise<void>;
@@ -43,7 +46,14 @@ export type SlackSessionAsk = {
 	choice: QuickAskChoice;
 	/** The Slack thread above the question as text, for a new session's prompt. */
 	context?: string | null;
+	/** spec/notifications-slack-notes-and-schedules#slack-agent: every project the agent may look in. */
+	projects?: SlackSessionProject[];
+	/** Brigadir's tasks as text, for a new session's prompt. */
+	facts?: string;
+	/** spec/notifications-slack-notes-and-schedules#slack-agent: the agent's `ACK: …` line, as soon as it is written. */
+	ack?(text: string): void;
 };
+export type SlackSessionProject = { name: string; path: string };
 type Live = {
 	id: string;
 	key: TaskKey;
@@ -101,8 +111,10 @@ export class SlackSessions {
 		}
 		if (live && !live.busy) {
 			const entry = live,
-				said = await this.turn(entry, () =>
-					this.deps.followUp(key, entry.id, input.question, input.language)
+				said = await this.turn(
+					entry,
+					() => this.deps.followUp(key, entry.id, input.question, input.language),
+					input.ack
 				);
 			if (said !== gone) {
 				if (said === null) this.drop(name);
@@ -128,9 +140,16 @@ export class SlackSessions {
 				around: { start: 0, text: '' },
 			},
 		};
-		const said = await this.turn(entry, () =>
-			this.deps.ask(key, request, mode, input.context ?? null)
+		const said = await this.turn(
+			entry,
+			() =>
+				this.deps.ask(key, request, mode, input.context ?? null, {
+					...(input.projects ? { projects: input.projects } : {}),
+					...(input.facts ? { facts: input.facts } : {}),
+				}),
+			input.ack
 		);
+
 		const value = said === gone ? null : said;
 		if (value === null || !keep) {
 			if (this.live.get(name) === entry) this.drop(name);
@@ -139,12 +158,17 @@ export class SlackSessions {
 		return value;
 	}
 	/** One turn: its text when it ends, `null` when it fails, what came by the limit when it takes too long. */
-	private turn(entry: Live, start: () => Promise<void>): Promise<string | null | typeof gone> {
+	private turn(
+		entry: Live,
+		start: () => Promise<void>,
+		ack?: (text: string) => void
+	): Promise<string | null | typeof gone> {
 		clearTimeout(entry.timer);
 		entry.busy = true;
 		return new Promise((resolve) => {
 			let text = '',
-				ended = false;
+				ended = false,
+				acked = !ack;
 			const finish = (value: string | null | typeof gone) => {
 				if (ended) return;
 				ended = true;
@@ -158,11 +182,19 @@ export class SlackSessions {
 			};
 			const limit = setTimeout(() => {
 				void this.deps.stop(entry.id).catch(() => {});
-				finish(text.trim() || null);
+				finish(slackWithoutAck(text).trim() || null);
 			}, this.deps.answerMs ?? 300_000);
 			this.deps.listen(entry.id, (event) => {
-				if (event.kind === 'text') text += event.text;
-				else if (event.kind === 'done') finish(text.trim() || null);
+				if (event.kind === 'text') {
+					text += event.text;
+					// spec/notifications-slack-notes-and-schedules#slack-agent: «ACK: …» goes to Slack before the agent starts looking.
+					const found = acked ? null : slackAckOf(text);
+					if (found) {
+						acked = true;
+						text = found.rest;
+						ack!(found.ack);
+					}
+				} else if (event.kind === 'done') finish(slackWithoutAck(text).trim() || null);
 				else if (event.kind === 'failed') finish(null);
 			});
 			start().catch(() => finish(gone));

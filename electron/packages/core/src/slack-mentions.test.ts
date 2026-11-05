@@ -1,31 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { defaultSlackSettings, isAppToken, isSlackSettings, withSlackDefaults } from './slack';
 import {
-	parseSlackDispatch,
-	slackDispatchPrompt,
-	parseSlackIntent,
 	slackActionOf,
-	slackActiveText,
+	slackAckOf,
+	slackAgentSteps,
 	slackButtons,
 	slackFindTasks,
-	slackIntentFallback,
-	slackIntentPrompt,
 	slackMentionText,
 	slackNoteText,
 	slackProjectPrefix,
 	slackReply,
-	slackStatusText,
 	slackThreadText,
 	type SlackTaskInfo,
 	slackNamedProject,
 	slackLocalize,
 	slackLanguage,
-	slackAsksActive,
-	slackAsksQuestion,
-	slackAskAgentOf,
 	slackTitleKey,
-	slackAnswerPrompt,
-	slackAskProjectOf,
+	slackWithoutAck,
 } from './slack-mentions';
 
 const projects = [
@@ -89,61 +80,6 @@ it('picks the project from `in <project>:` and says when it names none', () => {
 	expect(slackProjectPrefix('fix it: now', projects)).toBeNull();
 });
 
-it('parses the model’s one word and falls back to keyword rules', () => {
-	expect(parseSlackIntent('task')).toEqual({ kind: 'task' });
-	expect(parseSlackIntent('  Status.\n')).toEqual({ kind: 'status' });
-	expect(parseSlackIntent('note summary')).toEqual({ kind: 'note', note: 'summary' });
-	expect(parseSlackIntent('note — thread')).toEqual({ kind: 'note', note: 'thread' });
-	expect(parseSlackIntent('note')).toEqual({ kind: 'note', note: 'unclear' });
-	expect(parseSlackIntent('I think this is a task')).toBeNull();
-	expect(parseSlackIntent(null)).toBeNull();
-
-	expect(slackIntentFallback('fix the phone validation on signup')).toEqual({ kind: 'task' });
-	expect(slackIntentFallback('додай тест на логін')).toEqual({ kind: 'task' });
-	expect(slackIntentFallback('what is the status of phone validation?')).toEqual({
-		kind: 'status',
-	});
-	expect(slackIntentFallback('на якому етапі задача з телефоном')).toEqual({ kind: 'status' });
-	expect(slackIntentFallback('#421')).toEqual({ kind: 'status' });
-	expect(slackIntentFallback('what’s in progress')).toEqual({ kind: 'status' });
-	expect(slackIntentFallback('save a summary of this thread')).toEqual({
-		kind: 'note',
-		note: 'unclear',
-	});
-	expect(slackIntentFallback('save the decision')).toEqual({ kind: 'note', note: 'summary' });
-	expect(slackIntentFallback('запиши тред')).toEqual({ kind: 'note', note: 'thread' });
-	expect(slackIntentFallback('нотатка')).toEqual({ kind: 'note', note: 'unclear' });
-	expect(slackIntentFallback('hello there')).toEqual({ kind: 'unsure' });
-	// A question (a question word or `?`) is about the tasks: the status answer takes it, not «not sure».
-	expect(slackIntentFallback('чому „New printer library" робилась так довго')).toEqual({
-		kind: 'status',
-	});
-	expect(slackIntentFallback('who reviewed the printer library')).toEqual({ kind: 'status' });
-	expect(slackIntentFallback('скільки ще лишилось')).toEqual({ kind: 'status' });
-	expect(slackAsksQuestion('hello there')).toBe(false);
-	expect(slackAsksQuestion('щось там?')).toBe(true);
-	expect(slackAsksQuestion('щось там')).toBe(false);
-});
-
-it('tells a question about the project’s code from one about its tasks (spec/notifications-slack-notes-and-schedules#slack)', () => {
-	expect(parseSlackIntent('code')).toEqual({ kind: 'code' });
-	expect(slackIntentPrompt('як працює логін?', null)).toContain(
-		'code — something to look up in the project itself'
-	);
-	expect(slackIntentFallback('як у business працює авторизація?')).toEqual({ kind: 'code' });
-	expect(slackIntentFallback('де обробляється webhook Stripe?')).toEqual({ kind: 'code' });
-	expect(slackIntentFallback('how does the auth middleware work?')).toEqual({ kind: 'code' });
-	expect(slackIntentFallback('where is the Stripe webhook handled?')).toEqual({ kind: 'code' });
-	expect(slackIntentFallback('which file has the printer driver?')).toEqual({ kind: 'code' });
-	// A task, a state or a PR stays what it was.
-	expect(slackIntentFallback('fix where the webhook is handled')).toEqual({ kind: 'task' });
-	expect(slackIntentFallback('where is the PR for phone validation?')).toEqual({ kind: 'status' });
-	expect(slackIntentFallback('як там задача з телефоном?')).toEqual({ kind: 'status' });
-	expect(slackLocalize(slackReply.askingCode('business'), 'uk')).toBe(
-		'⏳ Питаю агента в business…'
-	);
-});
-
 it('writes the thread as plain text and keeps it under 8 KB', () => {
 	const text = slackThreadText([
 		{ user: 'U1', ts: '1793354520.000100', text: 'Phone field drops <@U2>' },
@@ -190,43 +126,6 @@ it('finds a task by PR number, branch or title words', () => {
 	])
 		expect(slackFindTasks(text, quoted).map((task) => task.id)).toEqual(['d']);
 	expect(slackTitleKey(' „New  printer library" ')).toBe('new printer library');
-	expect(slackAskAgentOf('ASK_AGENT: „New printer library"')).toBe('New printer library');
-});
-
-it('answers about state from Brigadir’s data only', () => {
-	const now = Date.parse('2026-10-30T10:05:00.000Z');
-	expect(
-		slackStatusText({
-			task: info({
-				branch: 'claude/phone',
-				prs: [{ number: 12, url: 'https://github.com/o/r/pull/12', state: 'OPEN' }],
-			}),
-			project: 'business',
-			plan: { done: 2, total: 5, current: 'Write the validator' },
-			ci: 'running',
-			now,
-		}).split('\n')
-	).toEqual([
-		'⚙️ *Working* — business (`claude/phone`)',
-		'📋 Task: Phone validation',
-		'🗺️ Plan: 2 of 5 · Write the validator',
-		'🔀 PR: <https://github.com/o/r/pull/12|#12> · open',
-		'🧪 CI: running',
-		'🕒 Updated 5m ago',
-	]);
-	expect(
-		slackStatusText({
-			task: info({ status: 'done', updatedAt: null }),
-			project: 'b',
-			plan: null,
-			ci: null,
-			now,
-		})
-	).toBe('🏁 *Done* — b\n📋 Task: Phone validation');
-	expect(slackActiveText('business', [info({}), info({ id: 'x', status: 'completed' })])).toBe(
-		'🛠️ *In progress* — business\n• Phone validation — Working'
-	);
-	expect(slackActiveText('business', [])).toBe('💤 *Nothing in progress* — business');
 });
 
 it('writes replies, notes and buttons', () => {
@@ -248,14 +147,14 @@ it('writes replies, notes and buttons', () => {
 		'# Release plan\n\nFrom Slack: [#deploys thread](https://x.slack.com/archives/C1/p1)\n\nU1 · …\nhi\n'
 	);
 	const message = slackButtons('Which one?', [
-		{ action: 'brigadir_show', label: 'A', value: 'k:a' },
-		{ action: 'brigadir_show', label: 'B', value: 'k:b' },
+		{ action: 'brigadir_watch', label: 'A', value: 'k:a' },
+		{ action: 'brigadir_watch', label: 'B', value: 'k:b' },
 	]);
 	expect(message.blocks[1]).toMatchObject({
 		type: 'actions',
-		elements: [{ action_id: 'brigadir_show:0' }, { action_id: 'brigadir_show:1' }],
+		elements: [{ action_id: 'brigadir_watch:0' }, { action_id: 'brigadir_watch:1' }],
 	});
-	expect(slackActionOf('brigadir_show:1')).toBe('brigadir_show');
+	expect(slackActionOf('brigadir_watch:1')).toBe('brigadir_watch');
 	expect(slackActionOf('other')).toBeNull();
 });
 
@@ -269,8 +168,7 @@ it('finds a project named as a whole word, only when one is named', () => {
 	expect(slackNamedProject('businesses', projects)).toBeNull();
 });
 
-it('answers in the request’s language and counts the board’s In progress as in progress', () => {
-	expect(slackAsksActive('що зараз у роботі в business?')).toBe(true);
+it('answers in the request’s language', () => {
 	expect(slackLanguage('що зараз у роботі?')).toBe('uk');
 	expect(slackLanguage('what is in progress?')).toBe('en');
 	expect(
@@ -281,49 +179,35 @@ it('answers in the request’s language and counts the board’s In progress as 
 	);
 });
 
-it('takes «what can you do» in any language as a question and gives the model the bot’s abilities', () => {
-	expect(slackAsksQuestion('расскажи что умеешь, дай полный список своих фич')).toBe(true);
-	expect(slackAsksQuestion('розкажи про себе, що вмієш')).toBe(true);
-	expect(slackAnswerPrompt('what can you do', '', null)).toContain('watch and write in the thread');
-});
-
-// spec/notifications-slack-notes-and-schedules#slack-dispatch
-it('reads the dispatch answer: known projects by id or name, once each, and a clean title', () => {
-	const projects = [
-		{ id: 'adm', name: 'admin', folder: 'admin' },
-		{ id: 'cho', name: 'choice', folder: 'chooice.app' },
-	];
-	expect(
-		parseSlackDispatch(
-			'Sure: {"projects": ["Admin", "cho", "adm", "x"], "title": "«Hide chat threads.»"}',
-			projects
-		)
-	).toEqual({ projects: ['adm', 'cho'], title: 'Hide chat threads' });
-	expect(parseSlackDispatch('{"projects": []}', projects)).toEqual({ projects: [], title: null });
-	expect(parseSlackDispatch('task', projects)).toBeNull();
-	expect(parseSlackDispatch(null, projects)).toBeNull();
-	const prompt = slackDispatchPrompt({
-		text: 'создай задачу для админки + чой',
-		thread: 'U1 · можно удалить треды?',
-		projects,
-		channelProject: null,
+describe('the Slack agent’s answer (spec/notifications-slack-notes-and-schedules#slack-agent)', () => {
+	it('posts the ACK line as soon as it is finished, and never twice', () => {
+		expect(slackAckOf('ACK: Пішов дивитись')).toBeNull();
+		expect(slackAckOf('ACK: Пішов дивитись, що зарелізили сьогодні\nСьогодні')).toEqual({
+			ack: 'Пішов дивитись, що зарелізили сьогодні',
+			rest: 'Сьогодні',
+		});
+		expect(slackAckOf('Сьогодні нічого\n')).toBeNull();
+		expect(slackWithoutAck('ACK: Дивлюсь')).toBe('');
+		expect(slackWithoutAck('Відповідь')).toBe('Відповідь');
 	});
-	expect(prompt).toContain('- cho · choice · chooice.app');
-	expect(prompt).toContain('This channel has no project.');
-	expect(prompt).toContain('можно удалить треды?');
-});
-
-describe('looking it up in the project (spec/notifications-slack-notes-and-schedules#slack-project-questions)', () => {
-	it('reads the helper’s ASK_PROJECT line, with or without a name', () => {
-		expect(slackAskProjectOf('ASK_PROJECT: «admin»')).toBe('admin');
-		expect(slackAskProjectOf('ASK_PROJECT:')).toBe('');
-		expect(slackAskProjectOf('Merged #1171.\nASK_PROJECT: admin')).toBeNull();
-		expect(slackAskProjectOf('Nothing deployed today.')).toBeNull();
-	});
-	it('tells the helper to send what the facts cannot answer to the project', () => {
-		const prompt = slackAnswerPrompt('что залили сегодня в прод?', '', null);
-		expect(prompt).toContain('ASK_PROJECT: <project name>');
-		expect(prompt).toContain('Never answer that there is no data');
-		expect(slackIntentPrompt('возьми и проверь!', null)).toContain('"перевір"');
+	it('takes the ACTION lines out of the words and drops the ones that do not parse', () => {
+		const { text, actions } = slackAgentSteps(
+			[
+				'Передаю агенту задачі «Кнопка».',
+				'ACTION send_to_task {"task": "t1", "text": "Make the button blue"}',
+				'`ACTION create_task {"project": "admin", "title": "Нова кнопка", "prompt": "Add a button"}`',
+				'ACTION watch {"kinds": ["ci", "merged"]}',
+				'ACTION note {"kind": "summary"}',
+				'ACTION create_task {"title": "no project"}',
+				'ACTION send_to_task {broken',
+			].join('\n')
+		);
+		expect(text).toBe('Передаю агенту задачі «Кнопка».');
+		expect(actions).toEqual([
+			{ kind: 'send_to_task', task: 't1', text: 'Make the button blue' },
+			{ kind: 'create_task', projects: ['admin'], title: 'Нова кнопка', prompt: 'Add a button' },
+			{ kind: 'watch', kinds: ['ci', 'pr-merged'] },
+			{ kind: 'note', note: 'summary' },
+		]);
 	});
 });

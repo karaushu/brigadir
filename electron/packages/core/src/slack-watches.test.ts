@@ -1,13 +1,6 @@
 import { expect, it } from 'vitest';
-import { parseSlackIntent, slackIntentFallback, slackLocalize } from './slack-mentions';
-import {
-	isSlackWatch,
-	slackPRNumbers,
-	slackWatchKindsOf,
-	slackWatchReply,
-	slackWatchWords,
-	type SlackWatch,
-} from './slack-watches';
+import { slackLocalize } from './slack-mentions';
+import { isSlackWatch, slackWatchReply, type SlackWatch } from './slack-watches';
 import { slackText } from './slack';
 
 const pr = {
@@ -28,46 +21,6 @@ const watch: SlackWatch = {
 	task: { projectId: 'p', id: 't', title: 'Phone validation' },
 	pr,
 };
-
-it('reads a watch request from the model’s line and from keywords', () => {
-	expect(parseSlackIntent('watch ci merged')).toEqual({
-		kind: 'watch',
-		watch: ['ci', 'pr-merged'],
-	});
-	expect(parseSlackIntent('watch done')).toEqual({ kind: 'watch', watch: ['task-done'] });
-	expect(parseSlackIntent('watch')).toEqual({ kind: 'watch', watch: [] });
-	expect(parseSlackIntent('unwatch')).toEqual({ kind: 'unwatch' });
-
-	// Two typical requests, word for word.
-	expect(
-		slackIntentFallback('Напиши мені тут, коли CI цієї піарки пройде або коли піарка буде змержена')
-	).toEqual({ kind: 'watch', watch: ['ci', 'pr-merged'] });
-	expect(slackIntentFallback('напиши в цьому треді, коли задача буде закінчена')).toEqual({
-		kind: 'watch',
-		watch: ['task-done'],
-	});
-	expect(slackIntentFallback('let me know when #12 is merged')).toEqual({
-		kind: 'watch',
-		watch: ['pr-merged'],
-	});
-	expect(slackIntentFallback('ping me when the checks pass')).toEqual({
-		kind: 'watch',
-		watch: ['ci'],
-	});
-	// «Done» beside CI is CI's end, not a task's.
-	expect(slackWatchKindsOf('tell me when CI is done')).toEqual(['ci']);
-	expect(slackIntentFallback('повідом, коли щось станеться')).toEqual({ kind: 'watch', watch: [] });
-	expect(slackIntentFallback('stop watching')).toEqual({ kind: 'unwatch' });
-	expect(slackIntentFallback('не стеж більше')).toEqual({ kind: 'unwatch' });
-	expect(slackIntentFallback('скасуй')).toEqual({ kind: 'unwatch' });
-	expect(slackWatchWords('скасуй задачу')).toBeNull();
-	// A task that starts with «напиши» stays a task.
-	expect(slackIntentFallback('напиши тест для логіну')).toEqual({ kind: 'task' });
-	expect(slackWatchWords('what is the status of #12?')).toBeNull();
-	expect(slackPRNumbers('#12, PR 13 and https://github.com/o/r/pull/14 and #12')).toEqual([
-		12, 13, 14,
-	]);
-});
 
 it('keeps only well-formed watches from the file', () => {
 	expect(isSlackWatch(watch)).toBe(true);

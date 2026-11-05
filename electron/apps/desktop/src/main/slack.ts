@@ -368,9 +368,9 @@ export class Slack {
 	 */
 	private async message(payload: Record<string, unknown>, event: Record<string, unknown>) {
 		if (await this.answers!.message(payload)) return;
-		// spec/notifications-slack-notes-and-schedules#slack-which-project: a plain reply that may name the project of a waiting task.
+		// spec/notifications-slack-notes-and-schedules#slack-agent: a plain reply in a thread whose agent session still waits goes to the agent.
 		const reply = slackThreadReplyOf(payload, this.botUser);
-		if (reply && this.mentions!.waits(reply.channel, reply.threadTs, reply.user)) {
+		if (reply && this.mentions!.listens(reply.channel, reply.threadTs)) {
 			await this.mentions!.event({ ...payload, event: { ...event, type: 'app_mention' } });
 			return;
 		}

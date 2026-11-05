@@ -95,6 +95,8 @@ async function setup(
 			id: string;
 		}[],
 		follows: [] as { id: string; question: string }[],
+		/** What each new session got besides the question: Brigadir's tasks and the projects. */
+		contexts: [] as { facts?: string; projects?: { name: string; path: string }[] }[],
 		closed: [] as string[],
 		trees: [] as string[],
 		clock: 0,
@@ -106,8 +108,9 @@ async function setup(
 	};
 	let sessionIds = 0;
 	const side = new SlackSessions({
-		ask: async (key, request, mode) => {
+		ask: async (key, request, mode, _thread, context) => {
 			quick.asks.push({ key, mode, question: request.question, id: request.id });
+			quick.contexts.push(context ?? {});
 			answer(request.id, request.question);
 		},
 		followUp: async (_key, id, question) => {
@@ -160,13 +163,15 @@ async function setup(
 			notesOn: () => notesOn,
 			helper: async (prompt: string) => helperReply(prompt),
 			askAgent: async (task, question) => agentReply(task, question),
-			askCode: (projectId, question, language, thread) =>
-				side.askCode(projectId, {
+			askCode: (projectId, question, language, thread, agent) =>
+				side.askCode(projectId ?? 'p', {
 					thread,
 					question,
 					language,
 					choice: {},
 					context: thread.context,
+					...(agent?.facts ? { facts: agent.facts } : {}),
+					...(agent?.ack ? { ack: agent.ack } : {}),
 				}),
 			sideSession: (channel, ts) => side.session(channel, ts),
 			createTask: async (input) => {
@@ -268,32 +273,42 @@ it('opens Socket Mode with the app token, sealed apart, and reconnects when Slac
 	expect(sockets[1]!.closed).toBe(true);
 });
 
-it('acks a mention and makes a task in the channel’s project with the thread as its context', async () => {
-	const { sockets, created, posts, settle, slack } = await listening();
+it('carries a mention to the agent and makes the task it asks for, with the thread as its context', async () => {
+	const { sockets, created, posts, settle, slack, quick } = await listening();
+	codeReply = () =>
+		'Ставлю задачу.\nACTION create_task {"project": "business", "title": "Fix phone validation", "prompt": "Fix the phone validation on signup"}';
 	const envelope = mention('U2CD', 'fix the phone validation on signup');
-	sockets[0]!.emit(envelope);
-	expect(sockets[0]!.sent).toEqual([{ envelope_id: envelope.envelope_id }]);
-	await settle();
-	expect(created).toEqual([
-		{
-			projectId: 'p',
-			title: 'fix the phone validation on signup',
-			prompt: 'fix the phone validation on signup',
-			context: 'U2CD · 2026-10-30 10:02 UTC\nPhone field drops the plus',
-			start: true,
-			thread: { channel: 'C0DEPLOY', ts: thread, permalink },
-			alsoProjects: [],
-		},
-	]);
-	expect(posts().at(-1)?.body).toMatchObject({
-		channel: 'C0DEPLOY',
-		thread_ts: thread,
-		text: '🆕 *Task created* — business\n📋 Task: fix the phone validation on signup',
-	});
-	// The same envelope again (a late ack) is not a second task.
-	sockets[0]!.emit(envelope);
-	await settle();
-	expect(created).toHaveLength(1);
+	try {
+		sockets[0]!.emit(envelope);
+		expect(sockets[0]!.sent).toEqual([{ envelope_id: envelope.envelope_id }]);
+		await settle();
+		// The bot only carries: the message goes to the agent as is.
+		expect(quick.asks.map((item) => [item.mode, item.question])).toEqual([
+			['aboutCode', 'fix the phone validation on signup'],
+		]);
+		expect(created).toEqual([
+			{
+				projectId: 'p',
+				title: 'Fix phone validation',
+				prompt: 'Fix the phone validation on signup',
+				context: 'U2CD · 2026-10-30 10:02 UTC\nPhone field drops the plus',
+				start: true,
+				thread: { channel: 'C0DEPLOY', ts: thread, permalink },
+				alsoProjects: [],
+			},
+		]);
+		expect(
+			posts()
+				.map((post) => post.body.text)
+				.slice(-2)
+		).toEqual(['Ставлю задачу.', '🆕 *Task created* — business\n📋 Task: Fix phone validation']);
+		// The same envelope again (a late ack) is not a second task.
+		sockets[0]!.emit(envelope);
+		await settle();
+		expect(created).toHaveLength(1);
+	} finally {
+		codeReply = () => '';
+	}
 	// The task's own events answer in the thread it came from.
 	slack.post(
 		{
@@ -326,35 +341,8 @@ it('refuses someone not on the list with an ephemeral message', async () => {
 	]);
 });
 
-it('asks with buttons when unsure and routes the click', async () => {
-	const { sockets, created, posts, settle } = await listening();
-	sockets[0]!.emit(mention('U1AB', 'hello there'));
-	await settle();
-	const buttons = posts().at(-1)!.body;
-	expect(buttons.blocks[1].elements.map((item: any) => item.text.text)).toEqual([
-		'Show state',
-		'Create task',
-	]);
-	const click = buttons.blocks[1].elements[1];
-	sockets[0]!.emit({
-		envelope_id: 'env-click',
-		type: 'interactive',
-		payload: {
-			type: 'block_actions',
-			user: { id: 'U1AB' },
-			channel: { id: 'C0DEPLOY' },
-			container: { channel_id: 'C0DEPLOY', message_ts: '9.0', thread_ts: thread },
-			message: { text: buttons.text },
-			actions: [{ action_id: click.action_id, value: click.value }],
-		},
-	});
-	await settle();
-	expect(sockets[0]!.sent).toContainEqual({ envelope_id: 'env-click' });
-	expect(created.map((item) => item.prompt)).toEqual(['hello there']);
-});
-
-it('answers the state of a task from Brigadir’s data and keeps notes behind their module', async () => {
-	const { sockets, tasks, posts, calls, notes, notesOff, settle } = await listening();
+it('gives the agent Brigadir’s tasks and saves a note when it asks, behind the Notes module', async () => {
+	const { sockets, tasks, posts, calls, notes, notesOff, settle, quick } = await listening();
 	tasks.push({
 		projectId: 'p',
 		id: 'a',
@@ -364,24 +352,33 @@ it('answers the state of a task from Brigadir’s data and keeps notes behind th
 		prs: [],
 		updatedAt: null,
 	});
-	sockets[0]!.emit(mention('U1AB', 'what is the status of phone validation?'));
-	await settle();
-	expect(posts().at(-1)?.body.text).toBe(
-		'⚙️ *Working* — business (`claude/phone`)\n📋 Task: Phone validation\n🗺️ Plan: 1 of 3 · Write tests'
-	);
-	sockets[0]!.emit(mention('U1AB', 'запиши тред'));
-	await settle();
-	expect(notes).toHaveLength(1);
-	expect(notes[0]!.project).toBe('p');
-	expect(notes[0]!.text).toContain(`From Slack: [#C0DEPLOY thread](${permalink})`);
-	expect(notes[0]!.text).toContain('Phone field drops the plus');
-	expect(posts().at(-1)?.body.text).toBe('📝 *Нотатку збережено* — Phone field drops the plus');
-	notesOff();
-	sockets[0]!.emit(mention('U1AB', 'запиши тред'));
-	await settle();
-	expect(calls.filter((call) => call.method === 'chat.postEphemeral').at(-1)?.body.text).toBe(
-		'Нотатки вимкнені в Бригадирі.'
-	);
+	codeReply = (question) =>
+		question.includes('запиши')
+			? 'ACTION note {"kind": "thread"}'
+			: '⚙️ Phone validation — в роботі';
+	try {
+		sockets[0]!.emit(mention('U1AB', 'what is the status of phone validation?'));
+		await settle();
+		expect(quick.contexts[0]!.facts).toContain(
+			'- task a "Phone validation" (project business); state Working; board column In progress; branch claude/phone; plan 1 of 3'
+		);
+		expect(posts().at(-1)?.body.text).toBe('⚙️ Phone validation — в роботі');
+		sockets[0]!.emit(mention('U1AB', 'запиши тред'));
+		await settle();
+		expect(notes).toHaveLength(1);
+		expect(notes[0]!.project).toBe('p');
+		expect(notes[0]!.text).toContain(`From Slack: [#C0DEPLOY thread](${permalink})`);
+		expect(notes[0]!.text).toContain('Phone field drops the plus');
+		expect(posts().at(-1)?.body.text).toBe('📝 *Нотатку збережено* — Phone field drops the plus');
+		notesOff();
+		sockets[0]!.emit(mention('U1AB', 'запиши тред'));
+		await settle();
+		expect(calls.filter((call) => call.method === 'chat.postEphemeral').at(-1)?.body.text).toBe(
+			'Нотатки вимкнені в Бригадирі.'
+		);
+	} finally {
+		codeReply = () => '';
+	}
 });
 
 /** A task's thread, as a posted event starts it: the first event of the task is a message, its `ts` the thread. */
@@ -571,70 +568,37 @@ it('posts a schedule’s «Ask» with Run now · Skip and answers the click', as
 	).toBe('▶️ Run now by <@U1AB>');
 });
 
-it('takes a message in the bot’s DM as a mention — Slack sends no app_mention there — and finds the project by its name', async () => {
-	const { sockets, tasks, posts, calls, settle } = await listening();
-	tasks.push({
-		projectId: 'p',
-		id: 'a',
-		title: 'Phone validation',
-		status: 'working',
-		branch: 'claude/phone',
-		prs: [],
-		updatedAt: null,
-	});
-	sockets[0]!.emit({
-		envelope_id: 'env-dm',
-		type: 'events_api',
-		payload: {
-			event_id: 'EvDM',
-			event: {
-				type: 'message',
-				channel_type: 'im',
-				user: 'U1AB',
-				channel: 'D0DEV',
-				ts: mentionTs,
-				text: 'що зараз у роботі в business?',
-			},
-		},
-	});
-	await settle();
-	expect(posts().at(-1)?.body).toMatchObject({ channel: 'D0DEV' });
-	expect(posts().at(-1)?.body.text).toContain('Phone validation');
-});
-
-it('lets the helper model answer a free question from Brigadir’s facts only, in the question’s language', async () => {
-	const { sockets, tasks, posts, settle } = await listening();
-	tasks.push({
-		projectId: 'p',
-		id: 'a',
-		title: 'Phone validation',
-		status: 'done',
-		branch: 'claude/phone',
-		prs: [],
-		updatedAt: null,
-	});
-	const prompts: string[] = [];
-	helperReply = (prompt) => {
-		prompts.push(prompt);
-		return prompt.startsWith('You sort')
-			? 'status'
-			: '• *Phone validation* — чекає твого ревʼю @channel';
-	};
+it('takes a message in the bot’s DM as a mention — Slack sends no app_mention there — and starts in the project it names', async () => {
+	const { sockets, posts, settle, quick } = await listening();
+	codeReply = () => 'У business зараз у роботі Phone validation.';
 	try {
-		sockets[0]!.emit(mention('U1AB', 'що чекає на мене?'));
+		sockets[0]!.emit({
+			envelope_id: 'env-dm',
+			type: 'events_api',
+			payload: {
+				event_id: 'EvDM',
+				event: {
+					type: 'message',
+					channel_type: 'im',
+					user: 'U1AB',
+					channel: 'D0DEV',
+					ts: mentionTs,
+					text: 'що зараз у роботі в business?',
+				},
+			},
+		});
 		await settle();
 	} finally {
-		helperReply = () => null;
+		codeReply = () => '';
 	}
-	const answer = prompts.find((prompt) => prompt.startsWith('You are Brigadir'))!;
-	expect(answer).toContain('Question: що чекає на мене?');
-	expect(answer).toContain(
-		'"Phone validation" (project business); state Done; board column In progress; branch claude/phone; plan 1 of 3'
-	);
-	expect(posts().at(-1)?.body.text).toBe('• *Phone validation* — чекає твого ревʼю');
+	expect(quick.asks[0]!.key).toEqual({ projectId: 'p', id: 'main-tree' });
+	expect(posts().at(-1)?.body).toMatchObject({
+		channel: 'D0DEV',
+		text: 'У business зараз у роботі Phone validation.',
+	});
 });
 
-it('asks the task’s agent when the facts do not answer, and cuts the code out of its answer', async () => {
+it('asks a task’s agent when the Slack agent says so, and cuts the code out of its answer', async () => {
 	const { sockets, tasks, posts, settle } = await listening();
 	tasks.push({
 		projectId: 'p',
@@ -646,8 +610,7 @@ it('asks the task’s agent when the facts do not answer, and cuts the code out 
 		updatedAt: null,
 	});
 	const asked: string[] = [];
-	helperReply = (prompt) =>
-		prompt.startsWith('You sort') ? 'status' : 'ASK_AGENT: Phone validation';
+	codeReply = () => 'ACTION ask_task {"task": "a", "question": "чому так довго?"}';
 	agentReply = (task, question) => {
 		asked.push(`${task.id}: ${question}`);
 		return 'Чекаємо на E.164.\n```ts\nconst secret = 1;\n```';
@@ -656,49 +619,16 @@ it('asks the task’s agent when the facts do not answer, and cuts the code out 
 		sockets[0]!.emit(mention('U1AB', 'чому phone validation так довго?'));
 		await settle();
 	} finally {
-		helperReply = () => null;
+		codeReply = () => '';
 		agentReply = () => null;
 	}
-	expect(asked).toEqual(['a: чому phone validation так довго?']);
+	expect(asked).toEqual(['a: чому так довго?']);
 	const texts = posts().map((post) => post.body.text);
 	expect(texts.at(-2)).toBe('⏳ Питаю агента задачі «Phone validation»…');
 	expect(texts.at(-1)).toBe('Чекаємо на E.164.\n_(code omitted)_');
 });
 
-it('takes a question the classifier was not sure of to the facts and the agent, and finds a quoted title', async () => {
-	const { sockets, tasks, posts, settle } = await listening();
-	tasks.push({
-		projectId: 'p',
-		id: 'np',
-		title: 'New printer library',
-		status: 'completed',
-		branch: 'claude/printer',
-		prs: [],
-		updatedAt: null,
-	});
-	const asked: string[] = [];
-	helperReply = (prompt) =>
-		prompt.startsWith('You sort') ? 'unsure' : 'ASK_AGENT: „new printer library"';
-	agentReply = (task, question) => {
-		asked.push(`${task.id}: ${question}`);
-		return 'Довго через драйвери.';
-	};
-	try {
-		sockets[0]!.emit(
-			mention('U1AB', 'чому „New printer library" робилась так довго?', { thread_ts: undefined })
-		);
-		await settle();
-	} finally {
-		helperReply = () => null;
-		agentReply = () => null;
-	}
-	expect(asked).toEqual(['np: чому „New printer library" робилась так довго?']);
-	const texts = posts().map((post) => post.body.text);
-	expect(texts).not.toContain('🤔 *Не зрозумів, що треба*');
-	expect(texts.at(-1)).toBe('Довго через драйвери.');
-});
-
-it('watches a PR’s CI and merge from the task’s thread, asks what to watch when unclear, and stops on request', async () => {
+it('watches a PR’s CI and merge from the task’s thread, asks what to watch when unclear, and stops — each as the agent asks', async () => {
 	const read: string[] = [];
 	const test = await listening({
 		watching: {
@@ -724,6 +654,16 @@ it('watches a PR’s CI and merge from the task’s thread, asks what to watch w
 		},
 	});
 	const { sockets, tasks, posts, settle, root } = test;
+	codeReply = (question) =>
+		question === 'fix the phone field'
+			? 'ACTION create_task {"project": "business", "title": "fix the phone field"}'
+			: question.startsWith('Напиши')
+				? 'ACTION watch {"kinds": ["ci", "merged"]}'
+				: question === 'let me know when it happens'
+					? 'ACTION watch {"kinds": []}'
+					: question.includes('#77')
+						? 'ACTION watch {"kinds": ["merged"]}'
+						: 'ACTION unwatch {}';
 	sockets[0]!.emit(mention('U1AB', 'fix the phone field'));
 	await settle();
 	tasks.push({
@@ -806,11 +746,11 @@ it('watches a PR’s CI and merge from the task’s thread, asks what to watch w
 	expect(JSON.parse(await readFile(join(root, 'slack', 'watches.json'), 'utf8')).watches).toEqual(
 		[]
 	);
+	codeReply = () => '';
 });
 
-it('asks a new read-only agent in the project’s main tree about its code, and keeps it ten minutes for the thread', async () => {
+it('keeps one agent session per thread for ten minutes: a mention or a plain reply continues it', async () => {
 	const { sockets, posts, settle, quick } = await listening();
-	helperReply = (prompt) => (prompt.startsWith('You sort') ? 'code' : null);
 	codeReply = (question) =>
 		question.includes('авторизація')
 			? 'Сесію перевіряє `verifyToken` у src/auth/session.ts.\n```ts\nconst key = 1;\n```'
@@ -828,200 +768,86 @@ it('asks a new read-only agent in the project’s main tree about its code, and 
 			},
 		]);
 		let texts = posts().map((post) => post.body.text);
-		expect(texts.at(-2)).toBe('⏳ Питаю агента в business…');
 		expect(texts.at(-1)).toBe(
 			'Сесію перевіряє `verifyToken` у src/auth/session.ts.\n_(code omitted)_'
 		);
-		// A follow-up in the same thread within ten minutes goes to the same session, even when it sounds like a status.
-		helperReply = (prompt) => (prompt.startsWith('You sort') ? 'status' : null);
+		// A mention in the same thread within ten minutes goes to the same session.
 		quick.clock += 9 * 60_000;
 		sockets[0]!.emit(mention('U1AB', 'а де перевіряється токен?'));
 		await settle();
-		expect(quick.follows).toEqual([{ id: 's1', question: 'а де перевіряється токен?' }]);
+		// So does a plain reply, without the mention: «перевір».
+		sockets[0]!.emit(threadReply('U1AB', thread, 'перевір'));
+		await settle();
+		expect(quick.follows).toEqual([
+			{ id: 's1', question: 'а де перевіряється токен?' },
+			{ id: 's1', question: 'перевір' },
+		]);
 		expect(quick.asks).toHaveLength(1);
 		texts = posts().map((post) => post.body.text);
-		expect(texts.at(-1)).toBe('answer: а де перевіряється токен?');
-		// Ten idle minutes later the thread’s session is closed: a code question opens a new one.
-		helperReply = (prompt) => (prompt.startsWith('You sort') ? 'code' : null);
+		expect(texts.at(-1)).toBe('answer: перевір');
+		// Ten idle minutes later the thread’s session is closed: the next message opens a new one.
 		quick.clock += 11 * 60_000;
 		sockets[0]!.emit(mention('U1AB', 'where is the Stripe webhook handled?'));
 		await settle();
 		expect(quick.closed).toContain('s1');
 		expect(quick.asks.map((item) => item.id)).toEqual(['s1', 's2']);
-		expect(quick.follows).toHaveLength(1);
 	} finally {
-		helperReply = () => null;
 		codeReply = () => '';
 	}
 });
 
-it('looks a deploy question up in the project instead of saying there is no data (spec/notifications-slack-notes-and-schedules#slack-project-questions)', async () => {
+it('posts the agent’s «going to look» first, then its answer (spec/notifications-slack-notes-and-schedules#slack-agent)', async () => {
 	const { sockets, posts, settle, quick, settings } = await listening();
-	// No channel project: the model names the project by its folder or name.
+	// No channel project: the agent starts in the first project and works it out.
 	settings.projects = {};
-	helperReply = (prompt) => (prompt.startsWith('You sort') ? 'status' : 'ASK_PROJECT: «business»');
-	codeReply = () => 'Сьогодні в production пішли #1171 і #1216 (деплой о 14:02).';
+	codeReply = () =>
+		'ACK: Пішов дивитись, що зарелізили сьогодні\nСьогодні в production пішли #1171 і #1216 (деплой о 14:02).';
 	try {
 		sockets[0]!.emit(
 			mention('U1AB', 'что по админке залили сегодня в прод?', { channel: 'C0OTHER' })
 		);
 		await settle();
 	} finally {
-		helperReply = () => null;
 		codeReply = () => '';
 	}
-	expect(quick.asks).toEqual([
+	expect(quick.asks[0]!.key).toEqual({ projectId: 'p', id: 'main-tree' });
+	const texts = posts().map((post) => post.body.text);
+	expect(texts.slice(-2)).toEqual([
+		'⏳ Пішов дивитись, що зарелізили сьогодні',
+		'Сьогодні в production пішли #1171 і #1216 (деплой о 14:02).',
+	]);
+	expect(texts.join('\n')).not.toContain('Який проєкт');
+});
+
+it('hands a change to the agent of the task that covers it', async () => {
+	const { sockets, tasks, posts, sent, settle } = await listening();
+	tasks.push({
+		projectId: 'p',
+		id: 'b',
+		title: 'Signup button',
+		status: 'done',
+		branch: 'claude/button',
+		prs: [],
+		updatedAt: null,
+	});
+	codeReply = () =>
+		'ACTION send_to_task {"task": "b", "text": "Make the signup button blue, as asked in Slack."}';
+	try {
+		sockets[0]!.emit(mention('U1AB', 'зроби кнопку реєстрації синьою'));
+		await settle();
+	} finally {
+		codeReply = () => '';
+	}
+	expect(sent).toEqual([
 		{
-			key: { projectId: 'p', id: 'main-tree' },
-			mode: 'aboutCode',
-			question: 'что по админке залили сегодня в прод?',
-			id: 's1',
+			task: { projectId: 'p', id: 'b' },
+			text: "A reply from @U1AB in this task's Slack thread:\n\nMake the signup button blue, as asked in Slack.",
 		},
 	]);
-	const texts = posts().map((post) => post.body.text);
-	expect(texts.at(-2)).toBe('⏳ Питаю агента в business…');
-	expect(texts.at(-1)).toBe('Сьогодні в production пішли #1171 і #1216 (деплой о 14:02).');
+	expect(posts().at(-1)?.body.text).toBe('📨 *Передав агенту задачі* «Signup button»');
 });
 
-it('asks which project when a code question names none', async () => {
-	const { sockets, posts, settle, quick, settings } = await listening();
-	settings.projects = {};
-	helperReply = (prompt) => (prompt.startsWith('You sort') ? 'code' : null);
-	try {
-		sockets[0]!.emit(mention('U1AB', 'where is the webhook handled?', { channel: 'C0OTHER' }));
-		await settle();
-	} finally {
-		helperReply = () => null;
-	}
-	expect(quick.asks).toEqual([]);
-	expect(posts().at(-1)!.body.text).toContain('*Which project?*');
-});
-
-// spec/notifications-slack-notes-and-schedules#slack-dispatch, #slack-which-project, #slack-agent-post.
-const twoProjects = (root: string) => async () => [
-	{ id: 'p', name: 'business', path: root },
-	{ id: 'adm', name: 'admin', path: join(root, 'admin') },
-	{ id: 'cho', name: 'choice', path: join(root, 'chooice.app') },
-];
-const dispatching = (json: string) => (prompt: string) =>
-	prompt.startsWith('You route a request from Slack')
-		? json
-		: prompt.startsWith('You sort one Slack message')
-			? 'task'
-			: null;
-
-it('lets the dispatch pick the projects by loose names and title the task from the thread', async () => {
-	const test = await setup({}, {});
-	const { root } = test;
-	test.slack.dispose();
-	const { sockets, created, posts, settle } = await listening({ projects: twoProjects(root) });
-	const prompts: string[] = [];
-	const answer = dispatching(
-		'{"projects": ["admin", "cho", "nope"], "title": "Ховати треди чату для бекофісу."}'
-	);
-	helperReply = (prompt) => (prompts.push(prompt), answer(prompt));
-	try {
-		sockets[0]!.emit(mention('U2CD', 'создай задачу для админки + чой', { channel: 'C0OTHER' }));
-		await settle();
-	} finally {
-		helperReply = () => null;
-	}
-	// The dispatch read the projects with their folders and the thread above the mention.
-	const dispatch = prompts.find((prompt) => prompt.startsWith('You route'))!;
-	expect(dispatch).toContain('- cho · choice · chooice.app');
-	expect(dispatch).toContain('Phone field drops the plus');
-	expect(created).toHaveLength(1);
-	expect(created[0]).toMatchObject({
-		projectId: 'adm',
-		alsoProjects: ['cho'],
-		title: 'Ховати треди чату для бекофісу',
-		prompt: 'создай задачу для админки + чой',
-	});
-	expect(posts().at(-1)!.body.text).toContain('admin + choice');
-});
-
-it('asks which project with buttons and finishes the waiting request from the next message in the thread', async () => {
-	const test = await setup({}, {});
-	test.slack.dispose();
-	const { sockets, created, posts, settle, calls } = await listening({
-		projects: twoProjects(test.root),
-	});
-	helperReply = dispatching('{"projects": [], "title": "Hide chat threads"}');
-	try {
-		sockets[0]!.emit(mention('U2CD', 'make a task for this', { channel: 'C0OTHER' }));
-		await settle();
-		const ask = posts().at(-1)!.body;
-		expect(ask.text).toBe('🤔 *Which project?*');
-		expect(ask.blocks[1].elements.map((item: any) => item.text.text)).toEqual([
-			'business',
-			'admin',
-			'choice',
-		]);
-		expect(created).toEqual([]);
-		// Someone else's answer does not finish it; a plain reply of the asker naming a project does.
-		sockets[0]!.emit(
-			threadReply('U1AB', thread, 'admin', { channel: 'C0OTHER', ts: '1793354700.000300' })
-		);
-		await settle();
-		expect(created).toEqual([]);
-		sockets[0]!.emit(
-			threadReply('U2CD', thread, 'admin', { channel: 'C0OTHER', ts: '1793354800.000400' })
-		);
-		await settle();
-	} finally {
-		helperReply = () => null;
-	}
-	expect(created).toHaveLength(1);
-	expect(created[0]).toMatchObject({
-		projectId: 'adm',
-		alsoProjects: [],
-		title: 'Hide chat threads',
-		prompt: 'make a task for this',
-	});
-	// The buttons go once the wait is over.
-	expect(calls.filter((call) => call.method === 'chat.update').at(-1)!.body).toMatchObject({
-		channel: 'C0OTHER',
-		text: '🤔 *Which project?*',
-		blocks: [],
-	});
-	expect(posts().at(-1)!.body.text).toContain('*Task created* — admin');
-});
-
-it('finishes a waiting request from a project button', async () => {
-	const test = await setup({}, {});
-	test.slack.dispose();
-	const { sockets, created, posts, settle } = await listening({ projects: twoProjects(test.root) });
-	helperReply = dispatching('{"projects": []}');
-	try {
-		sockets[0]!.emit(mention('U2CD', 'fix the export'));
-		await settle();
-	} finally {
-		helperReply = () => null;
-	}
-	// The channel's project stands when the dispatch names none.
-	expect(created[0]).toMatchObject({ projectId: 'p', title: 'fix the export' });
-	created.length = 0;
-	helperReply = dispatching('{"projects": []}');
-	try {
-		sockets[0]!.emit(mention('U2CD', 'fix the import', { channel: 'C0OTHER' }));
-		await settle();
-		const ask = posts().at(-1)!;
-		sockets[0]!.emit(
-			click(
-				'U2CD',
-				{ ts: `${posts().length}.0`, text: ask.body.text },
-				ask.body.blocks[1].elements[2],
-				thread
-			)
-		);
-		await settle();
-	} finally {
-		helperReply = () => null;
-	}
-	expect(created).toHaveLength(1);
-	expect(created[0]).toMatchObject({ projectId: 'cho', prompt: 'fix the import' });
-});
-
+// spec/notifications-slack-notes-and-schedules#slack-agent-post.
 function agentFetch(
 	calls: { method: string; body: Record<string, any> }[],
 	post: (body: Record<string, any>) => Record<string, unknown>
@@ -1099,5 +925,33 @@ it('posts an agent’s message as the bot to a channel by name, and says how to 
 	});
 	await expect(slack.agentPost(task, { text: 'x' })).rejects.toThrow(
 		'This task has no Slack thread: name a channel.'
+	);
+});
+
+it('makes one task across the projects the agent names; their folders join it', async () => {
+	const test = await listening({
+		projects: async () => [
+			{ id: 'p', name: 'business', path: '/w/business' },
+			{ id: 'adm', name: 'admin', path: '/w/admin' },
+			{ id: 'cho', name: 'choice', path: '/w/chooice.app' },
+		],
+	});
+	codeReply = () =>
+		'ACTION create_task {"projects": ["admin", "chooice.app"], "title": "Сховати треди", "prompt": "Hide chat threads"}';
+	try {
+		test.sockets[0]!.emit(mention('U1AB', 'зробіть задачу'));
+		await test.settle();
+	} finally {
+		codeReply = () => '';
+	}
+	expect(test.created).toHaveLength(1);
+	expect(test.created[0]).toMatchObject({
+		projectId: 'adm',
+		alsoProjects: ['cho'],
+		title: 'Сховати треди',
+		prompt: 'Hide chat threads',
+	});
+	expect(test.posts().at(-1)?.body.text).toBe(
+		'🆕 *Задачу створено* — admin + choice\n📋 Задача: Сховати треди'
 	);
 });

@@ -254,12 +254,15 @@ describe('a question from Slack about the code (spec/notifications-slack-notes-a
 			project: 'business',
 			thread: 'U1 · 2026-10-30 10:00 UTC\nlogin breaks',
 		});
-		expect(prompt).toContain('project business');
+		expect(prompt).toContain('Project: business — this directory.');
 		expect(prompt).toContain('Answer in Ukrainian, at most 12 short lines');
 		expect(prompt).toContain('Never include code, diffs');
 		expect(prompt).toContain('Do not change any files');
 		expect(prompt).toContain('login breaks');
 		expect(prompt.endsWith('як у business працює авторизація?')).toBe(true);
+		expect(
+			quickCodePrompt({ question: 'q', language: 'en', project: 'b', facts: '- task t1 "Button"' })
+		).toContain('- task t1 "Button"');
 	});
 	it('keeps the same rules on a follow-up', () => {
 		const prompt = quickSlackFollowUpPrompt({
@@ -360,9 +363,22 @@ describe('what a Slack side agent may run (spec/notifications-slack-notes-and-sc
 			project: 'admin',
 			today: '2026-11-05 (Thursday), 21:14 UTC+02:00',
 		});
-		expect(prompt).toContain('Find the answer yourself');
+		expect(prompt).toContain('find it yourself');
+		expect(prompt).toContain('ACK: Пішов дивитись, що зарелізили сьогодні');
+		expect(prompt).toContain('ACTION send_to_task');
 		expect(prompt).toContain('gh api repos/{owner}/{repo}/deployments');
 		expect(prompt).toContain('Now: 2026-11-05 (Thursday), 21:14 UTC+02:00.');
 		expect(prompt).toContain('such commands are declined');
+		const any = quickCodePrompt({
+			question: 'глянь в треді',
+			language: 'uk',
+			project: 'admin',
+			projects: [
+				{ name: 'admin', path: '/w/admin' },
+				{ name: 'b2c', path: '/w/b2c' },
+			],
+		});
+		expect(any).toContain('work out which one is meant');
+		expect(any).toContain('- b2c — /w/b2c');
 	});
 });

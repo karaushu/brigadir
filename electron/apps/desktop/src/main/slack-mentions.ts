@@ -1,44 +1,34 @@
 import { randomUUID } from 'node:crypto';
 import {
 	isRecord,
-	parseSlackIntent,
 	slackActionOf,
 	slackActions,
-	slackActiveText,
 	slackAllowed,
-	slackAsksActive,
-	slackAsksQuestion,
-	slackTitleKey,
 	slackButtons,
 	slackFindTasks,
-	slackIntentFallback,
-	slackIntentPrompt,
 	slackMentionText,
 	slackNoteText,
 	slackNoteTitle,
 	slackLanguage,
 	slackLocalize,
 	slackNamedProject,
-	slackDispatchPrompt,
-	parseSlackDispatch,
 	type SlackProjectRef,
 	slackActive,
-	slackAnswerPrompt,
-	slackAskAgentOf,
-	slackAskProjectOf,
 	slackAgentAnswer,
+	slackAgentMessage,
+	slackAgentSteps,
+	slackAnswerReply,
 	slackFactsText,
 	slackModelAnswer,
+	type SlackAgentStep,
 	type SlackTaskFacts,
 	type SlackLanguage,
 	slackProjectPrefix,
 	slackReply,
-	slackStatusText,
 	slackSummaryPrompt,
 	slackTaskTitle,
 	slackThreadText,
 	type SlackButton,
-	type SlackIntent,
 	type SlackSettings,
 	type SlackStatusInput,
 	type SlackTaskInfo,
@@ -66,7 +56,7 @@ export type SlackTaskInput = {
 	/** `New task: Start` — starts now; `Ask in Brigadir` — waits in the backlog with a notice. */
 	start: boolean;
 	thread: SlackThreadRef;
-	/** spec/notifications-slack-notes-and-schedules#slack-dispatch: the other projects the work is in; their folders join the task. */
+	/** spec/notifications-slack-notes-and-schedules#slack-agent: the other projects the agent named for the task; their folders join it. */
 	alsoProjects: string[];
 };
 /**
@@ -84,12 +74,14 @@ export type SlackBrigadir = SlackAnswering & {
 		language: SlackLanguage,
 		thread?: SlackSideThread
 	): Promise<string | null>;
-	/** spec/notifications-slack-notes-and-schedules#slack-project-questions: a question to look up in the project — a new agent in its main tree that runs only commands that read; its answer. */
+	/** spec/notifications-slack-notes-and-schedules#slack-agent: the Slack agent — a session in a project's main tree that sees every project and runs only commands that read; its answer. */
 	askCode?(
-		projectId: string,
+		/** The project to start in; `null` — the first one. The agent sees every project either way. */
+		projectId: string | null,
 		question: string,
 		language: SlackLanguage,
-		thread: SlackSideThread
+		thread: SlackSideThread,
+		agent?: { facts?: string; ack?(text: string): void }
 	): Promise<string | null>;
 	/** The thread's side session that still waits for a follow-up (ten minutes after its last answer). */
 	sideSession?(channel: string, ts: string): SlackSideSession | null;
@@ -155,10 +147,6 @@ type Pending = {
 	at: number;
 	tasks?: TaskKey[];
 	drafts?: WatchDraft[];
-	/** spec/notifications-slack-notes-and-schedules#slack-which-project: the dispatch's title of a task that waits for its project. */
-	title?: string | null;
-	/** The message with the project buttons: its buttons go when the wait ends another way. */
-	buttonsTs?: string;
 };
 const pendingMs = 5 * 60_000,
 	seenLimit = 300;
@@ -170,8 +158,6 @@ const pendingMs = 5 * 60_000,
  */
 export class SlackMentions {
 	private pending = new Map<string, Pending>();
-	/** spec/notifications-slack-notes-and-schedules#slack-which-project: `<channel>/<thread>/<user>` → the pending task that waits for its project. */
-	private awaiting = new Map<string, string>();
 	private seen: string[] = [];
 	constructor(private readonly deps: SlackMentionDeps) {}
 	private now() {
@@ -228,8 +214,7 @@ export class SlackMentions {
 				await this.reply(mention, slackReply.noText);
 				return;
 			}
-			if (await this.resume(mention, projects)) return;
-			await this.route(await this.intent(mention), mention);
+			await this.agent(mention);
 		} catch (error) {
 			await this.reply(mention, slackReply.failed(reason(error))).catch(() => {});
 		}
@@ -273,84 +258,13 @@ export class SlackMentions {
 				.catch(() => {});
 		const mention = { ...pending.mention, user };
 		try {
-			if (kind === slackActions.status) await this.status(mention);
-			else if (kind === slackActions.task) await this.task(mention);
-			else if (kind === slackActions.summary) await this.note(mention, 'summary');
-			else if (kind === slackActions.thread) await this.note(mention, 'thread');
-			else if (kind === slackActions.show) {
-				const key = pending.tasks?.find((item) => item.id === taskId);
-				if (key) await this.statusOf(mention, key);
-			} else if (kind === slackActions.watch) {
+			if (kind === slackActions.watch) {
 				const draft = pending.drafts?.[Number(taskId)];
 				if (draft) await this.watch(mention, draft);
-			} else if (kind === slackActions.project) {
-				this.forget(pendingId);
-				const projects = await this.deps.projects().catch(() => []);
-				if (taskId && projects.some((project) => project.id === taskId))
-					await this.create(pending.mention, [taskId], pending.title ?? null);
 			}
 		} catch (error) {
 			await this.reply(mention, slackReply.failed(reason(error))).catch(() => {});
 		}
-	}
-	/** spec/notifications-slack-notes-and-schedules#slack-which-project: a plain reply of this person in this thread finishes a task that waits for its project. */
-	waits(channel: string, threadTs: string, user: string): boolean {
-		this.prune();
-		const id = this.awaiting.get(`${channel}/${threadTs}/${user}`);
-		return !!id && this.pending.has(id);
-	}
-	/**
-	 * spec/notifications-slack-notes-and-schedules#slack-which-project: the next message of the person in the thread names the project of the
-	 * waiting task — the original request is made with it. `false` — nothing waits here, or the message names no project (it
-	 * is a new mention then).
-	 */
-	private async resume(mention: Mention, projects: SlackProjectRef[]): Promise<boolean> {
-		if (!mention.inThread || !this.waits(mention.channel, mention.replyTs, mention.user))
-			return false;
-		const key = `${mention.channel}/${mention.replyTs}/${mention.user}`,
-			id = this.awaiting.get(key)!,
-			pending = this.pending.get(id)!;
-		this.forget(id);
-		let ids = mention.prefixed && mention.projectId ? [mention.projectId] : [];
-		if (!ids.length) {
-			const named = slackNamedProject(mention.text, projects);
-			if (named) ids = [named];
-		}
-		if (!ids.length && mention.text)
-			ids =
-				parseSlackDispatch(
-					await this.deps
-						.helper(
-							slackDispatchPrompt({
-								text: mention.text,
-								thread: null,
-								projects,
-								channelProject: null,
-							}),
-							400
-						)
-						.catch(() => null),
-					projects
-				)?.projects ?? [];
-		if (!ids.length) return false;
-		await this.create(pending.mention, ids, pending.title ?? null);
-		return true;
-	}
-	/** The waiting task is answered: its buttons and its wait go. */
-	private forget(id: string) {
-		const pending = this.pending.get(id);
-		this.pending.delete(id);
-		for (const [key, value] of this.awaiting) if (value === id) this.awaiting.delete(key);
-		const ts = pending?.buttonsTs;
-		if (pending && ts)
-			void this.deps
-				.api('chat.update', {
-					channel: pending.mention.channel,
-					ts,
-					text: slackLocalize(slackReply.whichProjectShort, pending.mention.language),
-					blocks: [],
-				})
-				.catch(() => {});
 	}
 	private allowed(user: string) {
 		return slackAllowed(this.deps.settings(), user);
@@ -403,63 +317,6 @@ export class SlackMentions {
 			// Without channels:history / groups:history the thread is not readable; the mention alone still works.
 			return [];
 		}
-	}
-	private async intent(mention: Mention): Promise<SlackIntent> {
-		const thread = mention.thread.length ? slackThreadText(mention.thread) : null;
-		if (!mention.text) return { kind: 'unsure' };
-		const answer = await this.deps
-			.helper(slackIntentPrompt(mention.text, thread), 40)
-			.catch(() => null);
-		return parseSlackIntent(answer) ?? slackIntentFallback(mention.text);
-	}
-	private async route(intent: SlackIntent, mention: Mention) {
-		// A follow-up question in a thread whose side session still waits goes to that session.
-		const side = mention.inThread
-				? (this.deps.sideSession?.(mention.channel, mention.replyTs) ?? null)
-				: null,
-			question =
-				intent.kind === 'code' ||
-				intent.kind === 'status' ||
-				(intent.kind === 'unsure' && slackAsksQuestion(mention.text));
-		if (side && question && side.mode === 'aboutCode' && this.deps.askCode) {
-			await this.code(mention, side.projectId);
-			return;
-		}
-		if (side && question && side.mode === 'aboutTask') {
-			const task = (await this.deps.tasks(side.task.projectId).catch(() => [])).find(
-				(item) => item.id === side.task.id
-			);
-			if (task) {
-				await this.askTaskAgent(mention, task);
-				return;
-			}
-		}
-		if (intent.kind === 'code' && this.deps.askCode) await this.code(mention);
-		else if (intent.kind === 'task') await this.task(mention);
-		else if (intent.kind === 'watch' && this.deps.watch)
-			await this.watch(mention, { kinds: intent.watch });
-		else if (intent.kind === 'unwatch' && this.deps.unwatch) await this.unwatch(mention);
-		// A question is answered from the facts (or by the task's agent), not with «not sure» buttons.
-		else if (
-			intent.kind === 'status' ||
-			intent.kind === 'code' ||
-			(intent.kind === 'unsure' && slackAsksQuestion(mention.text))
-		)
-			await this.status(mention);
-		else if (intent.kind === 'note' && intent.note !== 'unclear')
-			await this.note(mention, intent.note);
-		else if (intent.kind === 'note') {
-			if (!this.deps.notesOn()) await this.ephemeral(mention, slackReply.notesOff);
-			else
-				await this.buttons(mention, slackReply.noteKind, [
-					{ action: slackActions.summary, label: 'Save a summary' },
-					{ action: slackActions.thread, label: 'Save the thread' },
-				]);
-		} else
-			await this.buttons(mention, slackReply.unsure, [
-				{ action: slackActions.status, label: 'Show state' },
-				{ action: slackActions.task, label: 'Create task' },
-			]);
 	}
 	/**
 	 * «Write here when …»: what to watch (CI of a PR, its merge, a task done), then which PR — `#N`, else the thread task's
@@ -610,89 +467,21 @@ export class SlackMentions {
 			options.map((option) => option.draft)
 		);
 	}
-	private async projectNames() {
-		return (await this.deps.projects().catch(() => [])).map((project) => project.name);
-	}
-	private async task(mention: Mention) {
-		if (mention.unknownProject) {
-			await this.reply(
-				mention,
-				slackReply.unknownProject(mention.unknownProject, await this.projectNames())
-			);
-			return;
-		}
-		if (!mention.text) {
-			await this.reply(mention, slackReply.noText);
-			return;
-		}
-		const dispatch = await this.dispatch(mention),
-			ids = mention.prefixed
-				? [mention.projectId!]
-				: dispatch?.projects.length
-					? dispatch.projects
-					: mention.projectId
-						? [mention.projectId]
-						: [];
-		if (!ids.length) {
-			await this.askProject(mention, dispatch?.title ?? null);
-			return;
-		}
-		await this.create(mention, ids, dispatch?.title ?? null);
-	}
-	/**
-	 * spec/notifications-slack-notes-and-schedules#slack-dispatch: the helper model reads the mention, the thread and the projects and says which
-	 * projects the work is in and what the task is called; `null` — no helper agent or no valid answer.
-	 */
-	private async dispatch(mention: Mention) {
-		const projects = await this.deps.projects().catch(() => []);
-		if (!projects.length) return null;
-		const answer = await this.deps
-			.helper(
-				slackDispatchPrompt({
-					text: mention.text,
-					thread: mention.thread.length ? slackThreadText(mention.thread) : null,
-					projects,
-					channelProject: mention.channelProject,
-				}),
-				400
-			)
-			.catch(() => null);
-		return parseSlackDispatch(answer, projects);
-	}
-	/** spec/notifications-slack-notes-and-schedules#slack-which-project: one button per project; the request waits for a click or the next message. */
-	private async askProject(mention: Mention, title: string | null) {
-		const projects = await this.deps.projects().catch(() => []);
-		if (!projects.length) {
-			await this.reply(mention, slackReply.whichProject([]));
-			return;
-		}
-		const shown = projects.slice(0, 10),
-			id = await this.buttons(
-				mention,
-				projects.length > shown.length
-					? slackReply.whichProject(projects.map((project) => project.name))
-					: slackReply.whichProjectShort,
-				shown.map((project) => ({
-					action: slackActions.project,
-					label: project.name,
-					task: project.id,
-				})),
-				undefined,
-				undefined,
-				{ title }
-			);
-		this.awaiting.set(`${mention.channel}/${mention.replyTs}/${mention.user}`, id);
-	}
-	/** The task in the first project; the other projects' folders join it (spec/notifications-slack-notes-and-schedules#slack-dispatch). */
-	private async create(mention: Mention, ids: string[], title: string | null) {
+	/** The task in the first project; the other projects' folders join it (spec/notifications-slack-notes-and-schedules#slack-agent). */
+	private async create(
+		mention: Mention,
+		ids: string[],
+		title: string | null,
+		prompt?: string | null
+	) {
 		const start = this.deps.settings().mentions.start === 'start',
 			projects = await this.deps.projects().catch(() => []),
 			name = (id: string) => projects.find((item) => item.id === id)?.name ?? id,
 			[projectId, ...alsoProjects] = ids as [string, ...string[]];
 		const created = await this.deps.createTask({
 			projectId,
-			title: title || slackTaskTitle(mention.text),
-			prompt: mention.text,
+			title: title || slackTaskTitle(prompt || mention.text),
+			prompt: prompt || mention.text,
 			context: mention.thread.length ? slackThreadText(mention.thread) : null,
 			start,
 			thread: {
@@ -726,108 +515,6 @@ export class SlackMentions {
 			return null;
 		}
 	}
-	private async status(mention: Mention) {
-		if (!mention.unknownProject && (await this.smartStatus(mention).catch(() => false))) return;
-		const own = mention.inThread ? this.deps.taskOfThread(mention.channel, mention.replyTs) : null;
-		if (own) {
-			await this.statusOf(mention, own);
-			return;
-		}
-		if (mention.unknownProject) {
-			await this.ephemeral(
-				mention,
-				slackReply.unknownProject(mention.unknownProject, await this.projectNames())
-			);
-			return;
-		}
-		if (!mention.projectId) {
-			await this.ephemeral(mention, slackReply.whichProject(await this.projectNames()));
-			return;
-		}
-		const tasks = await this.deps.tasks(mention.projectId),
-			project = await this.projectName(mention.projectId);
-		if (slackAsksActive(mention.text)) {
-			await this.reply(mention, slackActiveText(project, tasks));
-			return;
-		}
-		const found = slackFindTasks(mention.text, tasks);
-		if (found.length === 1) await this.answer(mention, found[0]!, project);
-		else if (found.length > 1) {
-			const shown = found.slice(0, 3);
-			await this.buttons(
-				mention,
-				slackReply.severalTasks,
-				shown.map((task) => ({ action: slackActions.show, label: task.title, task: task.id })),
-				shown.map((task) => ({ projectId: task.projectId, id: task.id }))
-			);
-		} else
-			// Nothing named: what is in progress is the nearest answer, and the task can still be made.
-			await this.buttons(mention, `${slackReply.noTask}\n\n${slackActiveText(project, tasks)}`, [
-				{ action: slackActions.task, label: 'Create task' },
-			]);
-	}
-	/**
-	 * The helper model answers the question itself from Brigadir's facts — the thread's
-	 * task, else the project's tasks, else every project's — in the question's language. `false` — no helper or no answer;
-	 * the fixed answers below stay for that.
-	 */
-	private async smartStatus(mention: Mention): Promise<boolean> {
-		const own = mention.inThread ? this.deps.taskOfThread(mention.channel, mention.replyTs) : null,
-			projects = await this.deps.projects().catch(() => []),
-			ids = own
-				? [own.projectId]
-				: mention.projectId
-					? [mention.projectId]
-					: projects.map((p) => p.id);
-		const all: { task: SlackTaskInfo; project: string }[] = [];
-		for (const id of ids) {
-			const project = projects.find((item) => item.id === id)?.name ?? id;
-			for (const task of await this.deps.tasks(id).catch(() => []))
-				if (own ? task.id === own.id : !task.archived) all.push({ task, project });
-		}
-		all.sort((a, b) => (b.task.updatedAt ?? '').localeCompare(a.task.updatedAt ?? ''));
-		const shown = all.slice(0, 40);
-		const facts: SlackTaskFacts[] = [];
-		for (const [index, item] of shown.entries())
-			facts.push({
-				...item,
-				...(index < 15 && slackActive(item.task)
-					? await this.deps.status(item.task).catch(() => ({ plan: null, ci: null }))
-					: { plan: null, ci: null }),
-			});
-		const thread = mention.thread.length ? slackThreadText(mention.thread) : null,
-			answer = await this.deps
-				.helper(slackAnswerPrompt(mention.text, slackFactsText(facts, this.now()), thread), 3000)
-				.catch(() => null),
-			text = answer ? slackModelAnswer(answer) : null;
-		if (!text) return false;
-		const lookup = this.deps.askCode ? slackAskProjectOf(text) : null;
-		if (lookup !== null) {
-			// spec/notifications-slack-notes-and-schedules#slack-project-questions: the project can tell what the facts cannot.
-			const key = lookup.toLowerCase(),
-				named = key
-					? projects.find((item) =>
-							[item.id, item.name, item.folder ?? ''].some((name) => name.toLowerCase() === key)
-						)
-					: undefined;
-			await this.code(mention, named?.id ?? (ids.length === 1 ? ids[0] : undefined));
-			return true;
-		}
-		const asked = slackAskAgentOf(text);
-		if (asked !== null) {
-			const key = slackTitleKey(asked),
-				task =
-					(own && all.find((item) => item.task.id === own.id)?.task) ??
-					all.find((item) => item.task.title === asked)?.task ??
-					all.find((item) => slackTitleKey(item.task.title) === key)?.task;
-			if (!task) return false;
-			await this.askTaskAgent(mention, task);
-			return true;
-		}
-		// The model wrote it in the question's language: no fixed-phrase translation over it.
-		await this.reply({ channel: mention.channel, replyTs: mention.replyTs }, text);
-		return true;
-	}
 	/** «⏳ Asking the agent of …», then its answer with fenced code cut, or a short «did not answer». */
 	private async askTaskAgent(mention: Mention, task: SlackTaskInfo) {
 		await this.reply(mention, slackReply.askingAgent(task.title));
@@ -836,42 +523,130 @@ export class SlackMentions {
 				{ projectId: task.projectId, id: task.id },
 				mention.text,
 				mention.language,
-				this.sideThread(mention)
+				// Its own side session: the Slack agent's session of this thread stays.
+				{ ...this.sideThread(mention), ts: `${mention.replyTs}/task` }
 			)
 			.catch(() => null);
 		await this.agentReply(mention, reply);
 	}
 	/**
-	 * spec/notifications-slack-notes-and-schedules#slack: a question about the project's code — the
-	 * project of the thread's session, of the `in <project>:` prefix or the channel, of a name in the text, of the thread's
-	 * task; none — which project.
+	 * spec/notifications-slack-notes-and-schedules#slack-agent: the bot only carries the message. The agent gets it with the thread, every
+	 * project and Brigadir's tasks; its `ACK: …` line goes out at once, then its answer, then the actions it asked for.
 	 */
-	private async code(mention: Mention, sessionProject?: string) {
+	private async agent(mention: Mention) {
+		if (!this.deps.askCode) {
+			await this.reply(mention, slackReply.agentSilent);
+			return;
+		}
 		const own = mention.inThread ? this.deps.taskOfThread(mention.channel, mention.replyTs) : null,
-			projectId = sessionProject ?? mention.projectId ?? own?.projectId ?? null;
-		if (!projectId && mention.unknownProject) {
-			await this.reply(
-				mention,
-				slackReply.unknownProject(mention.unknownProject, await this.projectNames())
-			);
+			side = mention.inThread
+				? (this.deps.sideSession?.(mention.channel, mention.replyTs) ?? null)
+				: null,
+			projectId =
+				mention.projectId ?? own?.projectId ?? (side?.mode === 'aboutCode' ? side.projectId : null),
+			{ facts, tasks } = await this.facts(own),
+			where = { channel: mention.channel, replyTs: mention.replyTs };
+		let acked: Promise<unknown> = Promise.resolve();
+		const reply = await this.deps
+			.askCode(
+				projectId,
+				mention.text || '(The message only mentions you: read the thread above it.)',
+				mention.language,
+				this.sideThread(mention),
+				{
+					facts,
+					ack: (text) => {
+						const said = slackModelAnswer(text);
+						if (said) acked = this.reply(where, `⏳ ${said}`).catch(() => {});
+					},
+				}
+			)
+			.catch(() => null);
+		await acked;
+		if (!reply) {
+			await this.reply(mention, slackReply.agentSilent);
 			return;
 		}
-		if (!projectId) {
-			await this.reply(mention, slackReply.whichProject(await this.projectNames()));
-			return;
+		const { text, actions } = slackAgentSteps(reply),
+			said = text ? slackAgentAnswer(text) : null;
+		if (said) await this.reply(where, said);
+		for (const action of actions) await this.step(mention, action, tasks);
+	}
+	/** Brigadir's tasks for the agent: the thread's task first, then the newest of every project (≤ 40, plan and CI for 15). */
+	private async facts(own: TaskKey | null) {
+		const projects = await this.deps.projects().catch(() => []),
+			all: { task: SlackTaskInfo; project: string }[] = [];
+		const mine = (task: SlackTaskInfo) =>
+			own !== null && task.id === own.id && task.projectId === own.projectId;
+		for (const project of projects)
+			for (const task of await this.deps.tasks(project.id).catch(() => []))
+				if (!task.archived || mine(task)) all.push({ task, project: project.name });
+		all.sort(
+			(a, b) =>
+				Number(mine(b.task)) - Number(mine(a.task)) ||
+				(b.task.updatedAt ?? '').localeCompare(a.task.updatedAt ?? '')
+		);
+		const facts: SlackTaskFacts[] = [];
+		for (const [index, item] of all.slice(0, 40).entries())
+			facts.push({
+				...item,
+				...(index < 15 && slackActive(item.task)
+					? await this.deps.status(item.task).catch(() => ({ plan: null, ci: null }))
+					: { plan: null, ci: null }),
+			});
+		return { facts: slackFactsText(facts, this.now()), tasks: all.map((item) => item.task) };
+	}
+	/** One action the agent asked for; Brigadir runs it and says so in the thread. */
+	private async step(mention: Mention, action: SlackAgentStep, tasks: SlackTaskInfo[]) {
+		const taskOf = (ref: string) =>
+			tasks.find((task) => task.id === ref.trim()) ??
+			tasks.find((task) => task.title.toLowerCase() === ref.trim().toLowerCase());
+		try {
+			if (action.kind === 'create_task') {
+				const projects = await this.deps.projects().catch(() => []),
+					find = (name: string) =>
+						projects.find((item) =>
+							[item.id, item.name, item.folder ?? ''].some(
+								(value) => value.toLowerCase() === name.toLowerCase()
+							)
+						),
+					unknown = action.projects.find((name) => !find(name)),
+					ids = [...new Set(action.projects.map((name) => find(name)?.id ?? ''))];
+				if (unknown !== undefined || !ids.length)
+					await this.reply(
+						mention,
+						slackReply.unknownProject(
+							unknown ?? '',
+							projects.map((item) => item.name)
+						)
+					);
+				else await this.create(mention, ids, action.title, action.prompt);
+			} else if (action.kind === 'send_to_task' || action.kind === 'ask_task') {
+				const task = taskOf(action.task);
+				if (!task) await this.reply(mention, slackReply.noTask);
+				else if (action.kind === 'ask_task')
+					await this.askTaskAgent({ ...mention, text: action.question }, task);
+				else {
+					const result = await this.deps.sendToTask(
+						{ projectId: task.projectId, id: task.id },
+						slackAgentMessage(mention.user, action.text)
+					);
+					await this.reply(
+						mention,
+						result === 'sent' ? slackReply.handedTo(task.title) : slackAnswerReply[result]
+					);
+				}
+			} else if (action.kind === 'note') await this.note(mention, action.note);
+			else if (action.kind === 'watch' && this.deps.watch)
+				await this.watch(mention, { kinds: action.kinds });
+			else if (action.kind === 'unwatch' && this.deps.unwatch) await this.unwatch(mention);
+		} catch (error) {
+			await this.reply(mention, slackReply.failed(reason(error))).catch(() => {});
 		}
-		if (!mention.text) {
-			await this.reply(mention, slackReply.noText);
-			return;
-		}
-		await this.reply(mention, slackReply.askingCode(await this.projectName(projectId)));
-		const reply = await this.deps.askCode!(
-			projectId,
-			mention.text,
-			mention.language,
-			this.sideThread(mention)
-		).catch(() => null);
-		await this.agentReply(mention, reply);
+	}
+	/** spec/notifications-slack-notes-and-schedules#slack-agent: a plain reply in a thread whose agent session still waits goes to the agent. */
+	listens(channel: string, threadTs: string): boolean {
+		return this.deps.sideSession?.(channel, threadTs)?.mode === 'aboutCode';
 	}
 	private sideThread(mention: Mention): SlackSideThread {
 		return {
@@ -885,24 +660,6 @@ export class SlackMentions {
 		const said = reply ? slackAgentAnswer(reply) : null;
 		if (said) await this.reply({ channel: mention.channel, replyTs: mention.replyTs }, said);
 		else await this.reply(mention, slackReply.agentSilent);
-	}
-	private async projectName(projectId: string) {
-		return (
-			(await this.deps.projects().catch(() => [])).find((item) => item.id === projectId)?.name ??
-			projectId
-		);
-	}
-	private async statusOf(mention: Mention, key: TaskKey) {
-		const task = (await this.deps.tasks(key.projectId)).find((item) => item.id === key.id);
-		if (!task) {
-			await this.reply(mention, slackReply.noTask);
-			return;
-		}
-		await this.answer(mention, task, await this.projectName(key.projectId));
-	}
-	private async answer(mention: Mention, task: SlackTaskInfo, project: string) {
-		const { plan, ci } = await this.deps.status(task);
-		await this.reply(mention, slackStatusText({ task, project, plan, ci, now: this.now() }));
 	}
 	private async note(mention: Mention, kind: 'thread' | 'summary') {
 		if (!this.deps.notesOn()) {
@@ -940,8 +697,7 @@ export class SlackMentions {
 		text: string,
 		buttons: { action: SlackButton['action']; label: string; task?: string }[],
 		tasks?: TaskKey[],
-		drafts?: WatchDraft[],
-		extra?: Pick<Pending, 'title'>
+		drafts?: WatchDraft[]
 	): Promise<string> {
 		this.prune();
 		const id = randomUUID().replace(/-/g, '').slice(0, 16);
@@ -950,10 +706,9 @@ export class SlackMentions {
 			at: this.now(),
 			...(tasks ? { tasks } : {}),
 			...(drafts ? { drafts } : {}),
-			...extra,
 		};
 		this.pending.set(id, pending);
-		const sent = await this.deps.api('chat.postMessage', {
+		await this.deps.api('chat.postMessage', {
 			channel: mention.channel,
 			thread_ts: mention.replyTs,
 			unfurl_links: false,
@@ -967,14 +722,12 @@ export class SlackMentions {
 				}))
 			),
 		});
-		if (typeof sent?.ts === 'string') pending.buttonsTs = sent.ts;
 		return id;
 	}
 	private prune() {
 		const now = this.now();
 		for (const [id, pending] of this.pending)
 			if (now - pending.at > pendingMs) this.pending.delete(id);
-		for (const [key, id] of this.awaiting) if (!this.pending.has(id)) this.awaiting.delete(key);
 	}
 	private reply(
 		mention: Pick<Mention, 'channel' | 'replyTs'> & { language?: SlackLanguage },

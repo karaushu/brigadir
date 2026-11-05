@@ -90,6 +90,7 @@ const verbs = {
 	ask_user: ['Asking you', 'Asked you', 'Could not ask you'],
 	create_task: ['Proposing a task', 'Proposed a task', 'Could not propose a task'],
 	add_folder: ['Adding a folder', 'Added a folder', 'Could not add the folder'],
+	slack_post: ['Posting to Slack', 'Posted to Slack', 'Could not post to Slack'],
 	browser_open: ['Opening the page', 'Opened the page', 'Could not open the page'],
 	browser_state: ['Checking the browser', 'Checked the browser', 'Could not check the browser'],
 	browser_read: ['Reading the page', 'Read the page', 'Could not read the page'],
@@ -202,7 +203,13 @@ const actVerbs: Record<string, readonly [MessageKey, MessageKey]> = {
 	rotate: ['Rotating the simulator', 'Rotated the simulator'],
 };
 export function mcpModule(tool: string): McpModule {
-	if (tool === 'ask_user' || tool === 'create_task' || tool === 'add_folder') return 'human';
+	if (
+		tool === 'ask_user' ||
+		tool === 'create_task' ||
+		tool === 'add_folder' ||
+		tool === 'slack_post'
+	)
+		return 'human';
 	if (tool === 'editor_state' || tool === 'editor_restart_language_servers') return 'editor';
 	if (tool.startsWith('browser_')) return 'browser';
 	if (tool.startsWith('simulator_')) return 'simulator';
@@ -662,6 +669,18 @@ export function mcpRow(
 							: null
 				)
 			);
+			break;
+		}
+		// spec/notifications-slack-notes-and-schedules#slack-agent-post: where it went, the text, and why Slack or the person refused.
+		case 'slack_post': {
+			const reason = str(r.reason);
+			detail = join(
+				plain(str(a.channel) ?? (str(a.thread) ? null : t(locale, 'the task’s Slack thread'))),
+				plain(
+					r.posted === false ? (reason && isMessageKey(reason) ? t(locale, reason) : reason) : null
+				)
+			);
+			text = str(a.text);
 			break;
 		}
 		case 'ask_user': {

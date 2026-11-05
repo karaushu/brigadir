@@ -75,7 +75,8 @@ describe('mcp calls (spec/chat#mcp-calls)', () => {
 		for (const tool of brigadirTools)
 			for (const state of ['running', 'done', 'failed'] as const) {
 				const call = { server: 'brigadir', tool, args: {} };
-				expect(mcpVerb('uk', call, state)).not.toMatch(/[a-z_]{4}/);
+				// Product names stay in Latin (docs/glossary.md); anything else in Latin is an untranslated key.
+				expect(mcpVerb('uk', call, state).replace(/Slack/g, '')).not.toMatch(/[a-z_]{4}/);
 				expect(mcpVerb('en', call, state)).toMatch(/^[A-Z]/);
 			}
 		expect(

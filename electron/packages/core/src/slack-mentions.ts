@@ -83,6 +83,73 @@ export function slackNamedProject(
 	return named.length === 1 ? named[0]!.id : null;
 }
 
+/** A project as the dispatch reads it: its id, its name and the name of its folder. */
+export type SlackProjectRef = { id: string; name: string; folder?: string };
+/** spec/notifications-slack-notes-and-schedules#slack-dispatch: the projects a task is in (the first is the task's) and its title. */
+export type SlackDispatch = { projects: string[]; title: string | null };
+/**
+ * spec/notifications-slack-notes-and-schedules#slack-dispatch: one request to the helper model for a task mention — which projects the work
+ * is in and what the task is called. English (rule 12); the answer is one JSON line.
+ */
+export function slackDispatchPrompt(input: {
+	text: string;
+	thread: string | null;
+	projects: readonly SlackProjectRef[];
+	channelProject: string | null;
+}): string {
+	return [
+		'You route a request from Slack to a coding agent. Pick the projects the work is in and name the task.',
+		'Answer with exactly one line of JSON and nothing else: {"projects": ["<id>", ...], "title": "<title>"}',
+		'- projects: ids from the list below. People name projects loosely: in another language, in slang, transliterated, by a part of the name or the folder (for example «адмінка» or «админка» → admin, «чой» → choice). List every project the request names, the main one first. When the words name none, use the project of the channel if there is one; otherwise an empty list. Never guess a project the request does not point to.',
+		'- title: what is to be done, at most 80 characters, in the language of the request. When the message only says to make a task, take the work from the thread above it. No project names, no quotes, no trailing period.',
+		'',
+		'Projects (id · name · folder):',
+		...input.projects.map(
+			(project) =>
+				`- ${project.id} · ${project.name}${project.folder && project.folder !== project.name ? ` · ${project.folder}` : ''}`
+		),
+		input.channelProject
+			? `Project of this channel: ${input.channelProject}`
+			: 'This channel has no project.',
+		'',
+		'Message:',
+		input.text.slice(0, 2000),
+		...(input.thread
+			? ['', 'Thread above the message (context only):', input.thread.slice(-4000)]
+			: []),
+	].join('\n');
+}
+/** The dispatch answer: known ids only (by id or name, case aside), no repeats; `null` when it is not the JSON line. */
+export function parseSlackDispatch(
+	answer: string | null,
+	projects: readonly SlackProjectRef[]
+): SlackDispatch | null {
+	const json = /\{[\s\S]*\}/.exec(answer ?? '')?.[0];
+	if (!json) return null;
+	let value: unknown;
+	try {
+		value = JSON.parse(json);
+	} catch {
+		return null;
+	}
+	if (typeof value !== 'object' || value === null) return null;
+	const record = value as Record<string, unknown>,
+		ids: string[] = [];
+	for (const item of Array.isArray(record.projects) ? record.projects : []) {
+		if (typeof item !== 'string') continue;
+		const key = item.trim().toLowerCase(),
+			project =
+				projects.find((entry) => entry.id.toLowerCase() === key) ??
+				projects.find((entry) => entry.name.toLowerCase() === key);
+		if (project && !ids.includes(project.id)) ids.push(project.id);
+	}
+	const title =
+		typeof record.title === 'string'
+			? slackTaskTitle(record.title.replace(/^[\s"'«»„“”]+|[\s"'«»„“”.]+$/g, ''))
+			: '';
+	return { projects: ids, title: title || null };
+}
+
 /** One request to the helper model; the answer is one of six words (see `parseSlackIntent`). */
 export function slackIntentPrompt(text: string, thread: string | null): string {
 	return [
@@ -463,6 +530,7 @@ export const slackReply = {
 	taskWaiting: (project: string, title: string) =>
 		`⏳ *Waiting for approval in Brigadir* — ${slackEscape(project)}\n📋 Task: ${slackEscape(title)}`,
 	noteSaved: (title: string) => `📝 *Note saved* — ${slackEscape(title)}`,
+	whichProjectShort: '🤔 *Which project?*',
 	whichProject: (projects: readonly string[]) =>
 		`🤔 *Which project?* Write \`in <project>: …\`${projects.length ? `\nProjects: ${projects.slice(0, 20).map(slackEscape).join(', ')}` : ''}`,
 	unknownProject: (name: string, projects: readonly string[]) =>
@@ -492,6 +560,8 @@ export const slackActions = {
 	answer: 'brigadir_answer',
 	/** A watch: the value's index picks what to watch, which task or which PR. */
 	watch: 'brigadir_watch',
+	/** spec/notifications-slack-notes-and-schedules#slack-which-project: the project of a task that waits for one. */
+	project: 'brigadir_project',
 } as const;
 export type SlackAction = (typeof slackActions)[keyof typeof slackActions];
 export type SlackButton = {

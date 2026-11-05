@@ -1,5 +1,5 @@
 import { mkdir, readFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import {
 	dotenvToken,
 	isAppToken,
@@ -9,7 +9,9 @@ import {
 	slackMention,
 	slackNoticeButtons,
 	slackNoticeEvent,
+	slackPermalinkTarget,
 	slackText,
+	slackThreadReplyOf,
 	type SlackBotState,
 	type SlackListen,
 	type SlackNotice,
@@ -104,6 +106,8 @@ export class Slack {
 	private sending: Promise<void> = Promise.resolve();
 	private timer: ReturnType<typeof setTimeout> | null = null;
 	private botUser: string | null = null;
+	/** spec/notifications-slack-notes-and-schedules#slack-agent-post: the bot's name as Slack shows it (display name), else its username. */
+	private botName: string | null = null;
 	private appToken: string | null | undefined = undefined;
 	private readonly socket: SlackSocket;
 	private readonly mentions: SlackMentions | null;
@@ -160,7 +164,12 @@ export class Slack {
 					...deps.brigadir,
 					api: (method, body, form) => this.call(method, body, { form: !!form }),
 					settings: () => this.deps.settings(),
-					projects: async () => (await this.deps.projects()).map(({ id, name }) => ({ id, name })),
+					projects: async () =>
+						(await this.deps.projects()).map(({ id, name, path }) => ({
+							id,
+							name,
+							folder: basename(path),
+						})),
 					botUser: () => this.botUser,
 					channelProject: (channel) => this.channelProject(channel),
 					channelName: (channel) => this.channelName(channel),
@@ -276,6 +285,7 @@ export class Slack {
 		try {
 			const auth = await this.call('auth.test', {});
 			this.botUser = typeof auth.user_id === 'string' ? auth.user_id : null;
+			this.botName = null;
 			this.set({
 				state: 'on',
 				source,
@@ -358,6 +368,12 @@ export class Slack {
 	 */
 	private async message(payload: Record<string, unknown>, event: Record<string, unknown>) {
 		if (await this.answers!.message(payload)) return;
+		// spec/notifications-slack-notes-and-schedules#slack-which-project: a plain reply that may name the project of a waiting task.
+		const reply = slackThreadReplyOf(payload, this.botUser);
+		if (reply && this.mentions!.waits(reply.channel, reply.threadTs, reply.user)) {
+			await this.mentions!.event({ ...payload, event: { ...event, type: 'app_mention' } });
+			return;
+		}
 		if (event.channel_type !== 'im' || event.bot_id || typeof event.subtype === 'string') return;
 		await this.mentions!.event({ ...payload, event: { ...event, type: 'app_mention' } });
 	}
@@ -556,6 +572,165 @@ export class Slack {
 		if (value.ok !== true)
 			throw new SlackError(typeof value.error === 'string' ? value.error : 'error');
 		return value;
+	}
+	/**
+	 * spec/notifications-slack-notes-and-schedules#slack-agent-post: where an agent's `slack_post` goes and as whom — checked before the
+	 * person is asked. A channel by ID as is, by name through the learned map or `conversations.list`; none — the task's thread.
+	 */
+	async agentTarget(
+		task: TaskKey,
+		input: { channel?: string | undefined; thread?: string | undefined }
+	): Promise<{ bot: string; label: string; channel: string; threadTs: string | null }> {
+		if (!this.deps.enabled()) throw new Error('Slack is off in Settings.');
+		if (!this.token || this.current.state === 'off') await this.refresh();
+		if (!this.token || this.current.state === 'off')
+			throw new Error('Brigadir has no Slack bot token.');
+		if (this.current.state === 'token')
+			throw new Error(
+				'The Slack bot token is no longer valid. The person replaces it in Settings.'
+			);
+		await this.loaded;
+		const bot = await this.shownName(),
+			link = slackPermalinkTarget(input.thread ?? ''),
+			threadTs = link?.ts ?? (input.thread?.trim() || null);
+		if (threadTs && !/^\d{9,}\.\d{1,9}$/.test(threadTs))
+			throw new Error('thread must be a message ts like 1793884455.669649 or its Slack link.');
+		const typed = input.channel?.trim().replace(/^#/, '') || link?.channel || '';
+		if (!typed) {
+			const own = this.threads.get(`${task.projectId}/${task.id}`);
+			if (!own) throw new Error('This task has no Slack thread: name a channel.');
+			const name = await this.channelName(own.channel);
+			return {
+				bot,
+				label: `${name ? `#${name}` : own.channel} · this task's thread`,
+				channel: own.channel,
+				threadTs: threadTs ?? own.ts,
+			};
+		}
+		const channel = /^[CGD][A-Z0-9]{6,}$/.test(typed)
+			? typed
+			: (this.channels.get(typed) ?? (await this.channelId(typed)) ?? typed);
+		const name =
+			channel === typed && !/^[CGD][A-Z0-9]{6,}$/.test(typed)
+				? typed
+				: await this.channelName(channel);
+		return {
+			bot,
+			label: `${name ? `#${name}` : channel}${threadTs ? ' · thread' : ''}`,
+			channel,
+			threadTs,
+		};
+	}
+	/** spec/notifications-slack-notes-and-schedules#slack-agent-post: the agent's message, sent now as the bot; the reason when Slack refuses. */
+	async agentPost(
+		task: TaskKey,
+		input: { channel?: string | undefined; thread?: string | undefined; text: string }
+	): Promise<
+		| { posted: true; channel: string; ts: string; permalink: string | null }
+		| { posted: false; reason: string }
+	> {
+		const target = await this.agentTarget(task, input);
+		let sent: Record<string, unknown>;
+		try {
+			sent = await this.call('chat.postMessage', {
+				channel: target.channel,
+				text: input.text,
+				unfurl_links: false,
+				unfurl_media: false,
+				...(target.threadTs ? { thread_ts: target.threadTs } : {}),
+			});
+		} catch (error) {
+			const code = error instanceof SlackError ? error.code : String(error);
+			if (error instanceof SlackError && tokenErrors.has(code)) this.fail(error);
+			const where = target.label.split(' · ')[0];
+			return {
+				posted: false,
+				reason:
+					code === 'channel_not_found' || code === 'not_in_channel'
+						? `The bot @${target.bot} is not in ${where}. Ask the person to run /invite @${target.bot} in that channel, then call slack_post again.`
+						: code === 'is_archived'
+							? `${where} is archived.`
+							: code === 'msg_too_long'
+								? 'The message is too long for Slack.'
+								: `Slack refused the message: ${code}.`,
+			};
+		}
+		const channel = typeof sent.channel === 'string' ? sent.channel : target.channel,
+			ts = typeof sent.ts === 'string' ? sent.ts : '';
+		const typed = input.channel?.trim().replace(/^#/, '');
+		if (typed && typed !== channel && !/^[CGD][A-Z0-9]{6,}$/.test(typed)) {
+			this.channels.set(typed, channel);
+			await this.saveThreads().catch(() => {});
+		}
+		let permalink: string | null = null;
+		try {
+			const value = await this.call(
+				'chat.getPermalink',
+				{ channel, message_ts: ts },
+				{ form: true }
+			);
+			permalink = typeof value.permalink === 'string' ? value.permalink : null;
+		} catch {
+			permalink = null;
+		}
+		return { posted: true, channel, ts, permalink };
+	}
+	/** The name people see and type after `@` in Slack: the bot user's display or real name (`users.info`), else the username of `auth.test`. */
+	private async shownName(): Promise<string> {
+		if (this.botName) return this.botName;
+		const fallback = this.current.state === 'on' ? this.current.bot : 'bot';
+		if (!this.botUser) return fallback;
+		try {
+			const value = await this.call('users.info', { user: this.botUser }, { form: true }),
+				user = isRecord(value.user) ? value.user : {},
+				profile = isRecord(user.profile) ? user.profile : {},
+				name = [profile.display_name, profile.real_name, user.real_name].find(
+					(item): item is string => typeof item === 'string' && item.trim() !== ''
+				);
+			this.botName = name?.trim() ?? fallback;
+		} catch {
+			// Without users:read Slack refuses; the username stays.
+			this.botName = fallback;
+		}
+		return this.botName;
+	}
+	/** A channel name → its ID through `conversations.list` (public and private channels the bot sees); `null` without the scope or a match. */
+	private async channelId(name: string): Promise<string | null> {
+		const key = name.toLowerCase();
+		let cursor = '';
+		try {
+			for (let page = 0; page < 5; page++) {
+				const value = await this.call(
+					'conversations.list',
+					{
+						types: 'public_channel,private_channel',
+						exclude_archived: true,
+						limit: 1000,
+						...(cursor ? { cursor } : {}),
+					},
+					{ form: true }
+				);
+				for (const item of Array.isArray(value.channels) ? value.channels : [])
+					if (
+						isRecord(item) &&
+						typeof item.id === 'string' &&
+						typeof item.name === 'string' &&
+						item.name.toLowerCase() === key
+					) {
+						this.channels.set(name, item.id);
+						return item.id;
+					}
+				cursor =
+					isRecord(value.response_metadata) &&
+					typeof value.response_metadata.next_cursor === 'string'
+						? value.response_metadata.next_cursor
+						: '';
+				if (!cursor) break;
+			}
+		} catch {
+			// Without channels:read / groups:read Slack refuses; the name goes to Slack as it is.
+		}
+		return null;
 	}
 	/** A bell's run ended: the watches on it answer; `true` — the bell was a watch's own (no second CI message). */
 	ciFinished(event: CIFinished, detail: CIRunDetail): Promise<boolean> {

@@ -1411,6 +1411,41 @@ export async function startHost(config: HostConfig) {
 		if (transport && task.transport !== 'terminal') rootsStale = true;
 		kickPrompts();
 	}
+	/**
+	 * spec/notifications-slack-notes-and-schedules#slack-agent-post: `slack_post` — main says where and as whom, the person allows or denies
+	 * with the text in front of them, then main posts it as the bot. The token never leaves main.
+	 */
+	async function slackPostTool(value: unknown, signal: AbortSignal): Promise<unknown> {
+		if (!modules.current().slack) throw new Error(moduleOffMessages.slack);
+		if (!isRecord(value) || typeof value.text !== 'string' || !value.text.trim())
+			throw new Error('text is empty.');
+		if (!ui) throw new Error('A Slack message goes out while the Brigadir app is open.');
+		const where = {
+			...(typeof value.channel === 'string' ? { channel: value.channel } : {}),
+			...(typeof value.thread === 'string' ? { thread: value.thread } : {}),
+		};
+		const target = await ui.request('slack_target', where);
+		if (!isRecord(target) || typeof target.bot !== 'string' || typeof target.label !== 'string')
+			throw new Error('Slack could not be reached.');
+		const request: PermissionRequest = {
+			id: randomUUID(),
+			tool: {
+				id: randomUUID(),
+				title: `Post to Slack as ${target.bot} · ${target.label}`,
+				category: 'other',
+				input: value.text,
+			},
+			options: [
+				{ id: 'post', name: 'Allow', kind: 'allow_once' },
+				{ id: 'deny', name: 'Deny', kind: 'reject_once' },
+			],
+		};
+		const answer = permission(request, signal);
+		await emit({ kind: 'permission.requested', request });
+		if ((await answer) !== 'post')
+			return { posted: false, reason: 'The person declined the message.' };
+		return ui.request('slack_post', { ...where, text: value.text });
+	}
 	/** spec/projects-and-board#folders-mid-task: `add_folder` — the app registers the folder in the project (spec/projects-and-board#external-folders) and adds it to the task once the person allows;
 	 *  spec/agents-and-providers#tool-permissions: a read-only folder asks too, since the agent's own permission card no longer stands before our tools. */
 	async function addFolderTool(value: unknown, signal: AbortSignal): Promise<unknown> {
@@ -2105,6 +2140,7 @@ export async function startHost(config: HostConfig) {
 		if (method.startsWith('console_')) return consoleTool(method.slice(8), params);
 		if (method === 'create_task') return proposeTask(params, signal);
 		if (method === 'add_folder') return addFolderTool(params, signal);
+		if (method === 'slack_post') return slackPostTool(params, signal);
 		if (method !== 'ask_user') throw new Error('Method is not available to this role');
 		return ask(params, signal);
 	}

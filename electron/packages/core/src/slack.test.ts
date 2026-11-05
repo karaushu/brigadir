@@ -6,6 +6,7 @@ import {
 	slackDuration,
 	slackEnvironment,
 	slackMention,
+	slackPermalinkTarget,
 	slackTaskAgent,
 	slackText,
 	withSlackDefaults,
@@ -140,4 +141,16 @@ it('names the repo alone when the task has no branch of its own', () => {
 	expect(slackText({ kind: 'taskDone', repo: 'b2c', branch: '', task, summary: null })).toBe(
 		'🏁 *Turn ended* — b2c\n📋 Task: Phone validation'
 	);
+});
+
+it('reads a Slack message link as the channel and the ts to answer in', () => {
+	expect(
+		slackPermalinkTarget('https://acme.slack.com/archives/C0BC02W9WLW/p1793884455669649')
+	).toEqual({ channel: 'C0BC02W9WLW', ts: '1793884455.669649' });
+	expect(
+		slackPermalinkTarget(
+			'https://acme.slack.com/archives/C0B/p1793884455669649?thread_ts=1793884400.000100&cid=C0B'
+		)
+	).toEqual({ channel: 'C0B', ts: '1793884400.000100' });
+	expect(slackPermalinkTarget('1793884455.669649')).toBeNull();
 });

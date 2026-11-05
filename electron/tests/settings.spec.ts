@@ -241,6 +241,7 @@ test('settings persist theme and restart language, retain dirty edits and match 
 			onboarding: { completedVersion: 1 },
 			remoteAccess: defaultAppSettings.remoteAccess,
 			slack: defaultAppSettings.slack,
+			updates: defaultAppSettings.updates,
 		});
 		app = await launch(['--brigadir-interactive']);
 		page = await app.firstWindow();

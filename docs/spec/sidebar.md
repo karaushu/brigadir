@@ -50,7 +50,7 @@ Everything in the list stands on one grid, so nothing looks shifted (measured fr
 | Content edge | 12 px from both edges; rounded controls (filter field, `All projects`, the crew card) start 8 px in |
 | Glyph column | centre at 23 px: `All projects`, the project tile, task, completed and crew glyphs |
 | Text column | 41 px: project names, task titles, `All projects`, completed titles; `Completed · N` starts on the glyph column (15 px) |
-| Right edge | every trailing glyph ends 12 px from the right edge: provider, `+`, archive, age, the crew chevron, `Filter by status` |
+| Right edge | every trailing glyph ends 12 px from the right edge: provider, `+`, archive, age, `Filter by status`; inside the crew card everything trailing (count, chevron glyph, worker providers) ends 11 px from the card's edge |
 | Project header | 40 px, the 22 px tile centred: 9 px above and below |
 
 <a id="window-chrome"></a>
@@ -352,11 +352,11 @@ See [Crew](crew.md) for what a crew is.
 
 | Part | Rule |
 | --- | --- |
-| Header | a task row (padding-left 7, right 4, so the glyph stays on the glyph column) with the helmet (15) before the title; title 600 and activity 500 while expanded, both 400 when collapsed |
+| Header | a task row (padding-left 7, right 11, so the glyph stays on the glyph column) with the helmet (15) before the title; title 600 and activity 500 while expanded, both 400 when collapsed |
 | Header tail | collapsed: up to two provider glyphs; always: worker count pill (16 px high, ≥ 24 wide, `--tint2`, `Workers`); space for the chevron |
-| Chevron | absolute 24 × 24 target on the title line, its glyph ending on the list's right edge line, `Expand crew` / `Collapse crew`; `--tint` on hover; a mouse click does not take focus, the keyboard does (`:focus-visible` ring) |
+| Chevron | absolute 24 × 24 target on the title line, 4 px inside the card's right edge, `Expand crew` / `Collapse crew`; `--tint` on hover; a mouse click does not take focus, the keyboard does (`:focus-visible` ring) |
 | Workers | straight under the header, no plate: indented 26 px inside the card so their glyphs stand under the title |
-| Worker row | 30 px, 12.5 px text `{Agent} · {part}` (agent name in `--fg2`), 13 px state glyph in a 14 px slot, gap 9; tail: unread dot, provider glyph. Hover `--tint`, selected `--sel`. Lead depth indents 14 px per level; a nested foreman shows its helmet before its glyph |
+| Worker row | 30 px, 12.5 px text `{Agent} · {part}` (agent name in `--fg2`), 13 px state glyph in a 14 px slot, gap 9, 11 px to the card's right edge; tail: unread dot, provider glyph. Hover `--tint`, selected `--sel`. Lead depth indents 14 px per level; a nested foreman shows its helmet before its glyph |
 | Worker extra line | `Waiting for the simulator` while it waits for the project's one device |
 | Branch of a worker | not shown; it derives from the crew worktree |
 

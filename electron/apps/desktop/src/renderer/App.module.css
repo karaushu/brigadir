@@ -456,6 +456,10 @@
 	position: absolute;
 	z-index: 2;
 }
+/* A click with the mouse leaves no ring; the keyboard still shows it. */
+.projectCollapse:focus:not(:focus-visible) {
+	outline: none;
+}
 .projectCollapse svg {
 	transform: rotate(-90deg);
 	transition: transform var(--motion-travel) var(--motion-ease);
@@ -606,6 +610,9 @@
 .taskUnreviewed {
 	display: flex;
 	flex: none;
+	/* spec/sidebar#grid: the glyph's circle sits left of its box and the dot sticks out right; the circle stands on the
+	   provider glyph's vertical above it, the dot hangs into the padding like a badge. */
+	margin-right: -3px;
 	color: var(--fg2);
 }
 .taskCopy .noBranch {
@@ -646,7 +653,7 @@
 }
 .crewHeader > .task {
 	padding-left: 7px;
-	padding-right: 4px;
+	padding-right: 11px;
 	border-radius: 10px 10px 0 0;
 }
 /* A selected expanded crew is selected whole — --sel over the card, header and the area around
@@ -668,7 +675,7 @@
 }
 .crewChevronSpace {
 	flex: none;
-	width: 16px;
+	width: 18px;
 	height: 18px;
 }
 /* The foreman's name 600 and its activity line 500 while open, selected or not; folded both 400. */
@@ -710,13 +717,13 @@
 	line-height: 1;
 	color: var(--fg2);
 }
-/* The 10 px chevron on the title row, its glyph ending on the list's right edge line and level with the title; a
+/* The 10 px chevron on the title row, its 24 px box 4 px inside the card's right edge, level with the title; a
    24 px target without a box at rest, --tint under the pointer. The mouse does not focus it (no ring after a click); the
    keyboard does, and only then the ring shows (:focus-visible). */
 .crewChevron {
 	position: absolute;
 	z-index: 1;
-	right: -3px;
+	right: 4px;
 	top: 5px;
 	display: flex;
 	align-items: center;
@@ -760,7 +767,7 @@
 	gap: 9px;
 	width: 100%;
 	min-height: 30px;
-	padding: 0 4px 0 6px;
+	padding: 0 11px 0 6px;
 	border: 0;
 	border-radius: 6px;
 	background: transparent;

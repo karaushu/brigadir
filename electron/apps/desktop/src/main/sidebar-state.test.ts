@@ -111,3 +111,27 @@ test('the project and task open last persist beside the other choices and are va
 		await rm(root, { recursive: true, force: true });
 	}
 });
+test('folded completed tasks persist per project beside the other choices (spec/sidebar#completed-fold)', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'sidebar-state-'));
+	try {
+		const data = join(root, 'data'),
+			repo = join(root, 'repo');
+		await mkdir(repo);
+		const store = await SessionStore.at(data),
+			a = await store.addProject(repo),
+			state = new SidebarState(data);
+		expect(await state.readCompleted()).toEqual([]);
+		await state.set(a.id, true);
+		await state.setCompleted(a.id, true);
+		expect(await state.readCompleted()).toEqual([a.id]);
+		expect(await state.read()).toEqual([a.id]);
+		expect(() => state.setCompleted('../x', true)).toThrow('Invalid project');
+		await state.setCompleted(a.id, false);
+		expect(JSON.parse(await readFile(join(data, 'sidebar.json'), 'utf8'))).toEqual({
+			schemaVersion: 1,
+			collapsed: [a.id],
+		});
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

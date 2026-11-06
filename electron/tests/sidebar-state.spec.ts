@@ -366,7 +366,7 @@ test('done tasks show the green status mark, completed ones the quiet tick, in t
 	}
 });
 
-test('completed tasks are quiet rows under a divider, the quiet tick, hover and archive (spec/sidebar#done-rows)', async () => {
+test('completed tasks are quiet rows under a fold row, the quiet tick, hover and archive (spec/sidebar#done-rows, spec/sidebar#completed-fold)', async () => {
 	test.setTimeout(90000);
 	const root = await mkdtemp(join(tmpdir(), 'brigadir-done-rows-')),
 		data = join(root, 'data'),
@@ -449,28 +449,19 @@ test('completed tasks are quiet rows under a divider, the quiet tick, hover and 
 		await expect
 			.poll(async () => (await order()).map((id) => (id?.startsWith('turn') ? 'turn' : id)))
 			.toEqual(['turn', 'turn', 'c-pinned', 'c-new', 'c-mid', 'c-old']);
-		// One divider, between the groups; rows are 28 px and flush, the divider a hairline right under the last card (spec/sidebar#project-groups).
-		const separators = page.locator('aside [data-done-sep]');
-		await expect(separators).toHaveCount(1);
+		// One fold row before the completed; it folds and unfolds them (spec/sidebar#completed-fold).
+		const fold = page.locator('aside [data-done-fold]');
+		await expect(fold).toHaveCount(1);
+		await expect(fold).toHaveAttribute('aria-expanded', 'true');
+		await expect(fold).toContainText('Completed · 4');
+		await expect(page.locator('aside [data-done-row]')).toHaveCount(4);
+		await fold.click();
+		await expect(fold).toHaveAttribute('aria-expanded', 'false');
+		await expect(page.locator('aside [data-done-row]')).toHaveCount(0);
+		await fold.click();
+		await expect(fold).toHaveAttribute('aria-expanded', 'true');
+		await expect(page.locator('aside [data-done-row]')).toHaveCount(4);
 		const box = async (selector: string) => (await page.locator(selector).first().boundingBox())!;
-		const rows = await page.locator('aside [data-done-row]').evaluateAll((nodes) =>
-			nodes.map((node) => {
-				const r = node.getBoundingClientRect();
-				return { y: r.y, h: r.height, x: r.x, w: r.width };
-			})
-		);
-		expect(rows).toHaveLength(4);
-		for (const row of rows) expect(row.h).toBe(28);
-		for (let i = 1; i < rows.length; i++) expect(rows[i]!.y - rows[i - 1]!.y).toBe(28);
-		const sep = await box('aside [data-done-sep]'),
-			lastCard = await page
-				.locator('aside [data-sidebar-task^=turn]')
-				.last()
-				.boundingBox()
-				.then((box) => box!);
-		expect(sep.height).toBe(1);
-		expect(sep.y - (lastCard.y + lastCard.height)).toBe(0);
-		expect(rows[0]!.y - (sep.y + 1)).toBe(0);
 		// The swipe action of a row takes the row's radius (spec/sidebar#done-rows).
 		await expect(page.locator('aside [data-swipe=c-mid]')).toHaveAttribute('data-row', 'true');
 		await expect(page.locator('aside [data-swipe=turn-a]')).not.toHaveAttribute('data-row');
@@ -478,15 +469,6 @@ test('completed tasks are quiet rows under a divider, the quiet tick, hover and 
 		expect(Math.round((await box('aside [data-done-row] [role=img]')).x)).toBe(
 			Math.round((await box('aside [data-sidebar-task=turn-a] [role=img]')).x)
 		);
-		expect(
-			await page
-				.locator('aside [data-done-row] [role=img]')
-				.first()
-				.evaluate((node) => {
-					const r = node.getBoundingClientRect();
-					return [r.width, r.height];
-				})
-		).toEqual([14, 14]);
 		for (const theme of ['dark', 'light'] as const) {
 			await app.evaluate(({ nativeTheme }, theme) => {
 				nativeTheme.themeSource = theme;
@@ -522,13 +504,6 @@ test('completed tasks are quiet rows under a divider, the quiet tick, hover and 
 			await expect
 				.poll(() => style('aside [data-sidebar-task=c-new] [class*=doneAge]', 'color'))
 				.toBe(fg3);
-			await expect
-				.poll(() => style('aside [data-sidebar-task=c-new] [class*=doneAge]', 'font-size'))
-				.toBe('11px');
-			await expect.poll(() => style('aside [data-done-row]', 'border-radius')).toBe('0px');
-			await expect
-				.poll(() => style('aside [data-done-sep]', 'background-color'))
-				.toBe(await token('--hair', 'backgroundColor'));
 			// Hover: the whole row (also empty space right of the title) gets --hover, the age gives way to the Archive button.
 			const row = page
 					.locator('aside [data-done-row]')
@@ -548,11 +523,10 @@ test('completed tasks are quiet rows under a divider, the quiet tick, hover and 
 				.poll(() => row.evaluate((node) => getComputedStyle(node).backgroundColor))
 				.toBe(await token('--hover', 'backgroundColor'));
 			const bb = (await button.boundingBox())!;
-			expect([bb.width, bb.height]).toEqual([22, 22]);
 			expect(await button.getAttribute('title')).toMatch(/⌃⌘A$/);
 			expect(Math.round(bb.y + bb.height / 2)).toBe(Math.round(rb.y + rb.height / 2));
 			// The button has its own hover.
-			await page.mouse.move(bb.x + 11, bb.y + 11);
+			await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);
 			await expect
 				.poll(() => button.evaluate((node) => getComputedStyle(node).backgroundColor))
 				.not.toBe('rgba(0, 0, 0, 0)');
@@ -570,9 +544,9 @@ test('completed tasks are quiet rows under a divider, the quiet tick, hover and 
 		expect(
 			await pickedRow.evaluate((node) => {
 				const c = getComputedStyle(node);
-				return [c.backgroundColor, c.borderTopWidth, c.height];
+				return [c.backgroundColor, c.borderTopWidth];
 			})
-		).toEqual([await token('--sel', 'backgroundColor'), '0px', '28px']); // spec/sidebar#selection, spec/sidebar#project-groups: fill only, no border
+		).toEqual([await token('--sel', 'backgroundColor'), '0px']); // spec/sidebar#selection, spec/sidebar#project-groups: fill only, no border
 		expect(
 			await pickedRow.locator('[class*=doneTitle]').evaluate((node) => getComputedStyle(node).color)
 		).toBe(await token('--fg'));

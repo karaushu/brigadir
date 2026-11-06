@@ -158,6 +158,7 @@ export type GlyphName =
 	| 'sidebar-running'
 	| 'sidebar-unreviewed'
 	| 'sidebar-chevron'
+	| 'sidebar-triangle'
 	| 'knowledge'
 	| 'knowledge-disclosure'
 	| 'badge-pass'
@@ -2085,6 +2086,22 @@ export function Glyph({ name, size = 12 }: { name: GlyphName; size?: number }) {
 						stroke="currentColor"
 						strokeWidth="1.8"
 						strokeLinecap="round"
+					/>
+				</svg>
+			);
+		// spec/sidebar#completed-fold: the filled disclosure triangle after «Completed · N»; it points down, a fold turns it right.
+		case 'sidebar-triangle':
+			return (
+				<svg
+					data-glyph={name}
+					aria-hidden="true"
+					width={size}
+					height={size}
+					viewBox="0 0 10 10"
+					fill="none">
+					<path
+						d="M2.2 3.3h5.6a.5.5 0 0 1 .4.8L5.4 7.2a.5.5 0 0 1-.8 0L1.8 4.1a.5.5 0 0 1 .4-.8z"
+						fill="currentColor"
 					/>
 				</svg>
 			);

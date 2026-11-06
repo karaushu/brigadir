@@ -18,7 +18,7 @@ import { usePRSectionReview } from './pr-section';
 import { SearchField } from './ui/PanelSearch';
 import { Glyph } from './ui/Glyph';
 import { PRStateGlyph } from './ui/PRGlyphs';
-import { ProjectIcon } from './ui/ProjectIcon';
+import { ProjectIcon, projectToneStyle } from './ui/ProjectIcon';
 import { SkeletonRows } from './ui/Loading';
 import styles from './App.module.css';
 
@@ -97,7 +97,7 @@ export function SidebarPRs({
 	const rowKey = (item: BoardPR) => `${item.projectId}/${prKeyOf(item.scopeId, item.pr.number)}`;
 	return (
 		<>
-			<div className={styles.taskFilter} data-size="s">
+			<div className={styles.taskFilter} data-size="l">
 				<SearchField
 					className={styles.taskFilterField}
 					locale={locale}
@@ -143,6 +143,7 @@ export function SidebarPRs({
 							<section key={project.id} className={styles.project} data-open={!shut}>
 								<div
 									className={styles.projectHeader}
+									style={projectToneStyle(project, colors.get(project.id) ?? 0)}
 									data-selected={(selected === project.id && !reviewing) || undefined}>
 									<button
 										className={styles.projectCollapse}
@@ -156,10 +157,10 @@ export function SidebarPRs({
 													: [...list, project.id]
 											)
 										}>
-										<Glyph name="sidebar-chevron" size={9} />
+										<Glyph name="sidebar-chevron" size={10} />
 									</button>
 									<span className={styles.projectIconButton} aria-hidden="true">
-										<ProjectIcon project={project} slot={colors.get(project.id) ?? 0} />
+										<ProjectIcon project={project} slot={colors.get(project.id) ?? 0} size={22} />
 									</span>
 									<h3 title={project.path}>
 										<button

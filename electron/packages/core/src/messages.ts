@@ -193,6 +193,9 @@ const uk = {
 	'The worker stopped: {reason}': 'Воркер зупинився: {reason}',
 	'Collapse crew': 'Згорнути бригаду',
 	'Expand crew': 'Розгорнути бригаду',
+	'Completed · {n}': 'Завершені · {n}',
+	'Collapse completed': 'Згорнути завершені',
+	'Expand completed': 'Розгорнути завершені',
 	Workers: 'Воркери',
 	'Workers working now': 'Активні воркери',
 	checks: 'перевіряє',
@@ -2729,6 +2732,7 @@ const uk = {
 	'Could not read the sidebar state.': 'Не вдалося прочитати стан сайдбару.',
 	'Could not save the collapsed projects.': 'Не вдалося зберегти стан згортання проєктів.',
 	'Could not save the collapsed crews.': 'Не вдалося зберегти стан згортання бригад.',
+	'Could not save the collapsed completed tasks.': 'Не вдалося зберегти стан згортання завершених.',
 	'Could not send the message.': 'Не вдалося надіслати повідомлення.',
 	'Could not attach the selection to the chat.': 'Не вдалося прикріпити виділені рядки до чату.',
 	'Could not send the answer to the agent.': 'Не вдалося надіслати відповідь агенту.',
@@ -4496,6 +4500,8 @@ const english: Partial<Record<MessageKey, string>> = {
 	'Could not read why this changed.': 'Could not determine why this changed.',
 	'Could not save the collapsed projects.': 'Could not save which projects are collapsed.',
 	'Could not save the collapsed crews.': 'Could not save which crews are collapsed.',
+	'Could not save the collapsed completed tasks.':
+		'Could not save whether completed tasks are collapsed.',
 	'Could not attach the selection to the chat.': 'Could not attach the selected lines to the chat.',
 	'The binary file {file} does not open in the editor.':
 		'The editor cannot open binary file {file}.',

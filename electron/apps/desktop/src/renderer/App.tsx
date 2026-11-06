@@ -39,7 +39,7 @@ import {
 	scheduleState,
 } from '@brigadir/core';
 import { TitleMark } from './ui/TitleMark';
-import { ProjectIcon } from './ui/ProjectIcon';
+import { ProjectIcon, projectToneStyle } from './ui/ProjectIcon';
 import { ProjectIconPicker } from './ProjectIconPicker';
 import { usePresence } from './ui/use-presence';
 import { QuotaButton } from './Quota';
@@ -119,6 +119,11 @@ import { useNotificationPermission } from './use-notification-permission';
 import styles from './App.module.css';
 import { setSimulatorWaiting } from './simulator-waiting';
 import { CrewCard, TaskRow } from './SidebarTasks';
+import {
+	collapseCompleted,
+	loadCollapsedCompleted,
+	useCompletedCollapse,
+} from './completed-collapse';
 import { SkeletonRows } from './ui/Loading';
 
 const issueLabels: Record<ReadIssueCode, MessageKey> = {
@@ -142,7 +147,7 @@ function ProjectAttention({ count, label }: { count: number; label: string }) {
 			className={styles.projectAttention}
 			data-attention={grew.current > 0 || undefined}
 			title={label}>
-			<Glyph name="sidebar-needs" size={12} />
+			<Glyph name="sidebar-needs" size={11} />
 			{count}
 		</span>
 	);
@@ -233,7 +238,7 @@ const CompletedRow = memo(function CompletedRow({
 						onMenu(task);
 					}
 				}}>
-				<StatusIcon status={task.status} label={statusText} size={14} />
+				<StatusIcon status={task.status} label={statusText} size={16} />
 				<span className={styles.doneTitle}>{task.title}</span>
 				{task.hasUnread && (
 					<span
@@ -345,6 +350,11 @@ export function App() {
 		[sidebarReady, setSidebarReady] = useState(false);
 	const sidebarRevision = useRef(0),
 		sidebarWrites = useRef(Promise.resolve());
+	// spec/sidebar#completed-fold: projects whose completed tasks are folded; read once, open by default.
+	const completedFolded = useCompletedCollapse((state) => state.collapsed);
+	useEffect(() => {
+		void loadCollapsedCompleted();
+	}, []);
 	async function loadSidebar() {
 		try {
 			const value = await window.brigadir.readSidebarState();
@@ -1254,7 +1264,7 @@ export function App() {
 									) : (
 										<>
 											{/* spec/appearance#evolution-redesign: the task filter is always there, the status filter beside it. */}
-											<div className={styles.taskFilter} data-size="s">
+											<div className={styles.taskFilter} data-size="l">
 												<SearchField
 													className={styles.taskFilterField}
 													inputRef={filterInput}
@@ -1297,7 +1307,7 @@ export function App() {
 													className={styles.allProjects}
 													aria-pressed={!task && selectedProject === '*'}
 													onClick={() => selectProject('*')}>
-													<Glyph name="board" size={14} />
+													<Glyph name="board" size={16} />
 													{t(locale, 'All projects')}
 												</button>
 												<ArchiveHeaderButton
@@ -1332,6 +1342,7 @@ export function App() {
 															data-open={!isProjectCollapsed(project.id)}>
 															<div
 																className={styles.projectHeader}
+																style={projectToneStyle(project, colors.get(project.id) ?? 0)}
 																data-selected={(!task && boardProject === project.id) || undefined}
 																tabIndex={0}
 																aria-label={project.name}
@@ -1362,7 +1373,7 @@ export function App() {
 																	onClick={() =>
 																		collapseProject(project.id, !isProjectCollapsed(project.id))
 																	}>
-																	<Glyph name="sidebar-chevron" size={9} />
+																	<Glyph name="sidebar-chevron" size={10} />
 																</button>
 																{/* spec/appearance#evolution-redesign: the icon in place of the dot; a click opens «Project icon»; a spinner while the agent picks. */}
 																<button
@@ -1391,6 +1402,7 @@ export function App() {
 																		<ProjectIcon
 																			project={project}
 																			slot={colors.get(project.id) ?? 0}
+																			size={22}
 																		/>
 																	)}
 																</button>
@@ -1407,7 +1419,7 @@ export function App() {
 																		{t(locale, 'Picking an icon…')}
 																	</span>
 																)}
-																{isProjectCollapsed(project.id) && (
+																{!project.iconPicking && (
 																	<ProjectAttention
 																		count={
 																			live.filter(
@@ -1419,7 +1431,7 @@ export function App() {
 																		label={t(locale, 'Needs you')}
 																	/>
 																)}
-																{/* A collapsed project keeps its archive count, not «New task». */}
+																{/* spec/sidebar#project-groups: open or folded, the same tail — Needs you, the archive count and «New task». */}
 																{!project.iconPicking && (
 																	<>
 																		<ArchiveHeaderButton
@@ -1431,15 +1443,13 @@ export function App() {
 																			locale={locale}
 																			onClick={() => setArchiveWindow({ projectId: project.id })}
 																		/>
-																		{!isProjectCollapsed(project.id) && (
-																			<IconButton
-																				size="s"
-																				hint={t(locale, 'New task')}
-																				label={`${t(locale, 'New task')} · ${project.name}`}
-																				onClick={() => showNew(project.id)}>
-																				<Glyph name="plus" size={14} />
-																			</IconButton>
-																		)}
+																		<IconButton
+																			size="s"
+																			hint={t(locale, 'New task')}
+																			label={`${t(locale, 'New task')} · ${project.name}`}
+																			onClick={() => showNew(project.id)}>
+																			<Glyph name="plus" size={14} />
+																		</IconButton>
 																	</>
 																)}
 															</div>
@@ -1450,7 +1460,7 @@ export function App() {
 																inert={isProjectCollapsed(project.id)}
 																aria-hidden={isProjectCollapsed(project.id)}>
 																<div>
-																	{/* spec/sidebar#done-rows: the completed come last as quiet rows; a divider (or a 4 px gap, when nothing is in progress) sits before the first. */}
+																	{/* spec/sidebar#completed-fold: the completed come last as quiet rows under «Completed · N», which folds them; a filter opens it. */}
 																	{sidebarTasks(
 																		workspace.tasks.filter(
 																			(item) =>
@@ -1462,48 +1472,78 @@ export function App() {
 																					))
 																		),
 																		quietRuns
-																	).map((item, index, list) => (
-																		<Fragment key={item.id}>
-																			{item.status === 'completed' &&
-																				(index === 0 || list[index - 1]!.status !== 'completed') &&
-																				(index > 0 ? (
-																					<div
-																						className={styles.doneSep}
-																						role="separator"
-																						data-done-sep
-																					/>
-																				) : (
-																					<div className={styles.doneGap} aria-hidden="true" />
-																				))}
-																			<SwipeToArchive
-																				task={item}
-																				tasks={workspace.tasks}
-																				locale={locale}
-																				row={item.status === 'completed'}>
-																				{item.status === 'completed' ? (
-																					<CompletedRow
-																						task={item}
-																						archivable={canArchive(item, workspace.tasks)}
-																						onMenu={taskMenuStable}
-																						onOpen={openTaskStable}
-																					/>
-																				) : item.crew ? (
-																					<CrewCard
+																	).map((item, index, list) => {
+																		const done = item.status === 'completed',
+																			doneFolded =
+																				completedFolded.has(project.id) &&
+																				!taskFilter.trim() &&
+																				statusFilter === null;
+																		if (
+																			done &&
+																			doneFolded &&
+																			list[index - 1]?.status === 'completed'
+																		)
+																			return null;
+																		return (
+																			<Fragment key={item.id}>
+																				{done && list[index - 1]?.status !== 'completed' && (
+																					<button
+																						type="button"
+																						className={styles.doneFold}
+																						data-done-fold
+																						aria-expanded={!doneFolded}
+																						title={t(
+																							locale,
+																							doneFolded ? 'Expand completed' : 'Collapse completed'
+																						)}
+																						onClick={() =>
+																							collapseCompleted(project.id, !doneFolded, locale)
+																						}>
+																						<span>
+																							{t(locale, 'Completed · {n}').replace(
+																								'{n}',
+																								new Intl.NumberFormat(locale).format(
+																									list.filter(
+																										(other) => other.status === 'completed'
+																									).length
+																								)
+																							)}
+																						</span>
+																						<Glyph name="sidebar-triangle" size={10} />
+																					</button>
+																				)}
+																				{!(done && doneFolded) && (
+																					<SwipeToArchive
 																						task={item}
 																						tasks={workspace.tasks}
-																						onMenu={taskMenuStable}
-																						onOpen={openTaskStable}
-																					/>
-																				) : (
-																					<TaskRow
-																						task={item}
-																						onMenu={taskMenuStable}
-																						onOpen={openTaskStable}
-																					/>
+																						locale={locale}
+																						row={item.status === 'completed'}>
+																						{item.status === 'completed' ? (
+																							<CompletedRow
+																								task={item}
+																								archivable={canArchive(item, workspace.tasks)}
+																								onMenu={taskMenuStable}
+																								onOpen={openTaskStable}
+																							/>
+																						) : item.crew ? (
+																							<CrewCard
+																								task={item}
+																								tasks={workspace.tasks}
+																								onMenu={taskMenuStable}
+																								onOpen={openTaskStable}
+																							/>
+																						) : (
+																							<TaskRow
+																								task={item}
+																								onMenu={taskMenuStable}
+																								onOpen={openTaskStable}
+																							/>
+																						)}
+																					</SwipeToArchive>
 																				)}
-																			</SwipeToArchive>
-																		</Fragment>
-																	))}
+																			</Fragment>
+																		);
+																	})}
 																	{!workspace.tasks.some(
 																		(item) => item.projectId === project.id
 																	) && <p className={styles.muted}>{t(locale, 'No tasks')}</p>}

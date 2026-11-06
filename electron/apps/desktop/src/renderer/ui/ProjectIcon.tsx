@@ -38,10 +38,11 @@ export function LucideIcon({
 		</svg>
 	);
 }
-/** Tile size → corner radius, glyph and stroke, monogram letters (18 in the sidebar, 36 and 48 in the picker). */
+/** Tile size → corner radius, glyph and stroke, monogram letters (22 in the sidebar, 36 and 48 in the picker). */
 const metrics = {
 	14: { radius: 4, glyph: 10, stroke: 2.2, letters: 9 },
 	18: { radius: 5, glyph: 12, stroke: 2.1, letters: 8.5 },
+	22: { radius: 6, glyph: 14, stroke: 2.1, letters: 10 },
 	36: { radius: 9, glyph: 22, stroke: 2, letters: 15 },
 	48: { radius: 12, glyph: 28, stroke: 2, letters: 23 },
 } as const;
@@ -49,6 +50,12 @@ export type ProjectIconSize = keyof typeof metrics;
 /** The colour a project shows: its icon's, or before it has one the slot it had as a dot. */
 export function projectIconColor(project: Project, slot: number): ProjectIconColor {
 	return project.icon?.color ?? projectIconColorAt(slot);
+}
+/** spec/sidebar#project-groups: the tone a sidebar header hands to the fold button that lies over its tile. */
+export function projectToneStyle(project: Pick<Project, 'icon'>, slot: number): CSSProperties {
+	return {
+		'--project-tone': `var(--icon-${project.icon?.color ?? projectIconColorAt(slot)})`,
+	} as CSSProperties;
 }
 /**
  * spec/appearance#evolution-redesign: the project's icon in place of the coloured dot — a Lucide icon on a tile of its colour, the app icon from

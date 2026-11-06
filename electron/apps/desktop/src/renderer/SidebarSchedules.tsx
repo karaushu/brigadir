@@ -12,7 +12,7 @@ import { useSchedules, stateGlyph, stateText } from './SchedulesScreen';
 import { SearchField } from './ui/PanelSearch';
 import { Button, IconButton } from './ui/Controls';
 import { Glyph } from './ui/Glyph';
-import { ProjectIcon } from './ui/ProjectIcon';
+import { ProjectIcon, projectToneStyle } from './ui/ProjectIcon';
 import { MenuItem, MenuPopover } from './ui/Popover';
 import { toastError } from './ui/Toast';
 import { SkeletonRows } from './ui/Loading';
@@ -61,7 +61,7 @@ export function SidebarSchedules({
 		.filter((group) => group.rows.length);
 	return (
 		<>
-			<div className={styles.taskFilter} data-size="s">
+			<div className={styles.taskFilter} data-size="l">
 				<SearchField
 					className={styles.taskFilterField}
 					locale={locale}
@@ -137,16 +137,18 @@ export function SidebarSchedules({
 								);
 						return (
 							<section key={project.id} className={styles.project} data-open={!shut}>
-								<div className={styles.projectHeader}>
+								<div
+									className={styles.projectHeader}
+									style={projectToneStyle(project, colors.get(project.id) ?? 0)}>
 									<button
 										className={styles.projectCollapse}
 										aria-label={`${t(locale, shut ? 'Expand project' : 'Collapse project')} · ${project.name}`}
 										aria-expanded={!shut}
 										onClick={toggle}>
-										<Glyph name="sidebar-chevron" size={9} />
+										<Glyph name="sidebar-chevron" size={10} />
 									</button>
 									<span className={styles.projectIconButton} aria-hidden="true">
-										<ProjectIcon project={project} slot={colors.get(project.id) ?? 0} />
+										<ProjectIcon project={project} slot={colors.get(project.id) ?? 0} size={22} />
 									</span>
 									<h3 title={project.path}>
 										<button className={styles.projectSelect} aria-expanded={!shut} onClick={toggle}>

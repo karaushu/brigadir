@@ -12,7 +12,7 @@ import { SearchField } from './ui/PanelSearch';
 import { IconButton } from './ui/Controls';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { Glyph } from './ui/Glyph';
-import { ProjectIcon } from './ui/ProjectIcon';
+import { ProjectIcon, projectToneStyle } from './ui/ProjectIcon';
 import { toastError } from './ui/Toast';
 import { SkeletonRows } from './ui/Loading';
 import styles from './App.module.css';
@@ -72,7 +72,7 @@ export function SidebarNotes({
 	};
 	return (
 		<>
-			<div className={styles.taskFilter} data-size="s">
+			<div className={styles.taskFilter} data-size="l">
 				<SearchField
 					className={styles.taskFilterField}
 					locale={locale}
@@ -101,7 +101,11 @@ export function SidebarNotes({
 							name = project?.name ?? t(locale, 'No project');
 						return (
 							<section key={id || '-'} className={styles.project} data-open={!shut}>
-								<div className={styles.projectHeader}>
+								<div
+									className={styles.projectHeader}
+									style={
+										project ? projectToneStyle(project, colors.get(project.id) ?? 0) : undefined
+									}>
 									<button
 										className={styles.projectCollapse}
 										aria-label={`${t(locale, shut ? 'Expand project' : 'Collapse project')} · ${name}`}
@@ -112,11 +116,11 @@ export function SidebarNotes({
 												shut ? list.filter((item) => item !== id) : [...list, id]
 											)
 										}>
-										<Glyph name="sidebar-chevron" size={9} />
+										<Glyph name="sidebar-chevron" size={10} />
 									</button>
 									<span className={styles.projectIconButton} aria-hidden="true">
 										{project ? (
-											<ProjectIcon project={project} slot={colors.get(project.id) ?? 0} />
+											<ProjectIcon project={project} slot={colors.get(project.id) ?? 0} size={22} />
 										) : (
 											<Glyph name="note" size={14} />
 										)}

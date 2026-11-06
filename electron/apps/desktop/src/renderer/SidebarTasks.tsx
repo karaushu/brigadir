@@ -82,7 +82,7 @@ export function CrewCard({
 					{...(summary ? { summary } : {})}
 					lead={
 						<span className={styles.crewHelmet} title={t(locale, 'Brigadir')}>
-							<Glyph name="helmet" size={14} />
+							<Glyph name="helmet" size={15} />
 						</span>
 					}
 					tail={
@@ -204,7 +204,7 @@ function WorkerRow({
 						status={worker.status}
 						question={activity?.kind === 'question'}
 						label={t(locale, statusLabels[worker.status])}
-						size={12}
+						size={13}
 					/>
 				</span>
 				<span className={styles.workerCopy}>
@@ -384,7 +384,7 @@ export const TaskRow = memo(function TaskRow({
 				question={activity?.kind === 'question'}
 				signIn={signIn}
 				label={statusText}
-				size={14}
+				size={16}
 			/>
 			<span className={styles.taskCopy}>
 				<span className={styles.taskHead}>

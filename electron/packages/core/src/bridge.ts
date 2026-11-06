@@ -174,6 +174,9 @@ export type DesktopBridge = {
 	/** spec/sidebar#crew-collapse: foreman tasks whose crew card is folded in the sidebar; expanded by default. */
 	readCollapsedCrews(): Promise<string[]>;
 	collapseCrew(id: string, collapsed: boolean): Promise<string[]>;
+	/** spec/sidebar#completed-fold: projects whose completed tasks are folded in the sidebar; open by default. */
+	readCollapsedCompleted(): Promise<string[]>;
+	collapseCompleted(projectId: string, collapsed: boolean): Promise<string[]>;
 	/** spec/sidebar#open-last: the project (`*` — All projects) and task open last; reopened on launch. */
 	readSelection(): Promise<{ project: string; task?: string } | null>;
 	saveSelection(value: { project: string; task?: string }): Promise<void>;

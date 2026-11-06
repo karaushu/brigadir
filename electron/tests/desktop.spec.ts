@@ -172,6 +172,8 @@ test('reads v2, isolates the renderer, updates theme, and opens Kit @area:shell 
 				'collapseProject',
 				'readCollapsedCrews',
 				'collapseCrew',
+				'readCollapsedCompleted',
+				'collapseCompleted',
 				'readSelection',
 				'saveSelection',
 				'readKnowledge',

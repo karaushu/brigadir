@@ -6,6 +6,7 @@ type SidebarDocument = {
 	collapsed: string[];
 	archiveOpen: string[];
 	crewCollapsed: string[];
+	completedCollapsed: string[];
 	selected: SidebarSelection | null;
 };
 const selection = (value: unknown): SidebarSelection | null => {
@@ -30,6 +31,7 @@ const ids = (value: unknown, field: string) => {
  * Only disclosure choices persist; filters stay transient and never hide work on a fresh launch.
  * `collapsed` — projects folded in the sidebar; `archiveOpen` — projects whose «Archive · N» section is open (spec/tasks#archive, closed by default);
  * `crewCollapsed` — foreman tasks whose crew card is folded (spec/sidebar#crew-collapse): the choice outlives opening, switching and relaunch;
+ * `completedCollapsed` — projects whose completed tasks are folded under «Completed · N» (spec/sidebar#completed-fold);
  * `selected` — the project and task open last, reopened on the next launch (spec/sidebar#open-last).
  */
 export class SidebarState {
@@ -50,11 +52,18 @@ export class SidebarState {
 				collapsed: ids(doc.collapsed, 'collapsed'),
 				archiveOpen: ids(doc.archiveOpen, 'archiveOpen'),
 				crewCollapsed: ids(doc.crewCollapsed, 'crewCollapsed'),
+				completedCollapsed: ids(doc.completedCollapsed, 'completedCollapsed'),
 				selected: selection(doc.selected),
 			};
 		} catch (error) {
 			if (isRecord(error) && error.code === 'ENOENT')
-				return { collapsed: [], archiveOpen: [], crewCollapsed: [], selected: null };
+				return {
+					collapsed: [],
+					archiveOpen: [],
+					crewCollapsed: [],
+					completedCollapsed: [],
+					selected: null,
+				};
 			throw error;
 		}
 	}
@@ -65,6 +74,7 @@ export class SidebarState {
 			collapsed: doc.collapsed,
 			...(doc.archiveOpen.length ? { archiveOpen: doc.archiveOpen } : {}),
 			...(doc.crewCollapsed.length ? { crewCollapsed: doc.crewCollapsed } : {}),
+			...(doc.completedCollapsed.length ? { completedCollapsed: doc.completedCollapsed } : {}),
 			...(doc.selected ? { selected: doc.selected } : {}),
 		});
 	}
@@ -77,12 +87,15 @@ export class SidebarState {
 	async readCrews(): Promise<string[]> {
 		return (await this.document()).crewCollapsed;
 	}
+	async readCompleted(): Promise<string[]> {
+		return (await this.document()).completedCollapsed;
+	}
 	async readSelection(): Promise<SidebarSelection | null> {
 		return (await this.document()).selected;
 	}
 	private change(
 		id: string,
-		field: 'collapsed' | 'archiveOpen' | 'crewCollapsed',
+		field: 'collapsed' | 'archiveOpen' | 'crewCollapsed' | 'completedCollapsed',
 		on: boolean
 	): Promise<string[]> {
 		if (!isId(id)) throw new Error(field === 'crewCollapsed' ? 'Invalid task' : 'Invalid project');
@@ -127,5 +140,8 @@ export class SidebarState {
 	}
 	setCrew(id: string, collapsed: boolean) {
 		return this.change(id, 'crewCollapsed', collapsed);
+	}
+	setCompleted(id: string, collapsed: boolean) {
+		return this.change(id, 'completedCollapsed', collapsed);
 	}
 }

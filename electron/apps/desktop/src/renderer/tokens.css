@@ -21,10 +21,6 @@
 	--red-fill: #d70015;
 	--on-red: #ffffff;
 	--tint: rgba(0, 0, 0, 0.045);
-	/* --tint and --amber-soft as an ink and its strength: a colour made opaque over a surface (the crew deck, spec/sidebar#project-groups). */
-	--tint-ink: #000000;
-	--tint-a: 4.5%;
-	--amber-soft-a: 10%;
 	--tint2: rgba(0, 0, 0, 0.08);
 	--hover: rgba(0, 0, 0, 0.03);
 	/* spec/composer#agent-capsule, spec/appearance#evolution-redesign: a hairline inside a surface (the island's environment row, a project group, the
@@ -56,8 +52,6 @@
 	--diffGutter: #fafafa;
 	--accent-opacity: 14%;
 	--sel-opacity: 12%;
-	/* The second stripe of a collapsed crew's deck (spec/sidebar#project-groups): its tone at this share of its strength over --win. */
-	--deck-fade: 1;
 	/* spec/task-window-workspace#layout-switch: the Layout glyphs — one opaque colour and the opacity on the whole glyph, as --fg2 / --fg. */
 	--column-ink: #000000;
 	--column-rest: 0.5;
@@ -87,9 +81,6 @@
 	--red-fill: #d4322a;
 	--on-red: #ffffff;
 	--tint: rgba(255, 255, 255, 0.06);
-	--tint-ink: #ffffff;
-	--tint-a: 6%;
-	--amber-soft-a: 13%;
 	--tint2: rgba(255, 255, 255, 0.1);
 	--hover: rgba(255, 255, 255, 0.035);
 	--hair: rgba(255, 255, 255, 0.07);
@@ -120,7 +111,6 @@
 	--diffGutter: #181818;
 	--accent-opacity: 20%;
 	--sel-opacity: 22%;
-	--deck-fade: 0.6;
 	--column-ink: #ffffff;
 	--column-rest: 0.55;
 	--column-hover: 0.87;
@@ -472,6 +462,7 @@
 	--text-12: calc(12px * var(--ui-scale));
 	--text-12-5: calc(12.5px * var(--ui-scale));
 	--text-13: calc(13px * var(--ui-scale));
+	--text-13-5: calc(13.5px * var(--ui-scale));
 	/* spec/appearance#evolution-redesign: the chat's text, 13.5 / 22. */
 	--text-chat: calc(13.5px * var(--ui-scale));
 	--text-14: calc(14px * var(--ui-scale));

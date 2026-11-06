@@ -45,7 +45,6 @@ its size from the [control scale](#control-scale), never from a local `height`, 
 | `--fg3` | `rgba(0,0,0,.42)` | `rgba(255,255,255,.4)` | tertiary text, placeholders |
 | `--tint` | `rgba(0,0,0,.045)` | `rgba(255,255,255,.06)` | soft fill, field background |
 | `--tint2` | `rgba(0,0,0,.08)` | `rgba(255,255,255,.1)` | pressed fill, counters |
-| `--tint-ink` / `--tint-a` | `#000000` / `4.5%` | `#ffffff` / `6%` | `--tint` as ink and strength, to mix an opaque colour |
 | `--hover` | `rgba(0,0,0,.03)` | `rgba(255,255,255,.035)` | neutral row hover |
 | `--tray` | `--win` at 70 % | `rgba(0,0,0,.22)` | lighter tray inside a card |
 | `--code` | `rgba(0,0,0,.04)` | `rgba(255,255,255,.05)` | code block surface |
@@ -63,7 +62,6 @@ its size from the [control scale](#control-scale), never from a local `height`, 
 | `--amber` | `#a35200` | `#ff9f0a` | warning, "needs you" |
 | `--amber-text` | `#a35200` | `#ff9f0a` | amber text and outline edge |
 | `--amber-soft` | `rgba(163,82,0,.1)` | `rgba(255,159,10,.13)` | soft warning fill |
-| `--amber-soft-a` | `10%` | `13%` | `--amber-soft` strength, for opaque mixes |
 | `--amber-hover` / `--amber-press` | `rgba(163,82,0,.17)` / `.25` | `rgba(255,159,10,.22)` / `.3` | hover and press on amber |
 | `--red` | `#d70015` | `#ff453a` | danger, destructive actions |
 | `--red-soft` | `rgba(215,0,21,.08)` | `rgba(255,69,58,.14)` | soft danger fill |
@@ -270,7 +268,6 @@ identity.
 | `--find-current` / `--on-find` | `#ffc83d` / `#1b1b1f` | the current find match and its text |
 | `--introGlint` | `rgba(255,255,255,.7)` | the light over the helmet in the intro |
 | `--providerClaude` | `#d97757` | the Claude provider mark |
-| `--deck-fade` | `1` light, `0.6` dark | the second stripe of a collapsed crew deck |
 | `--column-ink` / `--column-rest` / `--column-hover` | `#000000` / `0.5` / `0.85` light; `#ffffff` / `0.55` / `0.87` dark | Layout glyphs: one opaque colour with the glyph's opacity |
 | `--os-controls-right`, `--os-strip` | from the Window Controls Overlay; `--strip-h` | Windows and Linux only: room for the OS caption buttons |
 

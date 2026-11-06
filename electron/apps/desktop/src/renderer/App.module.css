@@ -450,9 +450,11 @@
 .projectCollapse:focus-visible {
 	opacity: 1;
 }
-/* Over `.projectHeader > button`, which raises the header's buttons in the flow. */
+/* Over `.projectHeader > button`, which raises the header's buttons in the flow: the fold button lies on the tile and
+   takes its clicks. */
 .projectHeader > .projectCollapse {
 	position: absolute;
+	z-index: 2;
 }
 .projectCollapse svg {
 	transform: rotate(-90deg);

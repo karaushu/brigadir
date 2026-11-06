@@ -14,6 +14,8 @@
   <img src="https://img.shields.io/badge/license-Apache--2.0-555" alt="License: Apache-2.0">
 </p>
 
+![Brigadir's main features: an agent crew with a lead and workers, Claude and Codex, tasks on a board, modules with MCP, GitHub and pull requests, remote access and Slack integration](docs/assets/readme/features.webp)
+
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/readme/hero-light.webp">
   <img src="docs/assets/readme/hero-dark.webp" alt="Brigadir: projects and tasks in the sidebar, the agent's conversation, the diff of a changed file and the Changes panel across three git roots">

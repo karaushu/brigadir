@@ -216,7 +216,7 @@ Where each part of the direction is specified:
 | --- | --- |
 | Geist fonts, token values, `sel`, Kit | this file |
 | Project icon (Lucide, picked by the agent) | [Projects](projects-and-board.md) |
-| Quota rings, crew card tray, branch names, sidebar remote button | [Sidebar](sidebar.md) |
+| Quota rings, crew card, branch names, sidebar remote button | [Sidebar](sidebar.md) |
 | Composer glass island, capsule, placeholder hints | [Composer](composer.md) |
 | Chat spacing, quiet tool rows, code blocks, diff blocks in replies | [Chat](chat.md) |
 | Editor tabs, change map, floating find | [Editor](editor.md) |

@@ -298,6 +298,20 @@ export const ipcTable = {
 		arity: 2,
 		validate: (a) => a.length === 2 && isId(a[0]) && typeof a[1] === 'boolean',
 	},
+	readCollapsedCompleted: {
+		kind: 'invoke',
+		channel: 'sidebar:completed-read',
+		class: 'remote',
+		arity: 0,
+		validate: (a) => a.length === 0,
+	},
+	collapseCompleted: {
+		kind: 'invoke',
+		channel: 'sidebar:completed-collapse',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isId(a[0]) && typeof a[1] === 'boolean',
+	},
 	readSelection: {
 		kind: 'invoke',
 		channel: 'sidebar:selection-read',

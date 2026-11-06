@@ -1,7 +1,7 @@
 # Sidebar
 
 The sidebar is the only place that tells the person about every other agent while one task fills the main area, so it is
-built to be read at a glance: framed project groups, one row per task, a state glyph that never moves, and colour only
+built to be read at a glance: project groups under one header each, one row per task, a state glyph that never moves, and colour only
 where something needs attention. A 48 px sections rail on its left switches what the sidebar lists (Tasks, Pull
 requests, Notes, Schedules) and carries the global tools (notifications, Remote, limits, Settings).
 
@@ -11,19 +11,19 @@ requests, Notes, Schedules) and carries the global tools (notifications, Remote,
 ```
 ┌rail┬─ strip (traffic lights · toggle) ─────────┐  ← one 48 px strip, --sep hairline under rail and list
 │ ▦  │ [Filter tasks ……………………]  [≡]               │  ← text filter + «Filter by status»
-│ ⑂  │ ▦ All projects               ⌂3  [+📁]       │  ← 30 px row: all-projects board, archive, add project
-│ ✎  │ ┌──────────────────────────────────────────┐ │
-│ ◷  │ │ ⌄ ◼ web-app                    ⌂2   +    │ │  ← project group (frame), 32 px header
-│    │ │ ! Fix kit Button focus ring       ●  ✱   │ │  ← task row: glyph · title · tail
-│    │ │   Permission · git push                  │ │     activity line (live tasks)
-│    │ │   ⑂ brigadir/kit-focus   +12 −3  #503 👁 │ │     tree line
-│    │ │ ┌ ⛑ Split kit exports        ✱ 3   ⌄ ┐   │ │  ← crew card (--tint) with the worker tray
-│    │ │ │  ◌ Developer · tokens            ✱ │   │ │
-│    │ │ └──────────────────────────────────┘   │ │
-│    │ │ ───────────────────────────────────────  │ │  ← divider before completed tasks
-│    │ │ ✓ Migrate pnpm workspace         2h      │ │  ← quiet 28 px completed row
-│    │ └──────────────────────────────────────────┘ │
-│    │ ┌ › ◼ mobile                     !1  ⌂ ┐     │  ← collapsed group: needs-you count + archive
+│ ⑂  │ ▦ All projects               ⌂3  [+📁]       │  ← 36 px row: all-projects board, archive, add project
+│ ✎  │ ──────────────────────────────────────────── │  ← --hair line over every project
+│ ◷  │ ◼ web-app                  (!2)  ⌂3   +      │  ← 40 px project header; on hover ◼ becomes ⌄
+│    │  ! Fix kit Button focus ring        ●  ✱     │  ← task row: glyph · title · tail
+│    │    Permission · git push                     │     activity line (live tasks)
+│    │    ⑂ brigadir/kit-focus   +12 −3  #503 👁    │     tree line
+│    │ ┌ ◌ ⛑ Split kit exports          3   ⌄ ┐     │  ← crew card (soft fill), workers under the title
+│    │ │      ◌ Developer · tokens          ✱ │     │
+│    │ └─────────────────────────────────────┘     │
+│    │  Completed · 2 ▾                             │  ← fold row of the completed tasks
+│    │  ✓ Migrate pnpm workspace          2h       │  ← quiet 32 px completed row
+│    │ ──────────────────────────────────────────── │
+│    │ ◼ mobile                   (!1)  ⌂4   +      │  ← collapsed project: needs-you pill, archive, «+»
 │ 🔔 │                                              │
 │ ⇄  │                                              │  ← rail foot: Notifications, Remote,
 │ ◔  │                                              │     limits, Settings
@@ -37,8 +37,21 @@ requests, Notes, Schedules) and carries the global tools (notifications, Remote,
 - Background is the flat opaque `--sb` token, not a translucent material, so the frame never changes tone with what is
   behind the window. Colours are semantic tokens with light/dark variants, never hardcoded.
 - There is no footer: the limits, Remote, notifications and Settings live at the foot of the rail.
-- There is no tree indentation anywhere — not for tasks, not for crew workers. Grouping is done by the project frame and
-  the crew card.
+- There is no tree indentation for tasks. Grouping is done by the project header with the hairline over it, and by the
+  crew card. Project groups have no frame.
+
+<a id="grid"></a>
+### One grid
+
+Everything in the list stands on one grid, so nothing looks shifted (measured from the list's left and right edges):
+
+| Line | Value |
+| --- | --- |
+| Content edge | 12 px from both edges; rounded controls (filter field, `All projects`, the crew card) start 8 px in |
+| Glyph column | centre at 23 px: `All projects`, the project tile, task, completed and crew glyphs |
+| Text column | 41 px: project names, task titles, `All projects`, completed titles; `Completed · N` starts on the glyph column (15 px) |
+| Right edge | every trailing glyph ends 12 px from the right edge: provider, `+`, archive, age, the crew chevron, `Filter by status` |
+| Project header | 40 px, the 22 px tile centred: 9 px above and below |
 
 <a id="window-chrome"></a>
 ### Strip and sidebar toggle
@@ -108,8 +121,8 @@ pointer travels along the rail. No stripes or borders.
   in Pull requests switches back to Tasks.
 - Persisted: `sidebarSection` in `surface-layout.json` (`tasks` | `prs`); a missing or unknown value opens Tasks. Notes and
   Schedules are screens of their own and are not stored there.
-- Every section's list uses the same look as tasks (one look, one component): a filter row, a 30 px «All …» row where it
-  makes sense, framed project groups, rows with a 14 px glyph and a second line, hover and selection on the whole row.
+- Every section's list uses the same look as tasks (one look, one component): a filter row, a 36 px «All …» row where it
+  makes sense, project groups under a header, rows with a 14 px glyph and a second line, hover and selection on the whole row.
   Empty sections show one sentence and one action (`No notes yet` · `New note`, `No schedules` · `New schedule`,
   `No pull requests`). The section's `+` action sits in its filter row.
 - Notes has no «All notes» row (the right side always shows one note).
@@ -136,7 +149,7 @@ Popovers from the foot open with `Popover side="right"`.
   `Ctrl+Alt+Shift+T` on Windows/Linux) shows the sidebar and focuses and selects the field. In the field, Esc clears the
   text; Esc on an empty field moves focus to the main area. `⌘F` stays the find of the focused surface.
 - `Filter by status` button beside it — see [Status filter](#status-filter).
-- `All projects` row, 30 px, radius 7: whole-row hover `--hover`, selected `--sel` while the all-projects board is open.
+- `All projects` row, 36 px, radius 8, glyph 16, text 13.5 / 500: whole-row hover `--hover`, selected `--sel` while the all-projects board is open.
   Its tail: the archive counter (opens the Archive window for all projects) and `Add a project…` (folder-plus).
 - `Add a project…` adds the folder to the persisted project list and selects it; adding an already listed project just
   selects it. Several open projects are the normal case, not a mode.
@@ -152,14 +165,14 @@ ordinary task. Repos are not parents of tasks (a task spans several repos), so t
 
 | Element | Rule |
 | --- | --- |
-| Group | every project, collapsed or open, is a frame: `box-shadow: inset 0 0 0 1px var(--hair)`, radius 10, margin `0 8px 8px`, no fill; rows inside are flush with the frame |
-| Header | 32 px, 12 / 600, name `--fg`. The name button stretches over the whole header, so the empty space opens the project board too; whole-row hover `--hover` |
+| Group | no frame and no fill: a 1 px `--hair` line over every project across the full width, 8 px under the last row of an open project, none under a collapsed one; rows and their hover run edge to edge |
+| Header | 40 px, padding `0 7px 0 12px`, gap 7, name 14 / 600 `--fg`. The name button stretches over the whole header, so the empty space opens the project board too; whole-row hover `--hover` |
 | Selected header | `--sel` when that project's board is open and no task is (the same fill as `All projects`); hover does not remove it. Opening a task removes it: there is one selection in the sidebar |
-| Chevron | 24 × 24 target, glyph rotates −90° when collapsed (`--motion-travel`); `Expand project` / `Collapse project` |
-| Project icon tile | its own 24 × 24 button over the header (`Project icon · {project}`), opens the `Project icon` picker; a spinner and `Picking an icon…` replace the archive counter and `+` while the agent picks. See [Project icon](projects-and-board.md) |
-| Open tail | archive counter (opens the Archive window for this project) and `+` `New task` |
-| Collapsed tail | amber `Needs you` count (pops when it grows, never on first render) and the archive counter; no `+` |
-| Empty project | muted `No tasks` row |
+| Project tile | 22 px, radius 6 (`ProjectIcon` size 22) |
+| Chevron | no chevron at rest. Under the pointer anywhere on the header, or with keyboard focus on it, the tile shows the chevron in its place: the `Expand project` / `Collapse project` button lies over the tile, drawn as the tile's own tone (`--project-tone` 16 %) with the chevron in the tone, and fades in with `--motion-fast`; the glyph rotates −90° when collapsed (`--motion-travel`). A click on the tile folds the project |
+| Project icon | the picker opens from `Project icon…` in the project menu, or with Enter on the tile's own button (`Project icon · {project}`), which keyboard focus still reaches; while the agent picks, a spinner stands in the tile and `Picking an icon…` replaces the archive counter and `+`. See [Project icon](projects-and-board.md) |
+| Tail | open or collapsed, the same: amber `Needs you` pill when anyone waits (20 px, radius 10, `--amber-soft`, 11.5 / 600, glyph 11; pops when it grows, never on first render), the archive counter (opens the Archive window for this project) and `+` `New task` |
+| Empty project | muted `No tasks` row on the text column |
 | Disclosure | animated `grid-template-rows` 0fr → 1fr with opacity; hidden content is `inert` |
 
 Collapse state is persisted per project (`collapsed` in `sidebar.json`) and outlives relaunch.
@@ -181,8 +194,9 @@ by the leading glyph and, for needs-you, the amber second line.
 
 | Part | Content |
 | --- | --- |
-| Glyph | state glyph, 14 px, fixed column so titles align (see [State glyphs](#state-icons)) |
-| Title | 12.5 / 16 (`--text-12-5`), weight 400 (500 when selected), one line with ellipsis. Auto-title from the first prompt; a manual title always wins |
+| Row | padding `8px 12px 9px 15px`, gap 10, edge to edge, no radius |
+| Glyph | state glyph, 16 px, on the glyph column (see [State glyphs](#state-icons)) |
+| Title | 13.5 / 18 (`--text-13-5`), weight 400 (500 when selected), one line with ellipsis. Auto-title from the first prompt; a manual title always wins |
 | Title-line tail | in order: rate-limit reset time (`rate-limited`), unread dot, «Archives today / tomorrow» clock, schedule glyph (a run of a schedule), accent browser glyph `Agent in the browser`, provider glyph (`claude` / `openai`, 11 px, `--fg3`, monochrome). The title truncates before the tail |
 | Sign-in line | `failed` with `failure: 'auth'`: amber `{agent} sign-in needed`, and the glyph becomes the amber key |
 | Activity line | only for `working`, `needs-you`, `preparing`, or a task blocked by a lock; amber in `needs-you` |
@@ -191,7 +205,8 @@ by the leading glyph and, for needs-you, the amber second line.
 | Tree line | branch/worktree, change counts, open PR, unreviewed mark (see [Tree line](#tree-line)) |
 | Backlog line | backlog without a tree: `no branch · queued`, plus a paperclip with the attachment count |
 
-- The second lines run the full width of the row, under the tail: the tail lives in the title line only.
+- The second lines are 12 / 16, 3 px apart, and run the full width of the row, under the tail: the tail lives in the
+  title line only.
 - Native `title` of the row: `{title} · Pinned · {status}`.
 - Click opens the task; right click / context-menu key / Shift+F10 opens the [task menu](#task-menu). All actions address
   the clicked row, not the current selection.
@@ -307,14 +322,19 @@ unreviewed diff» (that is the separate eye on the tree line).
 <a id="done-rows"></a>
 ## Completed tasks
 
-Completed tasks come last in their group as quiet rows, not cards.
+Completed tasks come last in their group as quiet rows, not cards, under a fold row.
 
-- Divider before the first completed row: a 1 px `--hair` line; when nothing is in progress, a 4 px gap instead.
-- Row: 28 px, padding `0 10px`, text 12 `--fg2`, one line with ellipsis. Content: the quiet tick (14), title, unread dot,
-  archive-soon clock, completion age (`relativeAge` of `completedAt`, `--text-11`, `--fg3`, tabular digits). No branch,
-  counts or provider glyph.
+<a id="completed-fold"></a>
+- Fold row: 32 px, `Completed · N` (12.5 / 500, `--fg3`) starting on the glyph column, then a filled triangle (10 px,
+  `--fg3`) 5 px after the text; it points down while open and right while folded (`--motion-travel`). The whole row is
+  one button with whole-row hover `--hover`, `aria-expanded`, hint `Collapse completed` / `Expand completed`. Folding is
+  per project, open by default, and persists like a folded project (`completedCollapsed` in `sidebar.json`). Filters and
+  search open it for the time they are on.
+- Row: 32 px, padding `0 12px 0 15px`, gap 10, text 13 `--fg2`, one line with ellipsis. Content: the quiet tick (16),
+  title, unread dot, archive-soon clock, completion age (`relativeAge` of `completedAt`, `--text-12`, `--fg3`, tabular
+  digits). No branch, counts or provider glyph.
 - Whole-row hover `--hover`. Under the pointer or on keyboard focus (`:focus-visible`) the age and clock give way to a
-  22 × 22 `Archive` button with its own hover (hint `Archive · ⌃⌘A`); it is absent when the task cannot be archived. The
+  24 × 24 `Archive` button with its own hover (hint `Archive · ⌃⌘A`); it is absent when the task cannot be archived. The
   archive button is a sibling raised over the row button, so it never opens the task.
 - Selected (task open): `--sel`, text `--fg`; the row does not grow.
 - Click opens; right click opens the task menu; a swipe archives (see [Archive](tasks.md)).
@@ -324,28 +344,27 @@ Completed tasks come last in their group as quiet rows, not cards.
 <a id="crew-card"></a>
 ## Crew card
 
-A foreman task is a card inside its group: `--tint` fill, radius 9, margin `4px 4px 6px`. The fill means «container» and
+A foreman task is a soft card inside its group: `--hover` fill (white 3 % in dark), radius 10, margin `2px 8px 6px`,
+6 px under the last worker. The fill means «container» and
 is the same in every state, except that a foreman in `needs-you` (e.g. its plan awaits approval) tints the whole card
 `--amber-soft`. A worker waiting for the person colours only its own glyph and lifts the attention flash onto the header.
 See [Crew](crew.md) for what a crew is.
 
 | Part | Rule |
 | --- | --- |
-| Header | a task row with the helmet (14) before the title; title 600 and activity 500 while expanded, both 400 when collapsed; header 48 px |
+| Header | a task row (padding-left 7, right 4, so the glyph stays on the glyph column) with the helmet (15) before the title; title 600 and activity 500 while expanded, both 400 when collapsed |
 | Header tail | collapsed: up to two provider glyphs; always: worker count pill (16 px high, ≥ 24 wide, `--tint2`, `Workers`); space for the chevron |
-| Chevron | absolute 24 × 24 target on the title line (centre 19 px from the right edge), `Expand crew` / `Collapse crew`; `--tint` on hover; a mouse click does not take focus, the keyboard does (`:focus-visible` ring) |
-| Tray | workers on a lighter `--tray` plate, 6 px from the card's left, right and bottom, 2 px under the header, padding 2, radius 7 |
-| Worker row | 26 px, 12 px text `{Agent} · {part}` (agent name in `--fg2`), 12 px state glyph centred in a 14 px slot under the header glyph so the texts align; tail: unread dot, provider glyph. Hover `--tint`, selected `--sel`. Lead depth indents 14 px per level; a nested foreman shows its helmet before its glyph |
+| Chevron | absolute 24 × 24 target on the title line, its glyph ending on the list's right edge line, `Expand crew` / `Collapse crew`; `--tint` on hover; a mouse click does not take focus, the keyboard does (`:focus-visible` ring) |
+| Workers | straight under the header, no plate: indented 26 px inside the card so their glyphs stand under the title |
+| Worker row | 30 px, 12.5 px text `{Agent} · {part}` (agent name in `--fg2`), 13 px state glyph in a 14 px slot, gap 9; tail: unread dot, provider glyph. Hover `--tint`, selected `--sel`. Lead depth indents 14 px per level; a nested foreman shows its helmet before its glyph |
 | Worker extra line | `Waiting for the simulator` while it waits for the project's one device |
 | Branch of a worker | not shown; it derives from the crew worktree |
 
-- **Selection.** A selected expanded crew is selected whole: `--sel` over the card (header and the area around the tray);
-  the header button stretches over the card so its hover covers the same area, while the tray and chevron lie above with
+- **Selection.** A selected expanded crew is selected whole: `--sel` over the card (header and the area around the workers);
+  the header button stretches over the card so its hover covers the same area, while the workers and chevron lie above with
   their own hover. A selected worker highlights only its row.
-- **Collapsed deck.** Folded, the header keeps the tone and two stripes show under it, drawn as two shadows of the card's
-  own shape (3 px in / 6 px down and 6 px in / 11 px down), centred with round ends; 14 px to the next card. Stripes are
-  the header tone made opaque — the first over `--sb`, the second over `--win` and weaker in dark theme (`--deck-fade`).
-  Tone: `--tint`, `--amber-soft` for needs-you, `--sel` when selected.
+- **Collapsed.** Folded, the card is the header alone in the same tone (`--amber-soft` for needs-you, `--sel` when
+  selected), 6 px to the next row.
 
 <a id="crew-collapse"></a>
 ### Collapse persists
@@ -372,7 +391,7 @@ scroll or resize before the second elapses cancels the timer. Untruncated rows n
   change). Selection wins over every other row fill.
 - There is one selection in the sidebar: a task row, a project header (its board) or `All projects`.
 - Hover covers the same area as selection (whole row, including the empty space); nested buttons sit above with their
-  own hover; group fills reach the frame with no empty padding under the last row.
+  own hover; rows reach both edges of the list with no empty padding beside them.
 
 <a id="status-filter"></a>
 ## Status filter
@@ -460,7 +479,7 @@ On launch the app reopens what was open last: a task (in its project), a project
 
 | File (`~/.brigadir/`) | Fields | Notes |
 | --- | --- | --- |
-| `sidebar.json` | `schemaVersion: 1`, `collapsed` (project ids), `archiveOpen`, `crewCollapsed` (foreman ids), `selected` | empty optional fields are not written; ids validated, ≤ 10 000 each; writes are serialised; IPC `sidebar:read`, `sidebar:collapse`, `sidebar:crew-read`, `sidebar:crew-collapse`, `sidebar:selection-read`, `sidebar:select`, `sidebar:archive-read`, `sidebar:archive-open` |
+| `sidebar.json` | `schemaVersion: 1`, `collapsed` (project ids), `archiveOpen`, `crewCollapsed` (foreman ids), `completedCollapsed` (project ids), `selected` | empty optional fields are not written; ids validated, ≤ 10 000 each; writes are serialised; IPC `sidebar:read`, `sidebar:collapse`, `sidebar:crew-read`, `sidebar:crew-collapse`, `sidebar:completed-read`, `sidebar:completed-collapse`, `sidebar:selection-read`, `sidebar:select`, `sidebar:archive-read`, `sidebar:archive-open` |
 | `surface-layout.json` | `sidebarWidth`, `sidebarSection` | shared with other column widths |
 | `task-reads.json` | `seen` | unread baseline |
 

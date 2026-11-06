@@ -13,7 +13,7 @@ today, one file per area. Start with [Overview](overview.md).
 - [Tasks](tasks.md): task model and states, launch sheet and fast start, isolation and worktree preparation, locks and
   conflicts, backlog, relay to a new task, live agents popup, worktree cleanup, archive, agent-created tasks and quick
   tasks from the main tree.
-- [Sidebar](sidebar.md): layout, project frames and task cards, state icons and the unread dot, status bar chips,
+- [Sidebar](sidebar.md): layout, project groups and task rows, state icons and the unread dot, status bar chips,
   repo/scope section, filters, done-task rows, crew card rows, width, section rail and opening the last task.
 
 ## Task window

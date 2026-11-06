@@ -3561,6 +3561,8 @@ void app.whenReady().then(async () => {
 	handle('sidebar:selection-read', () => sidebarState.readSelection());
 	handle('sidebar:select', (value) => sidebarState.select(value));
 	handle('sidebar:crew-collapse', (id, collapsed) => sidebarState.setCrew(id, collapsed));
+	handle('sidebar:completed-read', () => sidebarState.readCompleted());
+	handle('sidebar:completed-collapse', (id, collapsed) => sidebarState.setCompleted(id, collapsed));
 	// spec/notifications-slack-notes-and-schedules#notes: notes are plain files in `~/.brigadir/notes/`; every change goes to all windows so a list and an open note
 	// follow the agent's edits and the other window's.
 	const notesStore = NotesStore.at(process.env.BRIGADIR_DATA_DIR);

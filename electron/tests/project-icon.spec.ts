@@ -114,14 +114,15 @@ test('the agent picks a project icon and «Project icon» changes it: search, co
 		expect(JSON.parse(await readFile(join(data, 'project-icon-asks.json'), 'utf8')).asked).toEqual(
 			expect.arrayContaining(['couriers', 'kept', 'odd'])
 		);
-		await page.locator('[data-project-icon-button=kept]').click();
+		// spec/sidebar#project-groups: a click on the tile folds the project; the picker button is reached by keyboard (or the project menu).
+		await page.locator('[data-project-icon-button=kept]').press('Enter');
 		const kept = page.locator('[data-project-icon-picker=kept]');
 		await expect(kept.locator('[data-icon-agent]')).toContainText('Picked by the agent');
 		await expect(kept.locator('[data-icon-suggested=hard-hat]')).toHaveCount(0);
 		await page.keyboard.press('Escape');
 		await expect(kept).toHaveCount(0);
 		// «Not picked by the agent» wraps beside «Ask the agent», not under it.
-		await page.locator('[data-project-icon-button=odd]').click();
+		await page.locator('[data-project-icon-button=odd]').press('Enter');
 		const odd = page.locator('[data-project-icon-picker=odd]');
 		await odd.getByRole('radio', { name: 'Icon', exact: true }).click();
 		await expect(odd.locator('[data-icon-agent]')).toContainText('Not picked by the agent');
@@ -134,7 +135,7 @@ test('the agent picks a project icon and «Project icon» changes it: search, co
 		await expect(odd).toHaveCount(0);
 
 		// The picker: the agent's pick and its reason, the suggestions without the name outside Lucide.
-		await button.click();
+		await button.press('Enter');
 		const picker = page.locator('[data-project-icon-picker=couriers]');
 		await expect(picker).toBeVisible();
 		await expect(picker.locator('[data-icon-agent]')).toContainText('Picked by the agent');
@@ -324,7 +325,7 @@ test('«Project icon» ▸ Image: your own image is copied into the project data
 		page.on('pageerror', (error) => errors.push(error.message));
 		const button = page.locator('[data-project-icon-button=couriers]');
 		await expect(button.locator('[data-icon-name=truck]')).toBeVisible({ timeout: 20000 });
-		await button.click();
+		await button.press('Enter');
 		const picker = page.locator('[data-project-icon-picker=couriers]');
 		await picker.getByRole('radio', { name: 'Image', exact: true }).click();
 		await expect(picker.locator('[data-icon-own]')).toContainText('No image yet');
@@ -406,7 +407,7 @@ test('«Project icon» ▸ Image: your own image is copied into the project data
 		});
 		try {
 			const page = await again.firstWindow();
-			await page.locator('[data-project-icon-button=couriers]').click();
+			await page.locator('[data-project-icon-button=couriers]').press('Enter');
 			const picker = page.locator('[data-project-icon-picker=couriers]');
 			await expect(picker.getByRole('radio', { name: 'Зображення', exact: true })).toBeChecked();
 			await expect(picker.locator('[data-icon-own]')).toContainText('Намалював Codex');

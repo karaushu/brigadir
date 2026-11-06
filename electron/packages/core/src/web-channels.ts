@@ -49,6 +49,8 @@ export const webChannels: Readonly<Record<IpcMethod, WebAccess>> = {
 	collapseProject: 'deny',
 	readCollapsedCrews: 'allow',
 	collapseCrew: 'deny',
+	readCollapsedCompleted: 'allow',
+	collapseCompleted: 'deny',
 	readSelection: 'allow',
 	saveSelection: 'deny',
 	listSchedules: 'deny',

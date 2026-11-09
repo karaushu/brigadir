@@ -228,6 +228,7 @@ test('reads v2, isolates the renderer, updates theme, and opens Kit @area:shell 
 				'saveAgentTemplate',
 				'saveCrewTemplate',
 				'deleteTemplate',
+				'deleteTreeFile',
 				'restoreCrewTemplates',
 				'exportTemplate',
 				'importTemplate',

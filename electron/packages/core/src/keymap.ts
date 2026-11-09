@@ -228,6 +228,8 @@ const pcKeys: Record<string, string> = {
 	// spec/search-menus-and-commands#menu-structure: the find panel steps with F3 / Shift+F3, as Windows editors and VS Code do (Ctrl+G is Go to line there).
 	'editor-find-next': 'F3',
 	'editor-find-previous': 'Shift+F3',
+	// spec/task-window#files-delete: Ctrl+Backspace deletes a word on a PC; Explorer and the IDEs delete a file with Delete.
+	'file-delete': 'Delete',
 	// spec/sidebar#section-rail: ⌃⌘1… beside ⌘ read Alt+1… (Ctrl+Alt+digit is AltGr, Ctrl+Shift+1/2 switch Workspace and Kit).
 	'section-tasks': 'Alt+1',
 	'section-prs': 'Alt+2',
@@ -321,11 +323,13 @@ export type ShortcutScope =
 	| 'console'
 	| 'browser'
 	| 'simulator'
-	| 'pullRequests';
+	| 'pullRequests'
+	| 'files';
 /** Where a shortcut acts. Two commands conflict only in the same scope or when one of them is global. */
 export function shortcutScope(command: MenuCommand): ShortcutScope {
 	if (command.channel === 'editor') return command.group === 'Navigate' ? 'global' : 'editor';
 	if (command.when === 'pullRequests') return 'pullRequests';
+	if (command.when === 'fileTree') return 'files';
 	if (command.when === 'composerFormat') return 'composer';
 	if (command.group === 'Diff') return 'diff';
 	if (command.group === 'Browser') return 'browser';

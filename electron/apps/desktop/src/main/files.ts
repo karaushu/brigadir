@@ -997,6 +997,38 @@ export class Files {
 			throw new Error('File changed');
 		return { ...resource, absolute: path };
 	}
+	/**
+	 * spec/task-window#files-delete: what `Delete…` may move to the Trash — a file or folder of the task's tree. Never the root, a repo
+	 * root (a folder with its own `.git`), anything in `.git` or `.brigadir`, or a read-only file outside the project.
+	 */
+	async deletable(key: TaskKey, id: string) {
+		const resource = await this.treeLocation(key, id),
+			parts = resource.path.split(/[\\/]/).filter(Boolean);
+		if (
+			resource.external ||
+			resource.plan ||
+			!parts.length ||
+			parts.some((part) => part === '.git' || part === '.brigadir') ||
+			(resource.kind === 'directory' &&
+				(await stat(join(resource.absolute, '.git')).then(
+					() => true,
+					() => false
+				)))
+		)
+			throw new Error('This entry cannot be deleted');
+		return {
+			kind: resource.kind,
+			name: basename(resource.path),
+			absolute: resource.absolute,
+		};
+	}
+	/** spec/task-window#files-delete: after the Trash took `absolute` — its leases go, and a checkpoint shows the deletion in the tree and Changes. */
+	async deleted(key: TaskKey, absolute: string) {
+		for (const path of [...this.leases.keys()])
+			if (path === absolute || path.startsWith(`${absolute}/`) || path.startsWith(`${absolute}\\`))
+				this.leases.delete(path);
+		await this.refresh(key);
+	}
 	/** spec/editor#editor-context-menu: the editor menu's paths. A read-only file outside the project has no project-relative path; it shows its `~/` one. */
 	async editorLocation(key: TaskKey, id: string) {
 		const resource = await this.resource(key, id);

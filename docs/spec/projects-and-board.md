@@ -148,11 +148,12 @@ The detail area shows the project screen when a project or `All projects` is sel
 
 | Part | Contents |
 | --- | --- |
-| Title strip (`ProjectTitlebar`, 48 px) | The project name (tooltip: the path shortened with `~`) or `All projects`; the live agents button; `Search Everywhere` |
+| Title strip (`ProjectTitlebar`, 48 px) | The project name (tooltip: the path shortened with `~`) or `All projects`; `Open main tree` (editor glyph, a single project only); the live agents button; `Search Everywhere` |
 | Toolbar (`ProjectToolbar`, row `data-size="m"`) | Left: the section title with glyph and count, `Tasks N` or `Pull requests N`. Tasks: the knowledge counter (when there are proposals), the `Archive` button, the `Board / List` segment, then `New task` with the shortcut hint (primary button, shown when there are tasks or a status filter is active, never on `All projects`). Pull requests: the repo picker, the `All · Yours · Waiting for you` filter, `Board / List`, then the new PR button. |
 | Knowledge strip | Under the toolbar, in the Tasks section of a single project only |
 | Body | Board or list, the PR board, an empty state, or skeleton columns while loading |
 
+- `Open main tree` opens the project's main tree in the task window, the same as the project menu item ([Sidebar](sidebar.md#project-menu)): the Files tree, the editor and Git without a task. `All projects` has no such button, because a main tree belongs to one project.
 - The sections rail picks Tasks or Pull requests (see [Sidebar](sidebar.md)). With the Pull requests module off, the screen always shows Tasks.
 - In a window up to 1050 px wide, `Board / List` and the PR filter show glyphs with tooltips. The knowledge strip keeps the board's 16 px inset.
 - The `Tasks` count is the number of cards shown.

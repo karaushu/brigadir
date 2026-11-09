@@ -4917,6 +4917,30 @@ void app.whenReady().then(async () => {
 	);
 	handle('files:attach', (key, id) => files.attach(key, id));
 	handle('files:terminal', (key, id) => files.terminalHere(key, id));
+	// spec/task-window#files-delete: asks, then the file or folder goes to the Trash; never `rm`.
+	handleClient('files:delete', async (client, key, id) => {
+		const entry = await files.deletable(key, id),
+			locale = currentLocale();
+		const result = await ui.ask(client, {
+			type: 'warning',
+			message: t(locale, 'Delete {name}?').replace('{name}', entry.name),
+			detail: t(
+				locale,
+				entry.kind === 'directory'
+					? 'The folder and everything in it go to the Trash.'
+					: 'The file goes to the Trash.'
+			),
+			buttons: [t(locale, 'Cancel'), t(locale, 'Delete')],
+			defaultId: 0,
+			cancelId: 0,
+			danger: 1,
+		});
+		if (result !== 1) return false;
+		const target = await files.deletable(key, id);
+		await shell.trashItem(target.absolute);
+		await files.deleted(key, target.absolute);
+		return true;
+	});
 	handleClient('files:menu', async (client, key, id, source) => {
 		const entry = source === 'tree' ? await files.treeLocation(key, id) : null;
 		const path = entry?.absolute ?? (await files.location(key, id, source));
@@ -4967,6 +4991,10 @@ void app.whenReady().then(async () => {
 				icon: fileMenuIcons['finder'],
 				reveal: path,
 			},
+			// spec/task-window#files-delete: last, apart from the rest; the renderer asks main through `files:delete`.
+			...(entry && entry.path
+				? [null, { id: 'delete', label: t(locale, 'Delete…'), icon: fileMenuIcons['delete'] }]
+				: []),
 		]);
 	});
 	handleClient('chat:menu', (client, state) =>

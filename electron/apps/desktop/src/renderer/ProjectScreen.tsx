@@ -415,6 +415,20 @@ export function ProjectScreen({
 			<ProjectTitlebar
 				title={all ? t(locale, 'All projects') : project?.name}
 				hint={all ? undefined : displayPath}>
+				{/* spec/projects-and-board#screen-layout: the project's code without a task — Files, the editor and Git of the main tree. */}
+				{!all && (
+					<IconButton
+						label={t(locale, 'Open main tree')}
+						data-open-main-tree
+						onClick={() =>
+							void useWorkspace
+								.getState()
+								.openMainTree(projectId, null)
+								.catch(() => toastError(t(locale, 'Could not open the main tree.')))
+						}>
+						<Glyph name="editor" size={15} />
+					</IconButton>
+				)}
 				<AgentsButton />
 				<IconButton label={t(locale, 'Search Everywhere')} onClick={search}>
 					<Glyph name="search" size={15} />

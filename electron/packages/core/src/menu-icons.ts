@@ -244,6 +244,7 @@ export const fileMenuIcons = {
 	revert: 'revert',
 	'copy-absolute': 'copy-absolute',
 	finder: 'folder',
+	delete: 'trash',
 } as const satisfies Record<string, MenuIcon>;
 /**
  * spec/appearance#evolution-redesign: a row of the PR list. Review opens a window (`zoom`, as its buttons show it); the agent's ways are the

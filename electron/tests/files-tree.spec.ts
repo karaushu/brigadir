@@ -356,3 +356,81 @@ test('Files preserves pointer selection and parked scroll; keyboard reveals only
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+test('The project screen opens the main tree, and Files deletes a file or folder to the Trash after asking @area:editor', async ({}, info) => {
+	const { root, repo, launch } = await fixture('Delete', 'choice');
+	await mkdir(join(repo, 'src/old'), { recursive: true });
+	await git(repo, 'init', '-q');
+	await writeFile(join(repo, 'src/a.ts'), 'a\n');
+	await writeFile(join(repo, 'src/b.ts'), 'b\n');
+	await writeFile(join(repo, 'src/old/c.ts'), 'c\n');
+	const app = await launch();
+	try {
+		const page = await app.firstWindow();
+		// Never the person's real Trash: the test's Trash removes the path and remembers it.
+		await app.evaluate(({ dialog, shell }) => {
+			const g = globalThis as any;
+			g.deletePrompts = [];
+			g.trashed = [];
+			g.answer = 1;
+			dialog.showMessageBox = async (...args: any[]) => {
+				g.deletePrompts.push(args.at(-1).message);
+				return { response: g.answer, checkboxChecked: false };
+			};
+			shell.trashItem = async (path: string) => {
+				g.trashed.push(path);
+				await (process as any).mainModule.require('node:fs/promises').rm(path, { recursive: true });
+			};
+		});
+		// spec/projects-and-board#screen-layout: the project screen's title strip opens the main tree.
+		await page.getByRole('button', { name: 'choice', exact: true }).click();
+		await page.getByRole('button', { name: 'Open main tree', exact: true }).click();
+		await openPanelTab(page, 'files');
+		const tree = page.getByRole('tree', { name: 'Project files' }),
+			item = (name: string) => tree.getByRole('treeitem', { name, exact: true });
+		await item('src').click();
+		await item('src').press('ArrowRight');
+		await expect(item('a.ts')).toBeVisible();
+		// spec/task-window#files-delete: Cancel keeps the file; Delete moves it and the selection steps to the next sibling.
+		await app.evaluate(() => ((globalThis as any).answer = 0));
+		await item('a.ts').click();
+		await item('a.ts').press('Delete');
+		await expect
+			.poll(() => app.evaluate(() => (globalThis as any).deletePrompts as string[]))
+			.toEqual(['Delete a.ts?']);
+		await expect(item('a.ts')).toBeVisible();
+		await app.evaluate(() => ((globalThis as any).answer = 1));
+		await item('a.ts').press('Delete');
+		await expect(item('a.ts')).toHaveCount(0);
+		await expect(item('b.ts')).toBeFocused();
+		await expect(item('b.ts')).toHaveAttribute('aria-selected', 'true');
+		// File ▸ Delete… acts on the focused row of the tree, a folder with everything in it.
+		await item('old').focus();
+		await expect
+			.poll(() =>
+				app.evaluate(
+					({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('file-delete')!.enabled
+				)
+			)
+			.toBe(true);
+		await app.evaluate(({ Menu }) =>
+			Menu.getApplicationMenu()!.getMenuItemById('file-delete')!.click()
+		);
+		await expect(item('old')).toHaveCount(0);
+		const trashed = await app.evaluate(() => (globalThis as any).trashed as string[]);
+		expect(trashed.map((path) => path.replace(/^.*\/repo\//, ''))).toEqual(['src/a.ts', 'src/old']);
+		// Repo roots are not deletable, so the menu item is off there.
+		await tree.getByRole('treeitem', { name: 'choice', exact: true }).focus();
+		await expect
+			.poll(() =>
+				app.evaluate(
+					({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('file-delete')!.enabled
+				)
+			)
+			.toBe(false);
+		await page.screenshot({ path: info.outputPath('main-tree-delete.png') });
+	} finally {
+		await app.close();
+		await rm(root, { recursive: true, force: true });
+	}
+});

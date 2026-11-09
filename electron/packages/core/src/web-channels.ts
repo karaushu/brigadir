@@ -299,6 +299,7 @@ export const webChannels: Readonly<Record<IpcMethod, WebAccess>> = {
 	readComposer: 'allow',
 	saveComposer: 'allow',
 	fileMenu: 'deny',
+	deleteTreeFile: 'deny',
 	editorMenu: 'deny',
 	documentTabMenu: 'deny',
 	setMenuIcons: 'deny',

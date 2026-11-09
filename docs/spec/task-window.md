@@ -151,7 +151,16 @@ The project tree is not a plain folder tree: a project is several git roots (roo
 - The editor's Find key focuses the filter while the tree has focus. The filter searches the bounded project index (`searchFiles`), not only expanded folders; results show paths with the same icons; `Esc` clears it; a skeleton shows while searching, then `No results`.
 - Selection, filter, show-ignored, expanded folders and scroll position are parked per task.
 - **Drag** a file or folder into the GUI composer or the CLI terminal: it adds the same immutable text attachment with an explicit file/directory reference as `To composer`; the drag carries only an opaque id and the task's own `TaskKey`; main resolves the path; an unsaved buffer is never passed off as the saved file. In the CLI the reference goes through the hook context queue.
-- **Context menu** (native, `files:menu`): `Open in editor` (files only), `New file…`, `To composer`, `Open terminal here`, `Copy relative path`, `Copy absolute path`, `Reveal in Finder` (`Show in file manager` off macOS). Main resolves the registered id and checks `safePath` on every action; the terminal starts through the task host in the file's folder (or the selected folder), the host re-checks the project-relative cwd and refuses symlinks and service folders; no shell `cd` interpolation; the agent's cwd is unchanged.
+- **Context menu** (native, `files:menu`): `Open in editor` (files only), `New file…`, `To composer`, `Open terminal here`, `Copy relative path`, `Copy absolute path`, `Reveal in Finder` (`Show in file manager` off macOS), —, `Delete…` ([Delete](#files-delete)). Main resolves the registered id and checks `safePath` on every action; the terminal starts through the task host in the file's folder (or the selected folder), the host re-checks the project-relative cwd and refuses symlinks and service folders; no shell `cd` interpolation; the agent's cwd is unchanged.
+
+<a id="files-delete"></a>
+### Delete
+
+- **Entry points:** `Delete…` in the tree's context menu; `File ▸ Delete…` with `⌘⌫` on macOS and `Delete` on Windows and Linux, active while the focus is on a file or folder row of the tree; `Delete` (forward delete) on a selected row on macOS too. Repo roots and unavailable rows have neither.
+- **Confirmation** (`files:delete`, a native warning dialog): `Delete {name}?`, detail `The file goes to the Trash.` or `The folder and everything in it go to the Trash.`, buttons `Cancel` (default) and `Delete`.
+- The file or folder goes to the system Trash (`shell.trashItem`), never `rm`. Main resolves the registered id and checks `safePath`; it refuses the task root, a repo root (a folder with its own `.git`), anything inside `.git` or `.brigadir`, and a read-only file outside the project.
+- A checkpoint follows, so the tree and Changes show the deletion at once; the deleted file is an ordinary Git deletion. A failure shows the toast `Could not delete «{name}».`
+- Selection moves to the next row (or the previous one at the end of a folder) and the tree keeps focus.
 
 <a id="surface-state"></a>
 ## Surface state belongs to the task

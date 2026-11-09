@@ -209,6 +209,8 @@ export function FileTree({
 		}
 		if (repos && !repos.mainTree) rows.push({ id: 'add-folder', kind: 'add', parent: null });
 	}
+	const rowsLatest = useRef(rows);
+	rowsLatest.current = rows;
 	const selected = rows.find((row) => row.id === fileSelection),
 		activeFolder =
 			selected?.kind === 'directory' && expanded.has(selected.id) ? selected.id : selected?.parent;
@@ -240,6 +242,51 @@ export function FileTree({
 		else if (row.kind === 'file') open(row.id, row.path);
 		else if (row.kind === 'directory') toggle(row);
 	}
+	const deleting = useRef(false);
+	/**
+	 * spec/task-window#files-delete: main asks, then the row goes to the Trash; the selection steps to the next sibling (the previous one
+	 * at the end of a folder, else the folder) and the tree keeps the focus. One dialog at a time, whichever key or item asked.
+	 */
+	async function remove(row: FileRow) {
+		if (deleting.current || row.kind === 'unavailable') return;
+		deleting.current = true;
+		const siblings = rows.filter(
+				(item): item is FileRow => isFile(item) && item.parent === row.parent
+			),
+			index = siblings.findIndex((item) => item.id === row.id),
+			next =
+				siblings[index + 1] ??
+				siblings[index - 1] ??
+				rows.find((item) => item.id === row.parent || item.id === `repo:${row.parent}`);
+		try {
+			if (!(await window.brigadir.deleteTreeFile(task, row.id))) return;
+			if (next) {
+				pendingFocus.current = next.id;
+				select(next, true);
+			}
+			await load(row.parent);
+		} catch {
+			toastError(t(locale, 'Could not delete «{name}».').replace('{name}', row.name), {
+				bold: row.name,
+			});
+		} finally {
+			deleting.current = false;
+		}
+	}
+	const removeLatest = useRef(remove);
+	removeLatest.current = remove;
+	// spec/task-window#files-delete: File ▸ Delete… (⌘⌫, Delete on a PC) acts on the selected row while the focus is in this tree.
+	useEffect(
+		() =>
+			window.brigadir.onWorkspaceAction((action) => {
+				if (action !== 'file-delete' || !root.current?.contains(document.activeElement)) return;
+				const row =
+					document.activeElement?.closest<HTMLElement>('[data-deletable]')?.dataset.fileId;
+				const target = rowsLatest.current.find((item) => item.id === row);
+				if (target && isFile(target)) void removeLatest.current(target);
+			}),
+		[]
+	);
 	/**
 	 * The tree's keys for a file row and a repo root alike: ↑↓ Home End, → opens or steps in, ← closes or steps out, letters
 	 * seek. «Add folder…» ends the list but is a button, not a tree item: the keys walk the tree items, Tab reaches it.
@@ -250,6 +297,16 @@ export function FileTree({
 		const index = items.findIndex((item) => item.id === row.id);
 		const folder = row.kind === 'repo' ? row.folder : row.kind === 'directory' ? row.id : null;
 		let next: TreeRow | undefined;
+		// spec/task-window#files-delete: Delete, and ⌘⌫ / Ctrl+Backspace when the menu bar did not take it.
+		if (
+			isFile(row) &&
+			row.kind !== 'unavailable' &&
+			(event.key === 'Delete' || (event.key === 'Backspace' && (event.metaKey || event.ctrlKey)))
+		) {
+			event.preventDefault();
+			void remove(row);
+			return;
+		}
 		if (event.key === 'Enter') {
 			event.preventDefault();
 			activate(row);
@@ -442,6 +499,7 @@ export function FileTree({
 							aria-disabled={row.kind === 'unavailable'}
 							tabIndex={focusTarget(row)}
 							data-file-id={row.id}
+							data-deletable={row.kind !== 'unavailable' || undefined}
 							data-status={row.status}
 							data-ignored={row.ignored}
 							className={styles.item}
@@ -481,6 +539,7 @@ export function FileTree({
 											await attachTaskFile(task, row.id).catch(
 												named('Could not add {file} to the composer.')
 											);
+										if (action === 'delete') await remove(row);
 										if (action === 'terminal')
 											await openTaskTerminal(task, row.id).catch(
 												named('Could not open a terminal in {file}.')

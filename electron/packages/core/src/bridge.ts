@@ -906,7 +906,9 @@ export type DesktopBridge = {
 		key: TaskKey,
 		fileId: string,
 		source: 'tree' | 'changes'
-	): Promise<'open' | 'why' | 'revert' | 'attach' | 'terminal' | 'new-file' | null>;
+	): Promise<'open' | 'why' | 'revert' | 'attach' | 'terminal' | 'new-file' | 'delete' | null>;
+	/** spec/task-window#files-delete: asks, then moves a tree file or folder to the Trash; false when the person cancelled. */
+	deleteTreeFile(key: TaskKey, fileId: string): Promise<boolean>;
 	/** spec/editor#editor-context-menu: the native editor menu; path items run in main, the rest come back to the editor. */
 	editorMenu(
 		key: TaskKey,

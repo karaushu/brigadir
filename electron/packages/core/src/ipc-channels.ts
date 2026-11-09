@@ -2164,6 +2164,13 @@ export const ipcTable = {
 			a[1].length <= 1_000_000 &&
 			fitsUtf8(JSON.stringify(a[1]), 4 * 1024 * 1024),
 	},
+	deleteTreeFile: {
+		kind: 'invoke',
+		channel: 'files:delete',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTaskKey(a[0]) && isFileId(a[1]),
+	},
 	fileMenu: {
 		kind: 'invoke',
 		channel: 'files:menu',

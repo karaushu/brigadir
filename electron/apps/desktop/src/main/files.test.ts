@@ -556,3 +556,44 @@ it('peeks only into the task’s tree, never a file outside it that the computer
 	// The computer's read-only tab still opens it.
 	expect((await files.read(task, located.id)).text).toBe('outside\n');
 });
+
+it('spec/task-window#files-delete: deletes a tree file or folder, never a repo root, and drops its leases', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-file-delete-'));
+	roots.push(root);
+	const repo = join(root, 'repo');
+	await mkdir(join(repo, 'src'), { recursive: true });
+	await mkdir(join(repo, 'nested/.git'), { recursive: true });
+	await writeFile(join(repo, 'src/a.ts'), 'a');
+	const store = await SessionStore.at(join(root, 'data')),
+		project = await store.addProject(repo),
+		task = await store.createTask(project.id, 'Files', 'claude'),
+		other = await store.createTask(project.id, 'Other', 'claude');
+	const sessions = new Sessions(store.root, resolve('apps/desktop/out/services'), () => {}),
+		files = new Files(
+			new Changes(store.root, resolve('apps/desktop/out/services/diff.cjs')),
+			sessions
+		);
+	const refresh = vi.spyOn(files, 'refresh').mockResolvedValue(undefined as never);
+	const top = (await files.list(task, null)).entries,
+		src = top.find((entry) => entry.name === 'src')!,
+		nested = top.find((entry) => entry.name === 'nested')!,
+		file = (await files.list(task, src.id)).entries[0]!;
+	expect(await files.deletable(task, file.id)).toMatchObject({ kind: 'file', name: 'a.ts' });
+	expect(await files.deletable(task, src.id)).toMatchObject({ kind: 'directory', name: 'src' });
+	await expect(files.deletable(task, nested.id)).rejects.toThrow('cannot be deleted');
+	await expect(files.deletable(other, file.id)).rejects.toThrow('Unknown file');
+	// The open file's lease goes with it, so a file of the same name made later opens in another task.
+	await files.read(task, file.id);
+	const target = await files.deletable(task, file.id);
+	await rm(target.absolute);
+	await files.deleted(task, (await files.deletable(task, src.id)).absolute);
+	expect(refresh).toHaveBeenCalledWith(task);
+	await writeFile(join(repo, 'src/a.ts'), 'b');
+	const again = (
+		await files.list(
+			other,
+			(await files.list(other, null)).entries.find((e) => e.name === 'src')!.id
+		)
+	).entries[0]!;
+	expect((await files.read(other, again.id)).locked).toBe(false);
+});

@@ -143,6 +143,7 @@ export type WorkspaceAction =
 	| 'composer-queue'
 	| 'new-task'
 	| 'new-file'
+	| 'file-delete'
 	| 'quick-open-alias'
 	| 'notifications'
 	| 'needs-next'

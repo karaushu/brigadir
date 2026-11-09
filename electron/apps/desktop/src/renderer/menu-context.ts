@@ -149,6 +149,8 @@ export function useMenuContext(
 					!closest('[data-browser],[data-role=console]'),
 				// spec/pull-requests-and-ci#reading-and-refresh: ⌘R refreshes the PR list and the open PR while the focus is in the PR panel.
 				pullRequests: !!closest('[data-pr-panel]'),
+				// spec/task-window#files-delete: File ▸ Delete… acts on the focused file or folder row of the Files tree.
+				fileTree: !!closest('[data-menu-tree] [data-deletable]') && !modal,
 				// spec/git#commit-dialog: Diff ▸ Commit… opens the commit dialog of the open task.
 				commit: task && !!taskNode,
 				// spec/composer-steering-queue-and-ghost#quick-question: ⌘I asks about the selection the panel stands under, in the editor or the diff.

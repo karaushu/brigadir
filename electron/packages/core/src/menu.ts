@@ -51,6 +51,7 @@ export const menuContextKeys = [
 	'commit',
 	'prSection',
 	'noteChat',
+	'fileTree',
 ] as const;
 export type MenuContext = Record<(typeof menuContextKeys)[number], boolean>;
 export const emptyMenuContext = Object.fromEntries(
@@ -103,6 +104,8 @@ export const menuCommands: readonly Command[] = [
 	workspace('File', 'New task', 'new-task', 'CmdOrCtrl+N', 'project'),
 	// spec/editor#new-file: a file at a path in the task (⌘N is New task), the first item of Tools too.
 	workspace('File', 'New file…', 'new-file', 'CmdOrCtrl+Alt+N', 'task'),
+	// spec/task-window#files-delete: the selected file or folder of the Files tree goes to the Trash; ⌘⌫ as in Finder, Delete on a PC.
+	workspace('File', 'Delete…', 'file-delete', 'CmdOrCtrl+Backspace', 'fileTree'),
 	workspace('File', 'Open Quickly…', 'quick-open', 'CmdOrCtrl+Shift+O', 'task'),
 	workspace('File', 'Open Quickly (alias)', 'quick-open-alias', 'CmdOrCtrl+P', 'task'),
 	workspace('File', 'Search Everywhere…', 'search', 'CmdOrCtrl+Shift+K', 'always'),
@@ -331,6 +334,7 @@ export const menuCommandIcons: Readonly<Record<string, MenuIcon>> = {
 	relay: 'relay',
 	'new-task': 'task-new',
 	'new-file': 'file-new',
+	'file-delete': 'trash',
 	'quick-open': 'search-file',
 	'quick-open-alias': 'search-file',
 	search: 'search',

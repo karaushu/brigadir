@@ -451,6 +451,7 @@ const uk = {
 	// spec/task-window#repo-line: the lock of a repo another task holds; entering the main tree from the project menu.
 	Busy: 'Зайнято',
 	'Open main tree': 'Відкрити основне дерево',
+	'Could not open the main tree.': 'Не вдалося відкрити основне дерево.',
 	// spec/projects-and-board#repo-selection: a repo is either in the task or not.
 	'Add to the task': 'Додати в задачу',
 	'Remove from the task…': 'Прибрати із задачі…',
@@ -2496,6 +2497,10 @@ const uk = {
 	'delete…': 'видалити…',
 	'Selected {n}': 'Вибрано {n}',
 	'Delete…': 'Видалити…',
+	// spec/task-window#files-delete: a file or folder of the Files tree goes to the Trash.
+	'Delete {name}?': 'Видалити {name}?',
+	'The file goes to the Trash.': 'Файл піде у Смітник.',
+	'The folder and everything in it go to the Trash.': 'Тека й усе в ній підуть у Смітник.',
 	'The archive has no «{query}».': 'В архіві немає «{query}».',
 	'Search all tasks': 'Шукати в усіх задачах',
 	'The archive is empty.': 'Архів порожній.',

@@ -169,6 +169,7 @@ Releases are built and published **locally only**; there is no CI build. `node s
 # bump "version" in electron/apps/desktop/package.json to X.Y.Z
 git commit -am "chore(release): X.Y.Z"
 git tag vX.Y.Z
+git push origin main vX.Y.Z
 cd electron
 GH_TOKEN=$(gh auth token) pnpm dist:mac --all --publish
 GH_TOKEN=$(gh auth token) pnpm dist:linux --x64 --arm64 --publish
@@ -177,12 +178,13 @@ gh release upload vX.Y.Z dist/*.rpm --repo karaushu/brigadir
 gh release view vX.Y.Z --repo karaushu/brigadir --json assets --jq '.assets[].name'
 gh release upload vX.Y.Z <missing files from dist/> --repo karaushu/brigadir --clobber
 gh release edit vX.Y.Z --repo karaushu/brigadir --draft=false --latest
-git push origin main vX.Y.Z
 ```
 
 - `--publish` uploads the DMGs, zips, blockmaps, AppImages, `.deb` files and `latest-mac.yml` / `latest-linux.yml` /
   `latest-linux-arm64.yml` into a **draft** release; the `.rpm` files (made by nfpm) are uploaded with
   `gh release upload`. Apps see the version only after `--draft=false`, so they never meet a release with half its files.
+- Push the tag before publishing. A draft release has no tag of its own: if the tag is missing on GitHub,
+  `--draft=false` creates it on the remote `main` as it is then, which may be the previous release's commit.
 - The Linux packages build on a Mac with `zig`, `nfpm` and `rpm` (`brew install zig nfpm rpm`).
 - Without the Apple secrets in the environment the macOS packages are ad-hoc (section 2).
 

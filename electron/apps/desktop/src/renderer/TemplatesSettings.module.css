@@ -98,6 +98,23 @@
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 6px;
 }
+/* The models of a role take their own line under the dots: provider glyph and name, side by side. */
+.picks {
+	flex-basis: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 10px;
+	color: var(--fg);
+}
+.picks > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+.picks svg {
+	flex: none;
+	color: var(--fg2);
+}
 /* What the template fits: the fitting work in full colour, the rest muted. */
 .fits {
 	display: flex;

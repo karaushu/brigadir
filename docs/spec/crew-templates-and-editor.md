@@ -312,14 +312,16 @@ Templates are **global, not per project**. Repository-specific knowledge ("alway
 - `−` deletes an own template or hides a built-in crew. It is disabled for built-in agents.
 - Detail header: **Reset** (only on a customized built-in agent), **Duplicate** (adds ` 2` to the name), **Edit…** (own crews only; disabled while the crew has issues) and **Export…**.
 - **Agent detail**: Name, Specialty (not for foreman templates or built-ins), Provider (a provider turned off in Settings ▸ Agents is disabled unless the template already uses it; changing the provider clears the choices), Model, Effort, Mode, **Rights ▸ Checker** (switch between `developer` and `reviewer`; caption "Reads reports and changes, submits reviews, and approves work. Writes no code."), and **Instructions** (caption "Agent role, in English").
-- **Role guide**: above the agent detail, the four built-in roles as a 2 × 2 grid of `ui/OptionCard` cards without the radio mark. Each card has the role's glyph and name, its work in one line, three strength dots (`ui/LevelDots`) and a hint for model and effort. The card of the selected built-in is chosen; pressing a card selects that template. The guide names no model (rule 7): dots and hints are the app's advice for the role, the [model ladder](crew.md#model-ladder) as a picture.
+- **Role guide**: above the agent detail, the four built-in roles as a 2 × 2 grid of `ui/OptionCard` cards without the radio mark. Each card has the role's glyph and name, its work in one line, three strength dots (`ui/LevelDots`) with a hint for model and effort, and under them the model each enabled provider has for that work: the provider glyph and the model's catalog name. The card of the selected built-in is chosen; pressing a card selects that template. Dots and hints are the app's advice for the role, the [model ladder](crew.md#model-ladder) as a picture.
 
-  | Role | Work | Dots | Hint |
-  | --- | --- | --- | --- |
-  | Foreman | Splits the work, accepts the parts | 3 | `Strongest model · Medium` |
-  | Developer | Parts with a clear spec | 1 | `Faster model · Medium` |
-  | Senior developer | Migrations, refactors, unclear specs | 2 | `Strong model · High` |
-  | Reviewer | Checks the work, writes no code | 2 | `Author's model or stronger` |
+  | Role | Work | Dots | Hint | Claude | Codex |
+  | --- | --- | --- | --- | --- | --- |
+  | Foreman | Splits the work, accepts the parts | 3 | `Strongest model · Medium` | `fable` | `astra` |
+  | Developer | Parts with a clear spec | 1 | `Faster model · Medium` | `sonnet` | `terra` |
+  | Senior developer | Migrations, refactors, unclear specs | 2 | `Strong model · High` | `opus` | `sol` |
+  | Reviewer | Checks the work, writes no code | 2 | `Author's model or stronger` | `opus` | `astra` |
+
+  The last two columns are words, not model ids (`roleModelWords`, `roleModelPick` in `packages/core/src/role-models.ts`): the model shown is the first entry of the provider's catalog whose value or name says the word, under the catalog's own name (`Opus 5.5`, `6.1 Sol`), the way the Helper agent finds its default ([Agents and providers](agents-and-providers.md#helper-agent)). A provider turned off shows nothing; a catalog that has no such entry shows nothing for that provider; before the catalog is known the word itself is shown. The guide only shows: it changes no template.
 
 - **Best for** row under Effort: `Clear parts · Hard parts · Leading and checking`, with the one that fits this template in full colour and the rest muted (`templateFit`). A foreman or a reviewer leads and checks; a developer fits hard parts when its effort is `high` or above, clear parts otherwise.
 - **Effort dots** beside the Effort popup: one dot per level of the model (`default` is not a level), filled up to the chosen one. Levels past `high` fill amber, and a line under the row says "An effort above High costs about as much as a stronger model." `high` is found by the level's value or name, a presentation rule and not a table of levels (rule 7); a model without such a level never warns.

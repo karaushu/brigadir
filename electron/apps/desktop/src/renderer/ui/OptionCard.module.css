@@ -47,8 +47,9 @@
 }
 .meta {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 6px;
+	gap: 4px 6px;
 	margin-top: 4px;
 	font-size: var(--text-11);
 	line-height: 14px;

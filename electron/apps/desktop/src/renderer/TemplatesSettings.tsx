@@ -7,6 +7,7 @@ import {
 	effortRank,
 	foremanTemplateId,
 	reviewerTemplateId,
+	roleModelPick,
 	seniorDeveloperTemplateId,
 	templateFit,
 	builtinCrewTemplates,
@@ -81,6 +82,32 @@ const roleGuide: readonly {
 		hint: "Author's model or stronger",
 	},
 ];
+/** spec/crew-templates-and-editor#library-list: the provider glyph and the catalog name of the model for a role; nothing for a provider that is off or has no such model. */
+function RolePicks({
+	id,
+	enabled,
+	catalogs,
+}: {
+	id: string;
+	enabled: Record<'claude' | 'codex', boolean>;
+	catalogs: Record<string, ProviderCatalog | null>;
+}) {
+	const picks = (['claude', 'codex'] as const).flatMap((provider) => {
+		const name = enabled[provider] ? roleModelPick(id, provider, catalogs[provider]) : null;
+		return name ? [{ provider, name }] : [];
+	});
+	if (!picks.length) return null;
+	return (
+		<span className={styles.picks} data-role-picks>
+			{picks.map((pick) => (
+				<span key={pick.provider}>
+					<Glyph name={pick.provider === 'codex' ? 'openai' : 'claude'} size={11} />
+					{pick.name}
+				</span>
+			))}
+		</span>
+	);
+}
 const fits: readonly { fit: 'scoped' | 'hard' | 'lead'; label: MessageKey }[] = [
 	{ fit: 'scoped', label: 'Clear parts' },
 	{ fit: 'hard', label: 'Hard parts' },
@@ -449,6 +476,8 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 									onChange={() => setSelected({ kind: 'agent', id: item.id })}>
 									<LevelDots count={3} filled={item.strength} label={t(locale, item.hint)} />
 									{t(locale, item.hint)}
+									{/* The model each enabled provider has for this work, by its catalog name. */}
+									<RolePicks id={item.id} enabled={enabledProviders} catalogs={catalogs} />
 								</OptionCard>
 							))}
 						</div>

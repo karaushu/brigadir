@@ -32,6 +32,28 @@
 	flex: none;
 	margin-top: 1px;
 }
+/* The mark is not drawn, the radio stays for the keyboard and the reader; the card holds it, so nothing scrolls. */
+.card:has(.radio[data-hidden]) {
+	position: relative;
+}
+.radio[data-hidden] {
+	position: absolute;
+	inset: 0 auto auto 0;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	opacity: 0;
+	pointer-events: none;
+}
+.meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 4px;
+	font-size: var(--text-11);
+	line-height: 14px;
+	color: var(--fg2);
+}
 .copy {
 	flex: 1;
 	min-width: 0;

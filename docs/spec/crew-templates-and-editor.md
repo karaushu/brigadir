@@ -312,6 +312,17 @@ Templates are **global, not per project**. Repository-specific knowledge ("alway
 - `−` deletes an own template or hides a built-in crew. It is disabled for built-in agents.
 - Detail header: **Reset** (only on a customized built-in agent), **Duplicate** (adds ` 2` to the name), **Edit…** (own crews only; disabled while the crew has issues) and **Export…**.
 - **Agent detail**: Name, Specialty (not for foreman templates or built-ins), Provider (a provider turned off in Settings ▸ Agents is disabled unless the template already uses it; changing the provider clears the choices), Model, Effort, Mode, **Rights ▸ Checker** (switch between `developer` and `reviewer`; caption "Reads reports and changes, submits reviews, and approves work. Writes no code."), and **Instructions** (caption "Agent role, in English").
+- **Role guide**: above the agent detail, the four built-in roles as a 2 × 2 grid of `ui/OptionCard` cards without the radio mark. Each card has the role's glyph and name, its work in one line, three strength dots (`ui/LevelDots`) and a hint for model and effort. The card of the selected built-in is chosen; pressing a card selects that template. The guide names no model (rule 7): dots and hints are the app's advice for the role, the [model ladder](crew.md#model-ladder) as a picture.
+
+  | Role | Work | Dots | Hint |
+  | --- | --- | --- | --- |
+  | Foreman | Splits the work, accepts the parts | 3 | `Strongest model · Medium` |
+  | Developer | Parts with a clear spec | 1 | `Faster model · Medium` |
+  | Senior developer | Migrations, refactors, unclear specs | 2 | `Strong model · High` |
+  | Reviewer | Checks the work, writes no code | 2 | `Author's model or stronger` |
+
+- **Best for** row under Effort: `Clear parts · Hard parts · Leading and checking`, with the one that fits this template in full colour and the rest muted (`templateFit`). A foreman or a reviewer leads and checks; a developer fits hard parts when its effort is `high` or above, clear parts otherwise.
+- **Effort dots** beside the Effort popup: one dot per level of the model (`default` is not a level), filled up to the chosen one. Levels past `high` fill amber, and a line under the row says "An effort above High costs about as much as a stronger model." `high` is found by the level's value or name, a presentation rule and not a table of levels (rule 7); a model without such a level never warns.
 - A built-in agent is read-only apart from provider, model and effort: its name is locked, its Mode and Rights are disabled, and its instructions are shown read-only so they can still be read and copied in full.
 - Agent edits **autosave** 300 ms after the last change, without a busy state, so the focused field keeps its focus.
 - **Crew detail**: the Agents list and Levels, edited with the same `CrewEditor`.

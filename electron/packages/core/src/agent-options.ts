@@ -94,6 +94,30 @@ export function effortLevel(
 		null;
 	return { option, choice, levels: option.choices.map((item) => item.name) };
 }
+/** spec/crew-templates-and-editor#library-list: where a level stands among the model's own levels (`default` is no level). `high` is the level
+ *  whose value or name reads `high` — a presentation rule by the word, not a table of levels (rule 7); -1 when the model has none. */
+export function effortRank(
+	choices: readonly { value: string; name: string }[],
+	value: string | boolean | null | undefined
+): { count: number; index: number; high: number } {
+	const levels = choices.filter((choice) => choice.value !== 'default'),
+		reads = (text: string) => text.trim().toLowerCase() === 'high';
+	return {
+		count: levels.length,
+		index: levels.findIndex((choice) => choice.value === value),
+		high: levels.findIndex((choice) => reads(choice.value) || reads(choice.name)),
+	};
+}
+export type TemplateFit = 'scoped' | 'hard' | 'lead';
+/** spec/crew-templates-and-editor#library-list: the work a template fits. A foreman or a reviewer leads and checks; a developer takes hard parts
+ *  from `high` effort up, scoped parts otherwise (spec/crew#model-ladder). */
+export function templateFit(
+	role: 'foreman' | 'developer' | 'reviewer',
+	rank: { index: number; high: number } | null
+): TemplateFit {
+	if (role !== 'developer') return 'lead';
+	return rank && rank.high >= 0 && rank.index >= rank.high ? 'hard' : 'scoped';
+}
 /** spec/composer#capsule-squeeze: beside the provider glyph the capsule does not repeat the provider — a leading `<provider>-` is not shown
  *  (`claude-opus-5` → `opus-5`). A presentation rule, not a table of names (rule 7): anything else stays as the agent named it. */
 export function modelDisplayName(name: string, provider: string | null | undefined): string {

@@ -173,9 +173,17 @@ export const commandsBrief =
 /** spec/chat-turns-plans-and-questions#plan-approval: English by rule 12; `ExitPlanMode` reaches the chat as the plan for approval (spec/chat-turns-plans-and-questions#plan-approval), `EnterPlanMode` gets there from any mode. */
 export const planApprovalBrief =
 	'When the person asks for a plan before the work starts (for example "make a plan first" or "I want a full plan before you do anything"), enter plan mode with EnterPlanMode, research without changing anything, and present the plan with ExitPlanMode so the person can read, edit and approve it; do not give such a plan only as a message.';
+/** spec/agents-and-providers#subagent-model: a session whose subagents got a model of their own learns what to hand them. No word about the model's size: the person chose it. */
+export const subagentBrief =
+	"Your subagents run on their own model, chosen for searching and reading. Give them work whose mistakes are cheap to spot: finding files, reading logs and long output, running tests. Keep code edits and decisions yourself, and check a subagent's answer against the code before you act on it.";
 /** What the brief of a session knows: `commands` — the module is on and the project has saved commands (spec/search-menus-and-commands#agent-command-tools); `tools` — the
  *  modules on (spec/agents-and-providers#tools-awareness); `cli` — the agent runs in the terminal (spec/terminal-and-cli-agents#cli-start). */
-export type BriefOptions = { commands?: boolean; tools?: WorkspaceTools; cli?: boolean };
+export type BriefOptions = {
+	commands?: boolean;
+	tools?: WorkspaceTools;
+	cli?: boolean;
+	/** spec/agents-and-providers#subagent-model: the setting is on for this session. */ subagents?: boolean;
+};
 /** Every session gets a brief: the role brief of a crew node first, then the checklist sentence (spec/chat-turns-plans-and-questions#checklist-tools), then for a Claude session that
  *  talks to the person (no crew, or the foreman) the plan sentence (spec/chat-turns-plans-and-questions#plan-approval), then for sessions with the person's tools the context sentence (spec/agents-and-providers#context-tools),
  *  then for Codex and the CLI the tools line (spec/agents-and-providers#tools-awareness: they may not show our MCP instructions to the model), then the commands sentence.
@@ -193,6 +201,7 @@ export function sessionBrief(
 		worktreeBrief,
 		provider === 'claude' && talksToPerson ? planApprovalBrief : '',
 		human ? contextBrief : '',
+		provider === 'claude' && options.subagents && !options.cli ? subagentBrief : '',
 		options.tools && (provider === 'codex' || options.cli)
 			? toolsBrief(context?.role ?? null, options.tools)
 			: '',

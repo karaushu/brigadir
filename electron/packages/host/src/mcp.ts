@@ -593,7 +593,7 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 	},
 	create_worker_task: {
 		description:
-			'Give one of your agents a part after the plan was approved. The prompt must state which files the part owns. Each agent has one task for the whole crew: the first part creates it; a later part, once you accepted the previous one, continues in the same task and session after your tree is merged into its branch. While a part is open, change or return it with prompt_task. Returns the taskId you use in the other tools.',
+			'Give one of your agents a part after the plan was approved. The prompt must state which files the part owns and the command that proves the part is done. Each agent has one task for the whole crew: the first part creates it; a later part, once you accepted the previous one, continues in the same task and session after your tree is merged into its branch. While a part is open, change or return it with prompt_task. Returns the taskId you use in the other tools.',
 		shape: {
 			agent: z.string().max(80).optional(),
 			title: z.string().min(1).max(80),

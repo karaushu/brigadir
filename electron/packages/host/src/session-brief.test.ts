@@ -6,6 +6,7 @@ import {
 	contextBrief,
 	crewBrief,
 	planApprovalBrief,
+	subagentBrief,
 	sessionBrief,
 	worktreeBrief,
 	type CrewContext,
@@ -145,4 +146,14 @@ it('keeps the briefs of a solo agent, a foreman and a worker as goldens (spec/ag
 	await expect(sessionBrief(worker, 'claude', options)).toMatchFileSnapshot(
 		'../fixtures/briefs/worker-claude.txt'
 	);
+});
+
+// spec/agents-and-providers#subagent-model
+it('tells a Claude session what to hand its subagents only when they got a model of their own', () => {
+	expect(sessionBrief(null, 'claude')).not.toContain(subagentBrief);
+	expect(sessionBrief(null, 'claude', { subagents: true })).toContain(subagentBrief);
+	expect(sessionBrief(worker, 'claude', { subagents: true })).toContain(subagentBrief);
+	// The variable reaches neither Codex nor a terminal session.
+	expect(sessionBrief(null, 'codex', { subagents: true })).not.toContain(subagentBrief);
+	expect(sessionBrief(null, 'claude', { subagents: true, cli: true })).not.toContain(subagentBrief);
 });

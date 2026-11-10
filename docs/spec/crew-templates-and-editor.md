@@ -96,9 +96,9 @@ The product works without any user template. There is one built-in **agent** tem
 | Id | Name | Role | Instructions |
 | --- | --- | --- | --- |
 | `foreman-default` | Foreman | `foreman` | Empty: the foreman brief in code is the whole role. Nodes with subordinates use this template too. |
-| `developer` | Developer | `developer` | Implement your part; own the listed files only; `read_notes` / `post_note` around shared contracts; `ask_foreman` instead of guessing; run the check the prompt names before ending the turn; do not commit. |
+| `developer` | Developer | `developer` | Implement your part; own the listed files only; `read_notes` / `post_note` around shared contracts; `ask_foreman` instead of guessing; run the check the prompt names before ending the turn and say what it showed; a check that fails for a reason outside the zone is reported, not worked around; do not commit. |
 | `senior-developer` | Senior developer | `developer` | The Developer text, plus: read the code around the change first and say in the last message what was verified and how. Specialty: `Migrations, performance work, cross-module refactors and parts without a clear spec`. Claude `opus`, effort `high`. |
-| `reviewer` | Reviewer | `reviewer` | Write no code; `read_report`, then `read_diff` one file at a time; `submit_review` with line comments; `approve` when nothing is left. |
+| `reviewer` | Reviewer | `reviewer` | Write no code; `read_report`, then `read_diff` one file at a time; look for what a check cannot show (wrong behaviour, a changed contract, work outside the files); the report must name the check that was run and its result; comment only on what must change before acceptance, because every round runs the developer again; `submit_review` with line comments; `approve` when nothing is left. |
 
 | Id | Name | Tree |
 | --- | --- | --- |

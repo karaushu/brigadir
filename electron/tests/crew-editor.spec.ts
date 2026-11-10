@@ -52,7 +52,7 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		// CrewAddAgent: «+ Agent» opens the template popup; picking Reviewer adds a selected node with the name focused.
 		await editor.locator('[data-crew-add-slot]').click();
 		const menu = editor.getByRole('menu', { name: 'Agent templates' });
-		await expect(menu.getByRole('menuitem')).toHaveCount(4);
+		await expect(menu.getByRole('menuitem')).toHaveCount(5);
 		await menu.getByRole('menuitem', { name: /^Reviewer/ }).click();
 		await expect(editor.locator('[data-crew-node]')).toHaveCount(5);
 		await expect(
@@ -167,14 +167,14 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 			'true'
 		);
 		const list = settings.getByRole('listbox', { name: 'Templates' });
-		await expect(list.getByRole('option')).toHaveCount(3 + 2);
+		await expect(list.getByRole('option')).toHaveCount(4 + 3);
 		await expect(list.getByRole('option', { name: /Front \+ Design/ })).toContainText('4');
 		await list.getByRole('option', { name: /^Reviewer/ }).click();
 		await expect(settings.getByText('built-in', { exact: true })).toBeVisible();
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toBeDisabled();
 		await expect(settings.getByRole('textbox', { name: 'Specialty' })).toHaveCount(0);
 		await settings.getByRole('button', { name: 'Duplicate' }).click();
-		await expect(list.getByRole('option')).toHaveCount(6);
+		await expect(list.getByRole('option')).toHaveCount(8);
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toHaveValue('Reviewer 2');
 		await settings
 			.getByRole('textbox', { name: 'Specialty' })
@@ -208,7 +208,7 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		// Export acts on the selected template from its header; Import creates one from the «+» menu; the 222 px footer fits.
 		await expect(settings.getByRole('button', { name: 'Export…' })).toBeEnabled();
 		await settings.getByRole('button', { name: 'Delete' }).click();
-		await expect(list.getByRole('option')).toHaveCount(5);
+		await expect(list.getByRole('option')).toHaveCount(7);
 		expect(
 			await settings
 				.locator('[data-templates] > [role=listbox] > :last-child')

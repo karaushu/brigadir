@@ -49,6 +49,7 @@ import {
 	mapSubagentUpdate,
 	mapUpdate,
 	subagentResult,
+	turnUsage,
 } from './mapper';
 import { authAccess, claudeRateLimitReadings } from './quota';
 import { stopBackgroundProcesses } from './background-stop';
@@ -69,6 +70,8 @@ export type TransportOptions = {
 	/** spec/composer-steering-queue-and-ghost#quick-question: start as a fork of this session when the adapter advertises `session/fork`; otherwise a new session. */
 	forkSessionId?: string;
 	mcpServers?: McpCommand[];
+	/** spec/agents-and-providers#subagent-model: the model of a Claude session's own subagents; a value in the environment stays. */
+	subagentModel?: string;
 	additionalDirectories?: string[];
 	onEvent(event: AgentEvent): void | Promise<void>;
 	requestPermission?(request: PermissionRequest, signal: AbortSignal): Promise<string | null>;
@@ -249,6 +252,12 @@ export class AgentTransport {
 		// spec/chat-turns-plans-and-questions#checklist-tools: an SDK session of Claude has no task tool, so the adapter never sends `plan`; a value the person set stays.
 		if (config.provider === 'claude' && env.CLAUDE_CODE_ENABLE_TODO_TOOLS === undefined)
 			env.CLAUDE_CODE_ENABLE_TODO_TOOLS = '1';
+		if (
+			config.provider === 'claude' &&
+			config.subagentModel &&
+			env.CLAUDE_CODE_SUBAGENT_MODEL === undefined
+		)
+			env.CLAUDE_CODE_SUBAGENT_MODEL = config.subagentModel;
 		// A plan or a question of ours waits for the person; Claude aborts a tool call silent for 30 minutes (Codex: tool_timeout_sec below).
 		if (
 			config.provider === 'claude' &&
@@ -858,6 +867,8 @@ export class AgentTransport {
 					this.wireAnswers = Math.max(this.wireAnswers, this.promptsSent);
 				})
 				.then((result) => {
+					const usage = turnUsage(result.usage);
+					if (usage) void this.emit(usage);
 					const ended = this.emit({ kind: 'turn.completed', reason: result.stopReason });
 					if (this.turn === mine) this.ended = mine;
 					return ended;

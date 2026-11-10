@@ -95,13 +95,16 @@ export const crewNameLimit = 80,
 export const crewRecommendedDepth = 2;
 export const foremanTemplateId = 'foreman-default',
 	developerTemplateId = 'developer',
-	reviewerTemplateId = 'reviewer';
+	reviewerTemplateId = 'reviewer',
+	seniorDeveloperTemplateId = 'senior-developer';
 export const defaultCrewTemplateId = 'default';
 /** spec/pull-requests-and-ci#review-crew: the built-in crew of a PR review — the foreman merges what two reviewers of different providers found. */
 export const reviewCrewTemplateId = 'review';
 /** spec/crew#compose: the launch sheet's «the foreman composes» choice, remembered per project like a template id. */
 export const composeCrewId = 'compose';
 
+const developerInstructions =
+	'You implement your part of the work. You own the listed files and directories: change only them, other files belong to other agents. Read anything you need across the project. Keep changes small and coherent; do not refactor outside your zone. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the check your task prompt names (a test, a typecheck, a build) and say what it showed. Do not commit; the host snapshots your tree.';
 export const builtinAgentTemplates: readonly AgentTemplate[] = [
 	{ id: foremanTemplateId, name: 'Foreman', role: 'foreman', instructions: '', builtin: true },
 	{
@@ -109,8 +112,19 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		name: 'Developer',
 		role: 'developer',
 		builtin: true,
-		instructions:
-			'You implement your part of the work. You own the listed files and directories: change only them, other files belong to other agents. Read anything you need across the project. Keep changes small and coherent; do not refactor outside your zone. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Do not commit; the host snapshots your tree.',
+		instructions: developerInstructions,
+	},
+	/** spec/crew-templates-and-editor#builtin-templates: a Developer on a stronger model, for the parts the model ladder sends up (spec/crew#model-ladder). */
+	{
+		id: seniorDeveloperTemplateId,
+		name: 'Senior developer',
+		role: 'developer',
+		builtin: true,
+		provider: 'claude',
+		choices: { configOptions: { model: 'opus', effort: 'high' } },
+		choiceNames: { model: 'Opus', effort: 'High' },
+		summary: 'Migrations, performance work, cross-module refactors and parts without a clear spec',
+		instructions: `${developerInstructions} Your parts are the hard ones: read the code around the change before you write, and say in your last message what you verified and how.`,
 	},
 	{
 		id: reviewerTemplateId,
@@ -834,12 +848,33 @@ export function withBuiltinChoices(
 ): AgentTemplate {
 	if (!choices) return template;
 	const { provider, choices: launch, choiceNames } = choices;
+	// The overlay replaces the app's provider and choices whole: a model never carries over to another provider.
+	const { provider: _provider, choices: _choices, choiceNames: _names, ...rest } = template;
 	return {
-		...template,
+		...rest,
 		...(provider ? { provider } : {}),
 		...(launch ? { choices: launch } : {}),
 		...(choiceNames ? { choiceNames } : {}),
 	};
+}
+const sorted = (value: Record<string, unknown> | undefined) =>
+	JSON.stringify(Object.entries(value ?? {}).sort(([a], [b]) => a.localeCompare(b)));
+/** Whether two launch parts are the same choice, whatever the key order. */
+export function sameBuiltinChoices(a: BuiltinAgentChoices, b: BuiltinAgentChoices): boolean {
+	return (
+		a.id === b.id &&
+		a.provider === b.provider &&
+		sorted(a.choices?.configOptions) === sorted(b.choices?.configOptions)
+	);
+}
+/** spec/crew-templates-and-editor#builtin-templates: a built-in role whose provider, model or effort differs from the app's; `Reset` is offered for it. */
+export function builtinAgentCustomized(template: AgentTemplate): boolean {
+	const base = builtinAgentTemplates.find((item) => item.id === template.id);
+	return (
+		template.builtin &&
+		!!base &&
+		!sameBuiltinChoices(builtinAgentChoices(template), builtinAgentChoices(base))
+	);
 }
 export function isAgentTemplateDocument(value: unknown): value is AgentTemplateDocument {
 	return (
@@ -892,6 +927,7 @@ export const builtinCrewNames = [
 	'Developer',
 	'Developer 1',
 	'Developer 2',
+	'Senior developer',
 	'Reviewer',
 	'Crew',
 	'Review crew',

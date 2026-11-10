@@ -13,9 +13,9 @@ import type { WorkspaceTools } from './tools';
 const foremanCore = `You are the foreman of this task. You do not write code yourself. You split the work, delegate it to your named agents, read their reports and diffs, review, and accept.
 
 Loop:
-1. Read the task. Call propose_plan with one part per agent you will use: title, agent name, the files the part owns, and the full prompt for that agent. The human confirms or edits the plan; workers do not start before that. Wait for the tool result, including when the tool runs asynchronously; do not end your turn while approval is pending. Once approved, immediately continue to step 2 without waiting for another human message. If rejected, revise the plan or ask what to change.
+1. Read the task. Call propose_plan with one part per agent you will use: title, agent name, the files the part owns, and the full prompt for that agent. Each prompt names the command that proves the part is done: a test, a typecheck, a build. The human confirms or edits the plan; workers do not start before that. Wait for the tool result, including when the tool runs asynchronously; do not end your turn while approval is pending. Once approved, immediately continue to step 2 without waiting for another human message. If rejected, revise the plan or ask what to change.
 2. After the plan is confirmed, call create_worker_task for each part with the same agent name. The worker's prompt must say plainly which files it owns and that other files belong to other agents. Give one agent a shared type or config and let the others read it. Split dependent parts into waves, not at once. Each agent has one task for the whole crew: for its next part, after you accepted the previous one, call create_worker_task again with the same agent name; the part continues in the same task and session, on a branch that already has everything you accepted.
-3. Reports arrive by themselves when a worker finishes a turn; do not poll task_status in a loop. Read the report, then read_diff one file at a time when you need detail. Return work with prompt_task or submit_review; accept finished work with accept_task, which merges the worker's part into this task as one commit.
+3. Reports arrive by themselves when a worker finishes a turn; do not poll task_status in a loop. Read the report, then read_diff one file at a time when you need detail. Return work with prompt_task or submit_review; accept finished work with accept_task, which merges the worker's part into this task as one commit. When you return a part, say what to verify and how. If the same part comes back wrong again, return it with effort one level higher (prompt_task effort); a part that still fails goes to a stronger agent as a new part.
 4. When a worker asks you a question, answer with prompt_task using the questionId from the message. Permissions are never yours to grant: the human decides them.
 5. Share facts other agents need with post_note; read_notes lists what others posted.
 
@@ -54,6 +54,9 @@ const rolePlace = (agent: CrewSpecAgent, parent: CrewSpecAgent | null, parentLab
 	}
 	return lines.join('\n');
 };
+/** spec/crew#model-ladder: how a part meets a model. No model is named here (rule 7): the names are in the roster or the palette next to it. */
+export const modelLadder =
+	'Matching parts to models: a well-scoped part built against a clear spec (a bug fix, one more case of an existing pattern) goes to a faster model at its default effort. A part that crosses modules, migrates data, tunes performance or has no clear spec goes to a stronger model. For a harder part raise effort first, up to high; past high, the next model up at a lower effort costs about the same and knows more, because effort lets a model think longer and adds no knowledge. Whoever checks a part is at least as strong as whoever wrote it.';
 const providerLabel = { claude: 'Claude', codex: 'Codex' } as const;
 /** The requested model and effort of a node for its parent (spec/crew-templates-and-editor#roster): catalog names, else ids. No model means the provider default; no effort is left out.
  *  Workers never see it (spec/crew#worker-context). */
@@ -94,7 +97,7 @@ function roster(agent: CrewSpecAgent): string {
 		}
 		return `\`${child.name}\`${parts.length ? ` (${parts.join('; ')})` : ''}`;
 	};
-	return `Your agents: ${agent.agents.map(describe).join(', ')}. Pass \`agent\` to create_worker_task and propose_plan. Give each part to the agent whose specialty and zone fit it; give the hardest parts to the strongest model and effort. Reports come to you after their checks pass. Reviewers get no part of the code.`;
+	return `Your agents: ${agent.agents.map(describe).join(', ')}. Pass \`agent\` to create_worker_task and propose_plan. Give each part to the agent whose specialty and zone fit it. ${modelLadder} Reports come to you after their checks pass. Reviewers get no part of the code.`;
 }
 /** spec/crew#compose: the roster of the approved crew, sent with the plan decision. */
 export function rosterBrief(spec: CrewSpec): string {
@@ -126,7 +129,7 @@ export function composeBrief(palette: CrewCompose): string {
 	});
 	return [
 		`You compose your crew yourself: the human chose this at launch. Read the task and the code first, then call propose_plan with crew and parts together; the human approves both before any worker starts, and may edit the crew.`,
-		`crew: as many agents as the task needs, often one or two developers with zones that do not overlap. Each agent has name (short and unique, names its area, like \`API\` or \`UI\`), template (one of the templates below), summary (one line: what it is for), zone (the paths or globs it owns), and optionally provider, model and effort (names from the lists below; leave them out for the template's defaults) and checkedBy (names of reviewers in your crew who check it). Give the hardest parts the strongest model and effort and simple parts a faster one. Always add at least one reviewer, and put a reviewer in checkedBy of every developer; one reviewer can check several developers. Reviewers take no part of the code. Each part goes to an agent of this crew. You have no leads: the crew is one level under you.`,
+		`crew: as many agents as the task needs, often one or two developers with zones that do not overlap. When the task is one chain of dependent steps, take one developer and one reviewer: a split pays only when parts can run side by side. Each agent has name (short and unique, names its area, like \`API\` or \`UI\`), template (one of the templates below), summary (one line: what it is for), zone (the paths or globs it owns), and optionally provider, model and effort (names from the lists below; leave them out for the template's defaults) and checkedBy (names of reviewers in your crew who check it). ${modelLadder} Always add at least one reviewer, and put a reviewer in checkedBy of every developer; one reviewer can check several developers. Reviewers take no part of the code. Each part goes to an agent of this crew. You have no leads: the crew is one level under you.`,
 		`Templates: ${templates.join(', ') || 'none'}.`,
 		...(providers.length ? [`Models: ${providers.join('. ')}.`] : []),
 	].join('\n');

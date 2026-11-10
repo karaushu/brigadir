@@ -21,6 +21,7 @@ import { isBackgroundId, isBackgroundPath } from './background';
 type Check = (v: unknown) => boolean;
 const text: Check = (v) => typeof v === 'string';
 const number: Check = (v) => typeof v === 'number' && Number.isFinite(v);
+const tokens: Check = (v) => Number.isSafeInteger(v) && Number(v) >= 0;
 const bool: Check = (v) => typeof v === 'boolean';
 const nil =
 	(check: Check): Check =>
@@ -194,6 +195,7 @@ const checks: Record<string, Check> = {
 		capacity: number,
 		cost: nil(object({ amount: number, currency: text })),
 	}),
+	'turn.usage': object({ input: tokens, output: tokens, cacheRead: tokens, cacheWrite: tokens }),
 	'session.info': object({}, { title: text, updatedAt: text }),
 	'permission.requested': object({ request: permission }),
 	'permission.resolved': object({ id: text, optionId: nil(text) }, { returnMode: text }),

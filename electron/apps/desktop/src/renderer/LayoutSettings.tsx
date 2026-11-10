@@ -21,6 +21,7 @@ import {
 import { useSurfaceLayout } from './surface-layout';
 import { Button, Choice, Popup, PopupMarks, Segments, Stepper, Switch } from './ui/Controls';
 import { HelperAgentRow } from './HelperAgentRow';
+import { SubagentModelRow } from './SubagentModelRow';
 import { ActionAgentsRows } from './ActionAgents';
 import { CliUpdatesRow } from './CliUpdatesRow';
 import { AppUpdateRow } from './AppUpdates';
@@ -588,6 +589,14 @@ export function LayoutSettings({
 										</SettingsRow>
 										{/* spec/appearance#evolution-redesign: the Helper agent writes every short one-off text, the prompt hint among them. */}
 										<HelperAgentRow
+											settings={snapshot.settings}
+											locale={locale}
+											busy={busy}
+											update={(patch) => {
+												void update(patch);
+											}}
+										/>
+										<SubagentModelRow
 											settings={snapshot.settings}
 											locale={locale}
 											busy={busy}

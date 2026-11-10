@@ -1,7 +1,11 @@
 import { it, expect } from 'vitest';
 import {
+	builtinAgentCustomized,
 	builtinAgentTemplates,
 	builtinCrewTemplates,
+	isAgentTemplate,
+	seniorDeveloperTemplateId,
+	withBuiltinChoices,
 	crewIssues,
 	crewIssueText,
 	type CrewIssue,
@@ -429,4 +433,31 @@ it('resolves the specialty from the node, else the template, and validates it as
 		name: 'B',
 		template: 'tester',
 	});
+});
+// spec/crew-templates-and-editor#builtin-templates
+it('ships Senior developer with a model, and an overlay replaces its provider and choices whole', () => {
+	const senior = builtinAgentTemplates.find((item) => item.id === seniorDeveloperTemplateId)!;
+	expect(isAgentTemplate(senior)).toBe(true);
+	expect(senior).toMatchObject({
+		role: 'developer',
+		provider: 'claude',
+		choices: { configOptions: { model: 'opus', effort: 'high' } },
+	});
+	expect(builtinAgentCustomized(senior)).toBe(false);
+	const onCodex = withBuiltinChoices(senior, { id: senior.id, provider: 'codex' });
+	expect(onCodex.provider).toBe('codex');
+	expect(onCodex.choices).toBeUndefined();
+	expect(onCodex.choiceNames).toBeUndefined();
+	expect(onCodex.summary).toBe(senior.summary);
+	expect(builtinAgentCustomized(onCodex)).toBe(true);
+	// The same values in another key order are the app's own.
+	expect(
+		builtinAgentCustomized({
+			...senior,
+			choices: { configOptions: { effort: 'high', model: 'opus' } },
+		})
+	).toBe(false);
+	const developer = builtinAgentTemplates.find((item) => item.id === 'developer')!;
+	expect(builtinAgentCustomized(developer)).toBe(false);
+	expect(builtinAgentCustomized({ ...developer, provider: 'codex' })).toBe(true);
 });

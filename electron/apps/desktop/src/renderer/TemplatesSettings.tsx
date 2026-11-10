@@ -2,6 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import {
 	catalogOptions,
 	selectOption,
+	builtinAgentCustomized,
+	developerTemplateId,
+	effortRank,
+	foremanTemplateId,
+	reviewerTemplateId,
+	seniorDeveloperTemplateId,
+	templateFit,
 	builtinCrewTemplates,
 	crewSummaryLimit,
 	crewAgents,
@@ -23,6 +30,8 @@ import { CrewEditor } from './CrewEditor';
 import { Button, IconButton, Popup, Segments, Switch } from './ui/Controls';
 import { TextArea, TextInput } from './ui/Input';
 import { Glyph } from './ui/Glyph';
+import { LevelDots } from './ui/LevelDots';
+import { OptionCard } from './ui/OptionCard';
 import { MenuItem, MenuPopover, MenuSeparator } from './ui/Popover';
 import { effortOptions } from './ui/EffortIcon';
 import { optionChoices } from './ui/OptionIcon';
@@ -30,6 +39,53 @@ import styles from './TemplatesSettings.module.css';
 import { SkeletonText } from './ui/Loading';
 type Selection = { kind: 'agent' | 'crew'; id: string };
 /** SettingsTemplates (spec/crew-templates-and-editor#template-library): master-detail library. Built-ins duplicate only; own templates edit in place and save on change. */
+/** spec/crew-templates-and-editor#library-list: the role guide — the app's advice for each built-in role (spec/crew#model-ladder), no model named (rule 7). */
+const roleGuide: readonly {
+	id: string;
+	name: string;
+	glyph: 'helmet' | 'code' | 'review';
+	work: MessageKey;
+	strength: number;
+	hint: MessageKey;
+}[] = [
+	{
+		id: foremanTemplateId,
+		name: 'Foreman',
+		glyph: 'helmet',
+		work: 'Splits the work, accepts the parts',
+		strength: 3,
+		hint: 'Strongest model · Medium',
+	},
+	{
+		id: developerTemplateId,
+		name: 'Developer',
+		glyph: 'code',
+		work: 'Parts with a clear spec',
+		strength: 1,
+		hint: 'Faster model · Medium',
+	},
+	{
+		id: seniorDeveloperTemplateId,
+		name: 'Senior developer',
+		glyph: 'code',
+		work: 'Migrations, refactors, unclear specs',
+		strength: 2,
+		hint: 'Strong model · High',
+	},
+	{
+		id: reviewerTemplateId,
+		name: 'Reviewer',
+		glyph: 'review',
+		work: 'Checks the work, writes no code',
+		strength: 2,
+		hint: "Author's model or stronger",
+	},
+];
+const fits: readonly { fit: 'scoped' | 'hard' | 'lead'; label: MessageKey }[] = [
+	{ fit: 'scoped', label: 'Clear parts' },
+	{ fit: 'hard', label: 'Hard parts' },
+	{ fit: 'lead', label: 'Leading and checking' },
+];
 export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale; busy: boolean }) {
 	const [library, setLibrary] = useState<CrewLibrary | null>(null),
 		[selected, setSelected] = useState<Selection | null>(null),
@@ -242,9 +298,12 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 		saveAgent({ ...agent, choices: { ...agent.choices, configOptions }, choiceNames });
 	};
 	// spec/agents-and-providers#catalog: a built-in role keeps the person's provider, model and effort; `Reset` returns the provider defaults.
-	const customized = Boolean(
-		agent?.builtin && (agent.provider || Object.keys(agent.choices?.configOptions ?? {}).length)
-	);
+	const customized = Boolean(agent && builtinAgentCustomized(agent));
+	// spec/crew-templates-and-editor#library-list: the chosen effort among the model's levels, and the work the template fits.
+	const effort = option('effort'),
+		rank = effort ? effortRank(effort.choices, agent?.choices?.configOptions?.[effort.id]) : null,
+		pastHigh = Boolean(rank && rank.high >= 0 && rank.index > rank.high),
+		fit = agent ? templateFit(agent.role, rank) : null;
 	const reset = () => {
 		if (!agent) return;
 		const { provider: _provider, choices: _choices, choiceNames: _names, ...base } = agent;
@@ -372,6 +431,27 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 				{!library && !error && <SkeletonText lines={6} />}
 				{agent && (
 					<>
+						{/* spec/crew-templates-and-editor#library-list: which built-in role is for what; the dots are advice for the role, not data about a model (rule 7). */}
+						<div
+							className={styles.guide}
+							role="radiogroup"
+							aria-label={t(locale, 'Built-in roles')}>
+							{roleGuide.map((item) => (
+								<OptionCard
+									key={item.id}
+									name="role-guide"
+									radio={false}
+									checked={agent.id === item.id}
+									disabled={disabled}
+									glyph={item.glyph}
+									title={crewLabel(locale, item.name)}
+									description={t(locale, item.work)}
+									onChange={() => setSelected({ kind: 'agent', id: item.id })}>
+									<LevelDots count={3} filled={item.strength} label={t(locale, item.hint)} />
+									{t(locale, item.hint)}
+								</OptionCard>
+							))}
+						</div>
 						<div className={styles.head}>
 							<Glyph
 								name={
@@ -492,8 +572,34 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 										options={effortOptions(option('effort')!.choices)}
 										onChange={(value) => setChoice(option('effort')!.id, value)}
 									/>
+									{rank && rank.index >= 0 && (
+										<LevelDots
+											count={rank.count}
+											filled={rank.index + 1}
+											{...(rank.high >= 0 ? { warnFrom: rank.high + 1 } : {})}
+											label={agent.choiceNames?.[option('effort')!.id] ?? ''}
+										/>
+									)}
 								</div>
 							)}
+							{pastHigh && (
+								<div className={styles.row} data-size="m">
+									<span className={styles.label} />
+									<small className={styles.warn}>
+										{t(locale, 'An effort above High costs about as much as a stronger model.')}
+									</small>
+								</div>
+							)}
+							<div className={styles.row} data-size="m">
+								<span className={styles.label}>{t(locale, 'Best for')}</span>
+								<span className={styles.fits}>
+									{fits.map((item) => (
+										<span key={item.fit} data-fit={item.fit === fit || undefined}>
+											{t(locale, item.label)}
+										</span>
+									))}
+								</span>
+							</div>
 							{option('mode') && (
 								<div className={styles.row} data-size="m">
 									<span className={styles.label}>{t(locale, 'Mode')}</span>

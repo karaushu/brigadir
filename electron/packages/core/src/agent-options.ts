@@ -74,6 +74,50 @@ export function selectOption(
 			agentOptionKind(option) === kind && option.kind === 'select'
 	);
 }
+/** spec/crew#return-effort: an effort level of the session's current model by the catalog's value or name, whatever the case.
+ *  `null` — the model has no effort levels; `choice: null` — no such level, `levels` names what there is. */
+export function effortLevel(
+	options: readonly AgentOption[],
+	wanted: string
+): {
+	option: Extract<AgentOption, { kind: 'select' }>;
+	choice: { value: string; name: string } | null;
+	levels: string[];
+} | null {
+	const option = selectOption(options, 'effort');
+	if (!option) return null;
+	const same = (value: string) =>
+		value.trim().toLocaleLowerCase('en') === wanted.trim().toLocaleLowerCase('en');
+	const choice =
+		option.choices.find((item) => item.value === wanted) ??
+		option.choices.find((item) => same(item.name) || same(item.value)) ??
+		null;
+	return { option, choice, levels: option.choices.map((item) => item.name) };
+}
+/** spec/crew-templates-and-editor#library-list: where a level stands among the model's own levels (`default` is no level). `high` is the level
+ *  whose value or name reads `high` — a presentation rule by the word, not a table of levels (rule 7); -1 when the model has none. */
+export function effortRank(
+	choices: readonly { value: string; name: string }[],
+	value: string | boolean | null | undefined
+): { count: number; index: number; high: number } {
+	const levels = choices.filter((choice) => choice.value !== 'default'),
+		reads = (text: string) => text.trim().toLowerCase() === 'high';
+	return {
+		count: levels.length,
+		index: levels.findIndex((choice) => choice.value === value),
+		high: levels.findIndex((choice) => reads(choice.value) || reads(choice.name)),
+	};
+}
+export type TemplateFit = 'scoped' | 'hard' | 'lead';
+/** spec/crew-templates-and-editor#library-list: the work a template fits. A foreman or a reviewer leads and checks; a developer takes hard parts
+ *  from `high` effort up, scoped parts otherwise (spec/crew#model-ladder). */
+export function templateFit(
+	role: 'foreman' | 'developer' | 'reviewer',
+	rank: { index: number; high: number } | null
+): TemplateFit {
+	if (role !== 'developer') return 'lead';
+	return rank && rank.high >= 0 && rank.index >= rank.high ? 'hard' : 'scoped';
+}
 /** spec/composer#capsule-squeeze: beside the provider glyph the capsule does not repeat the provider — a leading `<provider>-` is not shown
  *  (`claude-opus-5` → `opus-5`). A presentation rule, not a table of names (rule 7): anything else stays as the agent named it. */
 export function modelDisplayName(name: string, provider: string | null | undefined): string {

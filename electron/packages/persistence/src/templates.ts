@@ -7,6 +7,7 @@ import {
 	builtinAgentChoices,
 	withBuiltinChoices,
 	builtinAgentTemplates,
+	sameBuiltinChoices,
 	builtinCrewTemplates,
 	crewIssues,
 	templateLookup,
@@ -192,7 +193,13 @@ export class TemplateStore {
 			file = await this.file('builtin', template.id);
 		if (!isBuiltinAgentChoicesDocument({ schemaVersion: 1, template: choices }))
 			throw new Error('Invalid agent template');
-		if (Object.keys(choices).length === 1) {
+		// spec/crew-templates-and-editor#builtin-templates: the app's own values are no overlay.
+		if (
+			sameBuiltinChoices(
+				choices,
+				builtinAgentChoices(builtinAgentTemplates.find((item) => item.id === template.id)!)
+			)
+		) {
 			await unlink(file).catch((error) => {
 				if (!(isRecord(error) && error.code === 'ENOENT')) throw error;
 			});

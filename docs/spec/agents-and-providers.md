@@ -22,11 +22,12 @@ Brigadir talks to coding agents through their ACP adapters (`claude-agent-acp`, 
 <a id="domain-model"></a>
 ### Domain model
 
-- **Events** (`AgentEvent.kind`): `session.started`, `session.info`, `session.failed`, `message.delta` (roles `assistant`, `thought`, `user`), `tool.changed`, `plan.changed`, `plan.document`, `plan.removed`, `options.changed`, `mode.changed`, `commands.changed`, `usage.changed`, `rate-limit.changed`, `quota.observed`, `permission.requested`, `subagent.started`, `subagent.changed`, `background.started`, `background.changed`, `turn.completed`, `unhandled`. The host adds its own boundary records (`turn.started`, `host.stopped`, `rate-limit.expired`, …).
+- **Events** (`AgentEvent.kind`): `session.started`, `session.info`, `session.failed`, `message.delta` (roles `assistant`, `thought`, `user`), `tool.changed`, `plan.changed`, `plan.document`, `plan.removed`, `options.changed`, `mode.changed`, `commands.changed`, `usage.changed`, `turn.usage`, `rate-limit.changed`, `quota.observed`, `permission.requested`, `subagent.started`, `subagent.changed`, `background.started`, `background.changed`, `turn.completed`, `unhandled`. The host adds its own boundary records (`turn.started`, `host.stopped`, `rate-limit.expired`, …).
 - **Commands** (`AgentCommand.kind`): `prompt`, `cancel`, `setMode`, `setOption`, `stopBackground`. Host-level session commands include `retryTurn` (see [sign-in recovery](#sign-in-recovery)).
 - **Tool patches.** A patch with a missing field keeps the previous value; an empty array clears the field. Boolean options and grouped selects are kept as the agent sent them.
 - **Parentage.** `_meta.claudeCode.parentToolUseId` (also on a subagent's message chunks) lives on the event record envelope, not on the event.
 - `usage.changed` carries `used`, `capacity` and the adapter's `cost`; cost is never displayed (see [usage](#usage-principles)).
+- <a id="turn-usage"></a>`turn.usage` carries the tokens of one finished turn as the adapter reported them in the `session/prompt` result: `input`, `output`, `cacheRead`, `cacheWrite` (non-negative integers; a missing counter is 0). It is journaled just before that turn's `turn.completed`, and not at all when the result has no `usage`. Nothing displays it; the crew report sums it (see [Crew](crew.md#reports)).
 
 <a id="acp-connection"></a>
 ### Connection lifecycle
@@ -90,6 +91,11 @@ Facts measured on live `claude-agent-acp` sessions; the mapper relies on them.
 | Rate limit | `usage_update._meta["_claude/rateLimit"]` (see [quota sources](#quota-sources)). |
 | Auth failure | `session/new` passes; `session/prompt` sends one assistant line with the CLI text, then fails with `RequestError` −32000 (`authRequired`). |
 | Transcripts | ACP sessions are persisted by the CLI to `~/.claude/projects/<escaped-cwd>/<session-id>.jsonl`. |
+
+<a id="subagent-model"></a>
+### Subagent model
+
+A Claude session's own subagents (search, reading, summaries) run on the session's model unless told otherwise. `agents.claudeSubagentModel` (Settings ▸ Agents ▸ `Subagent model`; null = `Same as the agent`) is a model value from the Claude catalog. The host reads it from `settings.json` when it starts an agent and passes it to the adapter as `CLAUDE_CODE_SUBAGENT_MODEL`; a value the person set in the environment stays. It applies to sessions started after the change, to every Claude task, crew members included. **Why:** a foreman on the strongest model otherwise reads files at that model's price, and a mistake in a search is cheap to spot.
 
 <a id="codex-adapter"></a>
 ## Codex adapter: verified behaviour

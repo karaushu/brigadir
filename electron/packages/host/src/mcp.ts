@@ -604,11 +604,12 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 	},
 	prompt_task: {
 		description:
-			'Send a prompt to a worker task about its open part: return work with instructions, or answer its question by passing the questionId from the question message. A next part goes through create_worker_task.',
+			'Send a prompt to a worker task about its open part: return work with instructions, or answer its question by passing the questionId from the question message. When the same part comes back wrong again, pass effort one level higher (a level name of its model, like High); it stays for the rest of its task. A next part goes through create_worker_task.',
 		shape: {
 			taskId,
 			text: z.string().min(1).max(200_000),
 			questionId: z.string().max(128).optional(),
+			effort: z.string().max(64).optional(),
 		},
 	},
 	task_status: {

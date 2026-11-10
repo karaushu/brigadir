@@ -131,6 +131,8 @@ export type AgentEvent =
 	  }
 	| { kind: 'session.info'; title?: string; updatedAt?: string }
 	| { kind: 'permission.requested'; request: PermissionRequest }
+	/** spec/agents-and-providers#turn-usage: the tokens of one finished turn as the adapter reported them; journaled just before its `turn.completed`. */
+	| { kind: 'turn.usage'; input: number; output: number; cacheRead: number; cacheWrite: number }
 	| { kind: 'turn.completed'; reason: string }
 	/** spec/agents-and-providers#sign-in-recovery: `auth` — the adapter answered ACP `authRequired`; the agent's sign-in, not the task, failed. */
 	| { kind: 'session.failed'; message: string; reason?: 'auth' }

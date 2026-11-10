@@ -67,6 +67,8 @@ export class Settings {
 								...(!('prSummary' in value.agents)
 									? { prSummary: defaultAppSettings.agents.prSummary }
 									: {}),
+								// spec/agents-and-providers#subagent-model: a file written before the setting keeps the session's model for subagents.
+								...(!('claudeSubagentModel' in value.agents) ? { claudeSubagentModel: null } : {}),
 							},
 						}
 					: {};

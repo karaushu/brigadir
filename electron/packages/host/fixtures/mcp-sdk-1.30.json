@@ -2185,7 +2185,7 @@
     },
     {
      "name": "prompt_task",
-     "description": "Send a prompt to a worker task about its open part: return work with instructions, or answer its question by passing the questionId from the question message. A next part goes through create_worker_task. Use it when a part needs changes or a worker asked you a question.",
+     "description": "Send a prompt to a worker task about its open part: return work with instructions, or answer its question by passing the questionId from the question message. When the same part comes back wrong again, pass effort one level higher (a level name of its model, like High); it stays for the rest of its task. A next part goes through create_worker_task. Use it when a part needs changes or a worker asked you a question.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -2203,6 +2203,10 @@
        "questionId": {
         "type": "string",
         "maxLength": 128
+       },
+       "effort": {
+        "type": "string",
+        "maxLength": 64
        }
       },
       "required": [
@@ -3305,7 +3309,7 @@
     },
     {
      "name": "prompt_task",
-     "description": "Send a prompt to a worker task about its open part: return work with instructions, or answer its question by passing the questionId from the question message. A next part goes through create_worker_task. Use it when a part needs changes or a worker asked you a question.",
+     "description": "Send a prompt to a worker task about its open part: return work with instructions, or answer its question by passing the questionId from the question message. When the same part comes back wrong again, pass effort one level higher (a level name of its model, like High); it stays for the rest of its task. A next part goes through create_worker_task. Use it when a part needs changes or a worker asked you a question.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3323,6 +3327,10 @@
        "questionId": {
         "type": "string",
         "maxLength": 128
+       },
+       "effort": {
+        "type": "string",
+        "maxLength": 64
        }
       },
       "required": [

@@ -91,12 +91,13 @@ All types and checks are in `packages/core/src/crew.ts`. Pure editor operations 
 <a id="builtin-templates"></a>
 ## Built-in templates
 
-The product works without any user template. A built-in **agent** template exists only where the host gives a different tool set, so there are exactly three. Any other role is a person's own template on top of one of the three. For example, a "Designer" is a Reviewer with extra instructions about screens, and a "Tester" is a Developer with extra instructions about tests.
+The product works without any user template. There is one built-in **agent** template per tool set the host gives (Foreman, Developer, Reviewer), plus **Senior developer**: a Developer on a stronger model, so a crew can pay for strength only where a part needs it. Any other role is a person's own template on top of these. For example, a "Designer" is a Reviewer with extra instructions about screens, and a "Tester" is a Developer with extra instructions about tests.
 
 | Id | Name | Role | Instructions |
 | --- | --- | --- | --- |
 | `foreman-default` | Foreman | `foreman` | Empty: the foreman brief in code is the whole role. Nodes with subordinates use this template too. |
-| `developer` | Developer | `developer` | Implement your part; own the listed files only; `read_notes` / `post_note` around shared contracts; `ask_foreman` instead of guessing; do not commit. |
+| `developer` | Developer | `developer` | Implement your part; own the listed files only; `read_notes` / `post_note` around shared contracts; `ask_foreman` instead of guessing; run the check the prompt names before ending the turn; do not commit. |
+| `senior-developer` | Senior developer | `developer` | The Developer text, plus: read the code around the change first and say in the last message what was verified and how. Specialty: `Migrations, performance work, cross-module refactors and parts without a clear spec`. Claude `opus`, effort `high`. |
 | `reviewer` | Reviewer | `reviewer` | Write no code; `read_report`, then `read_diff` one file at a time; `submit_review` with line comments; `approve` when nothing is left. |
 
 | Id | Name | Tree |
@@ -107,8 +108,8 @@ The product works without any user template. A built-in **agent** template exist
 Rules:
 
 - Built-in instructions are versioned with the code, like the foreman brief.
-- Built-in agent templates have no fixed model. Empty `choices` means the provider's default model at launch.
-- A person **can change the provider, model and effort of a built-in role**. The name, rights and instructions stay the app's. The overlay is stored in `templates/builtin/<id>.json` as `{ schemaVersion: 1, template: { id, provider?, choices?, choiceNames? } }`. Saving the overlay with no choices deletes the file. **Reset** in the library does that. See also the built-in role overlay in [Agents and providers](agents-and-providers.md).
+- Foreman, Developer and Reviewer have no fixed model: empty `choices` means the provider's default model at launch. Senior developer ships with a model and effort, like the nodes of the Review crew; the values are catalog ids, and a catalog without them shows the usual amber substitution (see [Choices at launch](#launch-check)).
+- A person **can change the provider, model and effort of every built-in role**, Senior developer included. The name, rights, specialty and instructions stay the app's. The overlay is stored in `templates/builtin/<id>.json` as `{ schemaVersion: 1, template: { id, provider?, choices?, choiceNames? } }` and replaces the app's provider and choices whole. Saving an overlay equal to the app's values deletes the file. **Reset** in the library does that; it is offered while the role differs from the app's values. See also the built-in role overlay in [Agents and providers](agents-and-providers.md).
 - Built-in crews are never edited in place. **Duplicate** one, or **Save as crew template** from the editor, which saves under a new id. Deleting a built-in crew only **hides** it (`templates/builtin/hidden-crews.json`, `{ schemaVersion: 1, crews: [...] }`). **Restore default crews** brings every hidden crew back.
 - Built-in names are stored in English and shown in the interface language (`crewLabel`, `builtinCrewNames`).
 - These ids are reserved, and an own template cannot use them: `compose` plus every built-in agent id and built-in crew id.
@@ -214,7 +215,7 @@ The foreman's brief is composed in `packages/orchestrator/src/brief.ts` (`forema
 
 The roster is the only place a foreman learns who its agents are. Each lead gets the same block for its own branch.
 
-Each child is described as `` `Name` (summary; Provider · model · effort; leads `A`, `B`; zone `p/**`; checked by `R`) ``. A reviewer gets `checks `A`, `B``, or `reviewer, checks nobody yet` when it checks no one. The roster ends with an instruction to pass `agent` to `create_worker_task` / `propose_plan`, to match parts to specialty and zone, and to give the hardest parts to the strongest model and effort.
+Each child is described as `` `Name` (summary; Provider · model · effort; leads `A`, `B`; zone `p/**`; checked by `R`) ``. A reviewer gets `checks `A`, `B``, or `reviewer, checks nobody yet` when it checks no one. The roster ends with an instruction to pass `agent` to `create_worker_task` / `propose_plan`, to match parts to specialty and zone, and the [model ladder](crew.md#model-ladder).
 
 - **Model and effort** (`specModel`) come from `requestedChoices`: the name from `choiceNames`, else the id, or `provider default model` when no model is chosen. The host finds the effort option by the same kinds the controls use (`thought_level`, `effort`, `reasoning_effort`, `thinking_level`). If no effort is chosen, or the model has none, that part is omitted.
 - A brief written before a worker started is not rewritten when that worker's model turns out to be unavailable.
@@ -252,7 +253,7 @@ Each child is described as `` `Name` (summary; Provider · model · effort; lead
 | Hint | "Drag an agent onto an agent to add a check." |
 | Selection | The first agent is selected when the editor opens. Clicking empty canvas clears the selection, and the inspector then shows "Select an agent in the tree". |
 
-**Add agent popup** (opened from `+ Agent`, the node `+` or the Subordinates `+`; titled "Agent templates"): first the built-ins (Developer, Reviewer, then Foreman with the tail "For a branch"), each with its provider glyph. Then the person's own templates, with the pencil glyph and the model as the tail. Then **Empty agent…**. The popup does not use the words "built-in" or "own"; the pencil glyph marks the difference. Picking an item adds the node at once under a unique name (`Developer`, `Developer 2`, …), selects it and focuses the inspector's name field with the text selected, so the node can be renamed straight away. Pressing Esc while the name is empty removes that new node.
+**Add agent popup** (opened from `+ Agent`, the node `+` or the Subordinates `+`; titled "Agent templates"): first the built-ins (Developer, Senior developer, Reviewer, then Foreman with the tail "For a branch"), each with its provider glyph. Then the person's own templates, with the pencil glyph and the model as the tail. Then **Empty agent…**. The popup does not use the words "built-in" or "own"; the pencil glyph marks the difference. Picking an item adds the node at once under a unique name (`Developer`, `Developer 2`, …), selects it and focuses the inspector's name field with the text selected, so the node can be renamed straight away. Pressing Esc while the name is empty removes that new node.
 
 **Checks by drag.** Drag a reviewer onto a developer, or a developer onto a reviewer, among the children of one parent. While dragging over a valid target, a preview edge is drawn in the resulting direction: the same amber dashed line at 45 % opacity. An impossible pair gets no preview, and dropping it shows an error. A pair under different leads shows "Could not add the check: the agents are under different leads." To remove an edge, use the × on its horizontal segment (visible on hover) or the × on the checker's chip in **Checked by**.
 
@@ -311,6 +312,17 @@ Templates are **global, not per project**. Repository-specific knowledge ("alway
 - `−` deletes an own template or hides a built-in crew. It is disabled for built-in agents.
 - Detail header: **Reset** (only on a customized built-in agent), **Duplicate** (adds ` 2` to the name), **Edit…** (own crews only; disabled while the crew has issues) and **Export…**.
 - **Agent detail**: Name, Specialty (not for foreman templates or built-ins), Provider (a provider turned off in Settings ▸ Agents is disabled unless the template already uses it; changing the provider clears the choices), Model, Effort, Mode, **Rights ▸ Checker** (switch between `developer` and `reviewer`; caption "Reads reports and changes, submits reviews, and approves work. Writes no code."), and **Instructions** (caption "Agent role, in English").
+- **Role guide**: above the agent detail, the four built-in roles as a 2 × 2 grid of `ui/OptionCard` cards without the radio mark. Each card has the role's glyph and name, its work in one line, three strength dots (`ui/LevelDots`) and a hint for model and effort. The card of the selected built-in is chosen; pressing a card selects that template. The guide names no model (rule 7): dots and hints are the app's advice for the role, the [model ladder](crew.md#model-ladder) as a picture.
+
+  | Role | Work | Dots | Hint |
+  | --- | --- | --- | --- |
+  | Foreman | Splits the work, accepts the parts | 3 | `Strongest model · Medium` |
+  | Developer | Parts with a clear spec | 1 | `Faster model · Medium` |
+  | Senior developer | Migrations, refactors, unclear specs | 2 | `Strong model · High` |
+  | Reviewer | Checks the work, writes no code | 2 | `Author's model or stronger` |
+
+- **Best for** row under Effort: `Clear parts · Hard parts · Leading and checking`, with the one that fits this template in full colour and the rest muted (`templateFit`). A foreman or a reviewer leads and checks; a developer fits hard parts when its effort is `high` or above, clear parts otherwise.
+- **Effort dots** beside the Effort popup: one dot per level of the model (`default` is not a level), filled up to the chosen one. Levels past `high` fill amber, and a line under the row says "An effort above High costs about as much as a stronger model." `high` is found by the level's value or name, a presentation rule and not a table of levels (rule 7); a model without such a level never warns.
 - A built-in agent is read-only apart from provider, model and effort: its name is locked, its Mode and Rights are disabled, and its instructions are shown read-only so they can still be read and copied in full.
 - Agent edits **autosave** 300 ms after the last change, without a busy state, so the focused field keeps its focus.
 - **Crew detail**: the Agents list and Levels, edited with the same `CrewEditor`.

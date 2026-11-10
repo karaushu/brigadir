@@ -82,13 +82,25 @@ Composed of: the fixed core (`foremanCore`), the lead's place in the tree (leads
 
 The core says:
 1. **Role:** never modify files; split, delegate to named agents, read reports and diffs, review, accept.
-2. **Loop:** `propose_plan` (one part per agent: title, agent, owned files, full prompt) → wait for the result, do not end the turn while approval is pending, continue immediately once approved → `create_worker_task` per part with the same agent name → reports arrive by themselves (no `task_status` polling) → `read_report`, then `read_diff` one file at a time → return with `prompt_task` / `submit_review`, accept with `accept_task`.
+2. **Loop:** `propose_plan` (one part per agent: title, agent, owned files, full prompt that names the command proving the part: a test, a typecheck, a build) → wait for the result, do not end the turn while approval is pending, continue immediately once approved → `create_worker_task` per part with the same agent name → reports arrive by themselves (no `task_status` polling) → `read_report`, then `read_diff` one file at a time → return with `prompt_task` / `submit_review`, accept with `accept_task`. A part that comes back wrong a second time is returned with `effort` one level higher (see [Returning with more effort](#return-effort)).
 3. **Splitting:** each worker's prompt states which files it owns and that others belong to other agents; a shared type/config goes to one agent, the rest read it; dependent parts go in waves. Each agent has one task for the whole crew; its next part is another `create_worker_task` after accepting the previous one.
 4. **Questions and permissions:** answer a worker's question with `prompt_task` and its `questionId`; permissions are never the foreman's.
 5. **Notes:** share facts with `post_note`, read others' with `read_notes`.
 6. **Research rule:** a question handed to a subagent is not researched in parallel by the foreman; end the message and wait for the result (the adapter holds the turn until background subagents finish), or run the subagent in the foreground when the next step depends on it. **Why:** the foreman's session lives for the whole crew, so every file it reads is carried by every later step.
 
-The **roster** (`roster`) lists each child with summary, provider · model · effort (catalog names; "provider default model" when unset), `leads …`, zone, `checked by …`, and for reviewers `checks …`. It tells the foreman to pass `agent` to `create_worker_task` and `propose_plan`, to give the hardest parts to the strongest model and effort, that reports come after checks pass, and that reviewers get no code.
+The **roster** (`roster`) lists each child with summary, provider · model · effort (catalog names; "provider default model" when unset), `leads …`, zone, `checked by …`, and for reviewers `checks …`. It tells the foreman to pass `agent` to `create_worker_task` and `propose_plan`, how to match a part to a model (the [model ladder](#model-ladder)), that reports come after checks pass, and that reviewers get no code.
+
+<a id="model-ladder"></a>
+### Model ladder
+
+One paragraph of the brief (`modelLadder`), the same in the roster and in the compose palette. It names no model (rule 7): the foreman reads the names in the roster or the palette.
+
+1. A well-scoped part built against a clear spec (a bug fix, one more case of an existing pattern) goes to a faster model at its default effort.
+2. A part that crosses modules, migrates data, tunes performance or has no clear spec goes to a stronger model.
+3. For a harder part, raise effort first, up to `high`. Past `high`, the next model up at a lower effort costs about the same and knows more: effort lets a model think longer, it adds no knowledge.
+4. Whoever checks a part is at least as strong as whoever wrote it.
+
+**Why:** a crew on one model pays the top price for every part; the check edge is what makes a cheaper developer safe.
 
 <a id="worker-context"></a>
 ### Worker context (`workerContext`)
@@ -122,7 +134,7 @@ Workers never start before the person approves the root foreman's plan.
 ### Composing the crew (`Foreman composes`)
 
 - `CrewLaunch` has a third kind `{compose: true, template?}`. Main stores in `task.crew.compose` a palette snapshot: every library agent template except the foreman, expanded as nodes (provider, model, effort, specialty, instructions), plus each enabled provider's catalog models and each model's effort levels. Template edits after launch do not affect the task.
-- While `compose` is set and the root has no agents, the brief carries the palette instead of a roster (`composeBrief`): read the task and code first, then call `propose_plan` with `crew` and `parts` together; as many agents as needed, non-overlapping zones; strongest model/effort on the hardest parts; **at least one reviewer, and every developer in some reviewer's `checkedBy`** (one reviewer may check several); reviewers take no code; no leads (one level under the foreman).
+- While `compose` is set and the root has no agents, the brief carries the palette instead of a roster (`composeBrief`): read the task and code first, then call `propose_plan` with `crew` and `parts` together; as many agents as needed, non-overlapping zones; one developer and one reviewer when the task is a single chain of dependent steps (a split pays only when parts can run side by side); models by the [model ladder](#model-ladder); **at least one reviewer, and every developer in some reviewer's `checkedBy`** (one reviewer may check several); reviewers take no code; no leads (one level under the foreman).
 - `crew[]` entries: `name` (≤ 80, short, unique, names its area), `template` (palette template name), optional `summary` (≤ 240), `zone`, `provider`, `model`, `effort` (palette names), `checkedBy` (reviewer names). The host builds nodes (a different provider drops the template's choices), checks the editor's rules (unique names, a reviewer checks only developers, zones) and then the parts against this crew. Unknown template or model → tool error listing what is available.
 - **Reviewer rule:** the host rejects a composed crew with no reviewer, or with a developer nobody checks; the English error names the palette's reviewer templates and the unchecked developers. It applies only when the palette has a template with the reviewer role. The person's own edit is not checked: `Edit crew…` may remove the reviewer.
 - The plan card shows a `Crew members` section above the parts (provider glyph, name, template role, model · effort, specialty, `checks …`). `Edit crew…` opens the crew editor on the proposed crew as a one-off crew; on `Done` parts are re-checked and part agents are chosen from the new list. The foreman itself cannot be changed there (`The foreman is already working: its settings stay.`). Approve/reject covers crew and parts together.
@@ -141,6 +153,15 @@ Workers never start before the person approves the root foreman's plan.
 - **Read everything, write your own.** Reading covers all project repos. Writing is limited by the worktree (writes cannot leak into other tasks) and checked afterwards: the report lists **changes outside the assigned files** — visibility, not a ban.
 - Workers count against the concurrent agent limit (`agents.maxConcurrent`); beyond it they wait `queued` and start when a slot frees, at most two launching at a time.
 - Reviewers of an agent start together with its first part, as file-less workers (`readOnlyAgent: true`: the host refuses their ACP file writes with "You check the work and do not write code."), and wait. A reviewer whose checks are all over is shut down; its worktree stays.
+
+<a id="return-effort"></a>
+### Returning with more effort
+
+`prompt_task(taskId, text, effort?)`: `effort` is a level of the worker's current model, by the catalog's name or value (`High`).
+
+- The host reads the levels from the worker session's latest options, sets the level with `setOption` before the prompt, records it in the worker's `effectiveChoices`, and replies `effort` with the level's name. It stays for the rest of the member's task.
+- Errors (English, with what is available): an unknown level lists the model's levels; a model without effort levels says so; `effort` with `questionId` is refused, because an answer returns into a running turn.
+- The order the brief gives: first say what to verify and how; on the second return raise effort one level; a part that still fails goes to a stronger agent as a new part. The host never raises effort by itself, and never changes a worker's model: a session's cache and reasoning belong to its model.
 
 <a id="parts"></a>
 ### One task per crew member; next parts
@@ -170,6 +191,7 @@ When a worker's turn ends, the worker host pushes a report to the parent (outbox
 - files (up to 200) with status and counts, project-relative paths;
 - `Changes outside the assigned files (n)` (up to 20 names);
 - checks with verdicts and round, and the disputed note when reviewers did not agree;
+- `Usage: N turns, X in, Y out, Z cached` — tokens of the member's task so far, summed from its `turn.usage` records: `in` is input plus cache writes, `cached` is cache reads (see [Agents and providers](agents-and-providers.md#turn-usage)); the line is left out when the provider reported none. No model and no money: reviewers read the same report, and the foreman has the model in its roster;
 - `Notes: N new` (never a separate push);
 - the question the worker ended with;
 - the worker's last message (≤ 4000 chars);
@@ -341,7 +363,8 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 - A reviewer that also owns a part of the code.
 - Automatic choice of the number of agents beyond `Foreman composes`.
 - Asking on `Stop` of a foreman whether to stop its workers too (default yes).
-- Foreman indicators (tokens, worst context, quota) aggregated over its workers.
+- Foreman indicators (tokens, worst context, quota) aggregated over its workers; tokens per accepted part on the plan card.
+- Raising a worker's effort automatically after a disputed check.
 
 <a id="non-goals"></a>
 ## Non-goals
@@ -354,4 +377,5 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 - A separate `answer_worker` tool, or `prompt_task` as a second way to start a next part.
 - Reviewers accepting work.
 - The foreman merging branches through its own tools, rebasing worker branches, or forbidding overlaps in the plan (overlaps are shown instead).
+- Changing a worker's model in the middle of its task.
 - Claude's own subagents as workers (they have no worktree, states, diffs or review loop).

@@ -9,6 +9,9 @@ import {
 	fastOptionOn,
 	capsuleShows,
 	typicalChoices,
+	effortLevel,
+	effortRank,
+	templateFit,
 } from './agent-options';
 import type { AgentOption } from './agent';
 it('orders only advertised options without changing labels or losing unknown options', () => {
@@ -218,4 +221,41 @@ it('the capsule shows model and effort always, the mode off its typical choice, 
 	expect(capsuleShows(select('ultracode', 'model_config', 'off', ['on', 'off']))).toBe(false);
 	expect(capsuleShows(select('ultracode', 'model_config', 'on', ['on', 'off']))).toBe(true);
 	expect(capsuleShows(select('choice', null, 'off', ['on', 'off', 'auto']))).toBe(true);
+});
+// spec/crew#return-effort
+it('finds an effort level by value or name whatever the case, and names the levels when there is none', () => {
+	const effort: AgentOption = {
+		id: 'effort',
+		category: 'thought_level',
+		name: 'Effort',
+		description: null,
+		kind: 'select',
+		value: 'medium',
+		choices: [
+			{ value: 'medium', name: 'Medium', description: null, group: null },
+			{ value: 'high', name: 'High', description: null, group: null },
+		],
+	};
+	expect(effortLevel([effort], ' HIGH ')?.choice).toMatchObject({ value: 'high', name: 'High' });
+	expect(effortLevel([effort], 'max')).toMatchObject({ choice: null, levels: ['Medium', 'High'] });
+	expect(effortLevel([], 'high')).toBeNull();
+});
+// spec/crew-templates-and-editor#library-list
+it('ranks an effort among the levels of its model and says what work a template fits', () => {
+	const levels = [
+		{ value: 'default', name: 'Default' },
+		{ value: 'low', name: 'Low' },
+		{ value: 'medium', name: 'Medium' },
+		{ value: 'high', name: 'High' },
+		{ value: 'max', name: 'Max' },
+	];
+	expect(effortRank(levels, 'max')).toEqual({ count: 4, index: 3, high: 2 });
+	expect(effortRank(levels, undefined)).toEqual({ count: 4, index: -1, high: 2 });
+	// A model without a level that reads `high` never warns.
+	expect(effortRank([{ value: 'a', name: 'Deep' }], 'a').high).toBe(-1);
+	expect(templateFit('developer', effortRank(levels, 'medium'))).toBe('scoped');
+	expect(templateFit('developer', effortRank(levels, 'high'))).toBe('hard');
+	expect(templateFit('developer', null)).toBe('scoped');
+	expect(templateFit('reviewer', effortRank(levels, 'low'))).toBe('lead');
+	expect(templateFit('foreman', null)).toBe('lead');
 });

@@ -104,7 +104,7 @@ export const reviewCrewTemplateId = 'review';
 export const composeCrewId = 'compose';
 
 const developerInstructions =
-	'You implement your part of the work. You own the listed files and directories: change only them, other files belong to other agents. Read anything you need across the project. Keep changes small and coherent; do not refactor outside your zone. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the check your task prompt names (a test, a typecheck, a build) and say what it showed. Do not commit; the host snapshots your tree.';
+	'You implement your part of the work. You own the listed files and directories: change only them, other files belong to other agents. Read anything you need across the project. Keep changes small and coherent; do not refactor outside your zone. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the check your task prompt names (a test, a typecheck, a build) and say what it showed. If it fails for a reason outside your files, say so instead of working around it. Do not commit; the host snapshots your tree.';
 export const builtinAgentTemplates: readonly AgentTemplate[] = [
 	{ id: foremanTemplateId, name: 'Foreman', role: 'foreman', instructions: '', builtin: true },
 	{
@@ -132,7 +132,7 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		role: 'reviewer',
 		builtin: true,
 		instructions:
-			'You do not write code. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Send review comments with submit_review: point at the line, say what is wrong and what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
+			'You do not write code. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Look for what a check cannot show: wrong behaviour, a contract changed under other agents, work outside the assigned files. The report ends with the last message of the agent: it must name the check it ran and what the check showed; when it does not, ask for it. Comment only on what must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line, say what is wrong and what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
 	},
 ];
 /** One built-in crew: two developers, one reviewer checking both. */

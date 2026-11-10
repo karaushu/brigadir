@@ -1,7 +1,14 @@
 import { expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { NewSessionResponse, SessionUpdate } from '@agentclientprotocol/sdk';
-import { mapOptions, mapSession, mapTool, mapUpdate } from './mapper';
+import { mapOptions, mapSession, mapTool, mapUpdate, turnUsage } from './mapper';
+// spec/agents-and-providers#turn-usage
+it('turns the usage of a prompt result into one record; a missing counter is 0, no usage is no record', () => {
+	expect(
+		turnUsage({ totalTokens: 30, inputTokens: 10, outputTokens: 20, cachedReadTokens: null })
+	).toEqual({ kind: 'turn.usage', input: 10, output: 20, cacheRead: 0, cacheWrite: 0 });
+	expect(turnUsage(undefined)).toBeNull();
+});
 for (const provider of ['claude', 'codex']) {
 	const fixture = JSON.parse(
 		readFileSync(new URL(`../fixtures/${provider}.json`, import.meta.url), 'utf8')

@@ -300,6 +300,7 @@ leads a crew.
 | Foreman | Бригадир | The agent that splits work, assigns parts, and accepts them. | |
 | Worker / Workers | Воркер / Воркери | A task that does one part under the foreman. | |
 | Developer / Reviewer | Розробник / Ревʼюер | Built-in agent templates. | |
+| Senior developer | Старший розробник | Built-in agent template: a Developer on a stronger model. | |
 | Crew members | Склад | The plan card section with the members the foreman proposes. | «ростер», «слот» |
 | Foreman composes | Бригадир збере | The crew popup item: the foreman proposes the members. | «Авто» |
 | crew from the foreman | склад від бригадира | | |

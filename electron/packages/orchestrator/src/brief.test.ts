@@ -178,7 +178,7 @@ it('gives a composing foreman the palette instead of a roster, and the roster on
 	const brief = foremanBrief(composing, 'root');
 	expect(brief).toContain('You compose your crew yourself');
 	expect(brief).toContain(
-		'Templates: `Developer` (developer; default Claude · provider default model), `Reviewer` (reviewer; default Claude · provider default model), `Tester` (developer; Writes Playwright e2e tests; give it every test part; default Claude · provider default model).'
+		'Templates: `Developer` (developer; default Claude · provider default model), `Senior developer` (developer; Migrations, performance work, cross-module refactors and parts without a clear spec; default Claude · Opus · High), `Reviewer` (reviewer; default Claude · provider default model), `Tester` (developer; Writes Playwright e2e tests; give it every test part; default Claude · provider default model).'
 	);
 	expect(brief).toContain('Models: Claude: `OPUS` (effort LOW, MAX), `HAIKU` (effort LOW).');
 	expect(brief).toContain(

@@ -30,6 +30,7 @@ import {
 	crewNoteLimit,
 	crewNotePageLimit,
 	isAgentOption,
+	effortLevel,
 	type AgentOption,
 	type AgentProvider,
 	type AgentTask,
@@ -262,6 +263,29 @@ function planReply(proposed: readonly CrewPlanPart[], edited: readonly CrewPlanP
 	return edited
 		? { edited: true, parts: edited }
 		: { edited: false, parts: proposed.map((part) => ({ title: part.title, agent: part.agent })) };
+}
+/** spec/crew#reports: the tokens of a task so far, summed from its `turn.usage` records; null when the provider reported none. */
+function taskUsage(records: readonly EventRecord[]) {
+	const total = { turns: 0, input: 0, output: 0, cached: 0 };
+	for (const record of records) {
+		const event = record.event;
+		if (event.kind !== 'turn.usage') continue;
+		total.turns++;
+		total.input += event.input + event.cacheWrite;
+		total.output += event.output;
+		total.cached += event.cacheRead;
+	}
+	return total.turns ? total : null;
+}
+/** The options the worker's session advertised last (`session.started`, then every `options.changed`). */
+function sessionOptions(records: readonly EventRecord[]): AgentOption[] {
+	let options: AgentOption[] = [];
+	for (const record of records) {
+		const event = record.event;
+		if (event.kind === 'session.started' || event.kind === 'options.changed')
+			options = event.options.filter(isAgentOption);
+	}
+	return options;
 }
 function busyIn(records: readonly EventRecord[]) {
 	return (
@@ -2171,7 +2195,12 @@ export class CrewHost {
 		const worker = this.worker(input.taskId),
 			text = typeof input.text === 'string' ? input.text : '';
 		if (!text.trim()) throw new Error('text is required');
+		const wanted = typeof input.effort === 'string' ? input.effort.trim() : '';
 		if (typeof input.questionId === 'string' && input.questionId) {
+			if (wanted)
+				throw new Error(
+					'effort goes with returned work, not with an answer: the answer returns into the running turn.'
+				);
 			const question = this.questions.find((item) => item.id === input.questionId);
 			if (!question || question.workerTaskId !== worker.taskId)
 				throw new Error('Unknown questionId for this worker');
@@ -2187,8 +2216,33 @@ export class CrewHost {
 				`The part «${worker.title}» of ${worker.name} was accepted. Give its next part with create_worker_task; it continues in the same task and session.`
 			);
 		const link = await this.spawn(this.workerKey(worker));
+		const effort = wanted ? await this.raiseEffort(worker, link, wanted) : null;
 		await link.peer.request('command', { kind: 'prompt', text });
-		return { sent: true, taskId: worker.taskId };
+		return { sent: true, taskId: worker.taskId, ...(effort ? { effort } : {}) };
+	}
+	/** spec/crew#return-effort: a level of the worker's current model, by the catalog's name or value; set before the prompt, kept for the rest of its task. */
+	private async raiseEffort(worker: CrewWorkerRecord, link: Link, wanted: string) {
+		const level = effortLevel(
+			sessionOptions((await this.journal(this.workerKey(worker))).records),
+			wanted
+		);
+		if (!level) throw new Error(`The model of ${worker.name} has no effort levels.`);
+		const { option, choice } = level;
+		if (!choice)
+			throw new Error(
+				`Unknown effort «${wanted}» for ${worker.name}. Its levels: ${level.levels.join(', ')}.`
+			);
+		if (choice.value !== option.value) {
+			await link.peer.request('command', { kind: 'setOption', id: option.id, value: choice.value });
+			await this.serial(async () => {
+				worker.effectiveChoices = {
+					...worker.effectiveChoices,
+					configOptions: { ...worker.effectiveChoices?.configOptions, [option.id]: choice.value },
+				};
+				await this.saveWorkers();
+			});
+		}
+		return choice.name;
 	}
 	private async taskStatus(input: Record<string, unknown>) {
 		const worker = this.worker(input.taskId),
@@ -2254,6 +2308,7 @@ export class CrewHost {
 			(note) => note.seq > seenNotes && note.authorTaskId !== worker.taskId
 		).length;
 		this.reportSeqs.set(`notes:${worker.taskId}`, notes.at(-1)?.seq ?? seenNotes);
+		const usage = taskUsage(journal.records);
 		return buildReport({
 			taskId: worker.taskId,
 			nodeId: worker.nodeId,
@@ -2271,6 +2326,7 @@ export class CrewHost {
 			round,
 			reviews,
 			part: worker.part ?? 1,
+			...(usage ? { usage } : {}),
 		});
 	}
 	private async readReport(input: Record<string, unknown>) {

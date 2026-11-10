@@ -113,6 +113,11 @@ const uk = {
 	Developer: 'Розробник',
 	'Developer 1': 'Розробник 1',
 	'Developer 2': 'Розробник 2',
+	'Senior developer': 'Старший розробник',
+	'Subagent model': 'Модель субагентів',
+	'Same as the agent': 'Як в агента',
+	"Claude's own subagents search and read on this model.":
+		'На цій моделі власні субагенти Claude шукають і читають.',
 	Reviewer: 'Ревʼюер',
 	'The plan has no parts.': 'У плані немає частин.',
 	'No agent named {agent}. Crew agents: {agents}.':

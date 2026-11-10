@@ -9,6 +9,7 @@ import {
 	fastOptionOn,
 	capsuleShows,
 	typicalChoices,
+	effortLevel,
 } from './agent-options';
 import type { AgentOption } from './agent';
 it('orders only advertised options without changing labels or losing unknown options', () => {
@@ -218,4 +219,22 @@ it('the capsule shows model and effort always, the mode off its typical choice, 
 	expect(capsuleShows(select('ultracode', 'model_config', 'off', ['on', 'off']))).toBe(false);
 	expect(capsuleShows(select('ultracode', 'model_config', 'on', ['on', 'off']))).toBe(true);
 	expect(capsuleShows(select('choice', null, 'off', ['on', 'off', 'auto']))).toBe(true);
+});
+// spec/crew#return-effort
+it('finds an effort level by value or name whatever the case, and names the levels when there is none', () => {
+	const effort: AgentOption = {
+		id: 'effort',
+		category: 'thought_level',
+		name: 'Effort',
+		description: null,
+		kind: 'select',
+		value: 'medium',
+		choices: [
+			{ value: 'medium', name: 'Medium', description: null, group: null },
+			{ value: 'high', name: 'High', description: null, group: null },
+		],
+	};
+	expect(effortLevel([effort], ' HIGH ')?.choice).toMatchObject({ value: 'high', name: 'High' });
+	expect(effortLevel([effort], 'max')).toMatchObject({ choice: null, levels: ['Medium', 'High'] });
+	expect(effortLevel([], 'high')).toBeNull();
 });

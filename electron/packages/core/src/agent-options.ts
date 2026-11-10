@@ -74,6 +74,26 @@ export function selectOption(
 			agentOptionKind(option) === kind && option.kind === 'select'
 	);
 }
+/** spec/crew#return-effort: an effort level of the session's current model by the catalog's value or name, whatever the case.
+ *  `null` — the model has no effort levels; `choice: null` — no such level, `levels` names what there is. */
+export function effortLevel(
+	options: readonly AgentOption[],
+	wanted: string
+): {
+	option: Extract<AgentOption, { kind: 'select' }>;
+	choice: { value: string; name: string } | null;
+	levels: string[];
+} | null {
+	const option = selectOption(options, 'effort');
+	if (!option) return null;
+	const same = (value: string) =>
+		value.trim().toLocaleLowerCase('en') === wanted.trim().toLocaleLowerCase('en');
+	const choice =
+		option.choices.find((item) => item.value === wanted) ??
+		option.choices.find((item) => same(item.name) || same(item.value)) ??
+		null;
+	return { option, choice, levels: option.choices.map((item) => item.name) };
+}
 /** spec/composer#capsule-squeeze: beside the provider glyph the capsule does not repeat the provider — a leading `<provider>-` is not shown
  *  (`claude-opus-5` → `opus-5`). A presentation rule, not a table of names (rule 7): anything else stays as the agent named it. */
 export function modelDisplayName(name: string, provider: string | null | undefined): string {

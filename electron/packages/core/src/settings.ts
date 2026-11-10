@@ -52,6 +52,8 @@ export type AgentDefaults = {
 	/** spec/tasks#archive: completed tasks go to the archive after this many days; null never. */ archiveAfterDays: ArchiveAfterDays;
 	/** spec/browser-and-simulator#background: agents act on any site in the browser without the `Act on <domain>` card; off by default. */ browserActAnywhere: boolean;
 	/** spec/appearance#evolution-redesign: the review of a PR writes the agent summary by itself on its first open; on by default. */ prSummary: boolean;
+	/** spec/agents-and-providers#subagent-model: the Claude catalog model its own subagents run on; null — the session's model. */ claudeSubagentModel:
+		string | null;
 };
 export const maxConcurrentLimit = 99;
 /** spec/appearance#accent: palette order is the swatch order in Settings ▸ Appearance; `system` follows macOS. */
@@ -258,6 +260,7 @@ export const defaultAppSettings: AppSettings = {
 		archiveAfterDays: defaultArchiveAfterDays,
 		browserActAnywhere: false,
 		prSummary: true,
+		claudeSubagentModel: null,
 	},
 	notifications: defaultNotificationPreferences,
 	editor: {
@@ -286,8 +289,13 @@ export const defaultAppSettings: AppSettings = {
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 12 &&
+		Object.keys(value).length === 13 &&
 		typeof value.prSummary === 'boolean' &&
+		(value.claudeSubagentModel === null ||
+			(typeof value.claudeSubagentModel === 'string' &&
+				value.claudeSubagentModel.length > 0 &&
+				value.claudeSubagentModel.length <= 200 &&
+				!/[\0\r\n]/.test(value.claudeSubagentModel))) &&
 		typeof value.copyEnvFiles === 'boolean' &&
 		typeof value.browserActAnywhere === 'boolean' &&
 		isArchiveAfterDays(value.archiveAfterDays) &&

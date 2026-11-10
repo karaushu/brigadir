@@ -51,6 +51,7 @@ test('stores own templates next to built-ins, refuses built-in writes and report
 		expect(library.agents.map((item) => item.id)).toEqual([
 			'foreman-default',
 			'developer',
+			'senior-developer',
 			'reviewer',
 			'designer',
 		]);
@@ -203,6 +204,7 @@ test('a built-in crew is hidden on delete and comes back on restore; built-in ag
 		expect((await store.read()).agents.map((item) => item.id)).toEqual([
 			'foreman-default',
 			'developer',
+			'senior-developer',
 			'reviewer',
 			'designer',
 		]);

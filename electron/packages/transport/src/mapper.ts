@@ -229,6 +229,19 @@ export function mapUpdate(update: ACP.SessionUpdate): AgentEvent {
 	}
 }
 
+/** spec/agents-and-providers#turn-usage: the `usage` of a `session/prompt` result as one record; a missing counter is 0, no `usage` is no record. */
+export function turnUsage(usage: unknown): Extract<AgentEvent, { kind: 'turn.usage' }> | null {
+	if (!isRecord(usage)) return null;
+	const count = (value: unknown) =>
+		typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+	return {
+		kind: 'turn.usage',
+		input: count(usage.inputTokens),
+		output: count(usage.outputTokens),
+		cacheRead: count(usage.cachedReadTokens),
+		cacheWrite: count(usage.cachedWriteTokens),
+	};
+}
 /** Claude ACP extension, observed by the v1 probe; never inferred from context usage. */
 export function mapRateLimit(
 	update: ACP.SessionUpdate

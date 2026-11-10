@@ -99,6 +99,7 @@ describe('crew palette (spec/crew#compose)', () => {
 		expect(isComposing(spec)).toBe(true);
 		expect(spec.compose!.templates.map((item) => [item.name, item.role, item.template])).toEqual([
 			['Developer', 'developer', 'developer'],
+			['Senior developer', 'developer', 'senior-developer'],
 			['Reviewer', 'reviewer', 'reviewer'],
 			['Designer', 'reviewer', 'designer'],
 		]);
@@ -203,7 +204,7 @@ describe('composeCrew (spec/crew#compose)', () => {
 			};
 		expect(fail(undefined)).toMatch(/pass crew/);
 		expect(fail([{ name: 'A', template: 'Tester' }])).toBe(
-			'Unknown template Tester for A. Templates: Developer.'
+			'Unknown template Tester for A. Templates: Developer, Senior developer.'
 		);
 		expect(fail([{ name: 'A', template: 'Developer', model: 'sonnet' }])).toBe(
 			'Unknown Claude model sonnet for A. Models: OPUS, HAIKU.'

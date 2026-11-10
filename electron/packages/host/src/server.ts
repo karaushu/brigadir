@@ -122,6 +122,7 @@ import {
 import { humanToolsAllowed, isWorkspaceTool, simulatorQueued } from '@brigadir/orchestrator';
 import { serveMcp } from './mcp';
 import { ModuleSettings } from './modules';
+import { claudeSubagentModel } from './agent-settings';
 import { terminalColors } from './terminal-colors';
 import { idleBlocker, idleTimeout } from './idle';
 export type HostConfig = {
@@ -2555,9 +2556,11 @@ export async function startHost(config: HostConfig) {
 		let replaying = previous?.kind === 'session.started';
 		sentScopeContext = '';
 		briefPending = !replaying;
+		const subagentModel = task.provider === 'claude' ? await claudeSubagentModel(store.root) : null;
 		transport = await AgentTransport.start({
 			provider: task.provider!,
 			cwd: project.path,
+			...(subagentModel ? { subagentModel } : {}),
 			additionalDirectories: scopeDirectories(snapshots?.current.scopes ?? []),
 			...(config.adapter ? { adapter: config.adapter } : {}),
 			readTextFile: (path, line, limit) => agentFiles.read(path, line, limit),

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
 	catalogOptions,
 	selectOption,
+	builtinAgentCustomized,
 	builtinCrewTemplates,
 	crewSummaryLimit,
 	crewAgents,
@@ -242,9 +243,7 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 		saveAgent({ ...agent, choices: { ...agent.choices, configOptions }, choiceNames });
 	};
 	// spec/agents-and-providers#catalog: a built-in role keeps the person's provider, model and effort; `Reset` returns the provider defaults.
-	const customized = Boolean(
-		agent?.builtin && (agent.provider || Object.keys(agent.choices?.configOptions ?? {}).length)
-	);
+	const customized = Boolean(agent && builtinAgentCustomized(agent));
 	const reset = () => {
 		if (!agent) return;
 		const { provider: _provider, choices: _choices, choiceNames: _names, ...base } = agent;

@@ -16,7 +16,20 @@ export type ReportInput = {
 	round: number | null;
 	reviews: { reviewer: string; comments: number; approved: boolean }[];
 	/** spec/crew#parts: the member's part; the header names it from the second on. */ part?: number;
+	/** spec/crew#reports: tokens of the member's task so far, from its `turn.usage` records; absent when the provider reported none. */ usage?: {
+		turns: number;
+		input: number;
+		output: number;
+		cached: number;
+	};
 };
+/** 1234 → `1.2k`, 1234567 → `1.2M`: a report line, not a meter. */
+const short = (value: number) =>
+	value >= 1_000_000
+		? `${(value / 1_000_000).toFixed(1)}M`
+		: value >= 1000
+			? `${(value / 1000).toFixed(1)}k`
+			: String(value);
 /** Project-relative path of a changed file: its repo prefix plus the path inside that repo. */
 export function projectRelative(
 	scope: Scope | undefined,
@@ -77,6 +90,10 @@ export function buildReport(input: ReportInput): { summary: CrewReportSummary; t
 	if (input.reviews.length)
 		lines.push(
 			`Checks: ${input.reviews.map((review) => `${review.reviewer} ${review.approved ? 'approved' : `${review.comments} comment${review.comments === 1 ? '' : 's'}`}`).join('; ')}${input.round !== null ? ` (round ${input.round})` : ''}.${input.verdict === 'disputed' ? ' The reviewer did not agree after two rounds; both sides are in the review thread. You decide.' : ''}`
+		);
+	if (input.usage)
+		lines.push(
+			`Usage: ${input.usage.turns} turn${input.usage.turns === 1 ? '' : 's'}, ${short(input.usage.input)} in, ${short(input.usage.output)} out, ${short(input.usage.cached)} cached.`
 		);
 	if (input.newNotes) lines.push(`Notes: ${input.newNotes} new. Call read_notes to read them.`);
 	if (input.question) lines.push(`The worker ended with a question: ${input.question}`);

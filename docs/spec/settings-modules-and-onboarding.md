@@ -82,7 +82,7 @@ A settings row (`SettingsRow`, and the `Rights` row in Templates) whose control 
 | Card | Rows |
 | --- | --- |
 | `Providers` | `Claude Code`, `Codex`: switch + `AgentStatus` (found / sign-in state, `Sign in…`, `Check`, `How to install`); `CliUpdatesRow` |
-| `Agents` | `Default agent` (Claude / Codex segments), `Helper agent` capsule, `Customize per action` rows, `Launch in` (`GUI` / `Terminal`), `Isolation for new tasks` (`No isolation` / `Worktree`), `Max concurrent` (0 = `Unlimited`, up to 99), keep-awake row, `Prompt suggestion` |
+| `Agents` | `Default agent` (Claude / Codex segments), `Helper agent` capsule, `Subagent model` (Claude catalog models, first item `Same as the agent`; shown while Claude is on; caption "Claude's own subagents search and read on this model."), `Customize per action` rows, `Launch in` (`GUI` / `Terminal`), `Isolation for new tasks` (`No isolation` / `Worktree`), `Max concurrent` (0 = `Unlimited`, up to 99), keep-awake row, `Prompt suggestion` |
 | `Tasks` | `Archive completed` (`Never`, after 1 / 3 / 7 / 30 days) |
 
 - A disabled provider is not offered in New task, in templates or as `Default agent`. Tasks that already use it still open. A provider that was not found cannot be turned on. The last enabled provider's switch is disabled. Turning off the default provider moves `agents.provider` to one that is on.
@@ -101,6 +101,7 @@ Everything the intro can change lives in `settings.json` (`schemaVersion` 1). A 
 | `onboarding.completedVersion` | number ≥ 1 or `null`; `null` | nowhere; `null` opens the intro on start (`onboardingVersion` = 1) |
 | `agents.enabled` | `{claude, codex}`, both `true`, at least one `true` | Agents ▸ `Providers` |
 | `agents.provider` | `claude` \| `codex`, `claude`; must be enabled | Agents ▸ `Default agent` |
+| `agents.claudeSubagentModel` | Claude catalog model value or `null`, `null` | Agents ▸ `Subagent model` ([Agents and providers](agents-and-providers.md#subagent-model)) |
 | `agents.transport` | `gui` \| `terminal`, `gui` | Agents ▸ `Launch in` |
 | `agents.isolation` | `in-place` \| `worktree`, `in-place` | Agents ▸ `Isolation for new tasks` |
 | `editor.codeTheme` | `brigadir` \| `vscode` \| `intellij`, `brigadir` | Editor ▸ `Code theme` |

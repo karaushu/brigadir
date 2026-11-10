@@ -17,6 +17,7 @@ import {
 	foremanTemplateId,
 	developerTemplateId,
 	reviewerTemplateId,
+	seniorDeveloperTemplateId,
 	removeCrewAgent,
 	removeCrewCheck,
 	renameCrewAgent,
@@ -284,29 +285,31 @@ export function CrewEditor({
 	};
 	const templateItems = (parentId: string) => (
 		<>
-			{[developerTemplateId, reviewerTemplateId, foremanTemplateId].map((id) => {
-				const item = lookup(id)!;
-				return (
-					<MenuItem
-						key={id}
-						icon={
-							<Glyph
-								name={
-									id === foremanTemplateId
-										? 'helmet'
-										: item.provider === 'codex'
-											? 'openai'
-											: 'claude'
-								}
-								size={12}
-							/>
-						}
-						tail={id === foremanTemplateId ? t(locale, 'For a branch') : undefined}
-						onSelect={() => addAgent(parentId, id)}>
-						{crewLabel(locale, item.name)}
-					</MenuItem>
-				);
-			})}
+			{[developerTemplateId, seniorDeveloperTemplateId, reviewerTemplateId, foremanTemplateId].map(
+				(id) => {
+					const item = lookup(id)!;
+					return (
+						<MenuItem
+							key={id}
+							icon={
+								<Glyph
+									name={
+										id === foremanTemplateId
+											? 'helmet'
+											: item.provider === 'codex'
+												? 'openai'
+												: 'claude'
+									}
+									size={12}
+								/>
+							}
+							tail={id === foremanTemplateId ? t(locale, 'For a branch') : undefined}
+							onSelect={() => addAgent(parentId, id)}>
+							{crewLabel(locale, item.name)}
+						</MenuItem>
+					);
+				}
+			)}
 			{library.agents.some((item) => !item.builtin) && <MenuSeparator />}
 			{library.agents
 				.filter((item) => !item.builtin)

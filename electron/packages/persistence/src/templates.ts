@@ -9,6 +9,8 @@ import {
 	builtinAgentTemplates,
 	sameBuiltinChoices,
 	builtinCrewTemplates,
+	withBuiltinCrew,
+	sameCrewTree,
 	crewIssues,
 	templateLookup,
 	isId,
@@ -30,7 +32,8 @@ export type TemplateLibrary = {
 const hiddenCrewsPath = 'templates/builtin/hidden-crews.json';
 const isBuiltinCrewId = (id: string) => builtinCrewTemplates.some((item) => item.id === id);
 /** spec/crew-templates-and-editor#template-library library: builtins come from code, own templates from `templates/agents|crews/<id>.json`. Builtins are never written;
- *  a person's provider, model and effort for a built-in role live beside them in `templates/builtin/<id>.json` (spec/agents-and-providers#catalog). */
+ *  a person's provider, model and effort for a built-in role, and their edit of a built-in crew, live beside them in `templates/builtin/<id>.json`
+ *  (spec/agents-and-providers#catalog, spec/crew-templates-and-editor#builtin-templates). */
 export class TemplateStore {
 	private tail: Promise<unknown> = Promise.resolve();
 	private pending = 0;
@@ -78,6 +81,34 @@ export class TemplateStore {
 			}
 		}
 		return found;
+	}
+	/** spec/crew-templates-and-editor#builtin-templates: a missing file is the app's crew; a broken one, or one that fails against the agent library, is an
+	 *  issue and the app's crew stays. */
+	private async builtinCrews(
+		lookup: ReturnType<typeof templateLookup>,
+		issues: ReadIssue[]
+	): Promise<CrewTemplate[]> {
+		const crews: CrewTemplate[] = [];
+		for (const base of builtinCrewTemplates) {
+			try {
+				const doc = await readDocument(await this.file('builtin', base.id));
+				if (
+					!isCrewTemplateDocument(doc) ||
+					doc.template.id !== base.id ||
+					crewIssues(doc.template, lookup).length
+				)
+					throw new ReadFailure('invalid_document');
+				crews.push(withBuiltinCrew(base, doc.template));
+			} catch (error) {
+				crews.push(base);
+				if (isRecord(error) && error.code === 'ENOENT') continue;
+				issues.push({
+					path: `templates/builtin/${base.id}.json`,
+					code: error instanceof ReadFailure ? error.code : 'unreadable',
+				});
+			}
+		}
+		return crews;
 	}
 	/** spec/pull-requests-and-ci#review-crew: a missing file hides nothing; a broken one is an issue and hides nothing either. Ids of crews the app
 	 *  no longer ships are dropped. */
@@ -164,10 +195,11 @@ export class TemplateStore {
 				});
 		}
 		const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+		const builtinCrews = await this.builtinCrews(lookup, issues);
 		return {
 			agents: [...builtins, ...agents.sort(byName)],
 			crews: [
-				...builtinCrewTemplates.filter((item) => !hiddenCrews.includes(item.id)),
+				...builtinCrews.filter((item) => !hiddenCrews.includes(item.id)),
 				...crews.sort(byName),
 			],
 			issues,
@@ -215,8 +247,28 @@ export class TemplateStore {
 			choices
 		);
 	}
+	/** The whole tree is kept under the app's id and name; the app's own tree removes the file, and the crew is the app's again. */
+	private async saveBuiltinCrew(template: CrewTemplate) {
+		const base = builtinCrewTemplates.find((item) => item.id === template.id)!,
+			edited = withBuiltinCrew(base, template),
+			file = await this.file('builtin', base.id);
+		if (!isCrewTemplateDocument({ schemaVersion: 1, template: edited }))
+			throw new Error('Invalid crew template');
+		const issues = crewIssues(edited, templateLookup((await this.read()).agents));
+		if (issues.length) throw new Error(issues[0]!.message);
+		if (sameCrewTree(edited, base)) {
+			await unlink(file).catch((error) => {
+				if (!(isRecord(error) && error.code === 'ENOENT')) throw error;
+			});
+			return base;
+		}
+		await mkdir(await this.dir('builtin'), { recursive: true, mode: 0o700 });
+		await atomicJson(file, { schemaVersion: 1, template: edited });
+		return edited;
+	}
 	saveCrew(template: CrewTemplate) {
 		return this.serial(async () => {
+			if (template.builtin && isBuiltinCrewId(template.id)) return this.saveBuiltinCrew(template);
 			if (template.builtin || isBuiltinTemplateId(template.id))
 				throw new Error('Built-in templates are read-only');
 			if (!isCrewTemplateDocument({ schemaVersion: 1, template }))

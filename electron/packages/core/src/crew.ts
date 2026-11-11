@@ -876,6 +876,33 @@ export function builtinAgentCustomized(template: AgentTemplate): boolean {
 		!sameBuiltinChoices(builtinAgentChoices(template), builtinAgentChoices(base))
 	);
 }
+const stable = (value: unknown): unknown =>
+	Array.isArray(value)
+		? value.map(stable)
+		: isRecord(value)
+			? Object.fromEntries(
+					Object.entries(value)
+						.filter(([, item]) => item !== undefined)
+						.sort(([a], [b]) => a.localeCompare(b))
+						.map(([key, item]) => [key, stable(item)])
+				)
+			: value;
+/** Whether two crews have the same tree, whatever the key order. */
+export function sameCrewTree(a: CrewTemplate, b: CrewTemplate): boolean {
+	return JSON.stringify(stable(a.root)) === JSON.stringify(stable(b.root));
+}
+/** spec/crew-templates-and-editor#builtin-templates: a person's edit of a built-in crew keeps the app's id and name. */
+export function withBuiltinCrew(
+	base: CrewTemplate,
+	edited: CrewTemplate | undefined
+): CrewTemplate {
+	return edited ? { ...edited, id: base.id, name: base.name, builtin: true } : base;
+}
+/** spec/crew-templates-and-editor#builtin-templates: a built-in crew whose tree differs from the app's; `Reset` is offered for it. */
+export function builtinCrewCustomized(template: CrewTemplate): boolean {
+	const base = builtinCrewTemplates.find((item) => item.id === template.id);
+	return template.builtin && !!base && !sameCrewTree(template, base);
+}
 export function isAgentTemplateDocument(value: unknown): value is AgentTemplateDocument {
 	return (
 		isRecord(value) &&

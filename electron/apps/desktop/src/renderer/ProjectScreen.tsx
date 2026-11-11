@@ -1,4 +1,5 @@
 import { AgentsButton } from './LiveAgents';
+import { followBoardFocus } from './board-focus';
 import {
 	crewNeedsYou,
 	crewWorkers,
@@ -373,15 +374,12 @@ export function ProjectScreen({
 		try {
 			await operation();
 			await useWorkspace.getState().load();
-			requestAnimationFrame(() => {
-				if (active.current && focused instanceof HTMLElement && !focused.isConnected)
-					(
-						document.querySelector<HTMLElement>(`[data-board-task="${id}"]`) ??
-						document.querySelector<HTMLElement>(
-							'[data-project-screen] [data-board-task], [data-project-screen] button'
-						)
-					)?.focus({ preventScroll: true });
-			});
+			followBoardFocus(
+				focused,
+				id,
+				'[data-project-screen] [data-board-task], [data-project-screen] button',
+				() => active.current
+			);
 		} catch {
 			if (active.current)
 				toastError(

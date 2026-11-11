@@ -215,6 +215,7 @@ The board and the list are two views of one grouping, `boardSections` in `packag
 - A task moved back to `Backlog` keeps its journal and baseline. Starting it again resumes. Its card reads `Backlog` instead of `Not started` (`hasStarted`).
 - Only the person sets `completed`: by a drop or a menu item. Late agent events never overwrite it. A `failed` task moved to `Completed` loses its error line, but the reason stays in the journal.
 - **A drop never navigates.** The screen stays where it is whatever the action does to the agent. A click right after a drag is swallowed (300 ms latch). Every drop has an equivalent in the task context menu, so dragging adds no capability.
+- **Keyboard focus follows the card.** After a move from the context menu, the card that had focus gets it back in its new column, also when the move lands later than the menu action (a stop that waits for the turn, up to 16 s). If the person has focused something else meanwhile, focus stays there.
 - First prompts are serialized in the main `LaunchQueue`. A duplicate request for the same task joins the one in flight. Cancelling a lock-conflict dialog keeps the task in the backlog. Starting a worktree that is already prepared again does not repeat setup or the first prompt.
 
 <a id="board-card"></a>

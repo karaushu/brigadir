@@ -1,6 +1,14 @@
 import { expect, it } from 'vitest';
 import { builtinAgentTemplates, type AgentTemplate } from './crew';
-import { soloInstructions, soloRole, soloRoleChecks, soloRoleTemplates } from './solo-role';
+import {
+	agentTemplateAttachment,
+	soloInstructions,
+	soloRole,
+	soloRoleChecks,
+	soloRoleTemplates,
+	subagentRole,
+} from './solo-role';
+import { attachmentMention } from './prompt-tokens';
 import { isAgentTask, isTaskRole } from './workspace';
 // spec/tasks#sheet-role
 it('offers every template that is not a foreman, and every built-in one has a solo text', () => {
@@ -53,4 +61,32 @@ it('accepts a task with a role and one whose role was taken away', () => {
 	expect(isAgentTask({ ...task, agentRole: soloRole(builtinAgentTemplates[4]!) })).toBe(true);
 	expect(isAgentTask({ ...task, agentRole: null })).toBe(true);
 	expect(isAgentTask({ ...task, agentRole: { templateId: 'x', name: '' } })).toBe(false);
+});
+// spec/composer#agent-blocks
+it('gives a mentioned template to the agent as a role for a subagent', () => {
+	for (const template of soloRoleTemplates(builtinAgentTemplates)) {
+		const role = subagentRole(template);
+		expect(role).toContain(`You work as ${template.name}, a subagent`);
+		// The agent that started it stands where the person does in a solo role; no crew tools either.
+		expect(role).not.toMatch(/the person|ask_foreman|read_report|submit_review|post_note/);
+		expect(role.includes('change no files')).toBe(soloRoleChecks(template));
+	}
+	const tester = builtinAgentTemplates.find((item) => item.id === 'tester')!,
+		attachment = agentTemplateAttachment(tester);
+	expect(attachment.name).toBe('Agent template · Tester');
+	expect(attachmentMention({ kind: 'text', name: attachment.name })).toEqual({
+		kind: 'agent',
+		label: 'Tester',
+	});
+	expect(attachment.text).toContain('start a subagent with your own subagent tool');
+	expect(attachment.text.endsWith(subagentRole(tester))).toBe(true);
+	const own: AgentTemplate = {
+		id: 'db',
+		name: 'Database expert',
+		role: 'developer',
+		builtin: false,
+		instructions: 'You write migrations. When unsure, call ask_foreman.',
+	};
+	expect(subagentRole(own)).toContain('turn to the agent that started you instead');
+	expect(subagentRole(own).endsWith(own.instructions)).toBe(true);
 });

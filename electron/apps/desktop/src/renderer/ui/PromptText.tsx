@@ -135,11 +135,13 @@ export function PromptText({
 							? owner?.crew
 								? 'helmet'
 								: 'person'
-							: mention.kind === 'text'
-								? 'code'
-								: mention.kind === 'folder'
-									? 'folder'
-									: 'file'
+							: mention.kind === 'agent'
+								? 'person'
+								: mention.kind === 'text'
+									? 'code'
+									: mention.kind === 'folder'
+										? 'folder'
+										: 'file'
 					}
 					size={10}
 				/>

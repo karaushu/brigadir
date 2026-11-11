@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	agentToken,
 	attachmentLines,
 	attachmentMention,
 	attachmentToken,
@@ -144,4 +145,16 @@ describe('spec/composer#mentions: згадки токенами в тексті 
 		expect(text).not.toContain('First answer');
 		expect(text).toContain('"kit/src/index.ts" | +3 -1 (modified)');
 	});
+});
+it('spec/composer#prompt-tokens: an agent template is a token until the message goes', () => {
+	const text = `run ${agentToken('tester')} on it`;
+	expect(promptParts(text).map((part) => (part.kind === 'text' ? part.text : part.token))).toEqual([
+		'run ',
+		{ kind: 'agent', id: 'tester' },
+		' on it',
+	]);
+	expect(promptDisplayText(text, [], [], [{ id: 'tester', name: 'Tester' }])).toBe(
+		'run @Tester on it'
+	);
+	expect(promptDisplayText(text)).toBe('run @tester on it');
 });

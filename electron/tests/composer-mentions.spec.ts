@@ -8,7 +8,7 @@ import { hideWorkArea, hidePanel } from './layout';
 const desktop = resolve('apps/desktop'),
 	executablePath = createRequire(join(desktop, 'package.json'))('electron') as string;
 
-// spec/composer#mention-menu, spec/composer#mentions: `@` opens the menu with tabs All · Files · Tasks · Models at once; a pick is a pill in its place in the text
+// spec/composer#mention-menu, spec/composer#mentions: `@` opens the menu with tabs All · Files · Agents · Tasks · Models at once; a pick is a pill in its place in the text
 // and reaches the agent there; `/` lists the agent's commands and a pick stays text.
 test('composer @ menu has tabs, picks become pills in the text and reach the agent in order; / lists agent commands @area:chat', async () => {
 	test.setTimeout(90000);
@@ -178,11 +178,24 @@ test('composer @ menu has tabs, picks become pills in the text and reach the age
 		await message.pressSequentially('do a @');
 		const mention = page.getByRole('listbox', { name: 'Mention' }),
 			tabs = page.getByRole('tablist', { name: 'Mention groups' });
-		await expect(tabs.getByRole('tab')).toHaveText(['All4', 'Files0', 'Tasks2', 'Models2']);
+		await expect(tabs.getByRole('tab')).toHaveText([
+			'All11',
+			'Files0',
+			'Agents7',
+			'Tasks2',
+			'Models2',
+		]);
 		await expect(tabs.getByRole('tab', { name: /^All/ })).toHaveAttribute('aria-selected', 'true');
 		await expect(message).toHaveAttribute('aria-controls', /.+/);
 		// All: every group in one list under its caption; the crew agent stands under its task.
 		await expect(mention.getByRole('option')).toHaveText([
+			/Developer/,
+			/Senior developer/,
+			/Tester/,
+			/Technical writer/,
+			/Reviewer/,
+			/Designer/,
+			/Security reviewer/,
 			/Fresh task/,
 			/Developer · src/,
 			/opus/,
@@ -270,7 +283,13 @@ test('composer @ menu has tabs, picks become pills in the text and reach the age
 		// No match: the menu stays and says the word stays text (spec/composer#mentions); Esc closes it for this word only.
 		await message.pressSequentially('@zzzz');
 		await expect(mention.getByRole('status')).toHaveText('No matches');
-		await expect(tabs.getByRole('tab')).toHaveText(['All0', 'Files0', 'Tasks0', 'Models0']);
+		await expect(tabs.getByRole('tab')).toHaveText([
+			'All0',
+			'Files0',
+			'Agents0',
+			'Tasks0',
+			'Models0',
+		]);
 		await message.press('Escape');
 		await expect(mention).toHaveCount(0);
 		await message.pressSequentially('z');
@@ -285,7 +304,16 @@ test('composer @ menu has tabs, picks become pills in the text and reach the age
 		await expect(pills).toHaveCount(3);
 		await message.press('Meta+z');
 		await expect(pills).toHaveCount(4);
-		// Send: the attachment and the task summary stand where the text puts them, the model goes as text.
+		// spec/composer#mention-menu: once a query is typed, a matching agent template stands above the files; its pick is a pill.
+		await message.press('End');
+		await message.pressSequentially(' then run @test');
+		await expect(mention.getByRole('option').first()).toContainText('Tester');
+		await message.press('Enter');
+		await expect(pills).toHaveCount(5);
+		await expect(pills.nth(4)).toHaveText('Tester');
+		await expect(pills.nth(4)).toHaveAttribute('data-kind', 'agent');
+		expect(await editorText(message)).toMatch(/ then run @\[agent:tester\] $/);
+		// Send: the attachment, the task summary and the agent template stand where the text puts them, the model goes as text.
 		await page.getByRole('button', { name: 'Resume', exact: true }).click();
 		await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
 		await message.press('End');
@@ -315,8 +343,12 @@ test('composer @ menu has tabs, picks become pills in the text and reach the age
 			'<attached_context name="components/">',
 			' with ',
 			'<attached_context name="Task summary · Fresh task">',
-			' using `sonnet` (Claude)',
+			' using `sonnet` (Claude) then run ',
+			'<attached_context name="Agent template · Tester">',
 		]);
+		// spec/composer#agent-blocks: the template reaches the agent as a role for a subagent.
+		expect(blocks[7]!.text).toContain('start a subagent with your own subagent tool');
+		expect(blocks[7]!.text).toContain('You work as Tester, a subagent');
 		expect(blocks[3]!.text).toContain('Directory reference:');
 		expect(blocks[5]!.text).toContain('Original request:\nSplit the exports');
 		expect(blocks[5]!.text).toContain('Latest agent answer:\nMoved the icons out.');
@@ -330,6 +362,7 @@ test('composer @ menu has tabs, picks become pills in the text and reach the age
 			reply.locator('button[data-kind="folder"]', { hasText: 'components' })
 		).toBeVisible();
 		await expect(reply.locator('button', { hasText: 'Button.tsx' })).toBeVisible();
+		await expect(reply.locator('button[data-kind="agent"]', { hasText: 'Tester' })).toBeVisible();
 		// spec/composer#slash-menu, spec/composer#mentions: `/` lists the agent's commands, the composer's actions and our MCP tools, its groups as tabs with
 		// All first; Tab switches the tab, Enter picks, and the pick stays text the agent reads.
 		await message.pressSequentially('/');

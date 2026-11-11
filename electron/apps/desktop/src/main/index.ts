@@ -225,6 +225,7 @@ import {
 	soloRole,
 	soloRoleChecks,
 	soloRoleTemplates,
+	agentTemplateAttachment,
 	isBrowserCommand,
 	isRecord,
 	isTaskAgentRequest,
@@ -3435,6 +3436,17 @@ void app.whenReady().then(async () => {
 			kind: 'text',
 			name: `${taskSummaryPrefix}${task.title}`.slice(0, 200),
 			text: taskSummaryText(task, journal.records, diff.stat).slice(0, 256 * 1024),
+		});
+	});
+	// spec/composer#agent-blocks: the template as the library has it now; the attachment keeps what the agent read.
+	handle('attachment:agent-template', async (key, templateId) => {
+		const template = soloRoleTemplates(
+			(await (await TemplateStore.at(process.env.BRIGADIR_DATA_DIR)).read()).agents
+		).find((item) => item.id === templateId);
+		if (!template) throw new Error('The agent template is unavailable');
+		return new Attachments(await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).create(key, {
+			kind: 'text',
+			...agentTemplateAttachment(template),
 		});
 	});
 	registerRead('quota:read', () => quota.read());

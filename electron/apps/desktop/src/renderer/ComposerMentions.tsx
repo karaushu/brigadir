@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyBinding } from '@codemirror/view';
 import {
 	agentSlashCommands,
+	agentToken,
+	crewLabel,
+	soloRoleTemplates,
 	attachmentLabel,
 	attachmentMention,
 	attachmentToken,
@@ -16,6 +19,7 @@ import {
 	t,
 	taskToken,
 	type AgentTask,
+	type AgentTemplate,
 	type EventRecord,
 	type FileEntry,
 	type Locale,
@@ -33,6 +37,7 @@ import {
 	type MentionTrigger,
 } from './mention-editor';
 import { attachTaskFile, useTaskState } from './task-state';
+import { templateWork } from './template-work';
 import { useWorkspace } from './store';
 import { Glyph } from './ui/Glyph';
 import { glyphMarkup } from './ui/glyph-markup';
@@ -100,8 +105,8 @@ type Models = { provider: 'claude' | 'codex'; choices: { value: string; name: st
 
 /**
  * spec/composer#mentions: the task composer is the sheet's editor (`useMentionEditor`). Mentions are tokens in the text: a file or a pasted
- * image is an attachment in its place, a task is attached as its summary when the message goes, a model is a reference in
- * the text. `@` has the tabs All · Files · Tasks · Models; `/` as the first character lists the agent's commands (spec/composer#mention-menu).
+ * image is an attachment in its place, a task is attached as its summary and an agent template as a role for a subagent when
+ * the message goes, a model is a reference in the text. `@` has the tabs All · Files · Agents · Tasks · Models; `/` as the first character lists the agent's commands (spec/composer#mention-menu).
  */
 export function useComposerEditor({
 	task,
@@ -139,7 +144,8 @@ export function useComposerEditor({
 	const workspaceTasks = useWorkspace((state) => state.workspace?.tasks);
 	const [trigger, setTrigger] = useState<MentionTrigger | null>(null),
 		[found, setFound] = useState<{ query: string; entries: readonly FileEntry[] } | null>(null),
-		[models, setModels] = useState<Models | null>(null);
+		[models, setModels] = useState<Models | null>(null),
+		[templates, setTemplates] = useState<readonly AgentTemplate[] | null>(null);
 	const [restored, setRestored] = useState<ReadonlyMap<string, PromptAttachment | null>>(new Map());
 	const picking = useRef(0),
 		placing = useRef(new Set<string>());
@@ -217,6 +223,24 @@ export function useComposerEditor({
 		};
 	}, [trigger?.kind, models === null, task.provider]);
 
+	// Agents: the library's templates each time `@` opens (Settings may have changed them), and once for a draft that names one.
+	const namesAgent = text.includes('@[agent:');
+	useEffect(() => {
+		if (trigger?.kind !== '@' && !(namesAgent && !templates)) return;
+		let alive = true;
+		void window.brigadir.readTemplates().then(
+			(library) => {
+				if (alive) setTemplates(soloRoleTemplates(library.agents));
+			},
+			() => {
+				if (alive) setTemplates((current) => current ?? []);
+			}
+		);
+		return () => {
+			alive = false;
+		};
+	}, [trigger?.kind === '@', namesAgent]);
+
 	const projectTasks = useMemo(
 		() =>
 			(workspaceTasks ?? []).filter(
@@ -290,6 +314,15 @@ export function useComposerEditor({
 				),
 			};
 		});
+		// Agents: every template that is not a foreman, by the name shown and by the English one (spec/composer#mention-menu).
+		const agents: MentionGroupItem[] = (templates ?? [])
+			.filter((item) => matches(item.name) || matches(crewLabel(locale, item.name)))
+			.map((item) => ({
+				key: `agent:${item.id}`,
+				label: crewLabel(locale, item.name),
+				tail: templateWork(locale, item),
+				icon: <Glyph name="person" size={12} />,
+			}));
 		const modelItems: MentionGroupItem[] = (models ?? []).flatMap((entry) =>
 			entry.choices
 				.filter((choice) => matches(choice.value) || matches(choice.name))
@@ -315,6 +348,13 @@ export function useComposerEditor({
 				items: files,
 				status: found ? null : t(locale, 'Searching…'),
 			},
+			{
+				id: 'agents',
+				label: t(locale, 'Agents'),
+				items: agents,
+				status: templates ? null : t(locale, 'Loading…'),
+				...(needle ? { lead: true } : {}),
+			},
 			{ id: 'tasks', label: t(locale, 'Tasks'), items: tasks },
 			{
 				id: 'models',
@@ -328,6 +368,7 @@ export function useComposerEditor({
 		query,
 		found,
 		projectTasks,
+		templates,
 		models,
 		slash,
 		matched,
@@ -352,6 +393,25 @@ export function useComposerEditor({
 				mono: true,
 				title: `${token.model} · ${providerName(token.provider)}\n${t(locale, 'Goes to the agent as text: the model id and the provider. The task model does not change.')}`,
 			};
+		if (token.kind === 'agent') {
+			const item = templates?.find((entry) => entry.id === token.id);
+			return item
+				? {
+						kind: 'pill',
+						type: 'agent',
+						label: crewLabel(locale, item.name),
+						glyph: glyphs.person,
+						title: `${crewLabel(locale, item.name)}\n${t(locale, 'Goes to the agent as a role for a subagent: the agent starts one when you ask.')}`,
+					}
+				: {
+						kind: 'pill',
+						type: 'agent',
+						label: templates ? token.id : '…',
+						glyph: glyphs.person,
+						missing: true,
+						...(templates ? { title: t(locale, 'The agent template could not be attached.') } : {}),
+					};
+		}
 		if (token.kind === 'task') {
 			const item = projectTasks.find((entry) => entry.id === token.id);
 			return item
@@ -400,11 +460,13 @@ export function useComposerEditor({
 			glyph:
 				mention.kind === 'task'
 					? glyphs.helmet
-					: mention.kind === 'text'
-						? glyphs.code
-						: mention.kind === 'folder'
-							? glyphs.folder
-							: glyphs.file,
+					: mention.kind === 'agent'
+						? glyphs.person
+						: mention.kind === 'text'
+							? glyphs.code
+							: mention.kind === 'folder'
+								? glyphs.folder
+								: glyphs.file,
 			mono: mention.kind === 'file' || mention.kind === 'folder',
 			title: item.name,
 			attachment: item.id,
@@ -422,6 +484,8 @@ export function useComposerEditor({
 		[...restored.entries()].map(([id, item]) => `${id}:${item ? 1 : 0}`).join(',') +
 		'|' +
 		projectTasks.map((item) => `${item.id}:${item.title}:${item.crew ? 1 : 0}`).join(',') +
+		'|' +
+		(templates?.map((item) => `${item.id}:${item.name}`).join(',') ?? '-') +
 		'|' +
 		locale;
 
@@ -458,6 +522,7 @@ export function useComposerEditor({
 				return entry.insert;
 			}
 			if (kind === 'task') return taskToken(value);
+			if (kind === 'agent') return agentToken(value);
 			if (kind === 'model') {
 				const [provider, ...model] = value.split(':');
 				return modelToken(provider as 'claude' | 'codex', model.join(':'));
@@ -543,7 +608,7 @@ export function useComposerEditor({
 			}
 	}, [text, attachments]);
 
-	/** What goes to the agent: task tokens become their summaries now (spec/composer#mentions); ids in the order of the text. */
+	/** What goes to the agent: task tokens become their summaries and agent templates their role texts now (spec/composer#agent-blocks); ids in the order of the text. */
 	async function prepare(value: string): Promise<{ text: string; attachmentIds: string[] } | null> {
 		let out = '';
 		for (const part of promptParts(value)) {
@@ -559,6 +624,15 @@ export function useComposerEditor({
 					);
 				} catch {
 					onError(t(locale, 'The task summary could not be attached.'));
+					return null;
+				}
+			} else if (part.kind === 'token' && part.token.kind === 'agent') {
+				try {
+					out += attachmentToken(
+						(await window.brigadir.attachAgentTemplate(task, part.token.id)).id
+					);
+				} catch {
+					onError(t(locale, 'The agent template could not be attached.'));
 					return null;
 				}
 			} else out += part.kind === 'text' ? part.text : part.raw;

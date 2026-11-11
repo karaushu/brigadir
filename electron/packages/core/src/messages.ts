@@ -2612,6 +2612,9 @@ const uk = {
 		'Модель задачі не змінюється.',
 	'The attachment is no longer available.': 'Вкладення вже недоступне.',
 	'The task summary could not be attached.': 'Не вдалося прикріпити підсумок задачі.',
+	'The agent template could not be attached.': 'Не вдалося прикріпити шаблон агента.',
+	'Goes to the agent as a role for a subagent: the agent starts one when you ask.':
+		'Іде агенту як роль для сабагента: агент запускає його, коли ви попросите.',
 	// spec/notifications-slack-notes-and-schedules#message-classes: class T toasts — the region and texts that name the action and its object.
 	'Notifications (toasts)': 'Сповіщення',
 	'{repo} · changed': '{repo} · змінено',

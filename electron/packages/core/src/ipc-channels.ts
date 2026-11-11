@@ -2460,6 +2460,13 @@ export const ipcTable = {
 			a[0].projectId === a[1].projectId &&
 			a[0].id !== a[1].id,
 	},
+	attachAgentTemplate: {
+		kind: 'invoke',
+		channel: 'attachment:agent-template',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTaskKey(a[0]) && isId(a[1]),
+	},
 	readAttachmentThumbnail: {
 		kind: 'invoke',
 		channel: 'attachment:thumbnail',

@@ -41,6 +41,7 @@ import { OptionCard } from './ui/OptionCard';
 import { MenuItem, MenuPopover, MenuSeparator } from './ui/Popover';
 import { effortOptions } from './ui/EffortIcon';
 import { optionChoices } from './ui/OptionIcon';
+import { templateWork } from './template-work';
 import styles from './TemplatesSettings.module.css';
 import { SkeletonText } from './ui/Loading';
 type Selection = { kind: 'agent' | 'crew'; id: string };
@@ -51,7 +52,6 @@ const roleGuide: readonly {
 	name: string;
 	glyph:
 		'helmet' | 'code' | 'review' | 'check-pass' | 'note' | 'settings-appearance' | 'scope-lock';
-	work: MessageKey;
 	strength: number;
 	hint: MessageKey;
 }[] = [
@@ -59,7 +59,6 @@ const roleGuide: readonly {
 		id: foremanTemplateId,
 		name: 'Foreman',
 		glyph: 'helmet',
-		work: 'Splits the work, accepts the parts',
 		strength: 3,
 		hint: 'Strongest model · Medium',
 	},
@@ -67,7 +66,6 @@ const roleGuide: readonly {
 		id: developerTemplateId,
 		name: 'Developer',
 		glyph: 'code',
-		work: 'Parts with a clear spec',
 		strength: 1,
 		hint: 'Faster model · Medium',
 	},
@@ -75,7 +73,6 @@ const roleGuide: readonly {
 		id: seniorDeveloperTemplateId,
 		name: 'Senior developer',
 		glyph: 'code',
-		work: 'Migrations, refactors, unclear specs',
 		strength: 2,
 		hint: 'Strong model · High',
 	},
@@ -83,7 +80,6 @@ const roleGuide: readonly {
 		id: reviewerTemplateId,
 		name: 'Reviewer',
 		glyph: 'review',
-		work: 'Checks the work, writes no code',
 		strength: 2,
 		hint: "Author's model or stronger",
 	},
@@ -91,7 +87,6 @@ const roleGuide: readonly {
 		id: testerTemplateId,
 		name: 'Tester',
 		glyph: 'check-pass',
-		work: 'Writes tests, changes no production code',
 		strength: 1,
 		hint: 'Faster model · Medium',
 	},
@@ -99,7 +94,6 @@ const roleGuide: readonly {
 		id: technicalWriterTemplateId,
 		name: 'Technical writer',
 		glyph: 'note',
-		work: 'Writes docs, changes no behaviour',
 		strength: 1,
 		hint: 'Faster model · Medium',
 	},
@@ -107,7 +101,6 @@ const roleGuide: readonly {
 		id: designerTemplateId,
 		name: 'Designer',
 		glyph: 'settings-appearance',
-		work: 'Checks screens in the running app',
 		strength: 2,
 		hint: "Author's model or stronger",
 	},
@@ -115,7 +108,6 @@ const roleGuide: readonly {
 		id: securityReviewerTemplateId,
 		name: 'Security reviewer',
 		glyph: 'scope-lock',
-		work: 'Looks for security defects in changes',
 		strength: 2,
 		hint: 'Strong model · High',
 	},
@@ -423,19 +415,7 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 					}
 					title={crewLabel(locale, item.name)}
 					{...(item.builtin ? {} : { mark: <Glyph name="edit" size={11} /> })}
-					description={
-						guide
-							? t(locale, guide.work)
-							: item.summary?.trim() ||
-								t(
-									locale,
-									item.role === 'foreman'
-										? 'Splits the work, accepts the parts'
-										: item.role === 'reviewer'
-											? 'Checks the work, writes no code'
-											: 'Writes code'
-								)
-					}
+					description={templateWork(locale, item)}
 					onChange={() => setSelected({ kind: 'agent', id: item.id })}>
 					{guide ? (
 						<>

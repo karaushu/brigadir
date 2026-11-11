@@ -899,6 +899,8 @@ export type DesktopBridge = {
 	readAttachmentInfo(key: AttachmentOwner, id: string): Promise<PromptAttachment>;
 	/** spec/composer#mentions: attaches a snapshot summary of `source` (same project) to `key`'s next prompt. */
 	attachTaskSummary(key: TaskKey, source: TaskKey): Promise<PromptAttachment>;
+	/** spec/composer#agent-blocks: attaches an agent template of the library to `key`'s next prompt, as a role for a subagent. */
+	attachAgentTemplate(key: TaskKey, templateId: string): Promise<PromptAttachment>;
 	/** spec/chat#images: a small PNG of an image attachment for its tile, as a `data:` URL; rejects when the image is gone or changed. */
 	readAttachmentThumbnail(key: AttachmentOwner, id: string): Promise<string>;
 	/** spec/chat#context-menu: the whole image attachment onto the system clipboard. */

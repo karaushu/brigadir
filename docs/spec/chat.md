@@ -90,7 +90,7 @@ Live permission and question cards are not log rows: they stand above the compos
 ### The person's message
 
 - A `--tint` bubble, radius 12, as wide as its text (max column − 32 px), 13.5 / 21, padding 10 × 14.
-- Rendered by `userMarkdown` (same renderer as answers, but a single line break is a line break). Mention tokens (`@[att:…]`, `@[task:…]`, `@[model:…]`) become pills or thumbnails; known `/` commands are marked as in the composer (see [Composer](composer.md)).
+- Rendered by `userMarkdown` (same renderer as answers, but a single line break is a line break). Mention tokens (`@[att:…]`, `@[task:…]`, `@[agent:…]`, `@[model:…]`) become pills or thumbnails; known `/` commands are marked as in the composer (see [Composer](composer.md)).
 - Attachments show as shelf tiles ([Images in messages](#images)); code-line pills open the editor ([Code pills](#code-pills)).
 - A message the host is still holding is drawn full width with its state and buttons on the right (see [Steering and queue](composer-steering-queue-and-ghost.md)).
 

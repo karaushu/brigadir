@@ -6,22 +6,24 @@ import type { EventRecord } from './session';
  * spec/composer#mentions: a mention in the composer's text is a token without spaces the person never sees. It is self-delimited
  * (`@[kind:value]`), so text typed right after a pill never becomes part of it:
  * `@[att:<id>]` an attachment in its place (file, text, image, task summary), `@[task:<id>]` a task before sending,
- * `@[model:<provider>:<model>]` a model reference.
+ * `@[agent:<id>]` an agent template before sending, `@[model:<provider>:<model>]` a model reference.
  */
 export type PromptToken =
 	| { kind: 'attachment'; id: string }
 	| { kind: 'task'; id: string }
+	| { kind: 'agent'; id: string }
 	| { kind: 'model'; provider: 'claude' | 'codex'; model: string };
 export type PromptPart =
 	{ kind: 'text'; text: string } | { kind: 'token'; token: PromptToken; raw: string };
 
-const tokenPattern = /@\[(att|task|model):([^\]\s]{1,300})\]/g;
+const tokenPattern = /@\[(att|task|agent|model):([^\]\s]{1,300})\]/g;
 const attachmentId = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const taskId = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 
 function token(kind: string, value: string): PromptToken | null {
 	if (kind === 'att') return attachmentId.test(value) ? { kind: 'attachment', id: value } : null;
 	if (kind === 'task') return taskId.test(value) ? { kind: 'task', id: value } : null;
+	if (kind === 'agent') return taskId.test(value) ? { kind: 'agent', id: value } : null;
 	const model = /^(claude|codex):(.+)$/.exec(value);
 	return model
 		? { kind: 'model', provider: model[1] as 'claude' | 'codex', model: model[2]! }
@@ -56,6 +58,7 @@ export function promptTokenRanges(
 }
 export const attachmentToken = (id: string) => `@[att:${id}]`;
 export const taskToken = (id: string) => `@[task:${id}]`;
+export const agentToken = (id: string) => `@[agent:${id}]`;
 export const modelToken = (provider: 'claude' | 'codex', model: string) =>
 	`@[model:${provider}:${model}]`;
 /** Attachment ids in the order the text places them, each once. */
@@ -78,9 +81,11 @@ export function modelMentionText(provider: 'claude' | 'codex', model: string) {
 
 /** The prefix of a task summary attachment's name (spec/composer#mentions); the rest is the task's title. */
 export const taskSummaryPrefix = 'Task summary · ';
-/** What a pill shows for an attachment: a task summary is the task, a file its base name, an image the image. */
+/** The prefix of an agent template attachment's name (spec/composer#agent-blocks); the rest is the template's name. */
+export const agentTemplatePrefix = 'Agent template · ';
+/** What a pill shows for an attachment: a task summary is the task, an agent template the template, a file its base name, an image the image. */
 export function attachmentMention(item: Pick<PromptAttachment, 'kind' | 'name'>): {
-	kind: 'image' | 'file' | 'folder' | 'text' | 'task';
+	kind: 'image' | 'file' | 'folder' | 'text' | 'task' | 'agent';
 	label: string;
 } {
 	if (item.kind === 'image') return { kind: 'image', label: item.name };
@@ -89,6 +94,8 @@ export function attachmentMention(item: Pick<PromptAttachment, 'kind' | 'name'>)
 		return { kind: 'folder', label: item.name.slice(0, -1).split('/').at(-1)! };
 	if (item.name.startsWith(taskSummaryPrefix))
 		return { kind: 'task', label: item.name.slice(taskSummaryPrefix.length) };
+	if (item.name.startsWith(agentTemplatePrefix))
+		return { kind: 'agent', label: item.name.slice(agentTemplatePrefix.length) };
 	const path = /^(.*?)(:\d+(?:-\d+)?)?$/.exec(item.name)!,
 		base = path[1]!.split('/').at(-1) || path[1]!;
 	return {
@@ -100,7 +107,12 @@ export function attachmentMention(item: Pick<PromptAttachment, 'kind' | 'name'>)
 export function attachmentLines(
 	item: Pick<PromptAttachment, 'kind' | 'name'>
 ): { path: string; start: number; end: number; side: 'old' | 'new' } | null {
-	if (item.kind !== 'text' || item.name.startsWith(taskSummaryPrefix)) return null;
+	if (
+		item.kind !== 'text' ||
+		item.name.startsWith(taskSummaryPrefix) ||
+		item.name.startsWith(agentTemplatePrefix)
+	)
+		return null;
 	const match = /^(.+):(\d+)(?:-(\d+))?(?: · (old|new))?$/.exec(item.name);
 	if (!match) return null;
 	const start = Number(match[2]),
@@ -113,7 +125,8 @@ export function attachmentLines(
 export function promptDisplayText(
 	text: string,
 	attachments: readonly Pick<PromptAttachment, 'id' | 'kind' | 'name'>[] = [],
-	tasks: readonly Pick<AgentTask, 'id' | 'title'>[] = []
+	tasks: readonly Pick<AgentTask, 'id' | 'title'>[] = [],
+	agents: readonly { id: string; name: string }[] = []
 ): string {
 	if (!text.includes('@[')) return text;
 	return promptParts(text)
@@ -123,6 +136,8 @@ export function promptDisplayText(
 			if (value.kind === 'model') return `@${value.model}`;
 			if (value.kind === 'task')
 				return `@${tasks.find((task) => task.id === value.id)?.title ?? value.id}`;
+			if (value.kind === 'agent')
+				return `@${agents.find((agent) => agent.id === value.id)?.name ?? value.id}`;
 			const item = attachments.find((entry) => entry.id === value.id);
 			return item ? `@${attachmentMention(item).label}` : '';
 		})
@@ -152,7 +167,7 @@ export function promptSequence(
 			run += modelMentionText(value.provider, value.model);
 			continue;
 		}
-		if (value.kind === 'task') {
+		if (value.kind === 'task' || value.kind === 'agent') {
 			run += part.raw;
 			continue;
 		}

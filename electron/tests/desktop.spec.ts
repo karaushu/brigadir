@@ -516,6 +516,7 @@ test('reads v2, isolates the renderer, updates theme, and opens Kit @area:shell 
 				'onTextSearch',
 				'runMenuCommand',
 				'attachTaskSummary',
+				'attachAgentTemplate',
 				'readAttachmentInfo',
 				'askQuickQuestion',
 				'askQuickFollowUp',

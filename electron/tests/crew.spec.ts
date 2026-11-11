@@ -145,7 +145,7 @@ test('launches a crew from the sheet, confirms the plan card and shows workers a
 		const list = sheet.getByRole('listbox', { name: 'Crew' }); // spec/crew#compose: «Foreman composes» first, then the templates.
 		await expect(list.getByRole('option')).toHaveCount(3);
 		await expect(list.getByRole('option').first()).toHaveText('Foreman composes');
-		await expect(list.getByRole('option', { name: /^Crew/ })).toContainText('3');
+		await expect(list.getByRole('option', { name: /^Crew \d/ })).toContainText('3');
 		for (const theme of ['light', 'dark'] as const) {
 			await app.evaluate(({ nativeTheme }, theme) => {
 				nativeTheme.themeSource = theme;
@@ -156,7 +156,7 @@ test('launches a crew from the sheet, confirms the plan card and shows workers a
 				path: info.outputPath(`launch-crew-popup-${theme}.png`),
 			});
 		}
-		await list.getByRole('option', { name: /^Crew/ }).click();
+		await list.getByRole('option', { name: /^Crew \d/ }).click();
 		await expect(sheet.getByRole('button', { name: 'Crew', exact: true })).toContainText('Crew');
 		const roster = sheet.locator('[data-crew-roster]');
 		await expect(roster).toContainText('Foreman');
@@ -399,7 +399,7 @@ test('shows the reviewer inside the foreman card and the check rows of both roun
 		await sheet.getByRole('button', { name: 'Crew', exact: true }).click();
 		await sheet
 			.getByRole('listbox', { name: 'Crew' })
-			.getByRole('option', { name: /^Crew/ })
+			.getByRole('option', { name: /^Crew \d/ })
 			.click();
 		await expect(sheet.locator('[data-crew-roster]')).toContainText('Reviewer');
 		await sheet.getByRole('button', { name: 'Base ref' }).click();

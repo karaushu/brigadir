@@ -96,8 +96,14 @@ export const crewRecommendedDepth = 2;
 export const foremanTemplateId = 'foreman-default',
 	developerTemplateId = 'developer',
 	reviewerTemplateId = 'reviewer',
-	seniorDeveloperTemplateId = 'senior-developer';
+	seniorDeveloperTemplateId = 'senior-developer',
+	testerTemplateId = 'tester',
+	technicalWriterTemplateId = 'technical-writer',
+	designerTemplateId = 'designer',
+	securityReviewerTemplateId = 'security-reviewer';
 export const defaultCrewTemplateId = 'default';
+/** spec/crew-templates-and-editor#builtin-templates: a developer, a tester and a reviewer. */
+export const testsCrewTemplateId = 'tests';
 /** spec/pull-requests-and-ci#review-crew: the built-in crew of a PR review — the foreman merges what two reviewers of different providers found. */
 export const reviewCrewTemplateId = 'review';
 /** spec/crew#compose: the launch sheet's «the foreman composes» choice, remembered per project like a template id. */
@@ -126,6 +132,33 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		summary: 'Migrations, performance work, cross-module refactors and parts without a clear spec',
 		instructions: `${developerInstructions} Your parts are the hard ones: read the code around the change before you write, and say in your last message what you verified and how.`,
 	},
+	/** spec/crew-templates-and-editor#builtin-templates: the specialists are a Developer or a Reviewer with their own instructions and specialty. */
+	{
+		id: testerTemplateId,
+		name: 'Tester',
+		role: 'developer',
+		builtin: true,
+		provider: 'claude',
+		choices: { configOptions: { model: 'sonnet' } },
+		choiceNames: { model: 'Sonnet' },
+		summary:
+			'Tests for a part: unit and integration tests, a failing test for a bug; changes no production code',
+		instructions:
+			'You write and run the tests of your part. You own the listed test files and directories: change only them, other files belong to other agents. Read anything you need across the project. For a bug, first write a test that fails because of it. Test what a caller or a person can observe, not private details, and cover the edge cases the task names and the ones the code suggests. Follow the tests the project already has: their layout, helpers and commands. Do not change the code under test: when a test shows a defect, keep the failing test and say what it shows and where, so the agent that owns the code can fix it. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the tests you wrote and say which passed and which failed. Do not commit; the host snapshots your tree.',
+	},
+	{
+		id: technicalWriterTemplateId,
+		name: 'Technical writer',
+		role: 'developer',
+		builtin: true,
+		provider: 'claude',
+		choices: { configOptions: { model: 'sonnet' } },
+		choiceNames: { model: 'Sonnet' },
+		summary:
+			'Documentation for a change: README, guides, the spec, API comments; changes no behaviour',
+		instructions:
+			'You write the documents of a change: the README, guides, the spec, comments on a public API. You own the listed files and directories: change only them, other files belong to other agents. Read the code and its diff before you write, and describe what the code does now, not what was planned. Keep the structure, terms and tone of the documents the project already has, and say a thing once, where a reader will look for it. Do not change behaviour: when the code and a document disagree and you cannot tell which is right, call ask_foreman. Run every command and example you write. Before you end your turn, run the check your task prompt names, when it names one, and say what it showed. Do not commit; the host snapshots your tree.',
+	},
 	{
 		id: reviewerTemplateId,
 		name: 'Reviewer',
@@ -134,8 +167,29 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		instructions:
 			'You do not write code. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Look for what a check cannot show: wrong behaviour, a contract changed under other agents, work outside the assigned files. The report ends with the last message of the agent: it must name the check it ran and what the check showed; when it does not, ask for it. Comment only on what must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line, say what is wrong and what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
 	},
+	{
+		id: designerTemplateId,
+		name: 'Designer',
+		role: 'reviewer',
+		builtin: true,
+		summary: 'Checks screens in the running app: themes, states, keyboard, layout',
+		instructions:
+			'You do not write code. You check how the work looks and behaves on screen. When the report of an agent you check arrives, read it with read_report and read its diff with read_diff, then open the changed screens in the running app with the browser or simulator tools you have. Look at each screen in the light and the dark theme, in a narrow and a wide window, with the keyboard alone, and in its hover, pressed, disabled, loading, empty and error states; try long text. Compare spacing, sizes and colours with the neighbouring screens and the design tokens of the project. When you have no tool to open a screen, say so in the review instead of judging from the code. Comment only on what must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line, name the screen and the state, say what you saw and what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
+	},
+	{
+		id: securityReviewerTemplateId,
+		name: 'Security reviewer',
+		role: 'reviewer',
+		builtin: true,
+		provider: 'claude',
+		choices: { configOptions: { model: 'opus', effort: 'high' } },
+		choiceNames: { model: 'Opus', effort: 'High' },
+		summary: 'Checks changes for security defects: untrusted input, access checks, secrets',
+		instructions:
+			'You do not write code. You check the work for security defects. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Follow untrusted input from where it enters to where it is used: queries, shell commands, file paths, markup, prompts to a model. Look for missing or misplaced access checks; secrets, tokens and personal data in code, logs, errors and URLs; unsafe file and network access; new dependencies and widened permissions; validation or defaults made weaker. Report a defect only when you can show its path: the input, the line where it becomes dangerous, and what an attacker gains. Leave style and ordinary bugs to other reviewers. Comment only on what must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line and say what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
+	},
 ];
-/** One built-in crew: two developers, one reviewer checking both. */
+/** The built-in crews: the default one (two developers, one reviewer checking both), the one with a tester, and the PR review crew. */
 export const builtinCrewTemplates: readonly CrewTemplate[] = [
 	{
 		schemaVersion: 1,
@@ -159,6 +213,27 @@ export const builtinCrewTemplates: readonly CrewTemplate[] = [
 					template: developerTemplateId,
 					checkedBy: ['reviewer'],
 				},
+				{ id: 'reviewer', name: 'Reviewer', template: reviewerTemplateId },
+			],
+		},
+	},
+	{
+		schemaVersion: 1,
+		id: testsCrewTemplateId,
+		name: 'Crew with tests',
+		builtin: true,
+		root: {
+			id: 'root',
+			name: 'Foreman',
+			template: foremanTemplateId,
+			agents: [
+				{
+					id: 'developer',
+					name: 'Developer',
+					template: developerTemplateId,
+					checkedBy: ['reviewer'],
+				},
+				{ id: 'tester', name: 'Tester', template: testerTemplateId, checkedBy: ['reviewer'] },
 				{ id: 'reviewer', name: 'Reviewer', template: reviewerTemplateId },
 			],
 		},
@@ -955,8 +1030,13 @@ export const builtinCrewNames = [
 	'Developer 1',
 	'Developer 2',
 	'Senior developer',
+	'Tester',
+	'Technical writer',
 	'Reviewer',
+	'Designer',
+	'Security reviewer',
 	'Crew',
+	'Crew with tests',
 	'Review crew',
 ] as const;
 /** Built-in names are stored in English and shown in the interface language (spec/crew-templates-and-editor#builtin-templates): the computer's crew and the phone's worker rows. */

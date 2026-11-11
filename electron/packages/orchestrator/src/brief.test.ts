@@ -177,8 +177,9 @@ it('gives a composing foreman the palette instead of a roster, and the roster on
 	};
 	const brief = foremanBrief(composing, 'root');
 	expect(brief).toContain('You compose your crew yourself');
+	// The person's own `Tester` stands in for the built-in one: a name means one template.
 	expect(brief).toContain(
-		'Templates: `Developer` (developer; default Claude · provider default model), `Senior developer` (developer; Migrations, performance work, cross-module refactors and parts without a clear spec; default Claude · Opus · High), `Reviewer` (reviewer; default Claude · provider default model), `Tester` (developer; Writes Playwright e2e tests; give it every test part; default Claude · provider default model).'
+		'Templates: `Developer` (developer; default Claude · provider default model), `Senior developer` (developer; Migrations, performance work, cross-module refactors and parts without a clear spec; default Claude · Opus · High), `Technical writer` (developer; Documentation for a change: README, guides, the spec, API comments; changes no behaviour; default Claude · Sonnet), `Reviewer` (reviewer; default Claude · provider default model), `Designer` (reviewer; Checks screens in the running app: themes, states, keyboard, layout; default Claude · provider default model), `Security reviewer` (reviewer; Checks changes for security defects: untrusted input, access checks, secrets; default Claude · Opus · High), `Tester` (developer; Writes Playwright e2e tests; give it every test part; default Claude · provider default model).'
 	);
 	expect(brief).toContain('Models: Claude: `OPUS` (effort LOW, MAX), `HAIKU` (effort LOW).');
 	expect(brief).toContain(

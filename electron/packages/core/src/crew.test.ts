@@ -6,6 +6,7 @@ import {
 	builtinAgentTemplates,
 	builtinCrewTemplates,
 	isAgentTemplate,
+	isBuiltinCrewName,
 	seniorDeveloperTemplateId,
 	withBuiltinChoices,
 	crewIssues,
@@ -493,4 +494,33 @@ it("a built-in crew is customized when its tree differs from the app's (spec/cre
 	// An own crew is never a customized built-in.
 	expect(builtinCrewCustomized({ ...edited, id: 'own', builtin: false })).toBe(false);
 	expect(withBuiltinCrew(base, undefined)).toBe(base);
+});
+it('ships the specialists as a Developer or a Reviewer with a specialty, and a crew with a tester (spec/crew-templates-and-editor#builtin-templates)', () => {
+	const roles = Object.fromEntries(builtinAgentTemplates.map((item) => [item.id, item.role]));
+	expect(roles).toEqual({
+		'foreman-default': 'foreman',
+		developer: 'developer',
+		'senior-developer': 'developer',
+		tester: 'developer',
+		'technical-writer': 'developer',
+		reviewer: 'reviewer',
+		designer: 'reviewer',
+		'security-reviewer': 'reviewer',
+	});
+	for (const template of builtinAgentTemplates) {
+		expect(isAgentTemplate(template)).toBe(true);
+		expect(isBuiltinCrewName(template.name)).toBe(true);
+		expect(builtinAgentCustomized(template)).toBe(false);
+		// Every role past the three base ones tells the foreman what it is for.
+		if (!['foreman-default', 'developer', 'reviewer'].includes(template.id))
+			expect(template.summary).toBeTruthy();
+	}
+	const lookup = templateLookup([]);
+	for (const crew of builtinCrewTemplates) expect(crewIssues(crew, lookup)).toEqual([]);
+	const tests = builtinCrewTemplates.find((item) => item.id === 'tests')!;
+	expect(tests.root.agents!.map((item) => [item.name, item.template, item.checkedBy])).toEqual([
+		['Developer', 'developer', ['reviewer']],
+		['Tester', 'tester', ['reviewer']],
+		['Reviewer', 'reviewer', undefined],
+	]);
 });

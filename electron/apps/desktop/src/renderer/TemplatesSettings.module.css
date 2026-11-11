@@ -92,7 +92,7 @@
 	flex-direction: column;
 	gap: 12px;
 }
-/* The role guide: the four built-in roles, two by two (spec/crew-templates-and-editor#library-list). */
+/* The role guide: the built-in roles, two in a row (spec/crew-templates-and-editor#library-list). */
 .guide {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));

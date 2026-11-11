@@ -31,4 +31,8 @@ it('shows the first catalog entry that says the word of the role, under the cata
 	expect(roleModelPick('reviewer', 'claude', claude)).toBe('Opus 5.5');
 	expect(roleModelPick('senior-developer', 'codex', claude)).toBeNull();
 	expect(roleModelPick('own-template', 'claude', claude)).toBeNull();
+	// The specialists have a word too.
+	expect(roleModelPick('security-reviewer', 'codex', codex)).toBe('6.1 Sol');
+	expect(roleModelPick('designer', 'claude', claude)).toBe('Opus 5.5');
+	expect(roleModelPick('tester', 'claude', null)).toBe('Sonnet');
 });

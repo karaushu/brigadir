@@ -241,3 +241,69 @@ test('a built-in crew is hidden on delete and comes back on restore; built-in ag
 		await rm(root, { recursive: true, force: true });
 	}
 });
+test("a built-in crew keeps a person's edit beside the app's id and name, and the app's own tree removes it (spec/crew-templates-and-editor#builtin-templates)", async () => {
+	const root = await mkdtemp(join(tmpdir(), 'templates-crew-edit-'));
+	const file = join(root, 'templates', 'builtin', 'default.json');
+	const base = builtinCrewTemplates.find((item) => item.id === 'default')!;
+	const edited: CrewTemplate = {
+		...base,
+		name: 'Renamed',
+		root: {
+			...base.root,
+			agents: [
+				{
+					id: 'developer-1',
+					name: 'API',
+					template: 'senior-developer',
+					zone: ['api/**'],
+					checkedBy: ['reviewer'],
+				},
+				{ id: 'reviewer', name: 'Reviewer', template: 'reviewer' },
+			],
+		},
+	};
+	try {
+		const store = new TemplateStore(root);
+		const saved = await store.saveCrew(edited);
+		// The id, the name and `builtin` stay the app's; the tree is the person's.
+		expect(saved).toEqual({ ...edited, name: 'Crew' });
+		expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ schemaVersion: 1, template: saved });
+		let library = await store.read();
+		expect(library.crews.map((item) => item.id)).toEqual(['default', 'review']);
+		expect(library.crews[0]).toEqual(saved);
+		expect(library.crews[1]).toEqual(builtinCrewTemplates[1]);
+		expect(library.issues).toEqual([]);
+		// Hiding keeps the edit; restoring brings the edited crew back.
+		await store.deleteCrew('default');
+		expect((await store.read()).crews.map((item) => item.id)).toEqual(['review']);
+		await store.restoreCrews();
+		expect((await store.read()).crews[0]).toEqual(saved);
+		// A tree that fails against the library is refused and changes nothing.
+		await expect(
+			store.saveCrew({
+				...base,
+				root: {
+					...base.root,
+					agents: [{ id: 'ui', name: 'UI', template: 'developer', checkedBy: ['nobody'] }],
+				},
+			})
+		).rejects.toThrow('unknown agent');
+		expect((await store.read()).crews[0]).toEqual(saved);
+		// A built-in id without `builtin` is still no own template.
+		await expect(store.saveCrew({ ...edited, builtin: false })).rejects.toThrow('read-only');
+		// A broken file is an issue and the app's crew stands in.
+		await writeFile(file, '{"schemaVersion":1,"template":{"id":"review"}}');
+		library = await store.read();
+		expect(library.crews[0]).toEqual(base);
+		expect(library.issues).toEqual([
+			{ path: 'templates/builtin/default.json', code: 'invalid_document' },
+		]);
+		// The app's own tree, in any key order, removes the file.
+		await store.saveCrew(edited);
+		expect(await store.saveCrew(JSON.parse(JSON.stringify(base)) as CrewTemplate)).toEqual(base);
+		await expect(readFile(file, 'utf8')).rejects.toThrow();
+		expect(await store.read()).toMatchObject({ crews: [...builtinCrewTemplates], issues: [] });
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

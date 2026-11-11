@@ -11,6 +11,7 @@ import {
 	seniorDeveloperTemplateId,
 	templateFit,
 	builtinCrewTemplates,
+	builtinCrewCustomized,
 	crewSummaryLimit,
 	crewAgents,
 	crewDepth,
@@ -694,10 +695,19 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 					<>
 						<div className={styles.head}>
 							<strong>{crewLabel(locale, crew.name)}</strong>
-							{crew.builtin && (
-								<span className={styles.tag}>{t(locale, 'built-in · read only')}</span>
-							)}
+							{crew.builtin && <span className={styles.tag}>{t(locale, 'built-in')}</span>}
 							<span className={styles.space} />
+							{/* spec/crew-templates-and-editor#builtin-templates: an edited built-in crew goes back to the app's tree. */}
+							{builtinCrewCustomized(crew) && (
+								<Button
+									disabled={disabled}
+									onClick={() => {
+										const base = builtinCrewTemplates.find((item) => item.id === crew.id);
+										if (base) void run(() => window.brigadir.saveCrewTemplate(base));
+									}}>
+									{t(locale, 'Reset')}
+								</Button>
+							)}
 							<Button
 								disabled={disabled}
 								onClick={() => {
@@ -705,13 +715,11 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 								}}>
 								{t(locale, 'Duplicate')}
 							</Button>
-							{!crew.builtin && (
-								<Button
-									disabled={disabled || crewIssues(crew, templateLookup(library.agents)).length > 0}
-									onClick={() => setEditing(crew)}>
-									{t(locale, 'Edit…')}
-								</Button>
-							)}
+							<Button
+								disabled={disabled || crewIssues(crew, templateLookup(library.agents)).length > 0}
+								onClick={() => setEditing(crew)}>
+								{t(locale, 'Edit…')}
+							</Button>
 							<Button disabled={disabled} onClick={exportSelected}>
 								{t(locale, 'Export…')}
 							</Button>
@@ -751,7 +759,8 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 					close={() => setEditing(null)}
 					done={(template) => {
 						setEditing(null);
-						void run(() => window.brigadir.saveCrewTemplate({ ...template, builtin: false }));
+						// A built-in crew is saved as its edit; `Save as crew template` inside the editor has already made a copy its own.
+						void run(() => window.brigadir.saveCrewTemplate(template));
 					}}
 					libraryChanged={setLibrary}
 				/>

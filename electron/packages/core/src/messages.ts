@@ -81,7 +81,6 @@ const uk = {
 	'has subordinates': 'має підлеглих',
 	'read only': 'лише читання',
 	'only this agent': 'лише цей агент',
-	'built-in · read only': 'вбудований · лише читання',
 	'from the catalog': 'з каталогу',
 	'the catalog appears after the first launch': 'каталог зʼявиться після першого запуску',
 	'Template instructions «{name}»': 'Інструкції шаблону «{name}»',

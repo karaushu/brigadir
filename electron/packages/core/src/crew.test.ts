@@ -1,6 +1,8 @@
 import { it, expect } from 'vitest';
 import {
 	builtinAgentCustomized,
+	builtinCrewCustomized,
+	withBuiltinCrew,
 	builtinAgentTemplates,
 	builtinCrewTemplates,
 	isAgentTemplate,
@@ -460,4 +462,35 @@ it('ships Senior developer with a model, and an overlay replaces its provider an
 	const developer = builtinAgentTemplates.find((item) => item.id === 'developer')!;
 	expect(builtinAgentCustomized(developer)).toBe(false);
 	expect(builtinAgentCustomized({ ...developer, provider: 'codex' })).toBe(true);
+});
+it("a built-in crew is customized when its tree differs from the app's (spec/crew-templates-and-editor#builtin-templates)", () => {
+	const base = builtinCrewTemplates.find((item) => item.id === 'default')!;
+	expect(builtinCrewCustomized(base)).toBe(false);
+	// Key order and absent values are no difference.
+	expect(
+		builtinCrewCustomized({
+			...base,
+			root: {
+				agents: base.root.agents!,
+				template: base.root.template,
+				name: 'Foreman',
+				id: 'root',
+			},
+		})
+	).toBe(false);
+	const edited = withBuiltinCrew(base, {
+		...base,
+		id: 'other',
+		name: 'Renamed',
+		builtin: false,
+		root: {
+			...base.root,
+			agents: base.root.agents!.slice(0, 1).map(({ checkedBy: _, ...agent }) => agent),
+		},
+	});
+	expect(edited).toMatchObject({ id: 'default', name: 'Crew', builtin: true });
+	expect(builtinCrewCustomized(edited)).toBe(true);
+	// An own crew is never a customized built-in.
+	expect(builtinCrewCustomized({ ...edited, id: 'own', builtin: false })).toBe(false);
+	expect(withBuiltinCrew(base, undefined)).toBe(base);
 });

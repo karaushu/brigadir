@@ -545,14 +545,14 @@ export function CrewEditor({
 					className={styles.crewName}
 					value={crewLabel(locale, template.name)}
 					maxLength={80}
+					// spec/crew-templates-and-editor#builtin-templates: a built-in crew edited in the library keeps the app's name.
+					disabled={!oneOff && template.builtin}
 					onChange={(event) => change({ ...template, name: event.target.value })}
 				/>
 				{oneOff && (
 					<small className={styles.cap}>
 						{t(locale, 'Crew').toLocaleLowerCase(locale)} ·{' '}
-						{template.builtin
-							? t(locale, 'built-in · read only').split(' · ')[0]
-							: t(locale, 'own')}
+						{template.builtin ? t(locale, 'built-in') : t(locale, 'own')}
 					</small>
 				)}
 				<span className={styles.space} />

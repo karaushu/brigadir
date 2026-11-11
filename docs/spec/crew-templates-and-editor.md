@@ -110,7 +110,8 @@ Rules:
 - Built-in instructions are versioned with the code, like the foreman brief.
 - Foreman, Developer and Reviewer have no fixed model: empty `choices` means the provider's default model at launch. Senior developer ships with a model and effort, like the nodes of the Review crew; the values are catalog ids, and a catalog without them shows the usual amber substitution (see [Choices at launch](#launch-check)).
 - A person **can change the provider, model and effort of every built-in role**, Senior developer included. The name, rights, specialty and instructions stay the app's. The overlay is stored in `templates/builtin/<id>.json` as `{ schemaVersion: 1, template: { id, provider?, choices?, choiceNames? } }` and replaces the app's provider and choices whole. Saving an overlay equal to the app's values deletes the file. **Reset** in the library does that; it is offered while the role differs from the app's values. See also the built-in role overlay in [Agents and providers](agents-and-providers.md).
-- Built-in crews are never edited in place. **Duplicate** one, or **Save as crew template** from the editor, which saves under a new id. Deleting a built-in crew only **hides** it (`templates/builtin/hidden-crews.json`, `{ schemaVersion: 1, crews: [...] }`). **Restore default crews** brings every hidden crew back.
+- A person **can edit a built-in crew in place**: its agents, their templates, models, zones, additions and check edges. The id and the name stay the app's. The edited crew is stored whole in `templates/builtin/<id>.json` as `{ schemaVersion: 1, template }`, a crew document under the built-in id with `builtin: true`, and stands in for the app's crew everywhere a crew is picked by id: the launch sheet, the PR review, schedules. Saving a tree equal to the app's deletes the file. **Reset** in the library does that; it is offered while the tree differs from the app's. A file that is not a valid crew, or fails `crewIssues` against the agent library, is reported as an issue and the app's crew is used. **Save as crew template** from the editor still saves a copy under a new id.
+- Deleting a built-in crew only **hides** it (`templates/builtin/hidden-crews.json`, `{ schemaVersion: 1, crews: [...] }`); its edits stay on disk. **Restore default crews** brings every hidden crew back, edited as it was.
 - Built-in names are stored in English and shown in the interface language (`crewLabel`, `builtinCrewNames`).
 - These ids are reserved, and an own template cannot use them: `compose` plus every built-in agent id and built-in crew id.
 
@@ -230,10 +231,10 @@ Each child is described as `` `Name` (summary; Provider · model · effort; lead
 <a id="editor-header-footer"></a>
 ### Header and footer
 
-- **Header** (row size M): `Crew`, the editable crew name (≤ 80 chars), and the summary `foreman + N agents · M levels` (plural forms through `crewAgentCountLabel` / `crewLevelCountLabel`). For a one-off crew it also shows `crew · own` or `crew · built-in`. It ends with the shared Esc close (`ui/PopupClose`).
+- **Header** (row size M): `Crew`, the editable crew name (≤ 80 chars; locked for a built-in crew edited from the library, whose name is the app's), and the summary `foreman + N agents · M levels` (plural forms through `crewAgentCountLabel` / `crewLevelCountLabel`). For a one-off crew it also shows `crew · own` or `crew · built-in`. It ends with the shared Esc close (`ui/PopupClose`).
 - **Esc** closes an open popup first, then the editor.
 - **Footer** (row size M): the first issue as a localized line, or the save error. Then **Save as crew template**, **Cancel** and **Done**. **Done** and **Save as crew template** are disabled while `crewIssues` is non-empty.
-- **Done** returns the edited tree. From the launch sheet it becomes a one-off crew: the sheet shows `<name> · own`, and `task:create` sends `{ template }`. From the library it saves the template.
+- **Done** returns the edited tree. From the launch sheet it becomes a one-off crew: the sheet shows `<name> · own`, and `task:create` sends `{ template }`. From the library it saves the template; a built-in crew is saved as its edit (see [Built-in templates](#builtin-templates)).
 - **Save as crew template** writes the crew to the library. If the source is built-in, it is saved under a new UUID.
 
 <a id="editor-tree"></a>
@@ -310,7 +311,7 @@ Templates are **global, not per project**. Repository-specific knowledge ("alway
 - The list is master-detail in two groups, **Agents** and **Crews**. Built-ins come first, then own templates sorted by name, each with the pencil glyph. Agents show their role or provider glyph. Crews show a tail with the agent count and levels.
 - The list footer has only `+ ▾` and `−`. The `+ ▾` menu offers **New agent** (a developer with empty instructions), **New crew** (a copy of the default crew), a separator, **Import…**, and **Restore default crews** while any built-in crew is hidden.
 - `−` deletes an own template or hides a built-in crew. It is disabled for built-in agents.
-- Detail header: **Reset** (only on a customized built-in agent), **Duplicate** (adds ` 2` to the name), **Edit…** (own crews only; disabled while the crew has issues) and **Export…**.
+- Detail header: **Reset** (only on a customized built-in agent or an edited built-in crew), **Duplicate** (adds ` 2` to the name), **Edit…** (crews, built-in ones included; disabled while the crew has issues) and **Export…**. A built-in template carries the tag `built-in`.
 - **Agent detail**: Name, Specialty (not for foreman templates or built-ins), Provider (a provider turned off in Settings ▸ Agents is disabled unless the template already uses it; changing the provider clears the choices), Model, Effort, Mode, **Rights ▸ Checker** (switch between `developer` and `reviewer`; caption "Reads reports and changes, submits reviews, and approves work. Writes no code."), and **Instructions** (caption "Agent role, in English").
 - **Role guide**: above the agent detail, the four built-in roles as a 2 × 2 grid of `ui/OptionCard` cards without the radio mark. Each card has the role's glyph and name, its work in one line, three strength dots (`ui/LevelDots`) with a hint for model and effort, and under them the model each enabled provider has for that work: the provider glyph and the model's catalog name. The card of the selected built-in is chosen; pressing a card selects that template. Dots and hints are the app's advice for the role, the [model ladder](crew.md#model-ladder) as a picture.
 
@@ -327,16 +328,16 @@ Templates are **global, not per project**. Repository-specific knowledge ("alway
 - **Effort dots** beside the Effort popup: one dot per level of the model (`default` is not a level), filled up to the chosen one. Levels past `high` fill amber, and a line under the row says "An effort above High costs about as much as a stronger model." `high` is found by the level's value or name, a presentation rule and not a table of levels (rule 7); a model without such a level never warns.
 - A built-in agent is read-only apart from provider, model and effort: its name is locked, its Mode and Rights are disabled, and its instructions are shown read-only so they can still be read and copied in full.
 - Agent edits **autosave** 300 ms after the last change, without a busy state, so the focused field keeps its focus.
-- **Crew detail**: the Agents list and Levels, edited with the same `CrewEditor`.
+- **Crew detail**: the Agents list and Levels, edited with the same `CrewEditor`. **New crew** copies the app's default crew, not its edit.
 - Failures show as one line in the detail pane that names the action, for example "The template could not be saved." or "Could not export the template."
 
 <a id="library-storage"></a>
 ### Storage, import and export
 
 - Files are `{ schemaVersion: 1, template }` documents, written atomically with pretty-printed JSON. Directories are created with mode `0700`, and writes are serialized.
-- Read rules: a file name must equal its `template.id`; symlinks, non-files and reserved built-in ids are reported as `issues` and skipped. A crew that fails `crewIssues` against the current agent library is reported as an issue too.
+- Read rules: a file name must equal its `template.id`; symlinks, non-files and reserved built-in ids in `templates/agents` and `templates/crews` are reported as `issues` and skipped. Edits of built-ins live only in `templates/builtin/`. A crew that fails `crewIssues` against the current agent library is reported as an issue too.
 - Deleting an agent template leaves crews that reference it invalid (listed as issues) until they are edited. Tasks keep their snapshots.
-- `saveCrew` re-validates the crew against the library before writing.
+- `saveCrew` re-validates the crew against the library before writing. A crew with `builtin: true` and a built-in crew id is written as that crew's edit; any other use of a reserved id is refused.
 - **Export…** uses the system save dialog and writes `<name>.json` (`/`, `:` and `\` replaced with `-`) with the document, indented by 2 spaces.
 - **Import…** uses the system open dialog. The file must be at most 2,000,000 chars and a valid agent or crew document; it is validated before anything is written, and `builtin` is forced to `false`. Under remote access, both dialogs run on the device (see [Remote access and mobile](remote-access-and-mobile.md)).
 - IPC: `templates:read`, `templates:save-agent`, `templates:save-crew`, `templates:delete` (`kind`, `id`), `templates:restore-crews`, `templates:export`, `templates:import`, `templates:catalog`. Every write returns the fresh `CrewLibrary` (`agents`, `crews`, `issues`, `hiddenCrews`).

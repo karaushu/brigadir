@@ -144,7 +144,8 @@ const checks: Record<string, Check> = {
 	'subagent.changed': object(
 		{ id: text },
 		{
-			state: (v) => ['completed', 'failed', 'cancelled'].includes(String(v)),
+			state: (v) => ['running', 'completed', 'failed', 'cancelled'].includes(String(v)),
+			prompt: text,
 			toolId: text,
 			type: text,
 			model: text,

@@ -85,7 +85,7 @@ Facts measured on live `claude-agent-acp` sessions; the mapper relies on them.
 | Messages | `agent_message_chunk` grouped into one row by `messageId`. |
 | Tool calls | `tool_call` / `tool_call_update` with `toolCallId`, `status`, `title`, `kind`, `locations[{path,line}]`, `content`, `rawInput`, `_meta.claudeCode.toolName`. The human description is `_meta.claudeCode.title` (the protocol `title` is the raw command). Observed `kind`: `read`, `edit`, `execute`, `think`, `other`, `human`; read-vs-mutation collapse uses `kind`, not tool names. |
 | Output | No streaming of command output: the whole output arrives in one `tool_call_update` with `status: completed`. |
-| Subagents | Launcher: `_meta.claudeCode {toolName: "Agent", subagent: true}`, `kind: think`; its `toolResponse` has `isAsync`, `agentId`, `resolvedModel`, totals. Nested events carry `parentToolUseId`. See [subagents](chat.md). |
+| Subagents | RFD form (our client): `subagent_update` announces and patches a child session (`title`, `description`, `state`), `session_message` carries its prompt and hand-back, the `Agent` call is hidden. Draft form (AIR): `subagent_spawned` / `subagent_state_update`, launcher `toolResponse` with `isAsync`, `agentId`, `resolvedModel`, totals. Nested events carry `parentToolUseId`. See [subagents](chat.md#subagent-transport). |
 | Commands | `available_commands_update` lists slash commands with descriptions, project commands included. |
 | Usage | `usage_update {used, size}` for the context ring; `session/prompt` result `usage {inputTokens, outputTokens, cachedReadTokens, cachedWriteTokens, totalTokens}`; `_meta.quota.model_usage[]` per model including subagents. |
 | Rate limit | `usage_update._meta["_claude/rateLimit"]` (see [quota sources](#quota-sources)). |

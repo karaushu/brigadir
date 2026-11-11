@@ -1,8 +1,10 @@
 import type { BackgroundState, BackgroundStopReason } from './agent';
 import type { EventRecord } from './session';
 
-/** spec/chat-turns-plans-and-questions#background-commands: a background command as the journal tells it. `turnSeq`: the `turn.started` of the turn that started it. */
+/** spec/chat-turns-plans-and-questions#background-commands: a background command as the journal tells it. `turnSeq`: the `turn.started` of the turn that started it.
+ *  `kind: 'subagent'` (spec/chat-turns-plans-and-questions#background-subagents): a subagent that outlived its turn; `id` is its session, it has no tool call or output file. */
 export type BackgroundCommand = {
+	kind: 'command' | 'subagent';
 	id: string;
 	toolId: string | null;
 	name: string;
@@ -15,6 +17,10 @@ export type BackgroundCommand = {
 	finishedSeq: number | null;
 	outputPath: string | null;
 };
+/** spec/chat#subagent-transport: a subagent's session id as the adapter names it (Claude agent ids, UUIDs). */
+export function isSubagentId(value: unknown): value is string {
+	return typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,200}$/.test(value);
+}
 /** Claude's task ids (`b01ijw66c`), Codex exec ids; never a path. */
 export function isBackgroundId(value: unknown): value is string {
 	return typeof value === 'string' && /^[A-Za-z0-9_-]{1,96}$/.test(value);
@@ -59,6 +65,7 @@ export function backgroundCommands(records: readonly EventRecord[]): BackgroundC
 		else if (e.kind === 'background.started') {
 			if (!all.has(e.id))
 				all.set(e.id, {
+					kind: 'command',
 					id: e.id,
 					toolId: e.toolId,
 					name: e.name,
@@ -88,6 +95,66 @@ export function liveBackground(records: readonly EventRecord[]): BackgroundComma
 	return backgroundCommands(records).filter((command) => command.state === 'running');
 }
 
+/**
+ * spec/chat-turns-plans-and-questions#background-subagents: the subagents still running when the turn they started in ended. From then on each stays
+ * background work until it ends, through later turns; one that ended inside its turn never is. Its end is its own state (`cancelled` reads as
+ * stopped), else the session's: `session.failed`, `host.stopped`, a new `session.started`.
+ */
+export function backgroundSubagents(records: readonly EventRecord[]): BackgroundCommand[] {
+	const all = new Map<string, BackgroundCommand>(),
+		left: BackgroundCommand[] = [];
+	let turnSeq: number | null = null;
+	const end = (item: BackgroundCommand, state: BackgroundState, record: EventRecord) => {
+		item.state = state;
+		item.finishedAt = Date.parse(record.at);
+		item.finishedSeq = record.seq;
+	};
+	for (const record of records) {
+		const e = record.event;
+		if (e.kind === 'turn.started') turnSeq = record.seq;
+		else if (e.kind === 'subagent.started') {
+			if (!all.has(e.id))
+				all.set(e.id, {
+					kind: 'subagent',
+					id: e.id,
+					toolId: null,
+					name: e.name,
+					seq: record.seq,
+					turnSeq,
+					startedAt: Date.parse(record.at),
+					state: 'running',
+					reason: null,
+					finishedAt: null,
+					finishedSeq: null,
+					outputPath: null,
+				});
+		} else if (e.kind === 'subagent.changed' && e.state) {
+			const item = all.get(e.id);
+			if (!item) continue;
+			if (e.state === 'running') {
+				item.state = 'running';
+				item.finishedAt = item.finishedSeq = null;
+			} else if (item.state === 'running')
+				end(item, e.state === 'cancelled' ? 'stopped' : e.state, record);
+		} else if (e.kind === 'turn.completed') {
+			for (const item of all.values())
+				if (item.state === 'running' && !left.includes(item)) left.push(item);
+		} else if (
+			e.kind === 'session.failed' ||
+			e.kind === 'host.stopped' ||
+			e.kind === 'session.started'
+		)
+			for (const item of all.values()) if (item.state === 'running') end(item, 'stopped', record);
+	}
+	return left;
+}
+/** Commands and background subagents in the order they started: what the deck, the footer chip and the sidebar show. */
+export function backgroundWork(records: readonly EventRecord[]): BackgroundCommand[] {
+	return [...backgroundCommands(records), ...backgroundSubagents(records)].sort(
+		(a, b) => a.seq - b.seq
+	);
+}
+
 /** How long a finished command stays in the deck before it leaves (its summary shows for 4 s). */
 export const backgroundSettleMs = 4000;
 /**
@@ -100,7 +167,7 @@ export function backgroundDeck(
 	dismissed: ReadonlySet<string> = new Set()
 ): BackgroundCommand[] {
 	const lastTurn = records.findLast((record) => record.event.kind === 'turn.started')?.seq ?? 0;
-	return backgroundCommands(records).filter((command) => {
+	return backgroundWork(records).filter((command) => {
 		if (dismissed.has(command.id)) return false;
 		if (command.state === 'running') return true;
 		if (command.state === 'completed')
@@ -115,15 +182,42 @@ export function turnBackground(
 	records: readonly EventRecord[],
 	turnSeq: number
 ): BackgroundCommand[] {
-	return backgroundCommands(records).filter((command) => command.turnSeq === turnSeq);
+	return backgroundWork(records).filter((command) => command.turnSeq === turnSeq);
 }
-/** What the sidebar card says while the turn is over and work goes on: the name of one command, or the number of them. */
-export type BackgroundSummary = { count: number; name: string | null };
+/** What the sidebar card says while the turn is over and work goes on: the name of one item, or the number of them. `subagents`: how many of
+ *  `count` are background subagents (spec/chat-turns-plans-and-questions#background-subagents); absent in older task files. */
+export type BackgroundSummary = { count: number; name: string | null; subagents?: number };
 export function backgroundSummary(records: readonly EventRecord[]): BackgroundSummary | null {
-	const live = liveBackground(records);
+	const live = backgroundWork(records).filter((item) => item.state === 'running');
+	const subagents = live.filter((item) => item.kind === 'subagent').length;
 	return live.length
-		? { count: live.length, name: live.length === 1 ? live[0]!.name : null }
+		? {
+				count: live.length,
+				name: live.length === 1 ? live[0]!.name : null,
+				...(subagents ? { subagents } : {}),
+			}
 		: null;
+}
+/** spec/chat#subagent-transport: the subagents at work now, in the turn or in the background; what «Stop» may stop. */
+export function runningSubagents(records: readonly EventRecord[]): Set<string> {
+	const running = new Set<string>();
+	for (const { event: e } of records) {
+		if (e.kind === 'subagent.started') running.add(e.id);
+		else if (e.kind === 'subagent.changed' && e.state)
+			if (e.state === 'running') running.add(e.id);
+			else running.delete(e.id);
+		else if (
+			e.kind === 'session.failed' ||
+			e.kind === 'host.stopped' ||
+			e.kind === 'session.started'
+		)
+			running.clear();
+	}
+	return running;
+}
+/** The live background subagents (they keep the host up, like commands). */
+export function liveBackgroundSubagents(records: readonly EventRecord[]): BackgroundCommand[] {
+	return backgroundSubagents(records).filter((item) => item.state === 'running');
 }
 export function isBackgroundSummary(value: unknown): value is BackgroundSummary {
 	if (!value || typeof value !== 'object') return false;
@@ -132,6 +226,10 @@ export function isBackgroundSummary(value: unknown): value is BackgroundSummary 
 		Number.isSafeInteger(v.count) &&
 		Number(v.count) > 0 &&
 		Number(v.count) <= 1000 &&
+		(v.subagents === undefined ||
+			(Number.isSafeInteger(v.subagents) &&
+				Number(v.subagents) > 0 &&
+				Number(v.subagents) <= Number(v.count))) &&
 		(v.name === null || (typeof v.name === 'string' && v.name.length <= 4096))
 	);
 }

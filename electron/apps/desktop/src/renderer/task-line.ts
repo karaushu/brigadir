@@ -29,23 +29,25 @@ export function taskActivityText(locale: Locale, task: AgentTask): string {
 		? `${t(locale, 'Permission')} · ${t(locale, browserShowCard.title)}`
 		: activity?.kind === 'plan'
 			? t(locale, 'Plan for approval')
-			: activity
-				? [
-						activity.kind === 'tool'
-							? (mcpActivityTitle(locale, activity.title) ?? activity.title)
-							: t(
-									locale,
-									activity.kind === 'question'
-										? 'Question'
-										: activity.kind === 'proposal'
-											? 'New task'
-											: 'Permission'
-								),
-						activity.kind === 'tool' ? activity.path?.split(/[\\/]/).at(-1) : activity.title,
-					]
-						.filter(Boolean)
-						.join(' · ')
-				: t(locale, task.blockedBy?.length ? 'Waiting for the lock' : statusLabels[task.status]);
+			: activity?.subagent
+				? `${t(locale, 'Subagent')} · ${activity.title}`
+				: activity
+					? [
+							activity.kind === 'tool'
+								? (mcpActivityTitle(locale, activity.title) ?? activity.title)
+								: t(
+										locale,
+										activity.kind === 'question'
+											? 'Question'
+											: activity.kind === 'proposal'
+												? 'New task'
+												: 'Permission'
+									),
+							activity.kind === 'tool' ? activity.path?.split(/[\\/]/).at(-1) : activity.title,
+						]
+							.filter(Boolean)
+							.join(' · ')
+					: t(locale, task.blockedBy?.length ? 'Waiting for the lock' : statusLabels[task.status]);
 }
 /**
  * spec/tasks#worktree-preparation: in the sidebar, a «Preparing…» or «Queued» card shows the

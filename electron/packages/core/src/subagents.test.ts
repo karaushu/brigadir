@@ -192,7 +192,7 @@ it('reads a hand-back call as the answer, not a call, by its input shape', () =>
 	expect(answerLine('## Short answer\nYes.')).toBe('Short answer');
 });
 
-it('marks a subagent cut by the end of the turn as interrupted, and a failed one with its errors', () => {
+it('a subagent left without a state works on after its turn and is interrupted by the host; a failed one shows its errors (spec/chat#subagent-transport)', () => {
 	const rows = activityRows(
 		records([
 			{ kind: 'turn.started', text: 'go' },
@@ -208,7 +208,16 @@ it('marks a subagent cut by the end of the turn as interrupted, and a failed one
 		])
 	);
 	const [cut, bad] = rows.filter((row): row is SubagentRow => row.kind === 'subagent');
-	expect(subagentView(cut!).state).toBe('interrupted');
+	expect(subagentView(cut!).state).toBe('running');
+	const stopped = activityRows(
+		records([
+			{ kind: 'turn.started', text: 'go' },
+			{ kind: 'subagent.started', id: 'cut', parentId: null, name: 'Cut', prompt: null },
+			{ kind: 'turn.completed', reason: 'cancelled' },
+			{ kind: 'host.stopped', reason: 'closed' },
+		])
+	).find((row): row is SubagentRow => row.kind === 'subagent');
+	expect(subagentView(stopped!).state).toBe('interrupted');
 	expect(subagentView(bad!)).toMatchObject({ state: 'failed', errors: 1, answer: null });
 });
 

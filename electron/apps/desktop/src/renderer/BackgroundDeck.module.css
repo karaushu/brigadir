@@ -24,6 +24,10 @@
 .row.row:active {
 	background-image: none;
 }
+.kind {
+	flex: none;
+	color: var(--fg2);
+}
 .name {
 	flex: 0 1 auto;
 	min-width: 0;

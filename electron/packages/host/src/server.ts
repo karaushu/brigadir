@@ -47,6 +47,8 @@ import {
 	backgroundTailBytes,
 	isBackgroundId,
 	liveBackground,
+	liveBackgroundSubagents,
+	runningSubagents,
 	outputTail,
 	isPlanApproval,
 	recordModeId,
@@ -987,9 +989,13 @@ export async function startHost(config: HostConfig) {
 				});
 			}
 			// spec/chat-turns-plans-and-questions#background-commands: the sidebar card reads what still runs in the background from the task, not from the journal.
+			// A subagent joins it when its turn ends under it (spec/chat-turns-plans-and-questions#background-subagents).
 			if (
 				event.kind === 'background.started' ||
 				(event.kind === 'background.changed' && event.state) ||
+				(event.kind === 'subagent.changed' && event.state) ||
+				event.kind === 'turn.completed' ||
+				event.kind === 'session.failed' ||
 				event.kind === 'host.stopped' ||
 				event.kind === 'session.started'
 			) {
@@ -1724,6 +1730,12 @@ export async function startHost(config: HostConfig) {
 			await transport.send(c);
 			return;
 		}
+		// spec/chat#subagent-transport: Stop on a running subagent; the turn, if any, goes on.
+		if (c.kind === 'stopSubagent') {
+			if (!runningSubagents(records).has(c.id)) throw new Error('The subagent is not running');
+			await transport.send(c);
+			return;
+		}
 		if (c.kind === 'cancel') {
 			await Promise.all([...questions.values()].map((q) => q.finish(null)));
 			await Promise.all([...proposals.values()].map((p) => p.finish(null)));
@@ -2444,7 +2456,7 @@ export async function startHost(config: HostConfig) {
 	/** spec/architecture-and-platform#host-lifecycle: nothing to do for `idleMs` → the same graceful stop as Stop. The repo locks go with the host; the journal keeps the session. */
 	function idleState() {
 		return {
-			background: liveBackground(records).length > 0,
+			background: liveBackground(records).length > 0 || liveBackgroundSubagents(records).length > 0,
 			terminal: task.transport === 'terminal',
 			busy,
 			starting: startingAgent !== null,

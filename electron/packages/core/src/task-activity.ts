@@ -2,7 +2,26 @@ import type { EventRecord, SessionEvent } from './session';
 import { isPlanApproval } from './plan-approval';
 import type { TaskActivity } from './workspace';
 type State = { activity: TaskActivity | null; toolId: string | null };
-function next(state: State, event: SessionEvent): State {
+/** spec/chat#subagent-block: subagent names by id — a subagent's own calls read as `Subagent · <name>`, like the turn status row. */
+type Names = Map<string, string>;
+function next(state: State, event: SessionEvent, names: Names): State {
+	if (event.kind === 'subagent.started') {
+		names.set(event.id, event.name);
+		return {
+			activity: { kind: 'tool', title: event.name.slice(0, 240), path: null, subagent: true },
+			toolId: null,
+		};
+	}
+	if (event.kind === 'tool.changed' && event.subagentId && names.has(event.subagentId))
+		return {
+			activity: {
+				kind: 'tool',
+				title: names.get(event.subagentId)!.slice(0, 240),
+				path: null,
+				subagent: true,
+			},
+			toolId: null,
+		};
 	if (
 		[
 			'turn.started',
@@ -52,7 +71,8 @@ function next(state: State, event: SessionEvent): State {
 }
 /** Tail-derived current activity; lifecycle boundaries never leave stale tool/request text. */
 export function taskActivity(records: readonly EventRecord[]): TaskActivity | null {
-	return records.reduce<State>((state, record) => next(state, record.event), {
+	const names: Names = new Map();
+	return records.reduce<State>((state, record) => next(state, record.event, names), {
 		activity: null,
 		toolId: null,
 	}).activity;

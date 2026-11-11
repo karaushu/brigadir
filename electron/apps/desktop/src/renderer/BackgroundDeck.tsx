@@ -26,10 +26,34 @@ const status = (command: BackgroundCommand): AgentTask['status'] =>
 			: command.state === 'failed'
 				? 'failed'
 				: 'interrupted';
+/** spec/chat-turns-plans-and-questions#turn-status-row: whole seconds, the first one not shown; the end in words. */
+function rowTime(command: BackgroundCommand, locale: Locale, now: number): string {
+	const ms = Math.max(0, (command.finishedAt ?? now) - command.startedAt),
+		elapsed = formatDuration(locale, Math.floor(ms / 1000) * 1000);
+	return command.state === 'completed'
+		? `${t(locale, command.kind === 'subagent' ? 'subagent finished' : 'background finished')} · ${elapsed}`
+		: command.state === 'failed'
+			? `${t(locale, 'error')} · ${elapsed}`
+			: ms >= 1000
+				? elapsed
+				: '';
+}
+const stateWord = (command: BackgroundCommand, locale: Locale) =>
+	t(
+		locale,
+		command.state === 'running'
+			? 'Working'
+			: command.state === 'completed'
+				? 'Done'
+				: command.state === 'failed'
+					? 'Error'
+					: 'stopped'
+	);
 /**
  * spec/chat-turns-plans-and-questions#background-commands: what the agent left running after its turn, on the deck over the island. A row opens Output
  * (the tail of the command's output, read by the host), Stop stops it. A finished row stays 4 s; a failed one until
- * the agent's next turn or Remove; a stopped one leaves at once.
+ * the agent's next turn or Remove; a stopped one leaves at once. A background subagent (spec/chat-turns-plans-and-questions#background-subagents)
+ * has the same row; it opens its block in the log instead of Output.
  */
 export function BackgroundDeck({
 	task,
@@ -37,12 +61,14 @@ export function BackgroundDeck({
 	locale,
 	send,
 	queue,
+	onOpenSubagent,
 }: {
 	task: AgentTask;
 	records: readonly EventRecord[];
 	locale: Locale;
 	send(command: SessionCommand): Promise<boolean>;
 	/** The queue's own list, under the background one in the same deck. */ queue: React.ReactNode;
+	/** Scrolls the log to the subagent's block and opens it. */ onOpenSubagent(id: string): void;
 }) {
 	const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
 	const [open, setOpen] = useState<string | null>(null);
@@ -65,9 +91,10 @@ export function BackgroundDeck({
 	return (
 		<Deck data-background-deck={rows.length ? true : undefined}>
 			{rows.length > 0 && (
-				<DeckList label={t(locale, 'Background commands')} data-background-list>
+				<DeckList label={t(locale, 'Background work')} data-background-list>
 					{rows.map((command, index) => (
 						<BackgroundRow
+							onOpenSubagent={() => onOpenSubagent(command.id)}
 							key={command.id}
 							task={task}
 							command={command}
@@ -102,6 +129,7 @@ function BackgroundRow({
 	open,
 	onOpen,
 	onDismiss,
+	onOpenSubagent,
 }: {
 	task: AgentTask;
 	command: BackgroundCommand;
@@ -111,31 +139,24 @@ function BackgroundRow({
 	open: boolean;
 	onOpen(open: boolean): void;
 	onDismiss(): void;
+	onOpenSubagent(): void;
 }) {
+	if (command.kind === 'subagent')
+		return (
+			<SubagentRow
+				command={command}
+				locale={locale}
+				label={label}
+				send={send}
+				onOpen={onOpenSubagent}
+				onDismiss={onDismiss}
+			/>
+		);
 	const running = command.state === 'running',
 		now = useSecondTick(running),
 		anchor = useRef<HTMLButtonElement>(null);
-	// spec/chat-turns-plans-and-questions#turn-status-row: whole seconds, the first one not shown.
-	const ms = Math.max(0, (command.finishedAt ?? now) - command.startedAt),
-		elapsed = formatDuration(locale, Math.floor(ms / 1000) * 1000);
-	const time =
-		command.state === 'completed'
-			? `${t(locale, 'background finished')} · ${elapsed}`
-			: command.state === 'failed'
-				? `${t(locale, 'error')} · ${elapsed}`
-				: ms >= 1000
-					? elapsed
-					: '';
-	const word = t(
-		locale,
-		running
-			? 'Working'
-			: command.state === 'completed'
-				? 'Done'
-				: command.state === 'failed'
-					? 'Error'
-					: 'stopped'
-	);
+	const time = rowTime(command, locale, now),
+		word = stateWord(command, locale);
 	const stop = () => {
 		onOpen(false);
 		void send({ kind: 'stopBackground', id: command.id }).then((done) => {
@@ -216,6 +237,74 @@ function BackgroundRow({
 				data-background-output>
 				<Output task={task} command={command} locale={locale} />
 			</Popover>
+		</DeckRow>
+	);
+}
+
+/** spec/chat-turns-plans-and-questions#background-subagents: a subagent that outlived its turn — `Subagent`, its name and time; Open shows its block, Stop
+ *  cancels it. */
+function SubagentRow({
+	command,
+	locale,
+	label,
+	send,
+	onOpen,
+	onDismiss,
+}: {
+	command: BackgroundCommand;
+	locale: Locale;
+	label: string;
+	send(command: SessionCommand): Promise<boolean>;
+	onOpen(): void;
+	onDismiss(): void;
+}) {
+	const running = command.state === 'running',
+		now = useSecondTick(running),
+		time = rowTime(command, locale, now),
+		word = stateWord(command, locale);
+	const stop = () =>
+		void send({ kind: 'stopSubagent', id: command.id }).then((done) => {
+			if (done) notify('info', t(locale, 'The subagent is stopped'));
+		});
+	return (
+		<DeckRow
+			hover
+			label={label}
+			data-background-row={command.state}
+			data-background-kind="subagent"
+			actions={
+				<>
+					{command.state !== 'completed' && (
+						<Button
+							size="s"
+							variant="ghost"
+							title={t(locale, 'Open the subagent')}
+							onClick={onOpen}>
+							<Glyph name="chat" size={14} />
+							{t(locale, 'Open')}
+						</Button>
+					)}
+					{running && (
+						<Button size="s" variant="ghost" title={t(locale, 'Stop the subagent')} onClick={stop}>
+							<Glyph name="command-stop" size={12} />
+							{t(locale, 'Stop')}
+						</Button>
+					)}
+					{command.state === 'failed' && (
+						<IconButton size="s" label={t(locale, 'Remove')} onClick={onDismiss}>
+							<Glyph name="close" size={14} />
+						</IconButton>
+					)}
+				</>
+			}>
+			<button type="button" className={styles.row} title={command.name} onClick={onOpen}>
+				<StatusIcon status={status(command)} label={word} size={13} />
+				<span className={styles.kind}>{t(locale, 'Subagent')}</span>
+				<span className={styles.name}>{command.name}</span>
+				<span className={styles.time} aria-hidden={running || undefined}>
+					{time}
+				</span>
+			</button>
 		</DeckRow>
 	);
 }

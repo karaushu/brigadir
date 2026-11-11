@@ -43,7 +43,8 @@ export type PermissionRequest = {
 	tool: ToolPatch;
 	options: { id: string; name: string; kind: string }[];
 };
-export type SubagentState = 'completed' | 'failed' | 'cancelled';
+/** spec/chat#subagent-transport: `running` after an end — the agent gave the same subagent new work. */
+export type SubagentState = 'running' | 'completed' | 'failed' | 'cancelled';
 /** spec/chat-turns-plans-and-questions#background-commands: how a background command ended. `stopped` — the person's «Stop», or the task or the app closed under it. */
 export type BackgroundState = 'completed' | 'failed' | 'stopped';
 /** spec/chat-turns-plans-and-questions#background-commands: why it stopped; kept in the journal, never shown — the UI says «Stopped» for all three. */
@@ -90,12 +91,14 @@ export type AgentEvent =
 			name: string;
 			prompt: string | null;
 	  }
-	/** spec/chat#subagents: what the adapter told about a subagent: its end (ACP `subagent_state_update`), the tool call that ran it, and the
-	 *  type, model, tokens and run time of its result when the adapter sent them. Nothing here is computed by us. */
+	/** spec/chat#subagents: what the adapter told about a subagent: its state (ACP `subagent_state_update`, or `subagent_update.state`), its prompt
+	 *  when it came after the start, the tool call that ran it, and the type, model, tokens and run time when the adapter sent them. Nothing here is
+	 *  computed by us. */
 	| {
 			kind: 'subagent.changed';
 			id: string;
 			state?: SubagentState;
+			prompt?: string;
 			toolId?: string;
 			type?: string;
 			model?: string;
@@ -149,6 +152,8 @@ export type AgentCommand =
 	  }
 	| { kind: 'cancel' }
 	| { kind: 'stopBackground'; id: string }
+	/** spec/chat#subagent-transport: Stop on a subagent — `session/cancel` with its own session. */
+	| { kind: 'stopSubagent'; id: string }
 	| { kind: 'setMode'; modeId: string }
 	| { kind: 'setOption'; id: string; value: string | boolean };
 

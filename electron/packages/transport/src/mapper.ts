@@ -5,6 +5,7 @@ import type {
 	AgentEvent,
 	AgentOption,
 	PermissionRequest,
+	SubagentState,
 	ToolContent,
 	ToolPatch,
 } from '@brigadir/core';
@@ -335,4 +336,38 @@ export function mapSubagentUpdate(
 	)
 		return { kind: 'subagent.changed', id, state: update.state };
 	return null;
+}
+
+/** spec/chat#subagent-transport: the RFD `subagent_update.state` as our subagent state. `idle` with `end_turn` is completed, with `cancelled` or no
+ *  reason (the adapter saw the work end but cannot say how) cancelled, with any other reason failed; `unknown` is cancelled. `requires_action` and
+ *  anything else: null — the permission card shows it. */
+export function rfdSubagentState(state: unknown): SubagentState | null {
+	if (!isRecord(state)) return null;
+	if (state.state === 'running') return 'running';
+	if (state.state === 'unknown') return 'cancelled';
+	if (state.state !== 'idle') return null;
+	const reason = state.stopReason;
+	return reason === 'end_turn'
+		? 'completed'
+		: typeof reason !== 'string' || reason === 'cancelled'
+			? 'cancelled'
+			: 'failed';
+}
+/** spec/chat#subagent-transport: the text of an RFD `session_message` (its text blocks), or null. */
+export function sessionMessageText(update: Record<string, unknown>): string | null {
+	if (!Array.isArray(update.content)) return null;
+	const text = update.content
+		.flatMap((block) =>
+			isRecord(block) && block.type === 'text' && typeof block.text === 'string' ? [block.text] : []
+		)
+		.join('\n\n');
+	return text.trim() ? text : null;
+}
+/** spec/chat#subagent-transport: a child session's model, from its `config_option_update`: the name of the current `model` value. */
+export function subagentModel(update: ACP.SessionUpdate): string | null {
+	if (update.sessionUpdate !== 'config_option_update') return null;
+	const model = mapOptions(update.configOptions).find((option) => option.id === 'model');
+	// `default` is the adapter's «use the default», not a model.
+	if (model?.kind !== 'select' || !model.value || model.value === 'default') return null;
+	return model.choices.find((choice) => choice.value === model.value)?.name || model.value;
 }

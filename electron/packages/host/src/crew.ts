@@ -183,8 +183,9 @@ export type BriefOptions = {
 	tools?: WorkspaceTools;
 	cli?: boolean;
 	/** spec/agents-and-providers#subagent-model: the setting is on for this session. */ subagents?: boolean;
+	/** spec/tasks#agent-context: the role text of a task without a crew. */ role?: string;
 };
-/** Every session gets a brief: the role brief of a crew node first, then the checklist sentence (spec/chat-turns-plans-and-questions#checklist-tools), then for a Claude session that
+/** Every session gets a brief: the role brief of a crew node (or the role of a solo task, spec/tasks#agent-context) first, then the checklist sentence (spec/chat-turns-plans-and-questions#checklist-tools), then for a Claude session that
  *  talks to the person (no crew, or the foreman) the plan sentence (spec/chat-turns-plans-and-questions#plan-approval), then for sessions with the person's tools the context sentence (spec/agents-and-providers#context-tools),
  *  then for Codex and the CLI the tools line (spec/agents-and-providers#tools-awareness: they may not show our MCP instructions to the model), then the commands sentence.
  *  Codex cannot enter its Plan mode itself; a worker answers to its foreman. */
@@ -196,7 +197,7 @@ export function sessionBrief(
 	const talksToPerson = !context || context.role === 'foreman',
 		human = humanToolsAllowed(context?.role ?? null);
 	return [
-		context ? crewBrief(context, options.tools) : '',
+		context ? crewBrief(context, options.tools) : (options.role ?? ''),
 		checklistBrief,
 		worktreeBrief,
 		provider === 'claude' && talksToPerson ? planApprovalBrief : '',

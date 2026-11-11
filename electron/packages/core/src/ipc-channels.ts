@@ -204,8 +204,14 @@ const isSheet = (value: unknown) =>
 	value === undefined ||
 	(isRecord(value) &&
 		Object.keys(value).every(
-			(key) => key === 'name' || key === 'options' || key === 'attachments' || key === 'draftId'
+			(key) =>
+				key === 'name' ||
+				key === 'options' ||
+				key === 'attachments' ||
+				key === 'draftId' ||
+				key === 'role'
 		) &&
+		(value.role === undefined || value.role === null || isId(value.role)) &&
 		(value.name === undefined || isTaskTitle(value.name)) &&
 		(value.options === undefined || isAgentChoices(value.options)) &&
 		(value.attachments === undefined || isAttachmentIds(value.attachments)) &&

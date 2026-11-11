@@ -320,6 +320,7 @@ leads a crew.
 | New agent / New crew | Новий агент / Нова бригада | | |
 | Instructions | Інструкції | The role text of an agent template, in English. | «промпт» |
 | Specialty | Спеціалізація | One sentence for the foreman: what the agent is good at. | «Опис» |
+| Role / No role | Роль / Без ролі | The agent template a task without a crew gives its agent, on the New task sheet. | «шаблон» |
 | Zone | Зона | The files an agent owns. | |
 | Subordinates | Підлеглі | The agents under a lead in the crew tree. | «сабагенти» |
 | Checker | Перевіряльник | An agent that reviews others and writes no code. | |

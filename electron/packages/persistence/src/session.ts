@@ -413,6 +413,7 @@ export class SessionStore {
 				AgentTask,
 				| 'prReview'
 				| 'readOnlyAgent'
+				| 'agentRole'
 				| 'changeBase'
 				| 'crew'
 				| 'crewTaskId'

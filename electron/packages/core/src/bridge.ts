@@ -65,6 +65,8 @@ export type TaskSheet = {
 	options?: { id: string; value: string }[];
 	attachments?: string[];
 	draftId?: string;
+	/** spec/tasks#sheet-role: the id of the agent template the solo agent works as; null — no role. */
+	role?: string | null;
 };
 import type { BrowserCommand, BrowserEvent, BrowserTabInfo } from './browser';
 import type { BrowserScreenCommand, BrowserScreenEvent } from './browser-screen';

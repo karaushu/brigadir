@@ -708,8 +708,11 @@
 	background: linear-gradient(transparent, var(--content) 70%);
 	pointer-events: none;
 }
+/* spec/composer#glass-overlay: notices stand in the island's column. */
 .notices {
-	background: var(--content);
+	width: calc(100% - 24px);
+	max-width: calc(var(--conversation-column-width) - 24px);
+	margin-inline: auto;
 }
 .notices:empty {
 	display: none;

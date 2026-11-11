@@ -22,7 +22,8 @@ The composer is the glass "island" at the bottom of a task's chat column: a Mark
 
 - The conversation log fills the whole column height. The island, the queue deck and the notices above them form an absolutely positioned dock pinned to the column bottom; the log scrolls under it.
 - Island: background `--card` at 68 % (`color-mix`), `backdrop-filter: blur(22px) saturate(1.8)`, 1 px `--sep` border, radius 14, no shadow. Under `prefers-reduced-transparency: reduce` it is solid `--card` without blur.
-- A 32 px strip under the island fades into `--content` (`linear-gradient(transparent, var(--content) 70%)`) so bare text never peeks out below. Notices stay on solid `--content`.
+- A 32 px strip under the island fades into `--content` (`linear-gradient(transparent, var(--content) 70%)`) so bare text never peeks out below.
+- Notices (`ui/StateStrip`: agent not running, host disconnected, starting, waiting, archived) stand in the island's column — `calc(100% - 24px)` wide, capped at the column width minus 24, centred — as a card: `--tint` over solid `--content`, 1 px `--hair` border, radius 12. The log shows beside them, not through them.
 - The log knows the dock's height (`Rows.bottomInset`, measured with `ResizeObserver`): the last row scrolls clear above the island; follow-to-end, To latest, in-view search and turn navigation count only the visible height; the turn rail ends above the dock.
 - The gaps around the island belong to the log: the dock has `pointer-events: none`; only the island, deck and notices take clicks and wheel events.
 - Focus: one outer frame — `--accent` border plus a 4 px `--accent-soft` ring on `:focus-within`. The inner editor draws no outline. All app textareas have `resize: none`.

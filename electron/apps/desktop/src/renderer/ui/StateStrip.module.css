@@ -1,5 +1,6 @@
 /* Canvas v3 3.12: 44 tall with S (24) buttons, padding 16, text 12 --fg2 after a 14 px --fg2 glyph; actions wrap under the
-   text when the column is narrow. */
+   text when the column is narrow. spec/composer#glass-overlay: a card in the island's column, opaque so the log does not
+   show through. */
 .strip {
 	display: flex;
 	flex-wrap: wrap;
@@ -8,8 +9,9 @@
 	row-gap: 8px;
 	min-height: 44px;
 	padding: 6px 16px;
-	border-top: 1px solid var(--hair);
-	background: var(--tint);
+	border: 1px solid var(--hair);
+	border-radius: 12px;
+	background: linear-gradient(var(--tint), var(--tint)), var(--content);
 	font-size: var(--text-12);
 	color: var(--fg);
 }

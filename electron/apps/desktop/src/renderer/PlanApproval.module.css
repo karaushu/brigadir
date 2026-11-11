@@ -108,6 +108,12 @@
 .whole {
 	margin: 0 14px 8px calc(14px - var(--c-px));
 }
+/* spec/chat-turns-plans-and-questions#plan-revisions: `All changes` on the left, `Whole plan` on the right. */
+.wholeRow {
+	display: flex;
+	align-items: center;
+	margin: 0 calc(14px - var(--c-px)) 8px;
+}
 .foot {
 	display: flex;
 	align-items: center;

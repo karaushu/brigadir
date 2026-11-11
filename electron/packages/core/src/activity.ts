@@ -6,6 +6,7 @@ export type ToolDiffPreview = Pick<
 export type TurnChanges = { range: ChangeRange | null; files: ChangedFile[]; total: number };
 import type { PromptAttachment } from './attachments';
 import type { EventRecord } from './session';
+import { planChatWords } from './plan-approval';
 import type { SubagentState, ToolPatch } from './agent';
 export type ActivityRow = { id: string } & (
 	| {
@@ -116,7 +117,8 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 					id: `user-${record.seq}`,
 					kind: 'message',
 					role: 'user',
-					text: e.text,
+					// spec/chat-turns-plans-and-questions#plan-chat: the person's row shows their own words, not the app's wrapper.
+					text: planChatWords(e.text) ?? e.text,
 					...(e.attachments ? { attachments: e.attachments } : {}),
 				});
 		}

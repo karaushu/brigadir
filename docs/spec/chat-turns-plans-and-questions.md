@@ -196,6 +196,7 @@ A plan the agent writes in plan mode, so the person can read it, edit it and app
 3. **Card.** It takes the request's place in the chat, at the width of the conversation column.
    - Header: a "waiting for you" dot, the document glyph, `Plan for approval`, `<agent> is waiting for approval`, an `edited in the editor` badge when it applies, and `Open in editor` on the right.
    - Body: the chat's Markdown renderer, folded to about 210 px with a fade, plus `Whole plan · N lines` / `Collapse plan`.
+   - From the second revision on, a bar over the body switches `Changes · Plan` (see [Changes between revisions](#plan-revisions)).
    - Footer: the file name of the plan copy, `Plan further…` and a split `Approve plan` button whose chevron (`How to approve`) lists the agent's options.
 4. **Approve plan returns the mode the session had before the plan.**
    - The prior mode comes from the journal (`planPriorMode`). The mode sequence is built from `session.started` `modeId`, `mode.changed` and the value of the `mode` option category from `session.started` / `options.changed`, with repeats dropped. The last entry is the plan's mode and the entry before it is the prior mode. With no transition, there is no prior mode.
@@ -208,13 +209,36 @@ A plan the agent writes in plan mode, so the person can read it, edit it and app
 5. **Plan further…** opens the field `What should change in the plan?` (`⌘↩ send · Esc cancel`, `Cancel`, `Send to the agent`). It answers with the first `reject_once` (else the first `reject_*`) and then sends the English prompt `planFeedbackPrompt(text)`.
 6. **Open in editor** writes a copy of the plan into the task folder, `plans/<slug>-<hash8>.md`. The slug comes from the first heading or line: ASCII, at most 60 characters, `plan` as fallback. The hash is the first 8 hex characters of the request id's SHA-256. There is one file per request, never overwritten. The copy opens as a normal editor tab in code view. Main reads and writes it as a `plan` resource, which is writable with no lock and no snapshot, because it is app data, not the work tree. The agent's own plan file is never touched. If opening fails, an error toast offers `Retry`.
 7. **Edited in the editor.** While the request is live, the card polls the copy every 1.5 s and on window focus. When the copy differs (`samePlanText` ignores line endings and trailing blanks), the header shows `edited in the editor` and `Approve plan` becomes `Send edits`. That sends `reject_*` plus `planEditsPrompt(copy)`, which gives the agent the whole edited text and asks it to present the plan again. A plan the agent has not seen can never be approved.
-8. **After the answer** the card folds into a row with a chevron that expands the plan read-only; `Open in editor` stays.
+8. **After the answer** the card folds into a row with a chevron that expands the plan read-only, with the same `Changes · Plan` bar from the second revision on; `Open in editor` stays.
    - Approved: `The plan is approved · <mode>`. The mode is the actual mode after approval (`planApprovedMode`): within the approval turn, `returnMode` if the session reached it, else the first mode after the plan's own. Its name comes from `availableModes`, else the mode option. With no transition there is no mode.
    - Rejected: `Plan in revision`, plus the person's own words recovered from the feedback prompt (`planPromptFeedback`).
 9. **Sidebar.** A task with such a request shows `Plan for approval` in place of the permission line.
 10. **Chat hidden.** When the plan copy is open in the editor and the chat is not visible, the space above the document shows a single line, `Plan for approval · <title> · <agent> is waiting for approval`, with `Back to chat`, in place of a generic permission card.
+11. **Chat while the plan waits.** <a id="plan-chat"></a>The person can talk to the agent about a plan that waits for approval. Enter in the composer (a `prompt` with `steer`, desktop or phone) is not held behind the request:
+    - The host answers the plan request with its first `reject_once` (else the first `reject_*`), then queues the message as `planChatPrompt(text)` without `steer`, so it runs right after the agent's turn ends. The English prompt says that the person wrote while the plan waited: answer a question, revise the plan only where the message asks for a change, and present the plan for approval again, unchanged when nothing changes.
+    - `⌘↩` (the queue) keeps its meaning and waits behind the request like any queued message.
+    - The person's row shows only their own words (`planChatWords`). The folded card reads `Plan in revision` with no quote.
+    - While the request waits, the composer placeholder reads `Ask about the plan or say what to change`.
+    - Without a reject option, the message is held as before.
 
 There is no global `⌘↩` for `Approve plan`, because it would collide with the composer. Shortcuts exist only inside the `Plan further…` field.
+
+<a id="plan-revisions"></a>
+### Changes between plan revisions
+
+Each time the agent presents the plan again, the card shows what changed since the plan before, in the plan's own Markdown (`core/plan-revisions.ts`, `diff/plan-diff.ts`, `PlanChanges.tsx`).
+
+1. **Revisions come from the journal.** A revision is a plan for approval with text (`permission.requested` with `switch_mode`, its text by `planApprovalText`). Its number is its place among those requests of the session, from 1. Nothing new is stored.
+2. **What it is compared with** (`planRevisionBase`): the revision before it. When the person answered that revision with `Send edits`, the base is the edited text recovered from the prompt (`planEditsPrompt`), because that is the version the agent received. The first revision has no base and its card looks as before: no bar, no counters.
+3. **Bar.** Over the body: `Segments` (row size S) `Changes · Plan`, the hint `since revision N` (`since your edits` for an edited base) and the `+N −M` of `ui/ChangeCounts` on the right. The counters count changed non-empty lines.
+4. **Changes view.** The plan's Markdown, block by block (a heading, a paragraph, a list item, a quote, a whole table or code block). A block is matched with the old one of the same kind when at least 60 % of the old words stay (and 30 % of the new):
+   - an added block on `--diffAddedBg` with a 3 px green bar on the left;
+   - a removed block on `--diffRemovedBg` with a red bar, its text struck through in the secondary colour;
+   - a changed block with an accent bar; inside it, removed words are struck through on a red tint and new words sit on a green tint, the word diff of the file diff. A table or a code block is never split into words: it shows removed, then added;
+   - the title (the first heading) always shows. A section (from a heading to the next one) without changes folds; a run of such sections is one `DiffFold` band: `<names> · unchanged` (one or two names, else `N sections`) and its line count on the right. Inside a changed section a run of more than two unchanged blocks between changes folds the same way into `N unchanged lines`. A click on a band shows its blocks in place.
+5. **Folding.** The view folds to the body's 210 px like the plan; under it `All changes · N sections` / `Collapse changes` and, on the right, `Whole plan · N lines`, which switches to `Plan` and opens it whole.
+6. **Which view opens.** `Changes`, unless more than half of the lines changed (added and removed lines over the lines of both sides): then `Plan`, with the amber tag `Rewritten` and the hint `most lines changed since revision N`. A revision with nothing changed opens on `Plan` too, with the hint `no changes since revision N`. The choice belongs to the card and is not stored.
+7. **Folded rows** of answered revisions (`Plan in revision`, `The plan is approved`) open with the same bar against their own base.
 
 <a id="crew-plan-card"></a>
 ### Foreman plan card
@@ -279,6 +303,7 @@ A question is a **tool call**, not text in the turn. The agent calls the Brigadi
 - Marks on the turn rail for a turn that failed or waits for a permission, coloured like the sidebar state.
 - Background commands for Codex. Its background terminals exist only through AIR `asyncTasks`, which alters `exitCode` and `rawOutput` of ordinary calls.
 - Plan documents of kinds `items` and `file`.
+- Comparing any two revisions of a plan, not only a revision and the one before it.
 
 <a id="non-goals"></a>
 ## Non-goals

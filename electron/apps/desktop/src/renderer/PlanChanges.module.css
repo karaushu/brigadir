@@ -1,0 +1,102 @@
+/* spec/chat-turns-plans-and-questions#plan-revisions: the changes view of a plan revision and its bar. */
+.bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	padding: 8px 14px 4px;
+	white-space: nowrap;
+}
+.since {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.space {
+	flex: 1;
+	min-width: 8px;
+}
+.bar > :last-child {
+	flex: none;
+	font: var(--text-11) var(--mono-family);
+}
+/* Folded like the plan body: about 210 px and a fade. */
+.body {
+	position: relative;
+	padding: 4px 14px 6px;
+	overflow: hidden;
+}
+.body[data-folded='true'] {
+	max-height: 210px;
+}
+.body[data-folded='true']::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 44px;
+	background: linear-gradient(transparent, var(--card));
+	pointer-events: none;
+}
+/* A fold band spans the card from edge to edge, as across a diff. */
+.body > button {
+	margin: 4px -14px;
+	width: calc(100% + 28px);
+}
+.foldName {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.foldLines {
+	margin-left: auto;
+	font-family: var(--mono-family);
+	color: var(--fg3);
+}
+/* Blocks touch, so a run of added or removed ones reads as one band; the space is padding inside each. */
+.changes > .block {
+	margin: 0 -14px;
+	padding: 2px 14px;
+}
+.changes > .block > * {
+	margin: 0;
+}
+.changes > .block[data-kind='heading'] {
+	padding-top: 8px;
+}
+.changes > .block:first-child[data-kind='heading'] {
+	padding-top: 2px;
+}
+.changes > .block[data-change='added'] {
+	background: var(--diffAddedBg);
+	box-shadow: inset 3px 0 var(--green);
+}
+.changes > .block[data-change='removed'] {
+	background: var(--diffRemovedBg);
+	box-shadow: inset 3px 0 var(--red);
+	color: var(--fg2);
+	text-decoration: line-through;
+	text-decoration-color: color-mix(in srgb, var(--red) 60%, transparent);
+}
+.changes > .block[data-change='removed'] * {
+	color: inherit;
+}
+.changes > .block[data-change='changed'] {
+	box-shadow: inset 3px 0 var(--accent);
+}
+.changes ins {
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--green) 24%, transparent);
+	text-decoration: none;
+	color: inherit;
+}
+.changes del {
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--red) 18%, transparent);
+	text-decoration: line-through;
+	color: var(--fg2);
+}

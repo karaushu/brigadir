@@ -58,6 +58,7 @@ When the agent advertises steering, a message the person sends during a GUI turn
 ### When a message steers
 
 - The agent advertised `initialize._meta.steering.supported = true`. The transport passes this on as `session.started.steering: true`. There is no registry of our own.
+- A plan waiting for approval is the exception: Enter rejects the plan request and queues the message for the agent (see [Chat while the plan waits](chat-turns-plans-and-questions.md#plan-chat)).
 - Only the person's own composer message steers: the `prompt` command with `steer: true`. This flag cannot be combined with `crew`. Foreman prompts to workers, answers to questions restored after a restart, plan refusals, merge prompts and other app prompts have no flag and always go through the FIFO.
 - All of these must also hold: our own `session/prompt` is running, the FIFO is empty and not paused, and no rate limit blocks.
 - Everything else goes through the FIFO: worker reports and questions, `submitReview`, and anything sent while the queue is not empty. Pressing Enter behind a non-empty queue queues the message, so queue order is never broken.
@@ -146,7 +147,7 @@ Adapter behaviour as measured:
   - `To the queue`: "Sent after the turn ends", `⌘↩`.
 
   Arrow keys move between items, Escape closes, and focus returns to Send.
-- **Held-message row in the activity**: the person's row shows where it was sent, with a clock and `Waiting for the agent`. Under a pending permission request or question, the clock is amber and the text reads "Sent after you answer the request". The row has 22×22 `Edit message` and `Remove message` buttons, which use the same `edit` / `close` glyphs as the deck. Edit removes the message and puts its text back in the field. Once the agent takes the message, the row becomes a normal message row.
+- **Held-message row in the activity**: the person's row shows where it was sent, with a clock and `Waiting for the agent`. Under a pending permission request or question, the clock is amber and the text reads "Sent after you answer the request". A message sent with Enter while a plan waits for approval is not held: it answers the plan (see [Chat while the plan waits](chat-turns-plans-and-questions.md#plan-chat)). The row has 22×22 `Edit message` and `Remove message` buttons, which use the same `edit` / `close` glyphs as the deck. Edit removes the message and puts its text back in the field. Once the agent takes the message, the row becomes a normal message row.
 
 <a id="ghost"></a>
 ## Ghost next-prompt suggestion

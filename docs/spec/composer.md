@@ -1,6 +1,6 @@
 # Composer
 
-The composer is the glass "island" at the bottom of a task's chat column: a Markdown text editor with inline mention pills and image thumbnails, an agent row (attach, context ring, agent capsule, Send/Stop) and a full-width environment footer that says where the agent writes. Everything the person adds (files, folders, images, editor selections, task summaries, model references) stands in the text where it was placed and reaches the agent as ACP content blocks in the same order. Steering, the prompt queue, ghost suggestions and the quick question are described in [Steering, queue and ghost](composer-steering-queue-and-ghost.md).
+The composer is the glass "island" at the bottom of a task's chat column: a Markdown text editor with inline mention pills and image thumbnails, an agent row (attach, context ring, agent capsule, Send/Stop) and a full-width environment footer that says where the agent writes. Everything the person adds (files, folders, images, editor selections, task summaries, agent templates, model references) stands in the text where it was placed and reaches the agent as ACP content blocks in the same order. Steering, the prompt queue, ghost suggestions and the quick question are described in [Steering, queue and ghost](composer-steering-queue-and-ghost.md).
 
 <a id="island"></a>
 ## Island layout
@@ -131,7 +131,7 @@ The squeeze level is measured on the row itself (`ResizeObserver` on `[data-comp
 ## Text editor
 
 - CodeMirror, the same editor as the New task sheet prompt (`useMentionEditor`). Font 13.5 / 21, padding `12px 16px 2px`, one line high when empty (min 35 px), grows to 240 px, then scrolls inside.
-- Placeholder teaches the keys: `{send} send · {newline} new line · @ files · / commands`, keys from the keymap helper (`formatAccelerator`): `↩` / `⇧↩` on macOS, `Enter` / `Shift+Enter` on other platforms. While the agent works the placeholder describes steering (see [steering](composer-steering-queue-and-ghost.md)).
+- Placeholder teaches the keys: `{send} send · {newline} new line · @ files · / commands`, keys from the keymap helper (`formatAccelerator`): `↩` / `⇧↩` on macOS, `Enter` / `Shift+Enter` on other platforms. While the agent works the placeholder describes steering (see [steering](composer-steering-queue-and-ghost.md)). While a plan waits for approval it reads `Ask about the plan or say what to change` (see [Chat while the plan waits](chat-turns-plans-and-questions.md#plan-chat)).
 - A ghost suggestion is the placeholder text with a framed `Tab` key after it; `Tab` takes it only when the menu is closed and the text is empty.
 
 | Key | Action |
@@ -199,9 +199,10 @@ The draft and the journal keep each mention as a self-delimited token without sp
 | --- | --- | --- |
 | `@[att:<uuid>]` | an attachment: file or folder reference, text, image, task summary | file/folder/code glyph and name; image as thumbnail |
 | `@[task:<id>]` | a task, until the message is sent | task state glyph (helmet for a crew), title |
+| `@[agent:<id>]` | an agent template, until the message is sent | person glyph, the template's name |
 | `@[model:<provider>:<id>]` | a model reference | provider glyph, model id |
 
-- Pills: `--accent-soft` background, `--accent` text, 10 px glyph; file, folder and model in mono, task in the normal font. Images: inline thumbnail at line height, 39 × 26 in the composer, 30 × 20 in the sheet, radius 4, centre crop.
+- Pills: `--accent-soft` background, `--accent` text, 10 px glyph; file, folder and model in mono, task and agent template in the normal font. Images: inline thumbnail at line height, 39 × 26 in the composer, 30 × 20 in the sheet, radius 4, centre crop.
 - A pill is atomic: the caret walks around it; the first `⌫` right after it selects it, the second removes it. Removing a pill removes its attachment; `⌘Z` restores both. A pill's `title` says what it is and how it goes to the agent.
 - Click on a pill or thumbnail opens the attachment preview (file pills open the document).
 - Display text (`promptDisplayText`) replaces tokens with names (`@Button.tsx`) for the turn rail, queue deck, chat search and Copy message. The sent message in the log shows the same pills and thumbnails.
@@ -214,6 +215,7 @@ The draft and the journal keep each mention as a self-delimited token without sp
 - Text attachments become text blocks `<attached_context name="<name>">\n<text>\n</attached_context>`; images become `image` blocks (PNG). Attachments the text does not place follow the text.
 - A model pill becomes the text `` `claude-sonnet-5` (Claude) ``. It has no side effect: the task's model does not change and the turn runs on the task model.
 - A task pill becomes, at send time, an attachment `Task summary · <title>` built by main without a model (`attachment:task-summary`): title, state, branch, first request, latest agent answer and `git diff --stat`. Failure blocks the send with **The task summary could not be attached.**
+- An agent template pill becomes, at send time, an attachment `Agent template · <name>` built by main from the library (`attachment:agent-template`), so the log keeps what the agent read even after the template changes. Its text (English, rule 12) says the template is a role for a subagent: when the person asks to run it, the agent starts a subagent with its own subagent tool and gives it the instructions below, followed by the work and what the subagent has to know, because a subagent does not see the conversation; the agent checks the answer before it passes it on, and does the work itself by the same instructions when it has no subagent tool. The instructions are the template's own without the crew tools (`subagentRole`): a built-in gets its text for work under another agent, an own template its instructions with a sentence that sends its crew words to the agent that started it; a checker is told to write no code and change no files. The mention has no side effect: nothing starts until the agent starts it, the subagent runs inside the task's session with the task's rights, and the task's role, model and rights do not change. A template that left the library blocks the send with **The agent template could not be attached.**
 - More than 10 attachments at send time block the send with the attachment-limit error.
 - Images require the agent's `promptCapabilities.image`; otherwise the transport refuses the prompt before `turn.started` and the draft stays.
 - File and folder references are text, not `resource_link`: `File reference:` / `Directory reference:` with `Project-relative path` and `Absolute path`, ending `Read the current contents from disk when needed.` The agent reads the contents itself, so context is not spent and the reference does not go stale.
@@ -263,11 +265,12 @@ Queued prompts, attachments without a place under a reply, and the CLI context s
 ## `@` menu
 
 - `@` at the start of a word (line start or after whitespace) opens the menu anywhere in the text; `mail@example` and a query containing a space stay text. Without a pick, `@word` goes to the agent as text; nothing is silently converted.
-- Tabs **All · Files · Tasks · Models** with match counts; opens on **All** (all groups in one list, captions like `Models · Claude`). Tabs appear only when a menu has two or more groups (`ui/mention-tabs`).
+- Tabs **All · Files · Agents · Tasks · Models** with match counts; opens on **All** (all groups in one list, captions like `Models · Claude`). In **All**, once a query is typed, matching agent templates stand above the files: `@tester` names the template first, and a bare `@` starts with files. Tabs appear only when a menu has two or more groups (`ui/mention-tabs`).
 
 | Tab | Source and rows |
 | --- | --- |
 | Files | the task's file index (same as Open Quickly ⌘⇧O and Search Everywhere ▸ Files) plus folders; up to 8 rows; `file`/`folder` glyph 12, mono name, path tail |
+| Agents | the library's agent templates except foremen ([Templates](crew-templates-and-editor.md#builtin-templates)), in the library's order, matched by the name shown and by the English name; `person` glyph; tail = the line of the template's card ([Agent cards](crew-templates-and-editor.md#agent-cards)) |
 | Tasks | project tasks except the current one; crew agents indented under their task, the current task's own crew at the top level; state glyph; tail = current tool activity while working or needing you, else the state |
 | Models | both providers' model catalogs, the task's provider first, grouped by provider; mono model id; ✓ and tail **task model** on the task's model |
 
@@ -355,6 +358,8 @@ The queue deck (and the background commands deck) share `ui/Deck`, which stands 
 ## Later
 
 - `@` and `/` buttons in the agent row.
+- Agent templates in the New task sheet's `@` menu.
+- The template's own model for the subagent a mention starts.
 - `@` pick of a file open in the editor with a selection attaches it with that line range, shown in the menu before picking.
 - `⌫` on a list marker removes the marker; `Tab` inside a code block inserts 2 spaces.
 

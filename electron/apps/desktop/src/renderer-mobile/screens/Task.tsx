@@ -480,6 +480,7 @@ export function Task({
 					steering={steering}
 					disabled={offline}
 					limitMinutes={limitMinutes}
+					planWaiting={pending.permissions.some((request) => isPlanApproval(request))}
 					queued={queue.prompts.filter(isOwnQueuedPrompt)}
 					options={options}
 					context={context}

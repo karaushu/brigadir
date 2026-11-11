@@ -115,6 +115,7 @@ import {
 	planLinesLabel,
 	isPlanApproval,
 	planApprovalText,
+	planRevisionBase,
 	planApproveChoice,
 	planApprovedMode,
 	planPromptFeedback,
@@ -738,21 +739,24 @@ export function Conversation({
 		actions: composerActions,
 		placeholder: ghost
 			? ghost.text
-			: busy
-				? withPlatformKeys(
-						steers
-							? queueShortcut
-								? t(locale, '↩ send now · {queue} to the queue').replace(
-										'{queue}',
-										formatAccelerator(queueShortcut)
-									)
-								: t(locale, '↩ send now')
-							: t(locale, '↩ to the queue')
-					)
-				: // spec/composer#agent-capsule: the empty field teaches the keys, named as this platform spells them (spec/architecture-and-platform#window-frame).
-					t(locale, '{send} send · {newline} new line · @ files · / commands')
-						.replace('{send}', formatAccelerator('Enter'))
-						.replace('{newline}', formatAccelerator('Shift+Enter')),
+			: // spec/chat-turns-plans-and-questions#plan-chat: Enter answers a waiting plan.
+				pending.permissions.some((request) => isPlanApproval(request))
+				? t(locale, 'Ask about the plan or say what to change')
+				: busy
+					? withPlatformKeys(
+							steers
+								? queueShortcut
+									? t(locale, '↩ send now · {queue} to the queue').replace(
+											'{queue}',
+											formatAccelerator(queueShortcut)
+										)
+									: t(locale, '↩ send now')
+								: t(locale, '↩ to the queue')
+						)
+					: // spec/composer#agent-capsule: the empty field teaches the keys, named as this platform spells them (spec/architecture-and-platform#window-frame).
+						t(locale, '{send} send · {newline} new line · @ files · / commands')
+							.replace('{send}', formatAccelerator('Enter'))
+							.replace('{newline}', formatAccelerator('Shift+Enter')),
 		placeholderKey: ghost ? 'Tab' : undefined,
 		attributes: {
 			'aria-busy': String(!composerLoaded),
@@ -1430,12 +1434,14 @@ export function Conversation({
 			if (e.kind === 'permission.requested' && isPlanApproval(e.request)) {
 				const plan = planApprovalText(e.request, records, row.record.seq);
 				if (plan !== null) {
+					const base = planRevisionBase(records, row.record.seq);
 					if (pending.permissions.some((p) => p.id === e.request.id))
 						return (
 							<PlanApproval
 								request={e.request}
 								choice={planApproveChoice(e.request, records, row.record.seq)}
 								text={plan}
+								base={base}
 								task={task}
 								locale={locale}
 								revision={linkRevision}
@@ -1481,6 +1487,7 @@ export function Conversation({
 							<PlanApprovalSummary
 								request={e.request}
 								text={plan}
+								base={base}
 								approved={approved}
 								mode={mode}
 								feedback={feedback}

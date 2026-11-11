@@ -16,8 +16,11 @@ import {
 	type Locale,
 	type PermissionRequest,
 	type PlanApproveChoice,
+	type PlanRevisionBase,
 	type SessionCommand,
 } from '@brigadir/core';
+import { planChangeView, type PlanChangeView } from '@brigadir/diff';
+import { allChangesLabel, PlanChanges, PlanRevisionBar } from './PlanChanges';
 import { markdown, MarkdownBlock } from './MarkdownBlock';
 import { openTaskEditor } from './task-state';
 // spec/editor#markdown-views: the plan copy opens to be edited, so in Code view (a line opens the code), not in the preview a new .md gets.
@@ -66,6 +69,125 @@ function PlanBody({
 	);
 }
 
+/** spec/chat-turns-plans-and-questions#plan-revisions: the revision's changes against its base, and which view the card opens on. */
+function useRevision(text: string, base: PlanRevisionBase | undefined) {
+	const before = base?.base?.text ?? null;
+	const view = useMemo(
+		() => (before === null ? null : planChangeView(before, text)),
+		[before, text]
+	);
+	const [mode, setMode] = useState<'changes' | 'plan'>(
+		view && !view.rewritten && view.additions + view.deletions > 0 ? 'changes' : 'plan'
+	);
+	return { view, mode: view ? mode : ('plan' as const), setMode };
+}
+
+/** The body of a plan card: the changes view or the plan, the bar over them, and the fold buttons under them. */
+function RevisionBody({
+	id,
+	text,
+	task,
+	locale,
+	revision,
+	base,
+	view,
+	mode,
+	setMode,
+	whole,
+	setWhole,
+	foldable,
+	tag,
+}: {
+	id: string;
+	text: string;
+	task: AgentTask;
+	locale: Locale;
+	revision: number;
+	base: PlanRevisionBase['base'];
+	view: PlanChangeView;
+	mode: 'changes' | 'plan';
+	setMode(mode: 'changes' | 'plan'): void;
+	whole: boolean;
+	setWhole(whole: boolean): void;
+	foldable: boolean;
+	tag: React.ReactNode;
+}) {
+	const lines = planLineCount(text),
+		long = mode === 'changes' ? view.shownLines > 10 : lines > 10;
+	return (
+		<>
+			{base && (
+				<PlanRevisionBar
+					view={view}
+					base={base}
+					mode={mode}
+					locale={locale}
+					onMode={(next) => {
+						setMode(next);
+						setWhole(false);
+					}}
+					tag={tag}
+				/>
+			)}
+			{mode === 'changes' ? (
+				<PlanChanges
+					id={id}
+					view={view}
+					task={task}
+					locale={locale}
+					revision={revision}
+					folded={foldable && !whole && long}
+				/>
+			) : (
+				<PlanBody
+					id={id}
+					text={text}
+					task={task}
+					locale={locale}
+					revision={revision}
+					folded={foldable && !whole && long}
+				/>
+			)}
+			{foldable && long && mode === 'changes' && (
+				<div className={styles.wholeRow}>
+					<Button
+						size="s"
+						appearance="primary"
+						variant="ghost"
+						aria-expanded={whole}
+						onClick={() => setWhole(!whole)}>
+						{allChangesLabel(locale, view.sections, whole)}
+					</Button>
+					<span className={styles.space} />
+					<Button
+						size="s"
+						appearance="primary"
+						variant="ghost"
+						onClick={() => {
+							setMode('plan');
+							setWhole(true);
+						}}>
+						{t(locale, 'Whole plan · {n}').replace('{n}', planLinesLabel(locale, lines))}
+					</Button>
+				</div>
+			)}
+			{foldable && long && mode === 'plan' && (
+				<Button
+					size="s"
+					appearance="primary"
+					variant="ghost"
+					className={styles.whole}
+					aria-expanded={whole}
+					onClick={() => setWhole(!whole)}>
+					{whole
+						? t(locale, 'Collapse plan')
+						: t(locale, 'Whole plan · {n}').replace('{n}', planLinesLabel(locale, lines))}
+				</Button>
+			)}
+		</>
+	);
+}
+
 /**
  * spec/chat-turns-plans-and-questions#plan-approval: the plan for approval as a card in the chat. `Approve plan` answers with the agent's option for the mode
  * the session had before the plan, else `allow_once` asking the host for that mode back; the chevron lists its
@@ -79,6 +201,7 @@ export function PlanApproval({
 	task,
 	locale,
 	revision,
+	base,
 	disabled,
 	send,
 }: {
@@ -88,6 +211,8 @@ export function PlanApproval({
 	task: AgentTask;
 	locale: Locale;
 	revision: number;
+	/** spec/chat-turns-plans-and-questions#plan-revisions: what this revision is compared with. */
+	base?: PlanRevisionBase;
 	disabled: boolean;
 	send(command: SessionCommand): Promise<boolean>;
 }) {
@@ -104,7 +229,8 @@ export function PlanApproval({
 		toggle = useRef<HTMLButtonElement>(null),
 		field = useRef<HTMLTextAreaElement>(null);
 	const edited = copy !== null && !samePlanText(copy, text),
-		lines = planLineCount(text);
+		lines = planLineCount(text),
+		changes = useRevision(text, base);
 	// The copy is compared while the request lives; the poll is a stat in main and stops with the card.
 	useEffect(() => {
 		let alive = true;
@@ -193,26 +319,46 @@ export function PlanApproval({
 					{t(locale, 'Open in editor')}
 				</Button>
 			</header>
-			<PlanBody
-				id={`plan-approval-${request.id}`}
-				text={text}
-				task={task}
-				locale={locale}
-				revision={revision}
-				folded={!whole && lines > 10}
-			/>
-			{lines > 10 && (
-				<Button
-					size="s"
-					appearance="primary"
-					variant="ghost"
-					className={styles.whole}
-					aria-expanded={whole}
-					onClick={() => setWhole((value) => !value)}>
-					{whole
-						? t(locale, 'Collapse plan')
-						: t(locale, 'Whole plan · {n}').replace('{n}', planLinesLabel(locale, lines))}
-				</Button>
+			{changes.view ? (
+				<RevisionBody
+					id={`plan-approval-${request.id}`}
+					text={text}
+					task={task}
+					locale={locale}
+					revision={revision}
+					base={base?.base ?? null}
+					view={changes.view}
+					mode={changes.mode}
+					setMode={changes.setMode}
+					whole={whole}
+					setWhole={setWhole}
+					foldable
+					tag={<span className={styles.badge}>{t(locale, 'Rewritten')}</span>}
+				/>
+			) : (
+				<>
+					<PlanBody
+						id={`plan-approval-${request.id}`}
+						text={text}
+						task={task}
+						locale={locale}
+						revision={revision}
+						folded={!whole && lines > 10}
+					/>
+					{lines > 10 && (
+						<Button
+							size="s"
+							appearance="primary"
+							variant="ghost"
+							className={styles.whole}
+							aria-expanded={whole}
+							onClick={() => setWhole((value) => !value)}>
+							{whole
+								? t(locale, 'Collapse plan')
+								: t(locale, 'Whole plan · {n}').replace('{n}', planLinesLabel(locale, lines))}
+						</Button>
+					)}
+				</>
 			)}
 			{feedback !== null ? (
 				<form
@@ -332,11 +478,14 @@ export function PlanApprovalSummary({
 	task,
 	locale,
 	revision,
+	base,
 	open,
 	onToggle,
 }: {
 	request: PermissionRequest;
 	text: string;
+	/** spec/chat-turns-plans-and-questions#plan-revisions */
+	base?: PlanRevisionBase;
 	approved: boolean;
 	mode: string | null;
 	feedback: string | null;
@@ -347,6 +496,8 @@ export function PlanApprovalSummary({
 	open: boolean;
 	onToggle(event: React.SyntheticEvent<HTMLDetailsElement>): void;
 }) {
+	const changes = useRevision(text, base),
+		[whole, setWhole] = useState(false);
 	const openFile = () => {
 		void window.brigadir
 			.openPlanFile(task, request.id, text)
@@ -377,16 +528,33 @@ export function PlanApprovalSummary({
 				<Chevron />
 			</summary>
 			{!approved && feedback && <blockquote className={styles.quote}>{feedback}</blockquote>}
-			{open && (
-				<PlanBody
-					id={`plan-summary-${request.id}`}
-					text={text}
-					task={task}
-					locale={locale}
-					revision={revision}
-					folded={false}
-				/>
-			)}
+			{open &&
+				(changes.view ? (
+					<RevisionBody
+						id={`plan-summary-${request.id}`}
+						text={text}
+						task={task}
+						locale={locale}
+						revision={revision}
+						base={base?.base ?? null}
+						view={changes.view}
+						mode={changes.mode}
+						setMode={changes.setMode}
+						whole={whole}
+						setWhole={setWhole}
+						foldable={false}
+						tag={<span className={styles.badge}>{t(locale, 'Rewritten')}</span>}
+					/>
+				) : (
+					<PlanBody
+						id={`plan-summary-${request.id}`}
+						text={text}
+						task={task}
+						locale={locale}
+						revision={revision}
+						folded={false}
+					/>
+				))}
 		</details>
 	);
 }

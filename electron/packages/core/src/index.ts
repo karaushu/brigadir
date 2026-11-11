@@ -8,6 +8,7 @@ export * from './tool-groups';
 export * from './subagents';
 export * from './background';
 export * from './plan-approval';
+export * from './plan-revisions';
 export * from './event-validation';
 export * from './changes';
 export * from './review';

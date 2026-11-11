@@ -411,3 +411,4 @@ export function unifiedDiff(
 }
 export * from './anchors';
 export * from './merge3';
+export * from './plan-diff';

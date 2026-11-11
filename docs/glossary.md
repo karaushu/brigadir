@@ -279,6 +279,9 @@ Names" category of STE.
 | Plan further… | Планувати далі… | Reject the plan with text about what to change. | |
 | Send edits | Надіслати правки | Replaces `Approve plan` when the user edited the plan. | |
 | Plan approved / Plan rejected | План погоджено / План відхилено | | |
+| Revision | Ревізія | One version of a plan for approval; the agent makes a new one after `Plan further…`. | «версія» |
+| Changes · Plan | Зміни · План | The plan card's switch: what changed since the revision before, or the plan itself. | |
+| Rewritten | Переписано | Most lines of the plan changed since the revision before. | |
 
 ### Quick question
 

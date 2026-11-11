@@ -9,6 +9,7 @@ export type MentionGroup = {
 	id: string;
 	label: string;
 	items: readonly MentionGroupItem[];
+	/** In `All` the group's rows stand above the other groups (spec/composer#mention-menu: agent templates once a query is typed). */ lead?: boolean;
 	/** The name of the wait while the group loads, e.g. `Searching…`: skeleton rows show it (spec/appearance#loading). */ status?:
 		string | null;
 };
@@ -37,7 +38,9 @@ export function mentionView(
 			? allTab
 			: (groups[0]?.id ?? allTab);
 	const shown =
-		!tabbed || current === allTab ? groups : groups.filter((group) => group.id === current);
+		!tabbed || current === allTab
+			? [...groups.filter((group) => group.lead), ...groups.filter((group) => !group.lead)]
+			: groups.filter((group) => group.id === current);
 	// In `All` (and a menu of one group) a row's caption is its group, `Group · section` under a sub-heading; inside a
 	// group's own tab only sub-headings remain.
 	const items = shown.flatMap((group) =>

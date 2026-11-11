@@ -327,6 +327,7 @@ export const webChannels: Readonly<Record<IpcMethod, WebAccess>> = {
 	readAttachment: 'allow',
 	readAttachmentInfo: 'allow',
 	attachTaskSummary: 'deny',
+	attachAgentTemplate: 'deny',
 	readAttachmentThumbnail: 'allow',
 	copyAttachmentImage: 'deny',
 	browserCommand: 'deny',

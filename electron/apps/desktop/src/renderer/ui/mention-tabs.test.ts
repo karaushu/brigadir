@@ -68,4 +68,16 @@ describe('spec/composer#mentions: вкладки меню @', () => {
 		expect(nextTab(tabs, 'models', 1)).toBe('all');
 		expect(nextTab(tabs, 'all', -1)).toBe('models');
 	});
+	it('група з `lead` стоїть першою в «Усі», вкладки лишаються на місцях', () => {
+		const led = groups.map((group) => (group.id === 'tasks' ? { ...group, lead: true } : group)),
+			view = mentionView(led, allTab, 'All');
+		expect(view.tabs?.map((tab) => tab.id)).toEqual(['all', 'files', 'tasks', 'models']);
+		expect(view.items.map((item) => item.label)).toEqual([
+			'Split kit exports',
+			'Button.tsx',
+			'ButtonGroup.tsx',
+			'claude-opus-5',
+			'gpt-5.5',
+		]);
+	});
 });

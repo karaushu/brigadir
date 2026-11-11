@@ -68,6 +68,7 @@ export function Composer({
 	steering,
 	disabled,
 	limitMinutes,
+	planWaiting,
 	queued,
 	options,
 	context,
@@ -86,6 +87,7 @@ export function Composer({
 	disabled: boolean;
 	/** spec/remote-access-and-mobile#phone-app: the subscription limit with minutes to its reset; null — no limit. */ limitMinutes:
 		number | null;
+	/** spec/chat-turns-plans-and-questions#plan-chat: a plan waits for approval, so the message answers it. */ planWaiting: boolean;
 	queued: readonly QueuedPrompt[];
 	options: readonly AgentOption[];
 	context: number | null;
@@ -266,7 +268,9 @@ export function Composer({
 							? t(locale, 'No connection to {machine}').replace('{machine}', machine)
 							: limitMinutes !== null
 								? t(locale, 'What you send goes after the limit resets')
-								: t(locale, 'Write a message…')
+								: planWaiting
+									? t(locale, 'Ask about the plan or say what to change')
+									: t(locale, 'Write a message…')
 					}
 					onChange={(event) => setText(event.target.value)}
 				/>
@@ -338,7 +342,7 @@ export function Composer({
 								const long = press.current?.long;
 								press.current = null;
 								if (long) return;
-								void submit(steers || !busy);
+								void submit(steers || !busy || planWaiting);
 							}}>
 							<Icon name="up" size={20} />
 						</button>

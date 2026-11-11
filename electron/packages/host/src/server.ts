@@ -1719,6 +1719,11 @@ export async function startHost(config: HostConfig) {
 			return;
 		}
 		if (c.kind === 'retryTurn') return serialPrompt(() => retryTurn(c.reason));
+		// Pausing touches only the journaled queue: a console-only host with no agent takes it too, so Complete and Backlog pass (spec/tasks#archive-actions).
+		if (c.kind === 'pausePromptQueue')
+			return serialPrompt(async () => {
+				if (queue.prompts.length) await emit({ kind: 'queue.paused' });
+			});
 		// The snapshot is `connected` while the adapter still starts: a message sent then waits for it, a failed start answers with its own error.
 		if (!transport && startingAgent) {
 			await startingAgent;
@@ -1744,10 +1749,6 @@ export async function startHost(config: HostConfig) {
 			await transport.send(c);
 			return;
 		}
-		if (c.kind === 'pausePromptQueue')
-			return serialPrompt(async () => {
-				if (queue.prompts.length) await emit({ kind: 'queue.paused' });
-			});
 		if (c.kind === 'steerQueuedPrompt')
 			return serialPrompt(async () => {
 				const item = queue.prompts.find((entry) => entry.id === c.id);

@@ -37,6 +37,7 @@ import {
 	type AgentEvent,
 	type AgentProvider,
 	type PermissionRequest,
+	type SubagentState,
 } from '@brigadir/core';
 /** spec/composer#mentions: an attachment input with the id its token carries in the prompt text; inputs the host adds (brief, context) have none. */
 export type PromptInput = AttachmentInput & { id?: string };
@@ -48,6 +49,9 @@ import {
 	mapSession,
 	mapSubagentUpdate,
 	mapUpdate,
+	rfdSubagentState,
+	sessionMessageText,
+	subagentModel,
 	subagentResult,
 	turnUsage,
 } from './mapper';
@@ -178,7 +182,16 @@ export class AgentTransport {
 	 *  renamed to our `_brigadir/subagent`, so they keep their place among the other updates. */
 	private readonly sdkInput = new PassThrough();
 	/** spec/chat#subagents: the subagent sessions the adapter announced (`subagent_spawned`), and the tool calls that run them. */
-	private subagents = new Map<string, { toolId: string | null }>();
+	private subagents = new Map<
+		string,
+		{
+			toolId: string | null;
+			state: SubagentState | null;
+			prompt: boolean;
+			model: string | null;
+			type?: string;
+		}
+	>();
 	private subagentTools = new Map<string, string>();
 	/** spec/chat-turns-plans-and-questions#background-commands: Claude's background tasks from the raw SDK `task_*` messages: announced once backgrounded, ended once. */
 	private background = new Map<
@@ -343,6 +356,15 @@ export class AgentTransport {
 				if (this.sessionId && params.sessionId !== this.sessionId) {
 					const child = this.subagents.get(params.sessionId);
 					if (!child) return;
+					// spec/chat#subagent-transport: the RFD form reports the child's model through its own options.
+					const model = subagentModel(params.update);
+					if (model) {
+						if (model !== child.model) {
+							child.model = model;
+							await this.emit({ kind: 'subagent.changed', id: params.sessionId, model });
+						}
+						return;
+					}
 					const event = mapUpdate(params.update);
 					if (event.kind === 'tool.changed') {
 						if (!child.toolId && event.patch.parentId) {
@@ -414,11 +436,20 @@ export class AgentTransport {
 						(params.sessionId !== this.sessionId && !this.subagents.has(params.sessionId))
 					)
 						return;
+					if (isRecord(params.update) && params.update.sessionUpdate === 'subagent_update')
+						return this.rfdSubagent(params.update, params.sessionId);
+					if (isRecord(params.update) && params.update.sessionUpdate === 'session_message')
+						return this.rfdMessage(params.update, params.sessionId);
 					const event = mapSubagentUpdate(params.update, params.sessionId, this.sessionId);
 					if (!event) return;
 					if (event.kind === 'subagent.started') {
 						if (this.subagents.has(event.id)) return;
-						this.subagents.set(event.id, { toolId: null });
+						this.subagents.set(event.id, {
+							toolId: null,
+							state: null,
+							prompt: event.prompt !== null,
+							model: null,
+						});
 					} else if (!this.subagents.has(event.id)) return;
 					await this.emit(event);
 				}
@@ -812,6 +843,12 @@ export class AgentTransport {
 			await this.stopBackground(command.id);
 			return;
 		}
+		// spec/chat#subagent-transport: the RFD grants `cancel` on a child; the adapter answers with `idle cancelled`.
+		if (command.kind === 'stopSubagent') {
+			if (!this.subagents.has(command.id)) throw new Error('Unknown subagent');
+			await this.connection.agent.notify(methods.agent.session.cancel, { sessionId: command.id });
+			return;
+		}
 		if (command.kind === 'setMode') {
 			if (!this.modeIds.has(command.modeId)) throw new Error('Mode is not in the agent catalog');
 			await this.connection.agent.request(methods.agent.session.setMode, {
@@ -1067,11 +1104,67 @@ export class AgentTransport {
 		return status;
 	}
 	/** Lines of a chunk while a steer is watched; the SDK parses the same chunk only after this synchronous listener. */
+	/** spec/chat#subagent-transport: an RFD `subagent_update` on `parent` (ours or a known child). The first one for a child announces it; later
+	 *  ones change its type or state. Each state is journaled once, `running` only after an end. */
+	private async rfdSubagent(update: Record<string, unknown>, parent: string): Promise<void> {
+		const id = update.sessionId;
+		if (typeof id !== 'string' || !id || id === this.sessionId) return;
+		const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : null);
+		let child = this.subagents.get(id);
+		const events: AgentEvent[] = [];
+		if (!child) {
+			child = { toolId: null, state: 'running', prompt: false, model: null };
+			this.subagents.set(id, child);
+			events.push({
+				kind: 'subagent.started',
+				id,
+				parentId: parent === this.sessionId ? null : parent,
+				name: text(update.title) ?? text(update.description) ?? id,
+				prompt: null,
+			});
+		}
+		const described = text(update.description),
+			type = described && described !== child.type ? described : null,
+			state = rfdSubagentState(update.state);
+		if (type) child.type = type;
+		const next = state && state !== child.state && (state !== 'running' || child.state !== null);
+		if (state === 'running' && child.state === null) child.state = 'running';
+		if (next) child.state = state;
+		// Queued in one step: another notification handled meanwhile must not land between the start and its type.
+		if (type || next)
+			events.push({
+				kind: 'subagent.changed',
+				id,
+				...(type ? { type } : {}),
+				...(next ? { state } : {}),
+			});
+		await Promise.all(events.map((event) => this.emit(event)));
+	}
+	/** spec/chat#subagent-transport: an RFD `session_message` in a child's own transcript: a message to it is its prompt (the first one), a message from
+	 *  it (a hand-back report) is its answer. The parent's views of the same messages repeat them and are ignored. */
+	private async rfdMessage(update: Record<string, unknown>, session: string): Promise<void> {
+		const child = this.subagents.get(session),
+			text = sessionMessageText(update);
+		if (!child || !text) return;
+		if (update.senderSessionId === session)
+			await this.emit({
+				kind: 'message.delta',
+				role: 'assistant',
+				messageId: typeof update.messageId === 'string' ? update.messageId : null,
+				content: { kind: 'text', text },
+				subagentId: session,
+			});
+		else if (update.recipientSessionId === session && !child.prompt) {
+			child.prompt = true;
+			await this.emit({ kind: 'subagent.changed', id: session, prompt: text });
+		}
+	}
 	/** The pending session, ours, or a subagent session the adapter announced (spec/chat#subagents). */
 	private ownSession(sessionId: string): boolean {
 		return !this.sessionId || sessionId === this.sessionId || this.subagents.has(sessionId);
 	}
-	/** spec/chat#subagents: `subagent_spawned` and `subagent_state_update` go to the SDK as our ext notification; every other line as is. */
+	/** spec/chat#subagent-transport: the subagent updates the SDK schema does not know (`subagent_spawned`, `subagent_state_update`, `subagent_update`,
+	 *  `session_message`) go to the SDK as our ext notification; every other line as is. */
 	private static adapterLine(line: string): string {
 		if (!line.includes('"initialize"')) return line;
 		let message: unknown;
@@ -1096,7 +1189,7 @@ export class AgentTransport {
 		});
 	}
 	private static sdkLine(line: string): string {
-		if (!line.includes('"subagent_')) return line;
+		if (!line.includes('"subagent_') && !line.includes('"session_message"')) return line;
 		let message: unknown;
 		try {
 			message = JSON.parse(line);
@@ -1111,7 +1204,10 @@ export class AgentTransport {
 		)
 			return line;
 		const type = message.params.update.sessionUpdate;
-		return type === 'subagent_spawned' || type === 'subagent_state_update'
+		return type === 'subagent_spawned' ||
+			type === 'subagent_state_update' ||
+			type === 'subagent_update' ||
+			type === 'session_message'
 			? JSON.stringify({ ...message, method: '_brigadir/subagent' })
 			: line;
 	}

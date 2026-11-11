@@ -71,7 +71,7 @@ async function launch(scenario: string, extra: Record<string, string> = {}) {
 		},
 	};
 }
-const deck = (page: Page) => page.getByRole('region', { name: 'Background commands' });
+const deck = (page: Page) => page.getByRole('region', { name: 'Background work' });
 
 // spec/chat-turns-plans-and-questions#agent-started-turns: Claude Code begins a turn on its own after a background task. The fixture replays a live run's wire; the gate file
 // lets the test look at the finished turn first. The log, the status row, Stop, the person's message and the footer behave
@@ -173,6 +173,30 @@ test('the background command finishes and Claude goes on by itself: the row says
 			log.locator('footer[aria-label="Turn 1"] [data-background-chip="done"]')
 		).toBeVisible();
 		await expect(deck(page)).toHaveCount(0, { timeout: 8000 });
+		expect(errors).toEqual([]);
+	} finally {
+		await close();
+	}
+});
+
+// spec/chat-turns-plans-and-questions#background-subagents: a subagent still running when its turn ends — the RFD form of claude-agent-acp. Its deck row
+// opens its block in the log; Stop goes main → host → adapter as `session/cancel` on the child, and the row leaves when the adapter says it stopped.
+test('a background subagent: the deck row, Open, the sidebar line, Stop @area:chat', async () => {
+	const { page, errors, message, close } = await launch('subagents');
+	try {
+		await message.fill('subagent-rfd');
+		await message.press('Enter');
+		const row = deck(page).locator('[data-background-kind="subagent"]');
+		await expect(row).toContainText('List files');
+		await expect(page.locator('aside [data-task-background]')).toHaveText(
+			'In the background · Subagent List files'
+		);
+		await row.getByRole('button', { name: 'Open' }).click();
+		const log = page.getByRole('log', { name: 'Conversation' });
+		await expect(log.getByText('Run ls.', { exact: true })).toBeVisible();
+		await row.getByRole('button', { name: 'Stop' }).click();
+		await expect(row).toHaveCount(0);
+		await expect(page.locator('aside [data-task-background]')).toHaveCount(0);
 		expect(errors).toEqual([]);
 	} finally {
 		await close();

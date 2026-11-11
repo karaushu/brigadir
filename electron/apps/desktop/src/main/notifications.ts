@@ -95,6 +95,8 @@ type TaskState = {
 		string
 	>;
 	turnSeq: number;
+	/** spec/chat-turns-plans-and-questions#background-subagents: running subagents by id — their name, and whether their turn ended under them. */
+	subagents: Map<string, { name: string; left: boolean }>;
 	rateLimits: RateLimitWindow[];
 	seeded: boolean;
 	watermark: number;
@@ -159,6 +161,7 @@ export class Notifications {
 			state = {
 				background: new Map(),
 				turnSeq: 0,
+				subagents: new Map(),
 				rateLimits: [],
 				seeded: false,
 				watermark: 0,
@@ -298,6 +301,7 @@ export class Notifications {
 				this.close(state, `${group}/needs-you/${event.id}`);
 				break;
 			case 'host.stopped':
+				state.subagents.clear();
 				state.permissions.clear();
 				state.questions.clear();
 				state.proposals.clear();
@@ -311,6 +315,7 @@ export class Notifications {
 				this.close(state, `${group}/failed`);
 				break;
 			case 'turn.completed':
+				for (const subagent of state.subagents.values()) subagent.left = true;
 				if (event.reason !== 'cancelled' && state.crewQuestions.size) {
 					state.crewWaiting = true;
 					requestId = [...state.crewQuestions].at(-1)!;
@@ -321,6 +326,23 @@ export class Notifications {
 				while (state.background.size > 256)
 					state.background.delete(state.background.keys().next().value!);
 				break;
+			case 'subagent.started':
+				state.subagents.set(event.id, { name: event.name, left: false });
+				while (state.subagents.size > 256)
+					state.subagents.delete(state.subagents.keys().next().value!);
+				break;
+			// spec/chat-turns-plans-and-questions#background-subagents: a background subagent's failure notifies; its success is the agent's next turn.
+			case 'subagent.changed': {
+				const subagent = state.subagents.get(event.id);
+				if (subagent && event.state && event.state !== 'running') {
+					state.subagents.delete(event.id);
+					if (event.state === 'failed' && subagent.left) {
+						state.background.set(event.id, subagent.name);
+						this.deliver(key, state, 'failed', event.kind, event.id, null);
+					}
+				}
+				break;
+			}
 			case 'background.changed':
 				if (event.state === 'completed') {
 					const seq = record.seq,
@@ -484,13 +506,15 @@ export class Notifications {
 		requestId: string | null,
 		locale: Locale
 	) {
-		return eventKind === 'background.changed'
+		return eventKind === 'background.changed' || eventKind === 'subagent.changed'
 			? [
 					t(
 						locale,
-						kind === 'failed'
-							? 'The background command failed.'
-							: 'The background command finished.'
+						eventKind === 'subagent.changed'
+							? 'The subagent failed.'
+							: kind === 'failed'
+								? 'The background command failed.'
+								: 'The background command finished.'
 					),
 					requestId ? state.background.get(requestId) : null,
 				]

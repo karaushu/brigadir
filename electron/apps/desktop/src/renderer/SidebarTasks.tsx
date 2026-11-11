@@ -2,7 +2,7 @@ import { memo, useEffect, useId, useRef, useState } from 'react';
 import {
 	archiveSoon,
 	attachmentCount,
-	backgroundCommandCount,
+	backgroundWorkCount,
 	crewNeedsYou,
 	crewWorkerRows,
 	defaultArchiveAfterDays,
@@ -459,9 +459,15 @@ export const TaskRow = memo(function TaskRow({
 						!!task.blockedBy?.length
 					) &&
 					(() => {
+						// spec/chat-turns-plans-and-questions#background-subagents: one subagent reads «Subagent <name>»; several items as their counts.
+						const { count, name, subagents = 0 } = task.background;
 						const text = t(locale, 'In the background · {name}').replace(
 							'{name}',
-							task.background.name ?? backgroundCommandCount(locale, task.background.count)
+							name === null
+								? backgroundWorkCount(locale, count, subagents)
+								: subagents
+									? t(locale, 'Subagent {name}').replace('{name}', name)
+									: name
 						);
 						return (
 							<small data-task-background className={styles.taskBackground} title={text}>

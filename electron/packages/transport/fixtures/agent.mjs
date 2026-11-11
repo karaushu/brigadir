@@ -78,7 +78,7 @@ connection = agent({name:'fixture'})
   if(planModes&&params.configId==='mode')syncMode(params.value);
   return {configOptions:options};
  })
- .onNotification(methods.agent.session.cancel, () => {record('cancel',{}); release?.();})
+ .onNotification(methods.agent.session.cancel, (message) => {const sessionId=message?.params?.sessionId??message?.sessionId;if(sessionId&&sessionId!=='fixture-session'){record('cancel',{sessionId});process.stdout.write(JSON.stringify({jsonrpc:'2.0',method:'session/update',params:{sessionId:'fixture-session',update:{sessionUpdate:'subagent_update',sessionId,state:{state:'idle',stopReason:'cancelled'}}}})+'\n');return;}record('cancel',{}); release?.();})
  .onRequest('_session/steering',params=>params,async({params,client})=>{
   const text=params.prompt.map(item=>item.type==='text'?item.text:'').join('');record('steer',{text,meta:params._meta});
   // codex-acp with no running turn starts its own; Claude answers promptRequired.
@@ -282,6 +282,24 @@ connection = agent({name:'fixture'})
   }
   // spec/chat#subagents: a subagent in its own session, as claude-agent-acp sends it to a client with the `subagents` capability: the SDK
   // schema does not know `subagent_spawned` yet, so those lines go out raw; the child's updates carry its session id.
+  // spec/chat#subagent-transport: the RFD form claude-agent-acp 0.101+ sends to a client with `subagents` that is not AIR: `subagent_update`
+  // announces and ends the child, `session_message` replaces the hidden Agent call (prompt) and the hand-back; the parent's views repeat them.
+  if(text==='subagent-rfd'){
+   const raw=(sessionId,payload)=>new Promise(done=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:payload}})+'\n',done));
+   const child=(payload)=>client.notify(methods.client.session.update,{sessionId:'child-2',update:{...payload,_meta:{claudeCode:{parentToolUseId:'launch-2'}}}});
+   const message=(sessionId,messageId,from,to,text,link)=>raw(sessionId,{sessionUpdate:'session_message',messageId,senderSessionId:from,recipientSessionId:to,...link,content:[{type:'text',text}]});
+   await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Starting.'}});
+   await raw('fixture-session',{sessionUpdate:'subagent_update',sessionId:'child-2',title:'List files',description:'Explore',capabilities:{cancel:{}},state:{state:'running'}});
+   await message('fixture-session','launch-2','fixture-session','child-2','Run ls.',{recipientMessageId:'launch-2'});
+   await message('child-2','launch-2','fixture-session','child-2','Run ls.',{senderMessageId:'launch-2'});
+   await client.notify(methods.client.session.update,{sessionId:'child-2',update:{sessionUpdate:'config_option_update',configOptions:[{id:'model',name:'Model',type:'select',currentValue:'haiku',options:[{value:'default',name:'Default (recommended)'},{value:'haiku',name:'Haiku 5.5'}]}]}});
+   await child({sessionUpdate:'tool_call',toolCallId:'child-tool-2',title:'ls',kind:'execute',status:'pending'});
+   await child({sessionUpdate:'tool_call_update',toolCallId:'child-tool-2',status:'completed'});
+   await message('child-2','handback-2','child-2','fixture-session','Two files.',{recipientMessageId:'handback-2'});
+   await message('fixture-session','handback-2','child-2','fixture-session','Two files.',{senderMessageId:'handback-2'});
+   await raw('fixture-session',{sessionUpdate:'subagent_update',sessionId:'child-2',state:{state:'idle',stopReason:'end_turn'}});
+   await raw('fixture-session',{sessionUpdate:'subagent_update',sessionId:'child-2',state:{state:'running'}});
+  }
   if(text==='subagent'){
    const raw=payload=>new Promise(done=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',method:'session/update',params:{sessionId:'fixture-session',update:payload}})+'\n',done));
    const child=(payload)=>client.notify(methods.client.session.update,{sessionId:'child-1',update:{...payload,_meta:{claudeCode:{parentToolUseId:'launch-1'}}}});

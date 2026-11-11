@@ -100,7 +100,7 @@ Claude Code starts a turn by itself when a background task finishes or when a pe
 <a id="background-commands"></a>
 ### Background commands
 
-A command the agent runs with `run_in_background` (Claude Bash) ends its tool call at once, but the work goes on. The chat shows that work in an `In the background · N` deck, a footer chip and a sidebar line.
+A command the agent runs with `run_in_background` (Claude Bash) ends its tool call at once, but the work goes on. The chat shows that work in an `In the background · N` deck, a footer chip and a sidebar line. Background subagents join the same places (see [Background subagents](#background-subagents)).
 
 **Source (Claude only).** The source is the raw SDK `task_*` messages, requested together with `session_state_changed` (`emitRawSDKMessages` filters `task_started`, `task_updated` and `task_notification`). JetBrains AIR `asyncTasks` is deliberately not used: as a capability it changes the rest of the wire. Claude loses `output` of finished Read/Bash calls, `parentId` of subagent calls and `subagent.changed`; Codex loses `exitCode` and changes `rawOutput`.
 
@@ -133,6 +133,17 @@ A command the agent runs with `run_in_background` (Claude Bash) ends its tool ca
    - A failure notifies like a failure (`The background command failed.`) for every value except `Never`.
    - A success notifies like the end of a turn (`The background command finished.`), only if the agent does not start a turn within 5 s. If it does, that turn's end notification is the only one.
    - A stop (by the person, by closing, or by a restart) never notifies.
+
+<a id="background-subagents"></a>
+#### Background subagents
+
+A subagent the agent runs in the background (Claude `Agent` with `run_in_background`) outlives the turn that started it, like a background command. It shares the deck, the footer chip and the sidebar line with background commands.
+
+- **Which ones.** A subagent is background work when the turn it started in ends (`turn.completed`) while it still runs. From then on it stays an item until it ends, also through later turns. A subagent that ends inside its turn is never one. Source and states are the subagent's own events (see [Subagents](chat.md#subagent-transport)): `completed`, `failed`, `cancelled` (shown as stopped). A `running` after the end brings it back. State: `core/background.ts` `backgroundWork` (commands and subagents in the order they started, `kind: command | subagent`).
+- **Deck row.** The same `DeckRow`: state icon, `Subagent` in `--fg2`, its name, time since start. Actions: `Open` scrolls the log to its block and expands it; `Stop` sends `stopSubagent` and an info toast says `The subagent is stopped`. A click on the row opens the block too. When it ends: finished — `subagent finished · <time>` for 4 s, then the row leaves; failed — `error · <time>` with `Open` and `Remove` until the agent's next turn; stopped — the row leaves at once. The list is labelled `Background work`; `In the background · N` counts commands and subagents together.
+- **Footer chip** on the turn that started it: `⟳ in background N` counts both kinds. After the end: `✓ subagent · <time>` for one subagent, otherwise the counts joined with `·` (`2 subagents · 1 background command`).
+- **Sidebar.** `⟳ In the background · Subagent <name>` for one subagent; several items read as the counts, as on the chip. The host keeps `task.background {count, name, subagents}`, where `subagents` is how many of `count` are subagents.
+- **Host.** A live background subagent keeps the host from shutting down for inactivity, like a command. Closing the task or the app and a host restart end it the same way (`host.stopped`, a new `session.started`). Notifications: a failure notifies as `The subagent failed.`; a success never notifies on its own — Claude reads the answer and starts a turn, whose end is the notification.
 
 <a id="plans"></a>
 ## Plans

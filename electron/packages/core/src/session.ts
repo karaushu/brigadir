@@ -356,6 +356,8 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 			return v.reason === undefined || v.reason === 'auth';
 		case 'stopBackground':
 			return isBackgroundId(v.id);
+		case 'stopSubagent':
+			return isSubagentId(v.id);
 		case 'quickAsk':
 			return (
 				v.phase === 'before' ||
@@ -446,7 +448,7 @@ export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 import { isScopeUpdate, type ScopeUpdate } from './scope-controls';
 import { isScopeChoice, type ScopeChoice } from './launch';
 import { isTaskProposalResult, type TaskProposal, type TaskProposalResult } from './task-proposal';
-import { isBackgroundId } from './background';
+import { isBackgroundId, isSubagentId } from './background';
 /** The card or row that waits for the person's answer keeps the task in `needs-you` (spec/tasks#agent-created-tasks adds the proposed task, spec/crew#workers the foreman's plan). */
 export function waitsForPerson(inputs: PendingInputs) {
 	return (

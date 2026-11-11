@@ -52,12 +52,20 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 	let activeTools: Extract<ActivityRow, { kind: 'tool' }>[] = [];
 	const subagents = new Map<string, ActivityRow & { kind: 'subagent' }>(),
 		owners = new Map<string, string>();
-	let activeSubagents: (ActivityRow & { kind: 'subagent' })[] = [];
+	// spec/chat#subagent-transport: a subagent and its calls end only by its own state or with the session — a background one outlives its turn.
+	const subagentTools = new Map<string, Extract<ActivityRow, { kind: 'tool' }>[]>();
 	const closeTools = (at: string) => {
 		for (const row of activeTools) if (row.finishedAt === null) row.finishedAt = Date.parse(at);
 		activeTools = [];
-		for (const row of activeSubagents) if (row.finishedAt === null) row.finishedAt = Date.parse(at);
-		activeSubagents = [];
+	};
+	const closeSubagent = (row: ActivityRow & { kind: 'subagent' }, at: string) => {
+		row.finishedAt ??= Date.parse(at);
+		for (const tool of subagentTools.get(row.subagentId) ?? [])
+			if (tool.finishedAt === null) tool.finishedAt = Date.parse(at);
+		subagentTools.delete(row.subagentId);
+	};
+	const closeSubagents = (at: string) => {
+		for (const row of subagents.values()) if (row.finishedAt === null) closeSubagent(row, at);
 	};
 	let turn = 0;
 	let plan: (ActivityRow & { kind: 'event' }) | undefined;
@@ -129,17 +137,22 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 					rows: [],
 				};
 				subagents.set(e.id, row);
-				activeSubagents.push(row);
 				(parent?.rows ?? rows).push(row);
 			}
 		}
 		if (e.kind === 'subagent.changed') {
 			const row = subagents.get(e.id);
 			if (row) {
-				if (e.state) {
+				if (e.state === 'running') {
+					// The agent gave the same subagent new work: the block works again.
+					row.state = null;
+					row.finishedAt = null;
+					delete row.durationMs;
+				} else if (e.state) {
 					row.state = e.state;
-					row.finishedAt ??= Date.parse(record.at);
+					closeSubagent(row, record.at);
 				}
+				if (e.prompt && !row.prompt) row.prompt = e.prompt;
 				if (e.type) row.type = e.type;
 				if (e.model) row.model = e.model;
 				if (e.tokens !== undefined) row.tokens = e.tokens;
@@ -167,7 +180,7 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 						: '';
 			// A subagent's text without its own session (`parentId`) never joins the main agent's message.
 			const id = e.messageId
-				? `${turn}/${owner}${e.role}/${e.messageId}`
+				? `${e.subagentId ? '' : `${turn}/`}${owner}${e.role}/${e.messageId}`
 				: previous?.kind === 'message' &&
 					  previous.role === e.role &&
 					  (owners.get(previous.id) ?? '') === owner
@@ -189,7 +202,10 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 			row.text += content;
 		}
 		if (e.kind === 'tool.changed') {
-			const id = `${turn}/tool/${e.patch.id}`;
+			// A background subagent's call may change after its turn ended: its id does not depend on the turn.
+			const id = e.subagentId
+				? `subagent-${e.subagentId}/tool/${e.patch.id}`
+				: `${turn}/tool/${e.patch.id}`;
 			let row = tools.get(id);
 			if (!row) {
 				row = {
@@ -199,7 +215,11 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 					finishedAt: null,
 					tool: { id: e.patch.id },
 				};
-				activeTools.push(row);
+				if (e.subagentId) {
+					const list = subagentTools.get(e.subagentId) ?? [];
+					list.push(row);
+					subagentTools.set(e.subagentId, list);
+				} else activeTools.push(row);
 				tools.set(id, row);
 				sink.push(row);
 			}
@@ -210,6 +230,8 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 		}
 		if (['turn.completed', 'session.failed', 'host.stopped'].includes(e.kind))
 			closeTools(record.at);
+		if (['session.failed', 'host.stopped', 'session.started'].includes(e.kind))
+			closeSubagents(record.at);
 		if (e.kind === 'plan.changed') {
 			if (plan) plan.record = record;
 			else {

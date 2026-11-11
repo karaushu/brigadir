@@ -2946,6 +2946,17 @@ const uk = {
 	'Could not stop the background command.': 'Не вдалося зупинити фонову команду.',
 	'Could not read the output.': 'Не вдалося прочитати вивід.',
 	'Show background commands': 'Показати фонові команди',
+	// spec/chat-turns-plans-and-questions#background-subagents: a subagent that outlived its turn, in the same deck, chip and sidebar line.
+	'Background work': 'Фонова робота',
+	'Show background work': 'Показати фонову роботу',
+	subagent: 'сабагент',
+	'subagent finished': 'закінчив',
+	'Open the subagent': 'Відкрити сабагента',
+	'Stop the subagent': 'Зупинити сабагента',
+	'The subagent is stopped': 'Сабагента зупинено',
+	'The subagent failed.': 'Сабагент закінчив з помилкою.',
+	'Could not stop the subagent.': 'Не вдалося зупинити сабагента.',
+	'Subagent {name}': 'Сабагент {name}',
 	'Resolve conflicts': 'Розвести конфлікт',
 	'How to resolve': 'Як розвести',
 	'Merge {base} into the PR branch and resolve the conflict':
@@ -4817,6 +4828,23 @@ export function backgroundCommandCount(locale: Locale, count: number): string {
 					other: 'background commands',
 				};
 	return `${new Intl.NumberFormat(locale).format(count)} ${forms[form as keyof typeof forms] ?? forms.other}`;
+}
+/** spec/chat-turns-plans-and-questions#background-subagents: «1 сабагент», «3 сабагенти», «5 сабагентів» (rule 9: four uk forms). */
+export function subagentCount(locale: Locale, count: number): string {
+	const form = new Intl.PluralRules(locale).select(count);
+	const forms =
+		locale === 'uk'
+			? { one: 'сабагент', few: 'сабагенти', many: 'сабагентів', other: 'сабагента' }
+			: { one: 'subagent', few: 'subagents', many: 'subagents', other: 'subagents' };
+	return `${new Intl.NumberFormat(locale).format(count)} ${forms[form as keyof typeof forms] ?? forms.other}`;
+}
+/** spec/chat-turns-plans-and-questions#background-subagents: several items of background work — «2 сабагенти · 1 фонова команда»; one kind alone reads as its count. */
+export function backgroundWorkCount(locale: Locale, count: number, subagents = 0): string {
+	const commands = count - subagents;
+	return [
+		...(subagents > 0 ? [subagentCount(locale, subagents)] : []),
+		...(commands > 0 || subagents === 0 ? [backgroundCommandCount(locale, commands)] : []),
+	].join(' · ');
 }
 /** spec/chat#tool-groups: the tool group header — «21 виклик», «4 виклики», «5 викликів» (GLOSSARY: «N викликів», rule 9: four uk forms). */
 export function toolCallCount(locale: Locale, count: number): string {

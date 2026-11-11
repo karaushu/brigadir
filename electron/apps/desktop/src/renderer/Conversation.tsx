@@ -169,6 +169,7 @@ const sendFailures: Partial<Record<SessionCommand['kind'], MessageKey>> = {
 	resumePromptQueue: 'Could not resume the queue.',
 	retryTurn: 'Could not retry the turn.',
 	stopBackground: 'Could not stop the background command.',
+	stopSubagent: 'Could not stop the subagent.',
 };
 /** Texts the composer editor reports as they are; anything else it reports is the raw failure of the `@` file search. */
 const editorFailures: readonly MessageKey[] = [
@@ -1751,7 +1752,12 @@ export function Conversation({
 					bottomInset={dockHeight}
 					locale={locale}
 					searchText={conversationSearchText}
-					targetId={focusTurn ? `user-${focusTurn}` : focusedTool?.owner}
+					targetId={
+						focusTurn
+							? `user-${focusTurn}`
+							: (focusedTool?.owner ??
+								(activityTarget?.startsWith('subagent/') ? activityTarget : undefined))
+					}
 					onInteract={() => {
 						if (focusTurn || activityTarget) setTask({ focusTurn: null, activityTarget: null });
 					}}
@@ -1848,6 +1854,14 @@ export function Conversation({
 					records={records}
 					locale={locale}
 					send={send}
+					onOpenSubagent={(id) =>
+						// spec/chat-turns-plans-and-questions#background-subagents: «Open» brings the subagent's block into view, open.
+						setTask((state) => ({
+							activityTarget: `subagent/${id}`,
+							focusTurn: null,
+							activityExpanded: new Map(state.activityExpanded).set(`subagent/${id}`, true),
+						}))
+					}
 					queue={
 						ownQueue.length || (queue.paused && queue.prompts.length) ? (
 							<DeckList

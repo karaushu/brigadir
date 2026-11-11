@@ -546,6 +546,64 @@ it('announces subagents and keeps a subagent session apart: its updates, its per
 		outcome: { outcome: 'selected', optionId: 'allow' },
 	});
 });
+it('reads the RFD subagent form: subagent_update, session_message prompt and hand-back, child model, Stop (spec/chat#subagent-transport)', async () => {
+	const transport = await start('subagents');
+	await transport.send({ kind: 'prompt', text: 'subagent-rfd' });
+	expect(
+		events.slice(
+			events.findIndex(
+				(event) =>
+					event.kind === 'message.delta' &&
+					event.content.kind === 'text' &&
+					event.content.text === 'Starting.'
+			) + 1
+		)
+	).toEqual([
+		{ kind: 'subagent.started', id: 'child-2', parentId: null, name: 'List files', prompt: null },
+		{ kind: 'subagent.changed', id: 'child-2', type: 'Explore' },
+		{ kind: 'subagent.changed', id: 'child-2', prompt: 'Run ls.' },
+		{ kind: 'subagent.changed', id: 'child-2', model: 'Haiku 5.5' },
+		{
+			kind: 'tool.changed',
+			patch: {
+				id: 'child-tool-2',
+				title: 'ls',
+				category: 'execute',
+				status: 'pending',
+				parentId: 'launch-2',
+			},
+			subagentId: 'child-2',
+		},
+		{
+			kind: 'tool.changed',
+			patch: { id: 'child-tool-2', status: 'completed', parentId: 'launch-2' },
+			subagentId: 'child-2',
+		},
+		{
+			kind: 'message.delta',
+			role: 'assistant',
+			messageId: 'handback-2',
+			content: { kind: 'text', text: 'Two files.' },
+			subagentId: 'child-2',
+		},
+		{ kind: 'subagent.changed', id: 'child-2', state: 'completed' },
+		{ kind: 'subagent.changed', id: 'child-2', state: 'running' },
+		{
+			kind: 'message.delta',
+			role: 'assistant',
+			messageId: null,
+			content: { kind: 'text', text: 'world' },
+		},
+		{ kind: 'turn.completed', reason: 'end_turn' },
+	]);
+	await transport.send({ kind: 'stopSubagent', id: 'child-2' });
+	await expect
+		.poll(async () => (await wire()).filter((item) => item.event === 'cancel'))
+		.toEqual([{ event: 'cancel', params: { sessionId: 'child-2' } }]);
+	await expect(transport.send({ kind: 'stopSubagent', id: 'nobody' })).rejects.toThrow(
+		'Unknown subagent'
+	);
+});
 // spec/agents-and-providers#sign-in-recovery: ACP `authRequired` is the sign-in failing — the event says so; any other failure does not.
 it('marks a prompt the adapter answered with authRequired as a sign-in failure', async () => {
 	const saved = process.env.BRIGADIR_TEST_AUTH_FILE;

@@ -77,6 +77,8 @@ export type TaskActivity = {
 	kind: 'tool' | 'permission' | 'question' | 'plan' | 'proposal';
 	title: string;
 	path: string | null;
+	/** spec/chat#subagent-block: the work is a subagent's; `title` is its name. */
+	subagent?: true;
 };
 /** spec/crew-templates-and-editor#snapshot: `crew` marks a foreman task and is its immutable snapshot; workers carry `crewTaskId`, `crewNodeId` and `parentTaskId`. */
 /** spec/pull-requests-and-ci#review-modal, spec/pull-requests-and-ci#review-with-agent: a task that reviews or fixes a PR: repo, number, mode and the PR base for Create PR (`<head>-fixes → <head>`). */
@@ -291,6 +293,7 @@ export function isAgentTask(value: unknown): value is AgentTask {
 					value.activity.kind as string
 				) &&
 				typeof value.activity.title === 'string' &&
+				(value.activity.subagent === undefined || value.activity.subagent === true) &&
 				(value.activity.path === null || typeof value.activity.path === 'string'))) &&
 		(value.changeSummary === undefined ||
 			(isRecord(value.changeSummary) &&

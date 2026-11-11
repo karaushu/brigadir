@@ -24,6 +24,9 @@ export const workspaceEventKinds: ReadonlySet<string> = new Set([
 	'host.stopped',
 	'background.started',
 	'background.changed',
+	// spec/chat-turns-plans-and-questions#background-subagents: a subagent's start (the activity line) and its end (the background line).
+	'subagent.started',
+	'subagent.changed',
 	'crew.worker.created',
 	'crew.part.started',
 	'crew.part.dropped',

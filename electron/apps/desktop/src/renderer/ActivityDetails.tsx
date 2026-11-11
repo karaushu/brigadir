@@ -1,7 +1,7 @@
 import { FileLinkText } from './FileLinks';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-	backgroundCommandCount,
+	backgroundWorkCount,
 	formatDuration,
 	t,
 	type BackgroundCommand,
@@ -418,7 +418,7 @@ function BackgroundChip({
 			data-background-chip={status}
 			title={
 				running.length
-					? t(locale, 'Show background commands')
+					? t(locale, 'Show background work')
 					: commands.map((command) => command.name).join('\n')
 			}
 			onClick={show}
@@ -444,11 +444,16 @@ function BackgroundChip({
 				</>
 			) : one ? (
 				<>
-					{t(locale, 'background command')}
+					{t(locale, one.kind === 'subagent' ? 'subagent' : 'background command')}
 					{elapsed && <small>{elapsed}</small>}
 				</>
 			) : (
-				backgroundCommandCount(locale, commands.length)
+				// spec/chat-turns-plans-and-questions#background-subagents: subagents and commands as two counts.
+				backgroundWorkCount(
+					locale,
+					commands.length,
+					commands.filter((command) => command.kind === 'subagent').length
+				)
 			)}
 		</Button>
 	);

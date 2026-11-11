@@ -282,6 +282,13 @@ it('opens a console in the main tree, which has no provider, and starts no agent
 	expect(alive(child)).toBe(true);
 }, 20000);
 
+it('a console-only host with no agent takes Pause queue, so Complete stops it (spec/tasks#archive-actions)', async () => {
+	const { store, task, log } = await setup();
+	const { client } = await launch(store, task, log, true);
+	await until(async () => ((await client.status()).connected ? true : undefined));
+	await expect(client.command({ kind: 'pausePromptQueue' })).resolves.toEqual({ accepted: true });
+}, 20000);
+
 it('a repeated pull request record neither journals nor keeps the host alive (spec/tasks#lock-registry)', async () => {
 	const { store, task, log } = await setup();
 	const { child, client } = await launch(store, task, log);

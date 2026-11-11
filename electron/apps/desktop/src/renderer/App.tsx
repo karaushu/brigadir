@@ -1,4 +1,5 @@
 import { setTaskBrowser, setTaskSimulator, showTaskDiff } from './task-state';
+import { followBoardFocus } from './board-focus';
 import { onSessionEvent } from './session-events';
 import { workspaceEventKinds } from './workspace-events';
 import { statusLabels } from './task-line';
@@ -873,13 +874,7 @@ export function App() {
 				if (action === 'open') openTask(task);
 				if (action === 'archived') showArchiveToast(task);
 				await load();
-				requestAnimationFrame(() => {
-					if (fromBoard && focused instanceof HTMLElement && !focused.isConnected)
-						(
-							document.querySelector<HTMLElement>(`[data-board-task="${task.id}"]`) ??
-							document.querySelector<HTMLElement>('[data-project-screen] button')
-						)?.focus({ preventScroll: true });
-				});
+				if (fromBoard) followBoardFocus(focused, task.id, '[data-project-screen] button');
 				return action;
 			})
 			.catch(() => {

@@ -1,11 +1,11 @@
-/* SettingsTemplates (spec/crew-templates-and-editor#template-library): 222 px list with two groups, detail form on the right. */
+/* SettingsTemplates (spec/crew-templates-and-editor#template-library): 272 px list with two groups, detail form on the right. */
 .root {
 	flex: 1;
 	min-height: 0;
 	display: flex;
 }
 .list {
-	width: 222px;
+	width: 272px;
 	flex: none;
 	display: flex;
 	flex-direction: column;
@@ -19,6 +19,16 @@
 	padding: 8px 8px 4px;
 	display: flex;
 	flex-direction: column;
+}
+/* The agent cards, one under another (spec/crew-templates-and-editor#agent-cards). */
+.cards {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.rows {
+	display: flex;
+	flex-direction: column;
 	gap: 1px;
 }
 .groupTitle {
@@ -28,8 +38,7 @@
 	color: var(--fg2);
 	letter-spacing: 0.02em;
 }
-.groupTitle + .groupTitle,
-.item + .groupTitle {
+.cards + .groupTitle {
 	padding-top: 12px;
 }
 .item {
@@ -91,12 +100,6 @@
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-}
-/* The role guide: the built-in roles, two in a row (spec/crew-templates-and-editor#library-list). */
-.guide {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 6px;
 }
 /* The models of a role take their own line under the dots: provider glyph and name, side by side. */
 .picks {

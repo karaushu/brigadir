@@ -132,6 +132,7 @@ test('agent defaults persist, load before launch choices and never rewrite exist
 				copyEnvFiles: true,
 				archiveAfterDays: 3,
 				browserActAnywhere: false,
+				claudeSubagentModel: null,
 				prSummary: true,
 			});
 		for (const theme of ['light', 'dark'] as const) {
@@ -217,6 +218,7 @@ test('agent defaults persist, load before launch choices and never rewrite exist
 			copyEnvFiles: true,
 			archiveAfterDays: 3,
 			browserActAnywhere: false,
+			claudeSubagentModel: null,
 			prSummary: true,
 		});
 		expect(await readFile(join(dir, 'task.json'), 'utf8')).toBe(existing);
@@ -452,8 +454,11 @@ test("sheet picks the first catalog model, offers the model's effort levels and 
 			BrowserWindow.getAllWindows()[0]!.webContents.send('workspace:action', 'settings-templates');
 		});
 		const settings = page.getByRole('dialog', { name: 'Settings' }),
-			list = settings.getByRole('listbox', { name: 'Templates' });
-		await list.getByRole('option', { name: /^Reviewer/ }).click();
+			reviewer = settings
+				.getByRole('radiogroup', { name: 'Agents' })
+				.locator('[data-option-card]')
+				.filter({ has: page.getByRole('radio', { name: 'Reviewer', exact: true }) });
+		await reviewer.click();
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toBeDisabled();
 		// spec/settings-modules-and-onboarding#agents-tab: a built-in's role is read-only (readable and copyable), not a disabled field.
 		await expect(settings.getByRole('textbox', { name: 'Instructions' })).not.toBeEditable();
@@ -504,7 +509,7 @@ test("sheet picks the first catalog model, offers the model's effort levels and 
 		await app.evaluate(({ BrowserWindow }) => {
 			BrowserWindow.getAllWindows()[0]!.webContents.send('workspace:action', 'settings-templates');
 		});
-		await list.getByRole('option', { name: /^Reviewer/ }).click();
+		await reviewer.click();
 		await settings.getByRole('button', { name: 'Reset', exact: true }).click();
 		await expect.poll(stored).toBeNull();
 		await expect(settings.getByRole('button', { name: 'Reset', exact: true })).toHaveCount(0);

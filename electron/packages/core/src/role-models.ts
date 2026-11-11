@@ -1,9 +1,13 @@
 import { selectOption } from './agent-options';
 import {
+	designerTemplateId,
 	developerTemplateId,
 	foremanTemplateId,
 	reviewerTemplateId,
+	securityReviewerTemplateId,
 	seniorDeveloperTemplateId,
+	technicalWriterTemplateId,
+	testerTemplateId,
 	type ProviderCatalog,
 } from './crew';
 import type { AgentProviderId } from './settings';
@@ -17,6 +21,10 @@ export const roleModelWords: Readonly<Record<string, Readonly<Record<AgentProvid
 	[developerTemplateId]: { claude: 'sonnet', codex: 'terra' },
 	[seniorDeveloperTemplateId]: { claude: 'opus', codex: 'sol' },
 	[reviewerTemplateId]: { claude: 'opus', codex: 'astra' },
+	[testerTemplateId]: { claude: 'sonnet', codex: 'terra' },
+	[technicalWriterTemplateId]: { claude: 'sonnet', codex: 'terra' },
+	[designerTemplateId]: { claude: 'opus', codex: 'astra' },
+	[securityReviewerTemplateId]: { claude: 'opus', codex: 'sol' },
 };
 /**
  * The name to show for a role and a provider: the catalog's name of the first entry that says the word; the word itself while the

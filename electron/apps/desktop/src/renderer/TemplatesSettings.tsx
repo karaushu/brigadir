@@ -3,12 +3,16 @@ import {
 	catalogOptions,
 	selectOption,
 	builtinAgentCustomized,
+	designerTemplateId,
 	developerTemplateId,
 	effortRank,
 	foremanTemplateId,
 	reviewerTemplateId,
 	roleModelPick,
+	securityReviewerTemplateId,
 	seniorDeveloperTemplateId,
+	technicalWriterTemplateId,
+	testerTemplateId,
 	templateFit,
 	builtinCrewTemplates,
 	builtinCrewCustomized,
@@ -45,7 +49,8 @@ type Selection = { kind: 'agent' | 'crew'; id: string };
 const roleGuide: readonly {
 	id: string;
 	name: string;
-	glyph: 'helmet' | 'code' | 'review';
+	glyph:
+		'helmet' | 'code' | 'review' | 'check-pass' | 'note' | 'settings-appearance' | 'scope-lock';
 	work: MessageKey;
 	strength: number;
 	hint: MessageKey;
@@ -81,6 +86,38 @@ const roleGuide: readonly {
 		work: 'Checks the work, writes no code',
 		strength: 2,
 		hint: "Author's model or stronger",
+	},
+	{
+		id: testerTemplateId,
+		name: 'Tester',
+		glyph: 'check-pass',
+		work: 'Writes tests, changes no production code',
+		strength: 1,
+		hint: 'Faster model · Medium',
+	},
+	{
+		id: technicalWriterTemplateId,
+		name: 'Technical writer',
+		glyph: 'note',
+		work: 'Writes docs, changes no behaviour',
+		strength: 1,
+		hint: 'Faster model · Medium',
+	},
+	{
+		id: designerTemplateId,
+		name: 'Designer',
+		glyph: 'settings-appearance',
+		work: 'Checks screens in the running app',
+		strength: 2,
+		hint: "Author's model or stronger",
+	},
+	{
+		id: securityReviewerTemplateId,
+		name: 'Security reviewer',
+		glyph: 'scope-lock',
+		work: 'Looks for security defects in changes',
+		strength: 2,
+		hint: 'Strong model · High',
 	},
 ];
 /** spec/crew-templates-and-editor#library-list: the provider glyph and the catalog name of the model for a role; nothing for a provider that is off or has no such model. */

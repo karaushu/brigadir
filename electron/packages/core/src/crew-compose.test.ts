@@ -49,8 +49,9 @@ const claude: ProviderCatalog = {
 		haiku: [select('model', 'model', ['opus', 'haiku'])],
 	},
 };
+// An own template with a built-in's name: it stands in for the built-in in the palette (spec/crew#compose).
 const designer: AgentTemplate = {
-	id: 'designer',
+	id: 'ux-designer',
 	name: 'Designer',
 	role: 'reviewer',
 	summary: 'Checks screens and tokens',
@@ -100,8 +101,11 @@ describe('crew palette (spec/crew#compose)', () => {
 		expect(spec.compose!.templates.map((item) => [item.name, item.role, item.template])).toEqual([
 			['Developer', 'developer', 'developer'],
 			['Senior developer', 'developer', 'senior-developer'],
+			['Tester', 'developer', 'tester'],
+			['Technical writer', 'developer', 'technical-writer'],
 			['Reviewer', 'reviewer', 'reviewer'],
-			['Designer', 'reviewer', 'designer'],
+			['Security reviewer', 'reviewer', 'security-reviewer'],
+			['Designer', 'reviewer', 'ux-designer'],
 		]);
 		const entry = spec.compose!.providers[0]!;
 		expect(entry.model?.choices.map((choice) => choice.name)).toEqual(['OPUS', 'HAIKU']);
@@ -149,7 +153,7 @@ describe('composeCrew (spec/crew#compose)', () => {
 		expect(crew[0]!.checkedBy).toEqual([crew[1]!.id]);
 		expect(crew[0]!.instructions).toContain('You implement your part');
 		expect(crew[1]).toMatchObject({
-			template: 'designer',
+			template: 'ux-designer',
 			role: 'reviewer',
 			summary: 'Checks screens and tokens',
 			instructions: 'Check the UI.',
@@ -203,8 +207,8 @@ describe('composeCrew (spec/crew#compose)', () => {
 				return 'no error';
 			};
 		expect(fail(undefined)).toMatch(/pass crew/);
-		expect(fail([{ name: 'A', template: 'Tester' }])).toBe(
-			'Unknown template Tester for A. Templates: Developer, Senior developer.'
+		expect(fail([{ name: 'A', template: 'Plumber' }])).toBe(
+			'Unknown template Plumber for A. Templates: Developer, Senior developer, Tester, Technical writer.'
 		);
 		expect(fail([{ name: 'A', template: 'Developer', model: 'sonnet' }])).toBe(
 			'Unknown Claude model sonnet for A. Models: OPUS, HAIKU.'
@@ -254,7 +258,7 @@ describe('composeCrew (spec/crew#compose)', () => {
 				{ name: 'UI', template: 'Developer' },
 			])
 		).toThrow(
-			'The crew needs at least one reviewer to check the developers. Reviewer templates: Reviewer, Designer.'
+			'The crew needs at least one reviewer to check the developers. Reviewer templates: Reviewer, Security reviewer, Designer.'
 		);
 		expect(
 			fail([
@@ -317,7 +321,7 @@ describe('records with a crew', () => {
 		expect(template.root.template).toBe(foremanTemplateId);
 		expect(resolveCrew(template, { lookup, defaultProvider: 'claude' }).root.agents).toEqual(crew);
 		// A template gone from the library keeps what the agent was told as its addition.
-		const orphan = specAsTemplate(composedSpec(spec, crew), (id) => id !== 'designer').root
+		const orphan = specAsTemplate(composedSpec(spec, crew), (id) => id !== 'ux-designer').root
 			.agents![1]!;
 		expect(orphan).toMatchObject({ template: null, extraInstructions: 'Check the UI.' });
 	});

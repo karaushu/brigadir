@@ -40,8 +40,14 @@ export function crewPalette(
 	context: ResolveContext,
 	catalogs: readonly ProviderCatalog[]
 ): CrewCompose {
+	// spec/crew#compose: an own template with a built-in's name stands in for it, so a name means one template.
+	const own = templates.filter((template) => !template.builtin);
 	const nodes = templates
-		.filter((template) => template.role !== 'foreman')
+		.filter(
+			(template) =>
+				template.role !== 'foreman' &&
+				!(template.builtin && own.some((item) => same(item.name, template.name)))
+		)
 		.slice(0, crewAgentsPerNodeLimit)
 		.map((template) =>
 			resolveCrewAgent(

@@ -521,21 +521,29 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 									}
 								/>
 							</div>
-							{/* spec/crew-templates-and-editor#roster: what the foreman reads about agents of this template; built-ins have none, their role says it. */}
-							{agent.role !== 'foreman' && !agent.builtin && (
+							{/* spec/crew-templates-and-editor#roster: what the foreman reads about agents of this template; a built-in's is the app's, shown as text. */}
+							{agent.role !== 'foreman' && (!agent.builtin || agent.summary) && (
 								<div className={styles.row} data-size="m">
 									<span className={styles.label}>{t(locale, 'Specialty')}</span>
-									<TextInput
-										aria-label={t(locale, 'Specialty')}
-										value={agent.summary ?? ''}
-										maxLength={crewSummaryLimit}
-										placeholder={t(locale, 'What the foreman reads about this agent. In English.')}
-										onChange={(event) => {
-											const { summary: _, ...rest } = agent;
-											const summary = event.target.value.replace(/[\r\n]+/g, ' ');
-											saveAgent(summary ? { ...rest, summary } : rest);
-										}}
-									/>
+									{agent.builtin ? (
+										// The app's line reads in full: text, not a field cut at its width.
+										<span className={styles.value}>{agent.summary}</span>
+									) : (
+										<TextInput
+											aria-label={t(locale, 'Specialty')}
+											value={agent.summary ?? ''}
+											maxLength={crewSummaryLimit}
+											placeholder={t(
+												locale,
+												'What the foreman reads about this agent. In English.'
+											)}
+											onChange={(event) => {
+												const { summary: _, ...rest } = agent;
+												const summary = event.target.value.replace(/[\r\n]+/g, ' ');
+												saveAgent(summary ? { ...rest, summary } : rest);
+											}}
+										/>
+									)}
 								</div>
 							)}
 							<div className={styles.row} data-size="m">

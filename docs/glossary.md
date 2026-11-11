@@ -301,6 +301,11 @@ leads a crew.
 | Worker / Workers | Воркер / Воркери | A task that does one part under the foreman. | |
 | Developer / Reviewer | Розробник / Ревʼюер | Built-in agent templates. | |
 | Senior developer | Старший розробник | Built-in agent template: a Developer on a stronger model. | |
+| Tester | Тестувальник | Built-in agent template: writes and runs the tests of a part. | «тестер», «QA» |
+| Technical writer | Технічний письменник | Built-in agent template: writes the documents of a change. | «техрайтер» |
+| Designer | Дизайнер | Built-in agent template: checks screens in the running app, writes no code. | |
+| Security reviewer | Ревʼюер безпеки | Built-in agent template: checks changes for security defects. | «безпечник» |
+| Crew with tests | Бригада з тестами | Built-in crew: a developer, a tester and a reviewer. | |
 | Crew members | Склад | The plan card section with the members the foreman proposes. | «ростер», «слот» |
 | Foreman composes | Бригадир збере | The crew popup item: the foreman proposes the members. | «Авто» |
 | crew from the foreman | склад від бригадира | | |

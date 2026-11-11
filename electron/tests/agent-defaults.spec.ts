@@ -495,7 +495,7 @@ test("sheet picks the first catalog model, offers the model's effort levels and 
 		await sheet.getByRole('button', { name: 'Crew', exact: true }).click();
 		await sheet
 			.getByRole('listbox', { name: 'Crew' })
-			.getByRole('option', { name: /^Crew/ })
+			.getByRole('option', { name: /^Crew \d/ })
 			.click();
 		await expect(sheet.locator('[data-crew-roster] [title="Reviewer · Lite"]')).toHaveCount(1);
 		await sheet.getByRole('button', { name: 'Cancel' }).click();

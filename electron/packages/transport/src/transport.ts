@@ -184,7 +184,13 @@ export class AgentTransport {
 	/** spec/chat#subagents: the subagent sessions the adapter announced (`subagent_spawned`), and the tool calls that run them. */
 	private subagents = new Map<
 		string,
-		{ toolId: string | null; state: SubagentState | null; prompt: boolean; model: string | null }
+		{
+			toolId: string | null;
+			state: SubagentState | null;
+			prompt: boolean;
+			model: string | null;
+			type?: string;
+		}
 	>();
 	private subagentTools = new Map<string, string>();
 	/** spec/chat-turns-plans-and-questions#background-commands: Claude's background tasks from the raw SDK `task_*` messages: announced once backgrounded, ended once. */
@@ -1105,10 +1111,11 @@ export class AgentTransport {
 		if (typeof id !== 'string' || !id || id === this.sessionId) return;
 		const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : null);
 		let child = this.subagents.get(id);
+		const events: AgentEvent[] = [];
 		if (!child) {
 			child = { toolId: null, state: 'running', prompt: false, model: null };
 			this.subagents.set(id, child);
-			await this.emit({
+			events.push({
 				kind: 'subagent.started',
 				id,
 				parentId: parent === this.sessionId ? null : parent,
@@ -1116,18 +1123,22 @@ export class AgentTransport {
 				prompt: null,
 			});
 		}
-		const type = text(update.description),
+		const described = text(update.description),
+			type = described && described !== child.type ? described : null,
 			state = rfdSubagentState(update.state);
+		if (type) child.type = type;
 		const next = state && state !== child.state && (state !== 'running' || child.state !== null);
 		if (state === 'running' && child.state === null) child.state = 'running';
-		if (!type && !next) return;
 		if (next) child.state = state;
-		await this.emit({
-			kind: 'subagent.changed',
-			id,
-			...(type ? { type } : {}),
-			...(next ? { state } : {}),
-		});
+		// Queued in one step: another notification handled meanwhile must not land between the start and its type.
+		if (type || next)
+			events.push({
+				kind: 'subagent.changed',
+				id,
+				...(type ? { type } : {}),
+				...(next ? { state } : {}),
+			});
+		await Promise.all(events.map((event) => this.emit(event)));
 	}
 	/** spec/chat#subagent-transport: an RFD `session_message` in a child's own transcript: a message to it is its prompt (the first one), a message from
 	 *  it (a hand-back report) is its answer. The parent's views of the same messages repeat them and are ignored. */

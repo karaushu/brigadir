@@ -78,7 +78,7 @@ connection = agent({name:'fixture'})
   if(planModes&&params.configId==='mode')syncMode(params.value);
   return {configOptions:options};
  })
- .onNotification(methods.agent.session.cancel, (message) => {const sessionId=message?.params?.sessionId??message?.sessionId;if(sessionId&&sessionId!=='fixture-session'){record('cancel',{sessionId});return;}record('cancel',{}); release?.();})
+ .onNotification(methods.agent.session.cancel, (message) => {const sessionId=message?.params?.sessionId??message?.sessionId;if(sessionId&&sessionId!=='fixture-session'){record('cancel',{sessionId});process.stdout.write(JSON.stringify({jsonrpc:'2.0',method:'session/update',params:{sessionId:'fixture-session',update:{sessionUpdate:'subagent_update',sessionId,state:{state:'idle',stopReason:'cancelled'}}}})+'\n');return;}record('cancel',{}); release?.();})
  .onRequest('_session/steering',params=>params,async({params,client})=>{
   const text=params.prompt.map(item=>item.type==='text'?item.text:'').join('');record('steer',{text,meta:params._meta});
   // codex-acp with no running turn starts its own; Claude answers promptRequired.

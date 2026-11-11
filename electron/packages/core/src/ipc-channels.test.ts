@@ -132,6 +132,45 @@ describe('channel table (spec/architecture-and-platform#ipc-boundary, spec/remot
 		).toBe(false);
 		expect(row.validate([key, ref, 'fix', false, null, null, false, 'review'])).toBe(false);
 		expect(row.validate([key, ref, 'review', false, null, null, false, '../x'])).toBe(false);
+		// spec/pull-requests-and-ci#review-launch: the person's instructions go 9th, only when there are some.
+		await bridge.startPullRequestAgent(
+			key,
+			ref,
+			'review',
+			false,
+			'quick',
+			null,
+			false,
+			null,
+			'Look at the race'
+		);
+		expect(last()).toEqual([
+			key,
+			ref,
+			'review',
+			false,
+			'quick',
+			null,
+			false,
+			null,
+			'Look at the race',
+		]);
+		await bridge.startPullRequestAgent(key, ref, 'review', false, 'quick', null, false, null, '  ');
+		expect(last()).toEqual([key, ref, 'review', false, 'quick']);
+		expect(row.validate([key, ref, 'review', false, null, null, false, 'review', 'Notes'])).toBe(
+			true
+		);
+		expect(row.validate([key, ref, 'review', false, null, null, false, null, ''])).toBe(false);
+		expect(row.validate([key, ref, 'fix', false, null, null, false, null, 'Notes'])).toBe(false);
+		expect(
+			row.validate([key, ref, 'review', false, null, null, false, null, 'x'.repeat(16001)])
+		).toBe(false);
+		const notes = ipcInvokeRows.get('projects:review-notes')!;
+		expect(notes.validate(['p', { source: 'text', text: 'Check migrations' }])).toBe(true);
+		expect(notes.validate(['p', { source: 'file' }])).toBe(true);
+		expect(notes.validate(['p', null])).toBe(true);
+		expect(notes.validate(['p', { source: 'text', text: '  ' }])).toBe(false);
+		expect(notes.validate(['p', { source: 'file', text: 'x' }])).toBe(false);
 		expect(ipcInvokeRows.get('settings:action-crew')!.validate(['review', null])).toBe(true);
 		expect(
 			ipcInvokeRows

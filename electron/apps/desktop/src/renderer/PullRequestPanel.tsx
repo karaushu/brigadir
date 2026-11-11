@@ -1,10 +1,5 @@
-import {
-	saveActionAgent,
-	saveActionCrew,
-	useHelperSettings,
-	useProviderCatalogs,
-} from './HelperAgent';
-import { RememberCheck } from './ui/RememberCheck';
+import { openReviewLaunch, type ReviewChoice } from './ReviewLaunch';
+import { taskStatusLabel } from './ProjectBoard';
 import {
 	useCallback,
 	useEffect,
@@ -44,17 +39,11 @@ import {
 	suggestsPR,
 	type ForgeSnapshot,
 	type NewPRChoice,
-	actionChoice,
-	agentProviders,
-	crewLabel,
-	modelDisplayName,
-	selectOption,
-	type CrewLibrary,
-	type HelperRun,
+	liveReviewTask,
 } from '@brigadir/core';
 import { useForge } from './Forge';
 import { ChangeCounts } from './ui/ChangeCounts';
-import { useTaskState } from './task-state';
+import { openTaskPR, useTaskState } from './task-state';
 import { useWorkspace } from './store';
 import { openReview, usePRReview } from './pr-review';
 import { shownFiles, isSaving } from './pr-viewed';
@@ -67,8 +56,8 @@ import { ProgressBar } from './ui/ProgressBar';
 import { Avatar } from './ui/Avatar';
 import { PRMarkGlyph, PRStateGlyph } from './ui/PRGlyphs';
 export { Avatar, PRStateGlyph };
-import { Button, Chevron, Choice, IconButton, Segments, SplitButton } from './ui/Controls';
-import { MenuInfo, MenuItem, MenuPopover, MenuSeparator } from './ui/Popover';
+import { Button, Chevron, Choice, IconButton, Segments, StatusIcon } from './ui/Controls';
+import { MenuItem, MenuPopover } from './ui/Popover';
 import { toastError } from './ui/Toast';
 import { PanelSearch, SearchToggle, Highlight } from './ui/PanelSearch';
 import { listStep } from './ui/list-keys';
@@ -99,15 +88,13 @@ export type Actions = {
 		  ) => Promise<boolean>)
 		| undefined;
 	onOverview?: ((ref: Ref) => void) | undefined;
+	/** spec/pull-requests-and-ci#review-launch: starts the review the launch dialog describes; answers whether its task started. */
 	onAgentReview?:
 		| ((
 				detail: Pick<PullRequestDetail, 'summary'>,
 				scopeId: string,
-				where?: 'quick' | 'worktree',
-				agent?: HelperRun | null,
-				/** spec/pull-requests-and-ci#review-crew: the Crew segment's crew; excludes `agent`. */
-				crew?: string | null
-		  ) => void)
+				choice: ReviewChoice
+		  ) => Promise<boolean>)
 		| undefined;
 	/** spec/appearance#evolution-redesign: «Resolve conflicts…» of a list row — the «Merging» card's way, in the dialog. */
 	onResolveConflicts?: ((ref: Ref) => void) | undefined;
@@ -360,6 +347,7 @@ export function PullRequestPanel({
 			onCIFix={onCIFix}
 			onAgentReview={onAgentReview}
 			onResolveConflicts={onResolveConflicts}
+			onOpenTask={onOpenTask}
 		/>
 	);
 }
@@ -604,6 +592,7 @@ function PRListView({
 	onCIFix,
 	onAgentReview,
 	onResolveConflicts,
+	onOpenTask,
 }: {
 	task: AgentTask;
 	locale: Locale;
@@ -611,7 +600,7 @@ function PRListView({
 	filter: string | null;
 	context: ReturnType<typeof usePullRequests>;
 	onCIFix?: CIFix | undefined;
-} & Pick<Actions, 'onAgentReview' | 'onResolveConflicts'>) {
+} & Pick<Actions, 'onAgentReview' | 'onResolveConflicts' | 'onOpenTask'>) {
 	// spec/pull-requests-and-ci#review-drafts: a filter by a repo this task does not have (another worktree's id) is off, not «No open PRs».
 	const scoped =
 		filter && context?.data?.repos.some((repo) => repo.scopeId === filter) ? filter : null;
@@ -662,12 +651,25 @@ function PRListView({
 		}
 		// spec/appearance#evolution-redesign: the review modal of this PR, as «Start review» of the panel's footer opens it.
 		if (action === 'review') openReview(task, ref);
-		if (action === 'agent-quick' || action === 'agent-worktree')
-			onAgentReview?.(
-				{ summary: pr },
-				repo.scopeId,
-				action === 'agent-quick' ? 'quick' : 'worktree'
-			);
+		// spec/pull-requests-and-ci#pr-row-menu: the launch dialog, or the live review task of this PR.
+		if (action === 'agent-review' && onAgentReview)
+			openReviewLaunch({
+				projectId: task.projectId,
+				scopeId: repo.scopeId,
+				number: pr.number,
+				title: pr.title,
+				action: 'review',
+				start: (choice) => onAgentReview({ summary: pr }, repo.scopeId, choice),
+			});
+		if (action === 'open-review') {
+			const review = liveReviewTask(useWorkspace.getState().workspace?.tasks ?? [], {
+				projectId: task.projectId,
+				number: pr.number,
+				scopeId: repo.scopeId,
+				repo: repo.name,
+			});
+			if (review) openReviewTask(review, onOpenTask);
+		}
 		if (action === 'conflicts') onResolveConflicts?.(ref);
 		if (action === 'github')
 			void window.brigadir
@@ -1065,13 +1067,16 @@ function PRDetailView({
 						<Glyph name="list-bullets" size={11} />
 						{t(locale, 'Overview')}
 					</Button>
-					{detail && !reviewsThis && (
+					{detail && !reviewsThis && onAgentReview && (
 						<AgentReviewButton
 							locale={locale}
+							projectId={task.projectId}
+							scopeId={target.scopeId}
+							repo={list?.data?.repos.find((repo) => repo.scopeId === target.scopeId)?.name ?? null}
 							number={detail.summary.number}
-							run={(where, agent, crew) =>
-								onAgentReview?.(detail, target.scopeId, where, agent, crew)
-							}
+							title={detail.summary.title}
+							run={(choice) => onAgentReview(detail, target.scopeId, choice)}
+							onOpenReview={(review) => openReviewTask(review, onOpenTask)}
 						/>
 					)}
 					{owner && (owner.id !== task.id || owner.projectId !== task.projectId) && (
@@ -1664,337 +1669,61 @@ function OwnFooter({
 		</div>
 	);
 }
+/** spec/pull-requests-and-ci#review-with-agent: the live review task opens with the PR panel on its PR. */
+export function openReviewTask(review: AgentTask, open?: ((task: AgentTask) => void) | undefined) {
+	if (review.prReview)
+		openTaskPR(review, { scopeId: review.prReview.scopeId, number: review.prReview.number });
+	if (open) open(review);
+	else useWorkspace.getState().selectTask(review.projectId, review.id);
+}
 /**
- * spec/pull-requests-and-ci#review-with-agent: `Review with an agent ▾` — the main part runs the remembered way, the chevron chooses between `Quickly` (the main
- * tree, the PR read from git) and `In a worktree`; a choice runs the review and is remembered. Below 300 px it reads
- * `With an agent` (spec/pull-requests-and-ci#pr-list); the name stays whole for VoiceOver.
+ * spec/pull-requests-and-ci#review-with-agent: `Review with an agent…` opens the launch dialog (spec/pull-requests-and-ci#review-launch). While a review
+ * task of this PR is live it is `Open the review`, led by that task's status. Below 300 px it reads `With an agent…`; the name stays whole for VoiceOver.
  */
 export function AgentReviewButton({
 	locale,
+	projectId,
+	scopeId,
+	repo = null,
 	number,
+	title,
 	action = 'review',
 	run,
+	onOpenReview,
 }: {
 	locale: Locale;
+	projectId: string;
+	/** The PR's repo as the caller knows it; `repo` — its name in the project, so a worktree's id finds the task too. */
+	scopeId: string;
+	repo?: string | null;
 	number: number;
-	/** spec/appearance#evolution-redesign: from step 2 of the review modal it is «agent suggestions in review», its own row of Customize per action. */
+	title: string;
+	/** spec/appearance#evolution-redesign: from the review modal it is «agent suggestions in review», its own row of Customize per action. */
 	action?: 'review' | 'reviewSuggestions';
-	/** spec/pull-requests-and-ci#review-crew: `crew` — the Crew segment's library crew for this review; it and `agent` exclude each other. */
-	run(where?: 'quick' | 'worktree', agent?: HelperRun | null, crew?: string | null): void;
+	run(choice: ReviewChoice): Promise<boolean>;
+	onOpenReview(review: AgentTask): void;
 }) {
-	const where = useWorkspace((state) => state.appearance.reviewWhere ?? 'quick'),
-		[open, setOpen] = useState(false),
-		toggle = useRef<HTMLButtonElement>(null);
-	// spec/appearance#evolution-redesign: the «Agent» section — this review only; none chosen is the Default agent of Settings.
-	const settings = useHelperSettings(),
-		catalogs = useProviderCatalogs(open ? (settings?.enabled ?? null) : null),
-		[agent, setAgent] = useState<HelperRun | null>(null),
-		[remember, setRemember] = useState(false);
-	// spec/pull-requests-and-ci#review-crew: `Agent · Crew` — one agent or a library crew. The crew is this review's too, unless `Remember for …` keeps it.
-	const [crew, setCrew] = useState<string | null>(null),
-		[segment, setSegment] = useState<'agent' | 'crew' | null>(null),
-		[library, setLibrary] = useState<CrewLibrary | null>(null),
-		picks = useRef<HTMLDivElement>(null),
-		keyboardSwitch = useRef(false);
-	useEffect(() => {
-		if (!open) return;
-		let live = true;
-		void window.brigadir.readTemplates().then(
-			(value) => {
-				if (live) setLibrary(value);
-			},
-			() => {
-				if (live) setLibrary({ agents: [], crews: [], issues: [], hiddenCrews: [] });
-			}
+	const live = useWorkspace((state) =>
+		liveReviewTask(state.workspace?.tasks ?? [], { projectId, number, scopeId, repo })
+	);
+	if (live) {
+		const status = taskStatusLabel(live, locale);
+		return (
+			<Button data-open-review title={status} onClick={() => onOpenReview(live)}>
+				<StatusIcon status={live.status} label={status} size={12} />
+				{t(locale, 'Open the review')}
+				<Glyph name="zoom" size={11} />
+			</Button>
 		);
-		return () => {
-			live = false;
-		};
-	}, [open]);
-	const agents = settings
-		? agentProviders
-				.filter((provider) => settings.enabled[provider])
-				.flatMap((provider) => {
-					const catalog = catalogs[provider],
-						model = catalog ? selectOption(catalog.options, 'model') : undefined;
-					return (model?.choices ?? [])
-						.filter((choice) => choice.value !== 'default')
-						.map((choice) => ({
-							provider,
-							model: choice.value,
-							name: modelDisplayName(choice.name, provider),
-							default: provider === settings.defaultProvider && choice.value === model!.value,
-						}));
-				})
-		: [];
-	// spec/appearance#evolution-redesign: the one-time choice, else the action's own agent of Settings; null — the Default agent.
-	const own = settings
-			? actionChoice(action, null, settings.actionAgents, settings.enabled, catalogs).run
-			: null,
-		ownCrew = settings?.actionCrews[action] ?? null,
-		// The one-time crew, else the remembered one unless an agent was picked for this review (as main decides, spec/pull-requests-and-ci#review-crew).
-		chosenCrew = crew ?? (agent ? null : (ownCrew?.templateId ?? null)),
-		chosen = chosenCrew ? null : (agent ?? own),
-		shown = segment ?? (chosenCrew ? 'crew' : 'agent'),
-		fallback = agents.find((item) => item.default),
-		isDefault = (pick: HelperRun | null) =>
-			!pick || (pick.provider === fallback?.provider && pick.model === fallback.model);
-	/** With Remember checked a choice is also the action's agent in Settings; the Default agent makes it inherit again. */
-	const choose = (pick: HelperRun | null) => {
-		setCrew(null);
-		// Over a remembered agent or crew the Default agent for one review is named explicitly, else the setting would win.
-		setAgent(
-			pick ??
-				((own || ownCrew) && fallback
-					? { provider: fallback.provider, model: fallback.model, effort: null }
-					: null)
-		);
-		if (remember) void rememberPick(pick);
-	};
-	const rememberPick = (pick: HelperRun | null) => {
-		// Main forgets the action's crew with a remembered agent; the Default agent only inherits, so the crew goes here.
-		if (isDefault(pick) && ownCrew) void saveActionCrew(action, null).catch(() => {});
-		return saveActionAgent(
-			action,
-			isDefault(pick)
-				? null
-				: {
-						provider: pick!.provider,
-						model: pick!.model,
-						name:
-							agents.find((item) => item.provider === pick!.provider && item.model === pick!.model)
-								?.name ?? null,
-						effort: pick!.effort,
-					}
-		).catch(() => {});
-	};
-	const crews = library?.crews ?? null;
-	const rememberCrew = (id: string) => {
-		const template = crews?.find((item) => item.id === id);
-		if (template)
-			void saveActionCrew(action, { templateId: template.id, name: template.name }).catch(() => {});
-	};
-	const chooseCrew = (id: string) => {
-		setAgent(null);
-		setCrew(id);
-		if (remember) rememberCrew(id);
-	};
-	/** spec/pull-requests-and-ci#review-crew: the one-time crew goes with the review; a remembered crew main takes by itself. */
-	const start = (place?: 'quick' | 'worktree') =>
-		crew ? run(place, null, crew) : run(place, agent);
-	// ← → on a row of the list switch the segments; ↑ ↓ on a segment move to the rows, as everywhere in a menu.
-	const switchTo = (value: 'agent' | 'crew') => {
-		keyboardSwitch.current = true;
-		setSegment(value);
-	};
-	useEffect(() => {
-		if (!keyboardSwitch.current) return;
-		keyboardSwitch.current = false;
-		const list = picks.current;
-		(
-			list?.querySelector<HTMLElement>('[role^=menuitem][aria-checked=true]') ??
-			list?.querySelector<HTMLElement>('[role^=menuitem]')
-		)?.focus({ preventScroll: true });
-	}, [shown]);
-	const items = [
-		{
-			value: 'quick' as const,
-			label: t(locale, 'Quickly'),
-			caption: t(locale, 'In the main tree, the branch stays'),
-		},
-		{
-			value: 'worktree' as const,
-			label: t(locale, 'In a worktree'),
-			caption: t(locale, 'Branch {branch}, dependencies can be installed and run').replace(
-				'{branch}',
-				`pr-${number}-review`
-			),
-		},
-	];
+	}
 	return (
-		<SplitButton
-			data-agent-review={where}
-			aria-label={t(locale, 'Review with an agent')}
-			title={t(locale, where === 'quick' ? 'Quickly' : 'In a worktree')}
-			onClick={() => start()}
-			second={{
-				label: t(locale, 'Where the agent reviews'),
-				ref: toggle,
-				expanded: open,
-				onClick: () => setOpen((value) => !value),
-			}}
-			menu={
-				<MenuPopover
-					open={open}
-					onClose={() => setOpen(false)}
-					anchor={toggle}
-					align="end"
-					width={264}
-					focus="checked"
-					label={t(locale, 'Review with an agent')}
-					locale={locale}>
-					{items.map((item) => (
-						<MenuItem
-							key={item.value}
-							kind="radio"
-							checked={item.value === where}
-							description={item.caption}
-							onSelect={() => start(item.value)}>
-							{item.label}
-						</MenuItem>
-					))}
-					{settings && (
-						<div
-							className={styles.agentPicker}
-							onKeyDownCapture={(event) => {
-								const target = event.target as HTMLElement;
-								if (target.closest('[data-agent-crew]')) {
-									if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-									// The segments' own ↑ ↓ would switch them; in a menu they move between the rows.
-									event.preventDefault();
-									event.stopPropagation();
-									const rows = [
-										...(event.currentTarget
-											.closest('[role=menu]')
-											?.querySelectorAll<HTMLElement>('[role^=menuitem]:not(:disabled)') ?? []),
-									];
-									const next =
-										event.key === 'ArrowDown'
-											? rows.find((row) => picks.current?.contains(row))
-											: rows
-													.filter(
-														(row) =>
-															target.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_PRECEDING
-													)
-													.at(-1);
-									next?.focus({ preventScroll: true });
-									return;
-								}
-								if (
-									(event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
-									target.matches('[role^=menuitem]')
-								) {
-									event.preventDefault();
-									switchTo(event.key === 'ArrowLeft' ? 'agent' : 'crew');
-								}
-							}}>
-							{/* spec/pull-requests-and-ci#review-crew: the switch stands in place of the «Agent» heading; rule 16 — the row sets the size. */}
-							<div className={styles.agentSwitch} data-size="s" data-agent-crew>
-								<Segments
-									label={t(locale, 'Agent · Crew')}
-									stretch
-									value={shown}
-									onChange={(value) => setSegment(value as 'agent' | 'crew')}
-									options={[
-										{ value: 'agent', label: t(locale, 'Agent') },
-										{ value: 'crew', label: t(locale, 'Crew') },
-									]}
-								/>
-							</div>
-							<div ref={picks} key={shown} className={styles.agentPicks} data-review-picks={shown}>
-								{shown === 'agent' ? (
-									agents.length > 0 && (
-										<>
-											<MenuItem
-												kind="radio"
-												keepOpen
-												checked={!chosenCrew && isDefault(chosen)}
-												icon={
-													<Glyph
-														name={settings.defaultProvider === 'codex' ? 'openai' : 'claude'}
-														size={12}
-													/>
-												}
-												tail={t(locale, 'Default agent')}
-												onSelect={() => choose(null)}>
-												{fallback?.name ?? t(locale, 'Default agent')}
-											</MenuItem>
-											{agents
-												.filter((item) => !item.default)
-												.map((item) => (
-													<MenuItem
-														key={`${item.provider}:${item.model}`}
-														kind="radio"
-														keepOpen
-														checked={
-															chosen?.provider === item.provider && chosen.model === item.model
-														}
-														icon={
-															<Glyph
-																name={item.provider === 'codex' ? 'openai' : 'claude'}
-																size={12}
-															/>
-														}
-														onSelect={() =>
-															choose({ provider: item.provider, model: item.model, effort: null })
-														}>
-														{item.name}
-													</MenuItem>
-												))}
-										</>
-									)
-								) : crews === null ? null : crews.length ? (
-									crews.map((item) => (
-										<MenuItem
-											key={item.id}
-											kind="radio"
-											keepOpen
-											checked={chosenCrew === item.id}
-											icon={<Glyph name="helmet" size={12} />}
-											description={(item.root.agents ?? [])
-												.map((member) => crewLabel(locale, member.name))
-												.join(' · ')}
-											onSelect={() => chooseCrew(item.id)}>
-											{crewLabel(locale, item.name)}
-										</MenuItem>
-									))
-								) : (
-									<>
-										<MenuInfo>{t(locale, 'No crews')}</MenuInfo>
-										<MenuItem
-											hands
-											onSelect={() =>
-												window.dispatchEvent(
-													new CustomEvent('brigadir:open-settings', { detail: 'templates' })
-												)
-											}>
-											{t(locale, 'Settings ▸ Templates')}
-										</MenuItem>
-									</>
-								)}
-							</div>
-							<RememberCheck
-								label={t(
-									locale,
-									action === 'review'
-										? 'Remember for reviews with an agent'
-										: 'Remember for agent suggestions in review'
-								)}
-								checked={remember}
-								onChange={(checked) => {
-									setRemember(checked);
-									if (!checked) return;
-									if (crew) rememberCrew(crew);
-									else if (agent) void rememberPick(agent);
-								}}
-							/>
-							<p className={styles.agentNote}>
-								{t(
-									locale,
-									remember
-										? 'Saved in Settings ▸ Agents.'
-										: shown === 'crew'
-											? 'Only this review. The foreman merges the findings.'
-											: 'Only this review. Default: Default agent.'
-								)}
-							</p>
-						</div>
-					)}
-				</MenuPopover>
-			}>
+		<Button
+			data-agent-review
+			aria-label={t(locale, 'Review with an agent…')}
+			onClick={() => openReviewLaunch({ projectId, scopeId, number, title, action, start: run })}>
 			<Glyph name="generate" size={11} />
-			<span className={styles.wide}>{t(locale, 'Review with an agent')}</span>
-			<span className={styles.narrow}>{t(locale, 'With an agent')}</span>
-		</SplitButton>
+			<span className={styles.wide}>{t(locale, 'Review with an agent…')}</span>
+			<span className={styles.narrow}>{t(locale, 'With an agent…')}</span>
+		</Button>
 	);
 }

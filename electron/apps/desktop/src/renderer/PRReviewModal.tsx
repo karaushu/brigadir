@@ -53,6 +53,7 @@ import { shownFiles } from './pr-viewed';
 import { usePullRequests } from './PullRequests';
 import { HelperCapsule, useHelperRun } from './HelperAgent';
 import { AgentReviewButton, PRFileRow } from './PullRequestPanel';
+import type { ReviewChoice } from './ReviewLaunch';
 import { PRDiffView } from './PRDiffView';
 import { MergeControl, mergeWhy } from './PROverview';
 import { useTaskState } from './task-state';
@@ -249,9 +250,12 @@ export function PRReviewModal({
 	onCompose,
 	onDeliver,
 	onAgentReview,
+	onOpenReview,
 	onAgentFix,
 	onResolveConflicts,
 }: {
+	/** spec/pull-requests-and-ci#review-with-agent: `Open the review` — the live review task of this PR; the modal steps aside first. */
+	onOpenReview?: ((review: AgentTask) => void) | undefined;
 	/** spec/appearance#evolution-redesign: `Resolve conflicts… ▾` of the Merge card (spec/pull-requests-and-ci#resolve-conflicts); none — a conflict keeps «Merge PR…» off with its reason. */ onResolveConflicts?:
 		((how: 'agent' | 'manual') => Promise<string | null>) | undefined;
 	task: AgentTask;
@@ -267,9 +271,8 @@ export function PRReviewModal({
 		after?: string
 	): Promise<boolean>;
 	onDeliver?: ((text: string, to: AgentTask) => Promise<void>) | undefined;
-	onAgentReview?:
-		| ((where?: 'quick' | 'worktree', agent?: HelperRun | null, crew?: string | null) => void)
-		| undefined;
+	/** spec/pull-requests-and-ci#review-launch: starts the review the launch dialog describes; answers whether its task started. */
+	onAgentReview?: ((choice: ReviewChoice) => Promise<boolean>) | undefined;
 	onAgentFix?: ((sendComments: boolean) => Promise<boolean>) | undefined;
 }) {
 	const { detail, detailError, review, busy, actions, viewing, viewedError } = usePRReview(
@@ -643,9 +646,16 @@ export function PRReviewModal({
 		!zero && (
 			<AgentReviewButton
 				locale={locale}
+				projectId={task.projectId}
+				scopeId={target.scopeId}
 				number={target.number}
+				title={detail?.summary.title ?? ''}
 				action="reviewSuggestions"
-				run={(choice, agent, crew) => onAgentReview(choice, agent, crew)}
+				run={onAgentReview}
+				onOpenReview={(review) => {
+					closeReview(task);
+					onOpenReview?.(review);
+				}}
 				key={where}
 			/>
 		);
@@ -2096,9 +2106,8 @@ function CommentsColumn({
 	reviewTask: AgentTask | null;
 	files: number;
 	agentButton: ReactNode;
-	onAgentReview?:
-		| ((where?: 'quick' | 'worktree', agent?: HelperRun | null, crew?: string | null) => void)
-		| undefined;
+	/** spec/pull-requests-and-ci#review-launch: starts the review the launch dialog describes; answers whether its task started. */
+	onAgentReview?: ((choice: ReviewChoice) => Promise<boolean>) | undefined;
 	goTo(path: string, start: number | null): void;
 	accept(draft: PRDraft): void;
 	edit(draft: PRDraft, text: string, accept: boolean): Promise<boolean>;
@@ -2234,7 +2243,13 @@ function CommentsColumn({
 								)}
 								action={
 									onAgentReview && (
-										<Button variant="ghost" onClick={() => onAgentReview(where)}>
+										<Button
+											variant="ghost"
+											onClick={() =>
+												void onAgentReview({ where, agent: null, crew: null, notes: '' }).then(
+													(ok) => ok || toastError(t(locale, 'Could not start the review task.'))
+												)
+											}>
 											{t(locale, 'Ask again')}
 										</Button>
 									)

@@ -386,6 +386,7 @@ export const webChannels: Readonly<Record<IpcMethod, WebAccess>> = {
 	onCodeRestarted: 'deny',
 	readFormatters: 'deny',
 	setProjectFormatter: 'deny',
+	setProjectReviewNotes: 'deny',
 	onNavigate: 'deny',
 	searchFiles: (a) => a[2] === false,
 	searchText: 'deny',

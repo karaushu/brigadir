@@ -68,7 +68,7 @@ import { TaskReads } from './task-reads';
 import { NoticeLog } from './notice-log';
 import { QuitGuard, type PendingWrite } from './quit-guard';
 import { Boards } from './boards';
-import { resolveReviewCrew, reviewCrewPrompt } from './review-crew';
+import { resolveReviewCrew, reviewCrewPrompt, reviewGuidance } from './review-crew';
 import { ProjectViews } from './views';
 import { personTasks } from '@brigadir/core';
 import {
@@ -3825,7 +3825,8 @@ void app.whenReady().then(async () => {
 			where?: 'quick' | 'worktree' | null,
 			agent?: HelperRun | null,
 			suggestions?: boolean,
-			crew?: string
+			crew?: string | null,
+			notes?: string
 		) =>
 			agentTask(
 				key,
@@ -3836,7 +3837,8 @@ void app.whenReady().then(async () => {
 				client.device?.kind === 'phone',
 				agent,
 				suggestions === true,
-				crew ?? null
+				crew ?? null,
+				notes ?? ''
 			)
 	);
 	/**
@@ -3868,7 +3870,9 @@ void app.whenReady().then(async () => {
 		/** spec/appearance#evolution-redesign: asked from step 2 of the review modal — the action «agent suggestions in review». */
 		suggestions = false,
 		/** spec/pull-requests-and-ci#review-crew: the Crew segment — a library crew for this review; none takes the crew the action remembers, if any. */
-		crewChoice: string | null = null
+		crewChoice: string | null = null,
+		/** spec/pull-requests-and-ci#review-launch: the person's instructions for this review, as typed. */
+		notes = ''
 	) {
 		const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
 			detail = await pullRequests.detail(key.projectId, key.id, ref.scopeId, ref.number, true),
@@ -3960,10 +3964,15 @@ void app.whenReady().then(async () => {
 					};
 		const repo = !repoScope || repoScope.name === '.' ? '.' : repoScope.name,
 			prRef = `refs/brigadir-v2/pr/${pr.number}`;
+		// spec/pull-requests-and-ci#review-launch: the project's review notes, then the person's instructions; English frame, their text as typed (rule 12).
+		const guidance =
+			mode === 'review'
+				? reviewGuidance((await store.project(key.projectId)).reviewNotes, notes, repo, trees.base)
+				: '';
 		const prompt = quick
-			? `Review pull request #${pr.number} "${pr.title}" (${pr.head} → ${pr.base}) without checking it out: the working tree stays on the person's branch, so its files are not the PR. The PR head is fetched as ${prRef} in the repo ${repo}; its merge base with ${pr.base} is ${trees.base}. Read the change with \`git -C ${repo} diff ${trees.base} ${prRef}\`, a file with \`git -C ${repo} show ${prRef}:<path>\`, search with \`git -C ${repo} grep <pattern> ${prRef}\`. Read the existing review threads. Leave each finding as a draft comment on its lines with the pr_comment tool; the person sends the review. Do not change code or switch branches.`
+			? `Review pull request #${pr.number} "${pr.title}" (${pr.head} → ${pr.base}) without checking it out: the working tree stays on the person's branch, so its files are not the PR. The PR head is fetched as ${prRef} in the repo ${repo}; its merge base with ${pr.base} is ${trees.base}. Read the change with \`git -C ${repo} diff ${trees.base} ${prRef}\`, a file with \`git -C ${repo} show ${prRef}:<path>\`, search with \`git -C ${repo} grep <pattern> ${prRef}\`. Read the existing review threads. Leave each finding as a draft comment on its lines with the pr_comment tool; the person sends the review. Do not change code or switch branches.${guidance}`
 			: mode === 'review'
-				? `Review pull request #${pr.number} "${pr.title}" (${pr.head} → ${pr.base}). Read the changed files and the existing review threads. Leave each finding as a draft comment on its lines with the pr_comment tool; the person sends the review. Do not change code.`
+				? `Review pull request #${pr.number} "${pr.title}" (${pr.head} → ${pr.base}). Read the changed files and the existing review threads. Leave each finding as a draft comment on its lines with the pr_comment tool; the person sends the review. Do not change code.${guidance}`
 				: own
 					? fixPrompt
 					: `${fixPrompt}\nYou cannot push to ${pr.head}: the work goes to the branch ${branch}, and its pull request targets ${pr.head}.`;
@@ -3993,7 +4002,7 @@ void app.whenReady().then(async () => {
 			? { provider: crew.root.provider, launchOptions: [] }
 			: await taskAgent(action, mode === 'review' ? agent : null);
 		const taskPrompt = crew
-			? reviewCrewPrompt({ pr, quick, repo, mergeBase: trees.base, crew })
+			? reviewCrewPrompt({ pr, quick, repo, mergeBase: trees.base, crew, guidance })
 			: prompt;
 		const task = await store.createTask(
 			key.projectId,
@@ -4012,6 +4021,7 @@ void app.whenReady().then(async () => {
 				number: pr.number,
 				mode,
 				base: mode === 'fix' && !own ? pr.head : pr.base,
+				...(repoScope ? { repo: repoScope.name } : {}),
 			},
 			...(mode === 'review' ? { readOnlyAgent: true } : {}),
 			...(crew ? { crew } : {}),
@@ -4810,6 +4820,11 @@ void app.whenReady().then(async () => {
 			(await (await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).project(projectId)).path
 		)
 	);
+	handle('projects:review-notes', async (projectId, notes) => {
+		await (
+			await SessionStore.at(process.env.BRIGADIR_DATA_DIR)
+		).setProjectReviewNotes(projectId, notes);
+	});
 	handle('commands:save', (projectId, commands) =>
 		saveProjectCommands(process.env.BRIGADIR_DATA_DIR, projectId, commands)
 	);

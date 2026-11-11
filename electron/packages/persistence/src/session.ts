@@ -22,6 +22,7 @@ import {
 	isTaskKey,
 	isProject,
 	isProjectCommands,
+	isProjectReviewNotes,
 	isProjectSimulator,
 	isProjectIcon,
 	isProjectIconPick,
@@ -29,6 +30,7 @@ import {
 	type ProjectIconPick,
 	isAgentTask,
 	type ProjectCommand,
+	type ProjectReviewNotes,
 	type ProjectSimulator,
 	type TaskLaunch,
 	type AgentTask,
@@ -278,6 +280,17 @@ export class SessionStore {
 	async setProjectFormatter(id: string, formatter: ProjectFormatter): Promise<Project> {
 		const { formatter: _previous, ...rest } = await this.project(id);
 		const project: Project = formatter === 'default' ? rest : { ...rest, formatter };
+		await atomicJson(await safePath(this.root, 'projects', id, 'project.json'), {
+			schemaVersion: 1,
+			project,
+		});
+		return project;
+	}
+	/** spec/pull-requests-and-ci#review-notes: null drops the field — the project has no review notes. */
+	async setProjectReviewNotes(id: string, notes: ProjectReviewNotes | null): Promise<Project> {
+		if (notes !== null && !isProjectReviewNotes(notes)) throw new Error('Invalid review notes');
+		const { reviewNotes: _previous, ...rest } = await this.project(id);
+		const project: Project = notes ? { ...rest, reviewNotes: notes } : rest;
 		await atomicJson(await safePath(this.root, 'projects', id, 'project.json'), {
 			schemaVersion: 1,
 			project,

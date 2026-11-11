@@ -181,7 +181,7 @@ Collapse state is persisted per project (`collapsed` in `sidebar.json`) and outl
 ### Project context menu
 
 Right click, the context-menu key or Shift+F10 on a header opens a native menu (with glyphs):
-`New task`, `Open main tree`, `Project knowledge…`, `Project icon…`, `Show in file manager`, `Copy path`, —,
+`New task`, `Open main tree`, `Project knowledge…`, `Project icon…`, `Review notes…`, `Show in file manager`, `Copy path`, —,
 `Remove project…`. `Open main tree` opens the project's main working tree, as the button in the project screen's title
 strip does (see [Projects](projects-and-board.md#screen-layout)).
 

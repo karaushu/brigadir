@@ -2144,6 +2144,28 @@ const uk = {
 	'Branch {branch}, dependencies can be installed and run':
 		'Branch {branch}. Можна встановлювати залежності й запускати код.',
 	'Where the agent reviews': 'Де агент робить ревʼю',
+	// spec/pull-requests-and-ci#review-launch, spec/pull-requests-and-ci#review-notes
+	'Review with an agent…': 'Ревʼю з агентом…',
+	'With an agent…': 'З агентом…',
+	'Open the review': 'Відкрити ревʼю',
+	'What should the reviewer look at? (optional)': 'На що подивитися ревʼюеру? (необовʼязково)',
+	'What should the reviewers look at? (optional)': 'На що подивитися ревʼюерам? (необовʼязково)',
+	'Notes for the reviewer': 'Нотатки для ревʼюера',
+	'Where the agent works': 'Де',
+	'Who reviews': 'Хто',
+	'file or folder': 'файл або тека',
+	'The foreman passes your notes to each reviewer':
+		'Бригадир передасть твої нотатки кожному ревʼюеру',
+	'Project review notes': 'Нотатки проєкту для ревʼю',
+	'Review notes': 'Нотатки для ревʼю',
+	'Review notes…': 'Нотатки для ревʼю…',
+	'Every review with an agent in this project gets these notes.':
+		'Ці нотатки отримує кожне ревʼю з агентом у цьому проєкті.',
+	'In the project': 'У проєкті',
+	'REVIEW.md in the repo': 'REVIEW.md у repo',
+	'The agent reads it at the PR base.': 'Агент читає його з бази PR.',
+	'Could not save the review notes.': 'Не вдалося зберегти нотатки для ревʼю.',
+	'Review notes text': 'Текст нотаток для ревʼю',
 	'Reply to the agent': 'Відповісти агенту',
 	'Send to the agent': 'Надіслати агенту',
 	'Write to the agent…': 'Напиши агенту…',
@@ -4166,6 +4188,8 @@ export function attachmentLabel(
 }
 /** Keys whose English text is shared with another key of a different Ukrainian word. */
 const english: Partial<Record<MessageKey, string>> = {
+	'Where the agent works': 'Where',
+	'Who reviews': 'Who',
 	'PR merged (event)': 'PR merged',
 	'Repeat (schedule)': 'Repeat',
 	'Schedule (verb)': 'Schedule',
@@ -4673,6 +4697,15 @@ export function changedActionCount(locale: Locale, count: number): string {
 		locale === 'uk'
 			? { one: 'змінена', few: 'змінені', many: 'змінених', other: 'зміненої' }
 			: { one: 'changed', few: 'changed', many: 'changed', other: 'changed' };
+	return `${new Intl.NumberFormat(locale).format(count)} ${forms[form as keyof typeof forms] ?? forms.other}`;
+}
+/** spec/pull-requests-and-ci#review-launch: «3 lines» of the project review notes; four forms for uk (rule 9). */
+export function noteLineCount(locale: Locale, count: number): string {
+	const form = new Intl.PluralRules(locale).select(count);
+	const forms =
+		locale === 'uk'
+			? { one: 'рядок', few: 'рядки', many: 'рядків', other: 'рядка' }
+			: { one: 'line', few: 'lines', many: 'lines', other: 'lines' };
 	return `${new Intl.NumberFormat(locale).format(count)} ${forms[form as keyof typeof forms] ?? forms.other}`;
 }
 export function taskCount(locale: Locale, count: number): string {

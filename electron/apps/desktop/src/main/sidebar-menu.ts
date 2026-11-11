@@ -307,7 +307,7 @@ export class SidebarMenus {
 	async project(
 		id: string,
 		client: Client
-	): Promise<'new-task' | 'main-tree' | 'knowledge' | 'icon' | 'removed' | null> {
+	): Promise<'new-task' | 'main-tree' | 'knowledge' | 'icon' | 'review-notes' | 'removed' | null> {
 		const project = await (await SessionStore.at(this.dataDir)).project(id);
 		const action = await this.choose(
 			client,
@@ -318,6 +318,8 @@ export class SidebarMenus {
 				{ id: 'knowledge', label: 'Project knowledge…' },
 				// spec/sidebar#project-groups: the picker from the menu too, not only from the icon.
 				{ id: 'icon', label: 'Project icon…' },
+				// spec/pull-requests-and-ci#review-notes
+				{ id: 'review-notes', label: 'Review notes…' },
 				{ id: 'finder', label: 'Reveal in Finder', reveal: project.path },
 				{ id: 'copy', label: 'Copy path', copy: project.path },
 				null,
@@ -329,7 +331,8 @@ export class SidebarMenus {
 			action === 'new-task' ||
 			action === 'main-tree' ||
 			action === 'knowledge' ||
-			action === 'icon'
+			action === 'icon' ||
+			action === 'review-notes'
 		)
 			return action;
 		if (action === 'remove' && (await this.remove(client, id))) return 'removed';

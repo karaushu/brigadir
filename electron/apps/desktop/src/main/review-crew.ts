@@ -5,6 +5,7 @@ import {
 	type AgentProvider,
 	type CrewLibrary,
 	type CrewSpec,
+	type ProjectReviewNotes,
 } from '@brigadir/core';
 /**
  * spec/pull-requests-and-ci#review-crew: a PR review by a crew. The task stays `Review #N` with `prReview`; its agent is the foreman, who gives each reviewer
@@ -32,9 +33,18 @@ export type ReviewCrewPromptInput = {
 	repo: string;
 	mergeBase: string;
 	crew: CrewSpec;
+	/** spec/pull-requests-and-ci#review-launch: the project's review notes and the person's instructions (`reviewGuidance`), empty when none. */
+	guidance?: string;
 };
 /** English by rule 12: the foreman's first prompt. The host starts reviewers without a plan in a review task (spec/pull-requests-and-ci#review-crew). */
-export function reviewCrewPrompt({ pr, quick, repo, mergeBase, crew }: ReviewCrewPromptInput) {
+export function reviewCrewPrompt({
+	pr,
+	quick,
+	repo,
+	mergeBase,
+	crew,
+	guidance = '',
+}: ReviewCrewPromptInput) {
 	const prRef = `refs/brigadir-v2/pr/${pr.number}`,
 		names = crew.root.agents.map((agent) => agent.name),
 		listed = names.map((name) => `\`${name}\``).join(', '),
@@ -51,5 +61,30 @@ export function reviewCrewPrompt({ pr, quick, repo, mergeBase, crew }: ReviewCre
 		`${reading} Each reviewer reads the existing review threads too, changes no code and commits nothing, and reports every finding in its final message as one line \`path:line — finding\`, the most important first.`,
 		own,
 		`Reports arrive by themselves when a reviewer finishes. Read each with read_report. Merge the findings that are the same, settle disagreements between the reviewers by reading the code yourself, and drop what does not hold. Leave each remaining finding once as a draft comment on its lines with the pr_comment tool; the last line of its body names who found it, like \`— ${example}\`. Accept each reviewer's task with accept_task once you have its report. The person sends the review. Do not change code.`,
+		...(guidance
+			? [
+					`Pass everything below word for word into each reviewer's brief, and follow it yourself when you merge the findings.${guidance}`,
+				]
+			: []),
 	].join('\n\n');
+}
+
+/**
+ * spec/pull-requests-and-ci#review-launch, spec/pull-requests-and-ci#review-notes: what a review prompt ends with — the project's notes (its text, or REVIEW.md
+ * read at the merge base), then the person's instructions for this review as typed. Empty when there is neither.
+ */
+export function reviewGuidance(
+	projectNotes: ProjectReviewNotes | undefined,
+	notes: string,
+	repo: string,
+	mergeBase: string
+) {
+	const parts = [
+		projectNotes?.source === 'text' ? `Review notes of this project:\n${projectNotes.text}` : '',
+		projectNotes?.source === 'file'
+			? `This project keeps its review notes in REVIEW.md: read it at the merge base with \`git -C ${repo} show ${mergeBase}:REVIEW.md\` and follow it. If there is no such file, go on without it.`
+			: '',
+		notes.trim() ? `Instructions from the person for this review:\n${notes}` : '',
+	].filter(Boolean);
+	return parts.length ? `\n\n${parts.join('\n\n')}` : '';
 }

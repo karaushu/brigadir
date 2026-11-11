@@ -38,8 +38,24 @@ export const projectFormatters: readonly ProjectFormatter[] = [
 ];
 /** spec/search-menus-and-commands#project-commands: `commands` absent means none; an empty list is never written. */
 /** spec/browser-and-simulator#simulator: `simulator` — the device the project chose last. */
+/** spec/pull-requests-and-ci#review-notes: what every review with an agent in the project gets — its own text, or REVIEW.md the agent reads at the PR base. */
+export type ProjectReviewNotes = { source: 'text'; text: string } | { source: 'file' };
+export const reviewNotesLimit = 16000;
+export function isProjectReviewNotes(value: unknown): value is ProjectReviewNotes {
+	return (
+		isRecord(value) &&
+		((value.source === 'file' && Object.keys(value).length === 1) ||
+			(value.source === 'text' &&
+				Object.keys(value).length === 2 &&
+				typeof value.text === 'string' &&
+				value.text.trim().length > 0 &&
+				value.text.length <= reviewNotesLimit))
+	);
+}
 export type Project = {
 	commands?: ProjectCommand[];
+	/** spec/pull-requests-and-ci#review-notes: absent — none. */
+	reviewNotes?: ProjectReviewNotes;
 	simulator?: ProjectSimulator;
 	pullRequestBases?: Record<string, string>;
 	formatter?: ProjectFormatter;
@@ -70,6 +86,8 @@ export type TaskPRReview = {
 	number: number;
 	mode: 'review' | 'fix' | 'conflicts';
 	base: string;
+	/** spec/pull-requests-and-ci#review-with-agent: the repo's name in the project (`.` for the root), so a worktree's repo id finds the task too; absent on older tasks. */
+	repo?: string;
 };
 export type SlackThreadRef = { channel: string; ts: string; permalink: string | null };
 export function isSlackThreadRef(value: unknown): value is SlackThreadRef {
@@ -189,6 +207,7 @@ export function isProject(value: unknown): value is Project {
 		(value.formatter === undefined ||
 			projectFormatters.includes(value.formatter as ProjectFormatter)) &&
 		(value.commands === undefined || isProjectCommands(value.commands)) &&
+		(value.reviewNotes === undefined || isProjectReviewNotes(value.reviewNotes)) &&
 		(value.simulator === undefined || isProjectSimulator(value.simulator)) &&
 		(value.icon === undefined || isProjectIcon(value.icon)) &&
 		(value.iconPick === undefined || isProjectIconPick(value.iconPick)) &&

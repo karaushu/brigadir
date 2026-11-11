@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { oneShotText } from '@brigadir/transport';
-import { SessionStore, atomicJson } from '@brigadir/persistence';
+import { SessionStore, atomicJson, readWorkspace } from '@brigadir/persistence';
 import {
 	Snapshots,
 	discoverScopes,
@@ -16,6 +16,7 @@ import {
 import { Forge } from '@brigadir/forge';
 import {
 	emptyReviewDraft,
+	liveReviewTask,
 	prKeyOf,
 	type PRLocalReview,
 	type PRRefKey,
@@ -555,6 +556,20 @@ export class PullRequests {
 		if (project.some((item) => item.id === scopeId) || !taskId) return scopeId;
 		const name = (await this.scopes(projectId, taskId)).find((item) => item.id === scopeId)?.name;
 		return project.find((item) => item.name === name)?.id ?? scopeId;
+	}
+	/** spec/pull-requests-and-ci#review-with-agent: whether a review task of this PR is live — by the canonical repo id or the repo's name. */
+	async liveReview(key: TaskKey, ref: PRRefKey): Promise<boolean> {
+		const [canonical, scopes, workspace] = await Promise.all([
+			this.canonicalId(key.projectId, key.id, ref.scopeId),
+			this.scopes(key.projectId, key.id).catch(() => []),
+			readWorkspace(this.dataDir ? { dataDir: this.dataDir } : {}),
+		]);
+		return !!liveReviewTask(workspace.tasks, {
+			projectId: key.projectId,
+			number: ref.number,
+			scopeId: canonical,
+			repo: scopes.find((scope) => scope.id === ref.scopeId)?.name ?? null,
+		});
 	}
 	async readDraft(key: TaskKey, scopeId: string, number: number): Promise<PRReviewDraft> {
 		const store = await SessionStore.at(this.dataDir),

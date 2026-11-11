@@ -18,7 +18,13 @@ const open: PRMenuRow = {
 	head: 'feat/couriers-map',
 	url: 'https://github.com/acme/mobile/pull/91',
 };
-const base: PRMenuState = { pr: open, drafts: 0, conflicts: false, reviewsThis: false };
+const base: PRMenuState = {
+	pr: open,
+	drafts: 0,
+	conflicts: false,
+	reviewsThis: false,
+	liveReview: false,
+};
 /** Labels as the menu shows them: a submenu's items after `▸`, a separator as `-`. */
 const labels = (items: readonly NativeMenuItem[]): string[] =>
 	items.flatMap((item) =>
@@ -30,10 +36,10 @@ const labels = (items: readonly NativeMenuItem[]): string[] =>
 	);
 
 describe('the menu of a PR list row (spec/appearance#evolution-redesign)', () => {
-	it('gives an open PR its review, the agent in a submenu, then GitHub and the copies', () => {
+	it('gives an open PR its review, the agent’s launch dialog, then GitHub and the copies', () => {
 		expect(labels(prMenuTemplate('en', base))).toEqual([
 			'Start review…',
-			'Review with an agent ▸ Quickly / In a worktree',
+			'Review with an agent…',
 			'-',
 			'Open on GitHub',
 			'Copy link',
@@ -42,11 +48,14 @@ describe('the menu of a PR list row (spec/appearance#evolution-redesign)', () =>
 		const items = prMenuTemplate('en', base);
 		expect(items.find((item) => item?.id === 'copy-link')?.copy).toBe(open.url);
 		expect(items.find((item) => item?.id === 'copy-branch')?.copy).toBe(open.head);
-		expect(
-			items.find((item) => item?.id === 'agent-review')?.submenu?.map((item) => item?.id)
-		).toEqual(['agent-quick', 'agent-worktree']);
-		// Every top-level item has its glyph (spec/search-menus-and-commands#menu-glyphs); the submenu's ways are values, as a picker's are.
+		// Every item has its glyph (spec/search-menus-and-commands#menu-glyphs).
 		expect(items.filter((item) => item && !item.icon)).toEqual([]);
+	});
+	it('leads into the live review task instead of starting another (spec/pull-requests-and-ci#pr-row-menu)', () => {
+		const items = prMenuTemplate('en', { ...base, liveReview: true });
+		expect(labels(items).slice(0, 2)).toEqual(['Start review…', 'Open the review']);
+		expect(items.find((item) => item?.id === 'open-review')?.icon).toBe('zoom');
+		expect(items.some((item) => item?.id === 'agent-review')).toBe(false);
 	});
 	it('continues a review with drafts, hides the agent on the PR this task reviews, offers a conflict', () => {
 		expect(
@@ -74,7 +83,7 @@ describe('the menu of a PR list row (spec/appearance#evolution-redesign)', () =>
 	it('speaks Ukrainian', () => {
 		expect(labels(prMenuTemplate('uk', { ...base, drafts: 1 }))).toEqual([
 			'Продовжити ревʼю…',
-			'Ревʼю з агентом ▸ Швидко / У worktree',
+			'Ревʼю з агентом…',
 			'-',
 			'Відкрити на GitHub',
 			'Копіювати посилання',
@@ -104,7 +113,7 @@ describe('PRMenus.show', () => {
 		const ui = {
 			menu: async (_client: Client, items: NativeMenuItem[]) => {
 				shown.push(items);
-				return 'agent-worktree';
+				return 'agent-review';
 			},
 		} as unknown as ClientUi;
 		const menus = new PRMenus(
@@ -114,6 +123,7 @@ describe('PRMenus.show', () => {
 				lastDetail: async () => null,
 				detail: async () => ({ ...conflicting, mergeable: 'MERGEABLE', mergeState: 'CLEAN' }),
 				readDraft: async () => emptyReviewDraft(),
+				liveReview: async () => false,
 				...source,
 			},
 			() => 'en',
@@ -129,10 +139,10 @@ describe('PRMenus.show', () => {
 				drafts: [{ id: 'd1' } as never],
 			}),
 		});
-		expect(await menus.show(client, key, ref, open)).toBe('agent-worktree');
+		expect(await menus.show(client, key, ref, open)).toBe('agent-review');
 		expect(labels(shown[0]!).slice(0, 3)).toEqual([
 			'Continue review…',
-			'Review with an agent ▸ Quickly / In a worktree',
+			'Review with an agent…',
 			'Resolve conflicts…',
 		]);
 	});

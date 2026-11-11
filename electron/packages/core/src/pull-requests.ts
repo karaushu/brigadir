@@ -305,7 +305,8 @@ export function isPRRefKey(value: unknown): value is PRRefKey {
 /** spec/appearance#evolution-redesign: what a PR list row tells main for its right-click menu — the state, the head branch and the page. */
 export type PRMenuRow = Pick<PullRequestSummary, 'state' | 'head' | 'url'>;
 /** The menu's answer; the copies finish in main and answer null. */
-export type PRMenuAction = 'review' | 'agent-quick' | 'agent-worktree' | 'conflicts' | 'github';
+/** spec/pull-requests-and-ci#pr-row-menu: `agent-review` opens the launch dialog; `open-review` — the live review task of the PR. */
+export type PRMenuAction = 'review' | 'agent-review' | 'open-review' | 'conflicts' | 'github';
 const prStates: readonly unknown[] = ['OPEN', 'DRAFT', 'MERGED', 'CLOSED'] satisfies PRState[];
 export function isPRMenuRow(value: unknown): value is PRMenuRow {
 	return (

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { prColumn, prColumns, waitingCount, type PRLocalReview } from './pr-board';
+import { liveReviewTask, prColumn, prColumns, waitingCount, type PRLocalReview } from './pr-board';
+import type { AgentTask } from './workspace';
 import type { PullRequestSummary } from './pull-requests';
 
 const now = Date.parse('2026-10-26T12:00:00Z');
@@ -87,5 +88,42 @@ describe('prColumns', () => {
 		expect(numbers('mine')).toEqual([1]);
 		expect(numbers('waiting')).toEqual([2]);
 		expect(waitingCount(items.map((i) => i.pr))).toBe(1);
+	});
+});
+
+describe('the live review task of a PR (spec/pull-requests-and-ci#review-with-agent)', () => {
+	const task = (over: Partial<AgentTask>): AgentTask =>
+		({
+			id: 't1',
+			projectId: 'p',
+			title: 'Review #7',
+			status: 'working',
+			prReview: { scopeId: 'main-repo', number: 7, mode: 'review', base: 'main', repo: 'mobile' },
+			updatedAt: '2026-11-11T10:00:00Z',
+			...over,
+		}) as AgentTask;
+	const pr = { projectId: 'p', number: 7, scopeId: 'main-repo' };
+	it('finds it by the repo id, or by the repo name from a worktree', () => {
+		expect(liveReviewTask([task({})], pr)?.id).toBe('t1');
+		expect(
+			liveReviewTask([task({})], { ...pr, scopeId: 'worktree-repo', repo: 'mobile' })?.id
+		).toBe('t1');
+		expect(liveReviewTask([task({})], { ...pr, scopeId: 'worktree-repo' })).toBeNull();
+	});
+	it('skips archived tasks, other modes, numbers and projects; the newest of several wins', () => {
+		expect(
+			liveReviewTask([task({ archived: { at: '2026-11-11T11:00:00Z' } as never })], pr)
+		).toBeNull();
+		expect(
+			liveReviewTask(
+				[task({ prReview: { scopeId: 'main-repo', number: 7, mode: 'fix', base: 'main' } })],
+				pr
+			)
+		).toBeNull();
+		expect(liveReviewTask([task({})], { ...pr, number: 8 })).toBeNull();
+		expect(liveReviewTask([task({})], { ...pr, projectId: 'q' })).toBeNull();
+		expect(
+			liveReviewTask([task({}), task({ id: 't2', updatedAt: '2026-11-11T12:00:00Z' })], pr)?.id
+		).toBe('t2');
 	});
 });

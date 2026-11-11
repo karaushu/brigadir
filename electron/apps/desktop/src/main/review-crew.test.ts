@@ -5,7 +5,7 @@ import {
 	reviewCrewTemplateId,
 	type CrewLibrary,
 } from '@brigadir/core';
-import { resolveReviewCrew, reviewCrewPrompt } from './review-crew';
+import { resolveReviewCrew, reviewCrewPrompt, reviewGuidance } from './review-crew';
 
 const library: CrewLibrary = {
 	agents: [...builtinAgentTemplates],
@@ -58,5 +58,43 @@ describe('a PR review by a crew (spec/pull-requests-and-ci#review-crew)', () => 
 		const worktree = reviewCrewPrompt({ pr, quick: false, repo: 'api', mergeBase: 'abc123', crew });
 		expect(worktree).toContain('git -C api diff abc123 HEAD');
 		expect(worktree).not.toContain("person's branch");
+	});
+});
+
+describe('review notes and instructions in the prompt (spec/pull-requests-and-ci#review-launch)', () => {
+	it('puts the project notes first and the person’s text as typed after them', () => {
+		const text = reviewGuidance(
+			{ source: 'text', text: 'Migrations must be reversible.' },
+			'Look at the race in sync.ts',
+			'.',
+			'abc123'
+		);
+		expect(text).toBe(
+			'\n\nReview notes of this project:\nMigrations must be reversible.\n\nInstructions from the person for this review:\nLook at the race in sync.ts'
+		);
+	});
+	it('sends the agent to REVIEW.md at the merge base, and adds nothing without notes', () => {
+		expect(reviewGuidance({ source: 'file' }, '', 'apps/mobile', 'abc123')).toContain(
+			'`git -C apps/mobile show abc123:REVIEW.md`'
+		);
+		expect(reviewGuidance(undefined, '   ', '.', 'abc123')).toBe('');
+	});
+	it('tells the foreman to pass them word for word to each reviewer', () => {
+		const crew = resolveReviewCrew(library, reviewCrewTemplateId, 'claude');
+		const prompt = reviewCrewPrompt({
+			pr,
+			quick: true,
+			repo: '.',
+			mergeBase: 'abc123',
+			crew,
+			guidance: reviewGuidance(undefined, 'Skip style.', '.', 'abc123'),
+		});
+		expect(prompt).toContain("Pass everything below word for word into each reviewer's brief");
+		expect(prompt.endsWith('Instructions from the person for this review:\nSkip style.')).toBe(
+			true
+		);
+		expect(
+			reviewCrewPrompt({ pr, quick: true, repo: '.', mergeBase: 'abc123', crew })
+		).not.toContain('word for word');
 	});
 });

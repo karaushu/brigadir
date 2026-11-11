@@ -111,6 +111,7 @@ import { AppMenuButton } from './ui/AppMenuButton';
 import { useApplyAppearance } from './apply-appearance';
 import { Search, type SearchMode } from './Search';
 import { CommandEditorHost, useCommandEditor } from './ProjectCommands';
+import { ReviewLaunchHost, openReviewNotes } from './ReviewLaunch';
 import { Kit } from './Kit';
 import { SurfaceBoundary } from './ui/ErrorBoundary';
 import { Glyph } from './ui/Glyph';
@@ -896,6 +897,8 @@ export function App() {
 			.projectMenu(id)
 			.then(async (action) => {
 				if (action === 'knowledge') setKnowledgeProject(id);
+				// spec/pull-requests-and-ci#review-notes
+				if (action === 'review-notes') openReviewNotes(id);
 				// spec/sidebar#project-groups: «Project icon…» opens the same picker as the icon, anchored to the group's icon.
 				if (action === 'icon') {
 					const button = document.querySelector<HTMLElement>(
@@ -1159,6 +1162,7 @@ export function App() {
 							/>
 						)}
 						{appearance.modules.commands && <CommandEditorHost locale={locale} />}
+						<ReviewLaunchHost locale={locale} />
 						{route === '#kit' ? (
 							<>
 								<div className={styles.sidebarChrome} />

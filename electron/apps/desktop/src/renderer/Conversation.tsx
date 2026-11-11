@@ -115,6 +115,7 @@ import {
 	planLinesLabel,
 	isPlanApproval,
 	planApprovalText,
+	planRevisionBase,
 	planApproveChoice,
 	planApprovedMode,
 	planPromptFeedback,
@@ -1429,12 +1430,14 @@ export function Conversation({
 			if (e.kind === 'permission.requested' && isPlanApproval(e.request)) {
 				const plan = planApprovalText(e.request, records, row.record.seq);
 				if (plan !== null) {
+					const base = planRevisionBase(records, row.record.seq);
 					if (pending.permissions.some((p) => p.id === e.request.id))
 						return (
 							<PlanApproval
 								request={e.request}
 								choice={planApproveChoice(e.request, records, row.record.seq)}
 								text={plan}
+								base={base}
 								task={task}
 								locale={locale}
 								revision={linkRevision}
@@ -1480,6 +1483,7 @@ export function Conversation({
 							<PlanApprovalSummary
 								request={e.request}
 								text={plan}
+								base={base}
 								approved={approved}
 								mode={mode}
 								feedback={feedback}

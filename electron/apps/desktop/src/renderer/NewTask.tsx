@@ -24,6 +24,8 @@ import {
 	catalogOptions,
 	orderAgentOptions,
 	selectOption,
+	soloRoleChecks,
+	soloRoleTemplates,
 	specAgents,
 	type AgentOption,
 	type ProviderCatalog,
@@ -163,6 +165,10 @@ export function NewTask({
 		[crewTemplateId, setCrewTemplateId] = useState<string>(
 			editing?.crew?.templateId ?? duplicateSource?.crew?.templateId ?? composeCrewId
 		);
+	// spec/tasks#sheet-role: the template a solo agent works as; an edited or duplicated task opens with its own.
+	const [roleId, setRoleId] = useState<string | null>(
+		editing?.agentRole?.templateId ?? duplicateSource?.agentRole?.templateId ?? null
+	);
 	// spec/tasks#sheet-rail «Налаштувати…»: edits go to the task, not the library, until «Зберегти як шаблон».
 	const [oneOff, setOneOff] = useState<CrewTemplate | null>(null),
 		[editorOpen, setEditorOpen] = useState(false),
@@ -347,8 +353,36 @@ export function NewTask({
 			provider: 'claude' | 'codex';
 			launchOptions: { id: string; value: string | boolean }[];
 		} | null>(null),
-		seedTask = editing ?? proposalSeed;
+		// spec/tasks#sheet-role: a role with a provider brings its model and effort the same way, over the task's own.
+		[roleSeed, setRoleSeed] = useState<typeof proposalSeed>(null),
+		seedTask = roleSeed ?? editing ?? proposalSeed;
 	const seeded = useRef(!editing && !proposal);
+	const roles = soloRoleTemplates(library?.agents ?? []),
+		role = roles.find((item) => item.id === roleId),
+		// A role whose template is gone stays chosen by the name the task keeps.
+		goneRole =
+			roleId && library && !role && editing?.agentRole?.templateId === roleId ? editing : undefined,
+		// A duplicate of a task whose template is gone opens with no role.
+		chosenRole = role || goneRole || !library ? roleId : null,
+		canRole = taskType === 'agent' && !relay && !scheduling,
+		// spec/tasks#sheet-role: a checker runs in the GUI.
+		checking =
+			canRole && (role ? soloRoleChecks(role) : !!goneRole && goneRole.readOnlyAgent === true),
+		sheetTransport = checking ? 'gui' : transport;
+	function pickRole(id: string | null) {
+		setRoleId(id);
+		const template = roles.find((item) => item.id === id);
+		if (!template?.provider || !enabledProviders[template.provider]) return;
+		seeded.current = false;
+		setProvider(template.provider);
+		setRoleSeed({
+			provider: template.provider,
+			launchOptions: Object.entries(template.choices?.configOptions ?? {}).map(([key, value]) => ({
+				id: key,
+				value,
+			})),
+		});
+	}
 	useEffect(() => {
 		if (seeded.current || !seedTask || provider !== seedTask.provider || !catalogs[provider])
 			return;
@@ -374,7 +408,7 @@ export function NewTask({
 					])
 			)
 		);
-	}, [catalogs, provider, proposalSeed]);
+	}, [catalogs, provider, proposalSeed, roleSeed]);
 	function addAttachments(added: PromptAttachment[]) {
 		if (!added.length) return;
 		const next = [...attachmentsRef.current, ...added];
@@ -669,6 +703,8 @@ export function NewTask({
 				...(name.trim() ? { name: name.trim() } : {}),
 				...(choices.length ? { options: choices } : {}),
 				...(!editing && ids.length ? { attachments: ids, draftId: draftId.current } : {}),
+				// spec/tasks#sheet-role: a new task names its role; the edit says what it is now, unless its template is gone.
+				...(canRole && (editing ? !goneRole : chosenRole) ? { role: chosenRole } : {}),
 			};
 			// spec/tasks#backlog-edit: the edit sends the whole sheet — an emptied name gives the title back to the text, the list is the task's.
 			if (!editing && ids.length) adopted.current = true;
@@ -683,15 +719,22 @@ export function NewTask({
 						selection,
 					})
 				: editing
-					? await window.brigadir.editBacklogTask(editing, text, provider, transport, options, {
-							...sheet,
-							attachments: ids,
-						})
+					? await window.brigadir.editBacklogTask(
+							editing,
+							text,
+							provider,
+							sheetTransport,
+							options,
+							{
+								...sheet,
+								attachments: ids,
+							}
+						)
 					: await window.brigadir.createTask(
 							projectId,
 							text,
 							crewProvider,
-							taskType === 'brigadir' ? 'gui' : transport,
+							taskType === 'brigadir' ? 'gui' : sheetTransport,
 							backlog,
 							options,
 							taskType === 'brigadir'
@@ -1122,6 +1165,46 @@ export function NewTask({
 									</div>
 								) : (
 									<>
+										{/* spec/tasks#sheet-role: the template the agent works as; «No role» is an agent with no role text. */}
+										{canRole && (
+											<div className={styles.group} data-role-row>
+												<span className={styles.railLabel}>{t(locale, 'Role')}</span>
+												<Popup
+													align="end"
+													label={t(locale, 'Role')}
+													value={chosenRole ?? ''}
+													options={[
+														{
+															value: '',
+															label: t(locale, 'No role'),
+															icon: <Glyph name="person" size={13} />,
+														},
+														...roles.map((item) => ({
+															value: item.id,
+															label: crewLabel(locale, item.name),
+															icon: (
+																<Glyph name={soloRoleChecks(item) ? 'review' : 'code'} size={13} />
+															),
+														})),
+														...(goneRole?.agentRole
+															? [
+																	{
+																		value: goneRole.agentRole.templateId,
+																		label: crewLabel(locale, goneRole.agentRole.name),
+																		icon: (
+																			<Glyph
+																				name={goneRole.readOnlyAgent ? 'review' : 'code'}
+																				size={13}
+																			/>
+																		),
+																	},
+																]
+															: []),
+													]}
+													onChange={(value) => pickRole(value || null)}
+												/>
+											</div>
+										)}
 										<div className={styles.group}>
 											<div className={styles.railLabelRow} data-size="s">
 												<span className={styles.railLabel}>{t(locale, 'Agent')}</span>
@@ -1232,18 +1315,20 @@ export function NewTask({
 													/>
 												</div>
 											))}
-										<div className={styles.group}>
-											<span className={styles.railLabel}>{t(locale, 'Transport')}</span>
-											<Segments
-												label={t(locale, 'Transport')}
-												value={transport}
-												options={[
-													{ value: 'gui', label: 'GUI' },
-													{ value: 'terminal', label: 'CLI' },
-												]}
-												onChange={(value) => setTransport(value as 'gui' | 'terminal')}
-											/>
-										</div>
+										{!checking && (
+											<div className={styles.group}>
+												<span className={styles.railLabel}>{t(locale, 'Transport')}</span>
+												<Segments
+													label={t(locale, 'Transport')}
+													value={transport}
+													options={[
+														{ value: 'gui', label: 'GUI' },
+														{ value: 'terminal', label: 'CLI' },
+													]}
+													onChange={(value) => setTransport(value as 'gui' | 'terminal')}
+												/>
+											</div>
+										)}
 									</>
 								)}
 								{launch && (

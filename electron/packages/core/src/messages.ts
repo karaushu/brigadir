@@ -122,6 +122,8 @@ const uk = {
 	'Splits the work, accepts the parts': 'Ділить роботу, приймає частини',
 	'Parts with a clear spec': 'Частини з чіткою специфікацією',
 	'Migrations, refactors, unclear specs': 'Міграції, рефактори, нечіткі специфікації',
+	Role: 'Роль',
+	'No role': 'Без ролі',
 	'Checks the work, writes no code': 'Перевіряє роботу, коду не пише',
 	'Writes tests, changes no production code': 'Пише тести, робочий код не змінює',
 	'Writes docs, changes no behaviour': 'Пише документацію, поведінку не змінює',

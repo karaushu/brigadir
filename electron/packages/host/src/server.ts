@@ -192,6 +192,7 @@ export async function startHost(config: HostConfig) {
 	await modules.load();
 	modules.start();
 	const brief = sessionBrief(crew, task.provider, {
+		...(task.agentRole ? { role: task.agentRole.instructions } : {}),
 		subagents: task.provider === 'claude' && Boolean(await claudeSubagentModel(store.root)),
 		commands: modules.current().commands && Boolean(project.commands?.length),
 		tools: modules.current(),

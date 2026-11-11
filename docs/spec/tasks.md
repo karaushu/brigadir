@@ -22,6 +22,7 @@ A task is stored as `projects/<projectId>/tasks/<taskId>/task.json` (`{schemaVer
 | `originTaskId` | The task whose agent proposed this one with `create_task`. |
 | `relaySelection`, `relayIssue` | Which relay attachments were chosen; `summary-failed` \| `source-unavailable`. |
 | `archived`, `completedAt` | See [Archive](#archive). |
+| `agentRole` | The role a solo agent works as: `{templateId, name, instructions}`, a snapshot taken at creation ([Role](#sheet-role)). |
 | `crew`, `crewTaskId`, `crewNodeId`, `parentTaskId` | Foreman snapshot and worker links ([Crew](crew.md)). |
 | `scheduleRun` | A run of a schedule ([Schedules](notifications-slack-notes-and-schedules.md)). |
 
@@ -78,6 +79,7 @@ Groups for type `Agent`:
 
 | Group | Controls |
 | --- | --- |
+| `Role` | Role popup: `No role` first, then the agent templates ([Role](#sheet-role)). |
 | `Agent` | Provider popup, model popup (same control family), effort and mode, Fast mode; the subscription limits button sits right of the group label. |
 | `Transport` | `GUI` \| `CLI`. |
 | `Isolation` | Segment `No isolation` \| `Worktree` (data value `in-place` / `worktree`). Worktree only: `Branch name` (empty = auto, placeholder `brigadir/auto`), `from` + `Base ref`, `Copy .env`, `Setup command`. No isolation only: a `Branch` group per git repo (current branch, switchable before start; pull and dirty-tree handling, see [Git](git.md)). |
@@ -90,6 +92,18 @@ Type `Brigadir` replaces `Agent` with `Crew` (template popup with `Foreman compo
 - Repos, isolation, base ref, setup command and `.env` copying are remembered per project (`workspace.json`); the caption `Saves launch settings for this project.` says so. The branch is generated per task and never becomes a default. Crew template choice is remembered as `crewTemplateId`.
 - Rail labels: 11 px `--fg2` on a 16 px line, 6 px above the control; git refs (branch, setup command, base ref) are mono 11.5. Controls use the shared `ui/` sizes; rail popups open `align="end"` and show `PopupMarks` (✓).
 - A project with no git repo shows `A Git repository is required for worktree isolation.` in red under the fields.
+
+<a id="sheet-role"></a>
+### Role
+
+A task of type `Agent` can give its agent a **role**: an agent template from the library, so a task that is only documents, only tests or only a look at a screen goes to a specialist without a crew.
+
+- The popup lists `No role` (the default: an agent with no role text), then every template of the library that is not a foreman, built-in ones first, in the library's order. Each item carries the template's glyph: code for one that writes, review for a checker.
+- Picking a template that has a provider sets the sheet's provider, model and effort to the template's; the person can change them after. A template without a provider, or with a provider turned off in Settings ▸ Agents, leaves the sheet's agent as it is. `No role` changes nothing.
+- A checker (a template with reviewer rights) writes no code: the task gets `readOnlyAgent`, takes no repo lock and runs in the GUI, so `Transport` is not offered. It reports what it found to the person.
+- The role is a snapshot (`agentRole`): the task never reads the library again. It is not remembered for the project: the next sheet opens with `No role`. Edit task… and Duplicate task… open with the task's role. In the edit sheet a role whose template is gone stays chosen by its name; a duplicate of such a task opens with `No role`.
+- Schedules and Continue in a new task have no role control.
+- The role text goes to the agent in the session brief ([What the agent is told](#agent-context)).
 
 <a id="sheet-model"></a>
 ### Model and effort on the sheet
@@ -177,6 +191,7 @@ Order is fixed: **root → submodules → nested repos → `.env` copy → setup
 
 - Scope boundaries go structurally through `additionalDirectories` of the session.
 - An English repository-context block (type, branch, writable/read-only) is added to the first GUI prompt or the initial CLI prompt. User files such as `CLAUDE.md` are never edited.
+- A task with a role starts its session brief with the role: one sentence that the agent works alone and answers to the person, then the role text. For a built-in template the text is its solo variant (`soloInstructions` in `packages/core/src/solo-role.ts`): what the role does, without the crew tools. For an own template it is the template's Instructions as written, with a sentence to turn to the person wherever they name a foreman, a crew or crew tools. A checker is also told it changes no files.
 - Read-only repos: the policy layer rejects writes; writes that bypass it through shell commands are caught by snapshots and surface as the notice `The task only reads these repos, but files in them changed during the turn.`
 - Commit and push across submodules run in dependency order (submodule before parent): [Git](git.md).
 
@@ -415,6 +430,7 @@ The log reads as usual; above the composer a strip `The task is in the archive. 
 - `Other…` in the Base ref popup for starting from a tag or SHA.
 - `create_task` into another project or across several projects.
 - Copying attachments with `Duplicate task…`.
+- A role for scheduled tasks and for Continue in a new task; the role shown in the task header.
 - Bounded snapshot history for the main tree (it currently grows with every save, up to two checkpoints each).
 - The new task composer as a non-modal draft in the central area instead of a sheet.
 

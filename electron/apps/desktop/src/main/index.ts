@@ -222,6 +222,9 @@ import {
 	type WindowBounds,
 	type AttachmentOwner,
 	type TaskSheet,
+	soloRole,
+	soloRoleChecks,
+	soloRoleTemplates,
 	isBrowserCommand,
 	isRecord,
 	isTaskAgentRequest,
@@ -3246,6 +3249,11 @@ void app.whenReady().then(async () => {
 			...(attachments ? { attachments } : {}),
 		});
 		await launchSettings.save(key.projectId, launch);
+		// spec/tasks#sheet-role: the edit sheet sets or takes away the role; a role whose template is gone stays as it was.
+		if (sheet && 'role' in sheet) {
+			const role = await sheetRole(sheet.role ?? null);
+			if (role !== undefined) return store.updateTask(task, role);
+		}
 		return task;
 	});
 	handleClient('board:delete', async (client, key) => {
@@ -4268,6 +4276,21 @@ void app.whenReady().then(async () => {
 			...(effort ? { effortName: effort } : {}),
 		};
 	}
+	/** spec/tasks#sheet-role: the task patch of a role picked on the sheet — null clears it; undefined: the template is not in the library. */
+	async function sheetRole(id: string | null) {
+		if (id === null) return { agentRole: null, readOnlyAgent: false };
+		const template = soloRoleTemplates(
+			(await (await TemplateStore.at(process.env.BRIGADIR_DATA_DIR)).read()).agents
+		).find((item) => item.id === id);
+		return template
+			? {
+					agentRole: soloRole(template),
+					readOnlyAgent: soloRoleChecks(template),
+					// A checker runs in the GUI: the host cannot refuse the writes of an agent in the terminal.
+					...(soloRoleChecks(template) ? { transport: 'gui' as const } : {}),
+				}
+			: undefined;
+	}
 	/** `task:create`, and a schedule's run (spec/notifications-slack-notes-and-schedules#schedules): the sheet's arguments make the same task either way. */
 	async function createSheetTask(
 		projectId: string,
@@ -4360,6 +4383,12 @@ void app.whenReady().then(async () => {
 				),
 			});
 		else if (sheet?.draftId) await new Attachments(store).discard({ projectId, id: sheet.draftId });
+		// spec/tasks#sheet-role: the role of a solo agent is a snapshot of its template.
+		if (!crew && sheet?.role) {
+			const role = await sheetRole(sheet.role);
+			if (!role) throw new Error('The agent template is unavailable');
+			chosen = await store.updateTask(chosen, role);
+		}
 		return crew ? store.updateTask(chosen, { crew }) : chosen;
 	}
 	handle('task:create', (projectId, title, provider, transport, backlog, input, crew, sheet) =>

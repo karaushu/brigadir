@@ -157,3 +157,11 @@ it('tells a Claude session what to hand its subagents only when they got a model
 	expect(sessionBrief(null, 'codex', { subagents: true })).not.toContain(subagentBrief);
 	expect(sessionBrief(null, 'claude', { subagents: true, cli: true })).not.toContain(subagentBrief);
 });
+// spec/tasks#agent-context
+it('starts the brief of a task without a crew with its role', () => {
+	const brief = sessionBrief(null, 'claude', { role: 'You work on this task alone, as Tester.' });
+	expect(brief.startsWith('You work on this task alone, as Tester.\n\n')).toBe(true);
+	expect(brief.endsWith(sessionBrief(null, 'claude'))).toBe(true);
+	// A crew member's brief is its crew role; a role never stands beside it.
+	expect(sessionBrief(worker, 'claude', { role: 'ROLE' })).not.toContain('ROLE');
+});

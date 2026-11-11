@@ -86,6 +86,22 @@ export function isSlackThreadRef(value: unknown): value is SlackThreadRef {
 				/^https:\/\/[^\s/]+\.slack\.com\/\S*$/.test(value.permalink)))
 	);
 }
+/** spec/tasks#sheet-role: `instructions` is the whole role text of the session brief, in English (rule 12). */
+export type TaskRole = { templateId: string; name: string; instructions: string };
+export function isTaskRole(value: unknown): value is TaskRole {
+	return (
+		isRecord(value) &&
+		Object.keys(value).every(
+			(key) => key === 'templateId' || key === 'name' || key === 'instructions'
+		) &&
+		isId(value.templateId) &&
+		typeof value.name === 'string' &&
+		value.name.length > 0 &&
+		value.name.length <= 80 &&
+		typeof value.instructions === 'string' &&
+		value.instructions.length <= 110_000
+	);
+}
 export type AgentTask = {
 	/** spec/tasks#archive: in the archive; absent — a live task. */ archived?: TaskArchive;
 	/** spec/tasks#archive: when the person marked it completed. */ completedAt?: string;
@@ -94,6 +110,7 @@ export type AgentTask = {
 	crewTaskId?: string;
 	crewNodeId?: string;
 	parentTaskId?: string;
+	/** spec/tasks#sheet-role: the role a solo agent works as, a snapshot of an agent template; null — the edit sheet took it away. */ agentRole?: TaskRole | null;
 	/** spec/projects-and-board#repo-selection: the «writes no code» right lives on the agent, not on the repo set. */ readOnlyAgent?: boolean;
 	/** spec/crew#parts: the checkpoint every change surface counts from (a crew part's start); none — the first one. */ changeBase?: number;
 	activity?: TaskActivity | null;
@@ -204,6 +221,7 @@ export function isAgentTask(value: unknown): value is AgentTask {
 					([id, ref]) => /^[a-f0-9]{16}$/.test(id) && isPRRef(ref)
 				))) &&
 		(value.failure === undefined || value.failure === null || value.failure === 'auth') &&
+		(value.agentRole === undefined || value.agentRole === null || isTaskRole(value.agentRole)) &&
 		(value.relayIssue === undefined ||
 			value.relayIssue === null ||
 			value.relayIssue === 'summary-failed' ||

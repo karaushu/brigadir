@@ -112,6 +112,7 @@ export * from './turn-status';
 
 export * from './crew';
 export * from './role-models';
+export * from './solo-role';
 export * from './crew-edit';
 export * from './crew-runtime';
 export * from './crew-compose';

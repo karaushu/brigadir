@@ -45,7 +45,7 @@ import styles from './TemplatesSettings.module.css';
 import { SkeletonText } from './ui/Loading';
 type Selection = { kind: 'agent' | 'crew'; id: string };
 /** SettingsTemplates (spec/crew-templates-and-editor#template-library): master-detail library. Built-ins duplicate only; own templates edit in place and save on change. */
-/** spec/crew-templates-and-editor#library-list: the role guide — the app's advice for each built-in role (spec/crew#model-ladder), no model named (rule 7). */
+/** spec/crew-templates-and-editor#agent-cards: the role guide — the app's advice for each built-in role (spec/crew#model-ladder), no model named (rule 7). */
 const roleGuide: readonly {
 	id: string;
 	name: string;
@@ -160,6 +160,7 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 		[adding, setAdding] = useState(false);
 	const [catalogs, setCatalogs] = useState<Record<string, ProviderCatalog | null>>({});
 	const createButton = useRef<HTMLButtonElement>(null),
+		listItems = useRef<HTMLDivElement>(null),
 		mounted = useRef(true),
 		saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	// spec/settings-modules-and-onboarding#settings-keys: a provider turned off in Settings ▸ Agents is not offered for a template; a template that has it keeps it.
@@ -380,9 +381,15 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 				.exportTemplate(selected.kind, selected.id)
 				.catch(() => setError(t(locale, 'Could not export the template.')));
 	};
-	const list = (kind: 'agent' | 'crew', items: (AgentTemplate | CrewTemplate)[]) =>
+	// A template chosen from elsewhere (a new one, a duplicate, an import) comes into view in the list.
+	useEffect(() => {
+		listItems.current
+			?.querySelector('[data-checked], [data-active="true"]')
+			?.scrollIntoView({ block: 'nearest' });
+	}, [selected?.kind, selected?.id, library?.agents.length, library?.crews.length]);
+	const crewRows = (items: CrewTemplate[]) =>
 		items.map((item) => {
-			const active = selected?.kind === kind && selected.id === item.id;
+			const active = selected?.kind === 'crew' && selected.id === item.id;
 			return (
 				<button
 					key={item.id}
@@ -391,33 +398,78 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 					aria-selected={active}
 					className={styles.item}
 					data-active={active}
-					onClick={() => setSelected({ kind, id: item.id })}>
-					{kind === 'agent' ? (
-						<Glyph
-							name={
-								(item as AgentTemplate).role === 'foreman'
-									? 'helmet'
-									: ((item as AgentTemplate).provider ?? defaultProvider) === 'codex'
-										? 'openai'
-										: 'claude'
-							}
-							size={13}
-						/>
-					) : null}
+					onClick={() => setSelected({ kind: 'crew', id: item.id })}>
 					<span>{crewLabel(locale, item.name)}</span>
 					{!item.builtin && <Glyph name="edit" size={11} />}
-					{kind === 'crew' && <small>{crewTemplateTail(locale, item as CrewTemplate)}</small>}
+					<small>{crewTemplateTail(locale, item)}</small>
 				</button>
+			);
+		});
+	// spec/crew-templates-and-editor#agent-cards: a built-in card is the role guide; an own one shows its specialty and the model it names.
+	const agentCards = (items: AgentTemplate[]) =>
+		items.map((item) => {
+			const guide = item.builtin ? roleGuide.find((role) => role.id === item.id) : undefined,
+				names = Object.values(item.choiceNames ?? {});
+			return (
+				<OptionCard
+					key={item.id}
+					name="agent-template"
+					radio={false}
+					checked={selected?.kind === 'agent' && selected.id === item.id}
+					disabled={disabled}
+					glyph={
+						guide?.glyph ??
+						(item.role === 'foreman' ? 'helmet' : item.role === 'reviewer' ? 'review' : 'code')
+					}
+					title={crewLabel(locale, item.name)}
+					{...(item.builtin ? {} : { mark: <Glyph name="edit" size={11} /> })}
+					description={
+						guide
+							? t(locale, guide.work)
+							: item.summary?.trim() ||
+								t(
+									locale,
+									item.role === 'foreman'
+										? 'Splits the work, accepts the parts'
+										: item.role === 'reviewer'
+											? 'Checks the work, writes no code'
+											: 'Writes code'
+								)
+					}
+					onChange={() => setSelected({ kind: 'agent', id: item.id })}>
+					{guide ? (
+						<>
+							<LevelDots count={3} filled={guide.strength} label={t(locale, guide.hint)} />
+							{t(locale, guide.hint)}
+							{/* The model each enabled provider has for this work, by its catalog name. */}
+							<RolePicks id={item.id} enabled={enabledProviders} catalogs={catalogs} />
+						</>
+					) : (
+						<span className={styles.picks} data-role-picks>
+							<span>
+								<Glyph
+									name={(item.provider ?? defaultProvider) === 'codex' ? 'openai' : 'claude'}
+									size={11}
+								/>
+								{names.length ? names.join(' · ') : t(locale, 'Default model')}
+							</span>
+						</span>
+					)}
+				</OptionCard>
 			);
 		});
 	return (
 		<div className={styles.root} data-templates>
-			<div className={styles.list} role="listbox" aria-label={t(locale, 'Templates')}>
-				<div className={styles.items} data-size="s">
+			<div className={styles.list}>
+				<div ref={listItems} className={styles.items}>
 					<div className={styles.groupTitle}>{t(locale, 'Agents')}</div>
-					{library && list('agent', library.agents)}
+					<div className={styles.cards} role="radiogroup" aria-label={t(locale, 'Agents')}>
+						{library && agentCards(library.agents)}
+					</div>
 					<div className={styles.groupTitle}>{t(locale, 'Crews')}</div>
-					{library && list('crew', library.crews)}
+					<div className={styles.rows} role="listbox" aria-label={t(locale, 'Crews')} data-size="s">
+						{library && crewRows(library.crews)}
+					</div>
 				</div>
 				<div className={styles.listFooter} data-size="s">
 					<span className={styles.addWrap}>
@@ -496,29 +548,6 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 				{!library && !error && <SkeletonText lines={6} />}
 				{agent && (
 					<>
-						{/* spec/crew-templates-and-editor#library-list: which built-in role is for what; the dots are advice for the role, not data about a model (rule 7). */}
-						<div
-							className={styles.guide}
-							role="radiogroup"
-							aria-label={t(locale, 'Built-in roles')}>
-							{roleGuide.map((item) => (
-								<OptionCard
-									key={item.id}
-									name="role-guide"
-									radio={false}
-									checked={agent.id === item.id}
-									disabled={disabled}
-									glyph={item.glyph}
-									title={crewLabel(locale, item.name)}
-									description={t(locale, item.work)}
-									onChange={() => setSelected({ kind: 'agent', id: item.id })}>
-									<LevelDots count={3} filled={item.strength} label={t(locale, item.hint)} />
-									{t(locale, item.hint)}
-									{/* The model each enabled provider has for this work, by its catalog name. */}
-									<RolePicks id={item.id} enabled={enabledProviders} catalogs={catalogs} />
-								</OptionCard>
-							))}
-						</div>
 						<div className={styles.head}>
 							<Glyph
 								name={

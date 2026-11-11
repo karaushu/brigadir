@@ -313,12 +313,18 @@ Templates are **global, not per project**. Repository-specific knowledge ("alway
 <a id="library-list"></a>
 ### List and actions
 
-- The list is master-detail in two groups, **Agents** and **Crews**. Built-ins come first, then own templates sorted by name, each with the pencil glyph. Agents show their role or provider glyph. Crews show a tail with the agent count and levels.
+- The list is master-detail in two groups, **Agents** and **Crews**, in a 272 px column. Built-ins come first, then own templates sorted by name, each with the pencil glyph. Agents are cards ([Agent cards](#agent-cards)); crews are rows with a tail of the agent count and levels.
 - The list footer has only `+ ▾` and `−`. The `+ ▾` menu offers **New agent** (a developer with empty instructions), **New crew** (a copy of the default crew), a separator, **Import…**, and **Restore default crews** while any built-in crew is hidden.
 - `−` deletes an own template or hides a built-in crew. It is disabled for built-in agents.
 - Detail header: **Reset** (only on a customized built-in agent or an edited built-in crew), **Duplicate** (adds ` 2` to the name), **Edit…** (crews, built-in ones included; disabled while the crew has issues) and **Export…**. A built-in template carries the tag `built-in`.
 - **Agent detail**: Name, Specialty (not for foreman templates; on a built-in it is the app's line shown as text, and only when the built-in has one), Provider (a provider turned off in Settings ▸ Agents is disabled unless the template already uses it; changing the provider clears the choices), Model, Effort, Mode, **Rights ▸ Checker** (switch between `developer` and `reviewer`; caption "Reads reports and changes, submits reviews, and approves work. Writes no code."), and **Instructions** (caption "Agent role, in English").
-- **Role guide**: above the agent detail, every built-in role as a grid of `ui/OptionCard` cards without the radio mark, two in a row: the four roles of the model ladder (Foreman, Developer, Senior developer, Reviewer), then the four specialists. Each card has the role's glyph and name, its work in one line, three strength dots (`ui/LevelDots`) with a hint for model and effort, and under them the model each enabled provider has for that work: the provider glyph and the model's catalog name. The card of the selected built-in is chosen; pressing a card selects that template. Dots and hints are the app's advice for the role, the [model ladder](crew.md#model-ladder) as a picture.
+
+<a id="agent-cards"></a>
+### Agent cards
+
+Every agent template in the list is a `ui/OptionCard` card without the radio mark, one under another; the group is one radio group, so the arrow keys walk it. The card of the selected template is chosen; pressing a card selects it.
+
+- A **built-in** card is the role guide: the role's glyph and name, its work in one line, three strength dots (`ui/LevelDots`) with a hint for model and effort, and under them the model each enabled provider has for that work: the provider glyph and the model's catalog name. Dots and hints are the app's advice for the role, the [model ladder](crew.md#model-ladder) as a picture; they do not follow a changed provider or model.
 
   | Role | Work | Dots | Hint | Claude | Codex |
   | --- | --- | --- | --- | --- | --- |
@@ -331,7 +337,8 @@ Templates are **global, not per project**. Repository-specific knowledge ("alway
   | Designer | Checks screens in the running app | 2 | `Author's model or stronger` | `opus` | `astra` |
   | Security reviewer | Looks for security defects in changes | 2 | `Strong model · High` | `opus` | `sol` |
 
-  The last two columns are words, not model ids (`roleModelWords`, `roleModelPick` in `packages/core/src/role-models.ts`): the model shown is the first entry of the provider's catalog whose value or name says the word, under the catalog's own name (`Opus 5.5`, `6.1 Sol`), the way the Helper agent finds its default ([Agents and providers](agents-and-providers.md#helper-agent)). A provider turned off shows nothing; a catalog that has no such entry shows nothing for that provider; before the catalog is known the word itself is shown. The guide only shows: it changes no template.
+  The last two columns are words, not model ids (`roleModelWords`, `roleModelPick` in `packages/core/src/role-models.ts`): the model shown is the first entry of the provider's catalog whose value or name says the word, under the catalog's own name (`Opus 5.5`, `6.1 Sol`), the way the Helper agent finds its default ([Agents and providers](agents-and-providers.md#helper-agent)). A provider turned off shows nothing; a catalog that has no such entry shows nothing for that provider; before the catalog is known the word itself is shown. The cards only show: they change no template.
+- An **own** card has the glyph of its rights (helmet for a foreman, review for a checker, code otherwise), the name with the pencil glyph at the end of the line, the Specialty as its line (without one: `Splits the work, accepts the parts`, `Checks the work, writes no code` or `Writes code` by its rights), and under it the provider glyph with the model and effort it names, or `Default model`.
 
 - **Best for** row under Effort: `Clear parts · Hard parts · Leading and checking`, with the one that fits this template in full colour and the rest muted (`templateFit`). A foreman or a reviewer leads and checks; a developer fits hard parts when its effort is `high` or above, clear parts otherwise.
 - **Effort dots** beside the Effort popup: one dot per level of the model (`default` is not a level), filled up to the chosen one. Levels past `high` fill amber, and a line under the row says "An effort above High costs about as much as a stronger model." `high` is found by the level's value or name, a presentation rule and not a table of levels (rule 7); a model without such a level never warns.

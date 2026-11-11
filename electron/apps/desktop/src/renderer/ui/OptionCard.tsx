@@ -17,6 +17,7 @@ export function OptionCard({
 	description,
 	onChange,
 	radio = true,
+	mark,
 	children,
 }: {
 	name: string;
@@ -26,8 +27,10 @@ export function OptionCard({
 	title: string;
 	description: string;
 	onChange(): void;
-	/** false — the radio mark is not drawn; the card is still one radio of its group (the role guide, spec/crew-templates-and-editor#library-list). */
+	/** false — the radio mark is not drawn; the card is still one radio of its group (the agent cards, spec/crew-templates-and-editor#agent-cards). */
 	radio?: boolean;
+	/** A sign at the end of the title line: the pencil of an own template. */
+	mark?: ReactNode;
 	/** A line under the description: a meter, a hint. */
 	children?: ReactNode;
 }) {
@@ -50,7 +53,8 @@ export function OptionCard({
 			<span className={s.copy}>
 				<b>
 					<Glyph name={glyph} size={13} />
-					{title}
+					<span>{title}</span>
+					{mark}
 				</b>
 				<small>{description}</small>
 				{children && <span className={s.meta}>{children}</span>}

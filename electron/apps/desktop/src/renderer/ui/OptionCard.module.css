@@ -75,6 +75,14 @@
 	flex: none;
 	color: var(--fg2);
 }
+/* The title takes the line; a sign after it keeps its place at the end. */
+.copy b > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .copy small {
 	font-size: var(--text-11-5);
 	line-height: 16px;

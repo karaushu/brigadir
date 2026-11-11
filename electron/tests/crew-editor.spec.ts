@@ -166,15 +166,21 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 			'aria-selected',
 			'true'
 		);
-		const list = settings.getByRole('listbox', { name: 'Templates' });
-		await expect(list.getByRole('option')).toHaveCount(8 + 4);
-		await expect(list.getByRole('option', { name: /Front \+ Design/ })).toContainText('4');
-		await list.getByRole('option', { name: /^Reviewer/ }).click();
+		// spec/crew-templates-and-editor#agent-cards: agents are cards of one radio group, crews are rows.
+		const agents = settings.getByRole('radiogroup', { name: 'Agents' }),
+			crews = settings.getByRole('listbox', { name: 'Crews' });
+		await expect(agents.getByRole('radio')).toHaveCount(8);
+		await expect(crews.getByRole('option')).toHaveCount(4);
+		await expect(crews.getByRole('option', { name: /Front \+ Design/ })).toContainText('4');
+		await agents
+			.locator('[data-option-card]')
+			.filter({ has: page.getByRole('radio', { name: 'Reviewer', exact: true }) })
+			.click();
 		await expect(settings.getByText('built-in', { exact: true })).toBeVisible();
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toBeDisabled();
 		await expect(settings.getByRole('textbox', { name: 'Specialty' })).toHaveCount(0);
 		await settings.getByRole('button', { name: 'Duplicate' }).click();
-		await expect(list.getByRole('option')).toHaveCount(13);
+		await expect(agents.getByRole('radio')).toHaveCount(9);
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toHaveValue('Reviewer 2');
 		await settings
 			.getByRole('textbox', { name: 'Specialty' })
@@ -205,13 +211,13 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 				path: info.outputPath(`settings-templates-${theme}.png`),
 			});
 		}
-		// Export acts on the selected template from its header; Import creates one from the «+» menu; the 222 px footer fits.
+		// Export acts on the selected template from its header; Import creates one from the «+» menu; the list footer fits.
 		await expect(settings.getByRole('button', { name: 'Export…' })).toBeEnabled();
 		await settings.getByRole('button', { name: 'Delete' }).click();
-		await expect(list.getByRole('option')).toHaveCount(12);
+		await expect(agents.getByRole('radio')).toHaveCount(8);
 		expect(
 			await settings
-				.locator('[data-templates] > [role=listbox] > :last-child')
+				.locator('[data-templates] > :first-child > :last-child')
 				.evaluate((node) => node.scrollWidth <= node.clientWidth)
 		).toBe(true);
 		await settings.getByRole('button', { name: 'Create' }).click();

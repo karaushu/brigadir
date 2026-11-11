@@ -175,6 +175,16 @@ export function planFeedbackPrompt(text: string): string {
 export function planPromptFeedback(prompt: string): string | null {
 	return prompt.startsWith(feedbackLead) ? prompt.slice(feedbackLead.length) : null;
 }
+const chatLead =
+	'I wrote this while your plan was waiting for approval. If it is a question, answer it. Change the plan only where my message asks for a change. Then present the plan for approval again, unchanged if nothing needs to change:\n\n';
+/** English by rule 12: what the person wrote in the chat while the plan waited (spec/chat-turns-plans-and-questions#plan-chat). */
+export function planChatPrompt(text: string): string {
+	return `${chatLead}${text}`;
+}
+/** The person's own words back from a chat-while-the-plan-waits prompt, for their row; `null` for any other prompt. */
+export function planChatWords(prompt: string): string | null {
+	return prompt.startsWith(chatLead) ? prompt.slice(chatLead.length) : null;
+}
 /** English by rule 12: the person edited the plan copy; the agent sees that version before anything is approved. */
 export function planEditsPrompt(text: string): string {
 	return `I edited your plan. Treat this version as the plan, adjust it only where something is wrong, and present it for approval again:\n\n${text.trim()}`;

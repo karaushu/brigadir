@@ -131,7 +131,7 @@ The squeeze level is measured on the row itself (`ResizeObserver` on `[data-comp
 ## Text editor
 
 - CodeMirror, the same editor as the New task sheet prompt (`useMentionEditor`). Font 13.5 / 21, padding `12px 16px 2px`, one line high when empty (min 35 px), grows to 240 px, then scrolls inside.
-- Placeholder teaches the keys: `{send} send · {newline} new line · @ files · / commands`, keys from the keymap helper (`formatAccelerator`): `↩` / `⇧↩` on macOS, `Enter` / `Shift+Enter` on other platforms. While the agent works the placeholder describes steering (see [steering](composer-steering-queue-and-ghost.md)).
+- Placeholder teaches the keys: `{send} send · {newline} new line · @ files · / commands`, keys from the keymap helper (`formatAccelerator`): `↩` / `⇧↩` on macOS, `Enter` / `Shift+Enter` on other platforms. While the agent works the placeholder describes steering (see [steering](composer-steering-queue-and-ghost.md)). While a plan waits for approval it reads `Ask about the plan or say what to change` (see [Chat while the plan waits](chat-turns-plans-and-questions.md#plan-chat)).
 - A ghost suggestion is the placeholder text with a framed `Tab` key after it; `Tab` takes it only when the menu is closed and the text is empty.
 
 | Key | Action |

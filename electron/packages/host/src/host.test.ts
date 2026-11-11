@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SessionStore, atomicJson, readProjectFile } from '@brigadir/persistence';
-import { pendingInputs, type EventRecord, type TaskKey } from '@brigadir/core';
+import { pendingInputs, planChatPrompt, type EventRecord, type TaskKey } from '@brigadir/core';
 import { connectHost, readIdentity, Peer, type HostClient, type HostIdentity } from './index';
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -1285,6 +1285,20 @@ it('returns the mode from before the plan after the agent leaves it, and ignores
 	expect(
 		(await records()).findLast((r) => r.event.kind === 'permission.resolved')?.event
 	).not.toHaveProperty('returnMode');
+});
+
+// spec/chat-turns-plans-and-questions#plan-chat: Enter while a plan waits rejects the plan and the message runs as the next turn, wrapped for the agent.
+it('answers a waiting plan with the message sent from the composer', async () => {
+	const { store, task } = await setup();
+	const { client } = await launch(store, task, 'plan-modes');
+	await client.command({ kind: 'prompt', text: 'plan' });
+	const requested = await event(client, 'permission.requested');
+	await client.command({ kind: 'prompt', text: 'Why two phases?', steer: true });
+	const resolved = await event(client, 'permission.resolved', requested.seq);
+	expect(resolved.event).toMatchObject({ optionId: 'reject' });
+	const next = await event(client, 'turn.started', resolved.seq);
+	expect(next.event).toMatchObject({ text: planChatPrompt('Why two phases?') });
+	expect((await client.snapshot()).records.some((r) => r.event.kind === 'prompt.held')).toBe(false);
 });
 
 // spec/tasks#agent-created-tasks: `create_task` waits on its card; main answers with the created task, `Відхилити` and Stop with null.

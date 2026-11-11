@@ -49,6 +49,8 @@ import {
 	liveBackground,
 	outputTail,
 	isPlanApproval,
+	planChatPrompt,
+	planRejectOption,
 	recordModeId,
 	selectOption,
 	sessionModeName,
@@ -1782,6 +1784,28 @@ export async function startHost(config: HostConfig) {
 						))
 				)
 					return;
+				// spec/chat-turns-plans-and-questions#plan-chat: Enter while a plan waits answers the plan — the request is rejected and the message runs right after the turn.
+				const plan =
+						c.kind === 'prompt' && c.steer === true
+							? [...permissions.values()].find((item) => isPlanApproval(item.request))
+							: undefined,
+					planReject = plan ? planRejectOption(plan.request) : null;
+				if (c.kind === 'prompt' && plan && planReject) {
+					const { steer: _steer, ...rest } = c,
+						attachments = await assets.resolve(config.key, rest.attachmentIds ?? []);
+					transport!.validateAttachments(attachments.map((value) => value.input));
+					await plan.finish(planReject.id);
+					await emit({
+						kind: 'prompt.queued',
+						prompt: {
+							id: randomUUID(),
+							command: { ...rest, text: planChatPrompt(rest.text) },
+							attachments: attachments.map((value) => value.attachment),
+						},
+					});
+					kickPrompts();
+					return;
+				}
 				if (!busy && !queue.prompts.length && !queue.paused && !quotaBlocked()) {
 					await beginPrompt(c);
 					return;

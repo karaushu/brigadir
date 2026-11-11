@@ -2177,6 +2177,7 @@ const uk = {
 	'Whole plan · {n}': 'Увесь план · {n}',
 	'Collapse plan': 'Згорнути план',
 	'Plan further…': 'Планувати далі…',
+	'Ask about the plan or say what to change': 'Запитайте про план або скажіть, що змінити',
 	'How to approve': 'Як погодити',
 	'How to approve · the agent’s options': 'Як погодити · варіанти агента',
 	'Send edits': 'Надіслати правки',

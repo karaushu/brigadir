@@ -8,6 +8,8 @@ import {
 	planPriorMode,
 	sessionModeName,
 	planPromptFeedback,
+	planChatPrompt,
+	planChatWords,
 	isPlanApproval,
 	planAllowOptions,
 	planApprovalText,
@@ -361,4 +363,24 @@ it('finds the plan behind the checklist: the last plan for approval, else the la
 	expect(checklistPlan(withClaude, 9)).toBe('# Keep the ring\n\n1. Fix it');
 	expect(checklistPlan([...records, steps], 9)).toBe('# After');
 	expect(checklistPlan([steps], 9)).toBeNull();
+});
+
+// spec/chat-turns-plans-and-questions#plan-chat: the agent gets the wrapper, the person's row and the rail get their own words back.
+it('wraps a chat message to a waiting plan and gives the words back', async () => {
+	const prompt = planChatPrompt('Why two phases? @[file:a1]');
+	expect(prompt).toMatch(/^I wrote this while your plan was waiting for approval\./);
+	expect(planChatWords(prompt)).toBe('Why two phases? @[file:a1]');
+	expect(planPromptFeedback(prompt)).toBeNull();
+	expect(planChatWords(planFeedbackPrompt('Keep Firefox.'))).toBeNull();
+	const { promptDisplayText } = await import('./prompt-tokens');
+	expect(promptDisplayText(planChatPrompt('Why?'))).toBe('Why?');
+	const { activityRows } = await import('./activity');
+	const rows = activityRows([
+		{
+			seq: 1,
+			at: '2026-01-01T00:00:00Z',
+			event: { kind: 'turn.started', text: planChatPrompt('Why?') },
+		},
+	] as EventRecord[]);
+	expect(rows.find((row) => row.kind === 'message')).toMatchObject({ role: 'user', text: 'Why?' });
 });

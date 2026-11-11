@@ -202,6 +202,12 @@ A plan the agent writes in plan mode, so the person can read it, edit it and app
    - Rejected: `Plan in revision`, plus the person's own words recovered from the feedback prompt (`planPromptFeedback`).
 9. **Sidebar.** A task with such a request shows `Plan for approval` in place of the permission line.
 10. **Chat hidden.** When the plan copy is open in the editor and the chat is not visible, the space above the document shows a single line, `Plan for approval · <title> · <agent> is waiting for approval`, with `Back to chat`, in place of a generic permission card.
+11. **Chat while the plan waits.** <a id="plan-chat"></a>The person can talk to the agent about a plan that waits for approval. Enter in the composer (a `prompt` with `steer`, desktop or phone) is not held behind the request:
+    - The host answers the plan request with its first `reject_once` (else the first `reject_*`), then queues the message as `planChatPrompt(text)` without `steer`, so it runs right after the agent's turn ends. The English prompt says that the person wrote while the plan waited: answer a question, revise the plan only where the message asks for a change, and present the plan for approval again, unchanged when nothing changes.
+    - `⌘↩` (the queue) keeps its meaning and waits behind the request like any queued message.
+    - The person's row shows only their own words (`planChatWords`). The folded card reads `Plan in revision` with no quote.
+    - While the request waits, the composer placeholder reads `Ask about the plan or say what to change`.
+    - Without a reject option, the message is held as before.
 
 There is no global `⌘↩` for `Approve plan`, because it would collide with the composer. Shortcuts exist only inside the `Plan further…` field.
 

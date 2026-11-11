@@ -1,3 +1,4 @@
+import { planChatWords } from './plan-approval';
 import type { PromptAttachment } from './attachments';
 import type { AgentTask } from './workspace';
 import type { EventRecord } from './session';
@@ -115,6 +116,7 @@ export function promptDisplayText(
 	attachments: readonly Pick<PromptAttachment, 'id' | 'kind' | 'name'>[] = [],
 	tasks: readonly Pick<AgentTask, 'id' | 'title'>[] = []
 ): string {
+	text = planChatWords(text) ?? text;
 	if (!text.includes('@[')) return text;
 	return promptParts(text)
 		.map((part) => {

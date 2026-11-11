@@ -15,7 +15,7 @@ import {
 	t,
 	type AgentTask,
 	type ForgeAuth,
-	type HelperRun,
+	liveReviewTask,
 	type Locale,
 	type MessageKey,
 	type PRColumn,
@@ -35,7 +35,8 @@ import { Glyph } from './ui/Glyph';
 import { PRStateGlyph, PRMarkGlyph } from './ui/PRGlyphs';
 import { ProjectIcon } from './ui/ProjectIcon';
 import { resolveToast, showToast, toastError } from './ui/Toast';
-import { ChecksGlyph } from './PullRequestPanel';
+import { ChecksGlyph, openReviewTask } from './PullRequestPanel';
+import { openReviewLaunch, type ReviewChoice } from './ReviewLaunch';
 import { repoName } from './ui/RepoPicker';
 import { PRReviewModal } from './PRReviewModal';
 import { closeReview, openReview, useReviewOpen } from './pr-review';
@@ -304,8 +305,24 @@ export function PRBoard({
 			return;
 		}
 		if (action === 'review') review(item);
-		if (action === 'agent-quick' || action === 'agent-worktree')
-			void startAgentReview(item, locale, action === 'agent-quick' ? 'quick' : 'worktree');
+		// spec/pull-requests-and-ci#pr-row-menu: the launch dialog, or the live review task of this PR.
+		if (action === 'agent-review')
+			openReviewLaunch({
+				projectId: item.projectId,
+				scopeId: item.scopeId,
+				number: item.pr.number,
+				title: item.pr.title,
+				action: 'review',
+				start: (choice) => startAgentReview(item, locale, choice),
+			});
+		if (action === 'open-review') {
+			const review = liveReviewTask(useWorkspace.getState().workspace?.tasks ?? [], {
+				projectId: item.projectId,
+				number: item.pr.number,
+				scopeId: item.scopeId,
+			});
+			if (review) openReviewTask(review);
+		}
 		if (action === 'github')
 			void window.brigadir
 				.openPullRequestPage(item.projectId, null, item.scopeId, item.pr.number)
@@ -568,14 +585,12 @@ export function TaskPRBadges({
 }
 
 /** spec/pull-requests-and-ci#review-with-agent from the project screen: the review task starts on the main tree's key and opens on its PR. */
+/** spec/pull-requests-and-ci#review-launch: a failure stays in the launch dialog, so it answers false and shows nothing itself. */
 async function startAgentReview(
 	item: BoardPR,
 	locale: Locale,
-	where?: 'quick' | 'worktree',
-	agent?: HelperRun | null,
-	suggestions = false,
-	/** spec/pull-requests-and-ci#review-crew: a library crew reviews instead of one agent. */
-	crew?: string | null
+	{ where, agent, crew, notes }: ReviewChoice,
+	suggestions = false
 ): Promise<boolean> {
 	const ref = { scopeId: item.scopeId, number: item.pr.number };
 	try {
@@ -587,7 +602,8 @@ async function startAgentReview(
 			where,
 			crew ? null : agent,
 			suggestions,
-			crew ?? null
+			crew,
+			notes
 		);
 		openTaskPR(result.task, {
 			scopeId: result.task.prReview?.scopeId ?? ref.scopeId,
@@ -602,14 +618,6 @@ async function startAgentReview(
 		} else showToast(started, { label: t(locale, 'Open'), run: open });
 		return true;
 	} catch {
-		toastError(t(locale, 'Could not start the review task.'), {
-			action: {
-				label: t(locale, 'Retry'),
-				run: () => {
-					void startAgentReview(item, locale, where, agent, suggestions, crew);
-				},
-			},
-		});
 		return false;
 	}
 }
@@ -676,11 +684,13 @@ export function ProjectReview({
 			}}
 			onDeliver={(text, to) => deliverPrompt(to, text)}
 			// spec/appearance#evolution-redesign: from the review modal it is «agent suggestions in review».
-			onAgentReview={(where, agent, crew) => {
-				void startAgentReview(item, locale, where, agent, true, crew).then(
-					(ok) => ok && closeReview(task)
-				);
-			}}
+			onAgentReview={(choice) =>
+				startAgentReview(item, locale, choice, true).then((ok) => {
+					if (ok) closeReview(task);
+					return ok;
+				})
+			}
+			onOpenReview={(review) => openReviewTask(review)}
 			onAgentFix={async () => {
 				try {
 					quickTask({ projectId: task.projectId, ...(await prFixQuickTask(task, open, locale)) });

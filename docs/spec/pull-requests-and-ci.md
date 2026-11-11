@@ -145,7 +145,7 @@ Each GitHub repo row in Repos shows, without words: PR glyph + open count, merge
 <a id="pr-detail"></a>
 ### A PR
 
-- Title row (S row, 28 px; back, `Refresh`, GitHub 24 px): back to the list, glyph, title 12/600, `#N`. Below: author, `head → base`, checks, review state; buttons `Overview`, `Review with an agent ▾` ([Review with an agent](#review-with-agent)), `PR task` when the PR came from a task.
+- Title row (S row, 28 px; back, `Refresh`, GitHub 24 px): back to the list, glyph, title 12/600, `#N`. Below: author, `head → base`, checks, review state; buttons `Overview`, `Review with an agent…` or `Open the review` ([Review with an agent](#review-with-agent)), `PR task` when the PR came from a task.
 - Tabs `Comments · Files · Commits · Checks` with counts, sharing the capsule equally; ≤300 px they become glyphs with counts.
   - `Comments` — line threads and review drafts (yours and the agent's with ✦); filter `Unresolved only`; thread marks: open, draft, from the agent, handed to the agent, resolved. Empty: `No comments on the lines` / `Every thread is resolved`. General comments and reviews with text are in the Overview timeline.
   - `Files` — PR files with `Viewed` and comment counts; `{n} of {total} viewed` strip ([Files](#pr-files)).
@@ -250,7 +250,7 @@ Shows, in words, the same reason that disables `Merge PR…` (`mergeBlock` order
 
 The only review form; the PR panel has no form of its own. Near-full-window `ui/ModalDialog` over the work area; Esc closes without confirmation (drafts are already saved).
 
-- Header: PR (title, `#N`, author · branch), `Review with an agent ▾`, GitHub, `Merge PR…`/resolve, Esc.
+- Header: PR (title, `#N`, author · branch), `Review with an agent…` / `Open the review`, GitHub, `Merge PR…`/resolve, Esc.
 - Agent summary on top ([Summary](#pr-summary)): skeleton + `Stop` while writing; collapses to a line from step 2 (`Expand`).
 - Steps (clickable in any order, next one outlined; `Back`/`Next`): **Read** (unviewed files, risky spots, open threads) → **Comments** (select code → `Comment`; agent suggestions ✦ `Accept` / `Edit` / `Drop`; your drafts with `Go to the code`, `Edit`, `Remove`; empty → explanation and `Review with an agent`, `Next` still active) → **Verdict** (three decisions in plain words + an agent hint when there are drafts) → **Summary** (the reviewer's own words; `Generate from the drafts`) → **Check** (`What GitHub gets`: decision, summary, every comment as the author will see it; `Send` `⌘↩`).
 - Body: files with `Viewed` on the left, diff in the center (same `Unified` / `Side by side` / `Preview` / `Wrap lines` controls as diff tabs, task state `mode`/`wrap`), step column on the right. Narrow modal (<1000 px): files become a dropdown `index.tsx 4/6 ▾`; header without branch and agent button.
@@ -272,12 +272,22 @@ The only review form; the PR panel has no form of its own. Near-full-window `ui/
 <a id="review-with-agent"></a>
 ### Review with an agent
 
-- Split button `Review with an agent ▾` in the PR header (also on own PRs, and in a review task for a **different** PR; absent only on the PR that task reviews), in the modal header and in the row menu. Menu: `Quickly` (`Main tree, without switching branches`) and `In a worktree` (`Branch {branch}. Dependencies can be installed and code run.`); a check on the current one; choosing runs and remembers it (`agents.reviewWhere` in `settings.json`, default `quick`, missing key = `quick`). Below: switch `Agent · Crew` ([Crew review](#review-crew)) and the model list (default `Default agent`; `Remember for reviews with an agent`).
+- Button `Review with an agent…` (glyph `generate`) in the PR header (also on own PRs, and in a review task for a **different** PR; absent only on the PR that task reviews), in the modal header and as `Review with an agent…` in the row menu. Below 300 px it reads `With an agent…`. Each opens the [launch dialog](#review-launch).
+- **A live review task**: while a task `Review #N` of this PR (same project, `prReview.mode = review`, same canonical repo and number, or the same repo name, `prReview.repo`, when the PR is shown from a worktree) is not archived, the same places show `Open the review` with the `zoom` glyph instead, led by that task's status glyph (`ui/StatusIcon` 12, the sidebar's colours; tooltip and accessible name = the status in the board card's words, `taskStatusLabel`). A click opens the task with the PR panel on this PR; from the modal the modal closes first. Archiving the task brings `Review with an agent…` back. Several live review tasks of one PR (older data): the most recently updated one.
+
+<a id="review-launch"></a>
+- **Launch dialog** (`ui/ModalDialog`, width 520, title `Review with an agent`, note `#N · <title>`, `Esc`):
+  - The instructions field on top: `PromptEditor` of the New task sheet (no box, at least 84 px, `@` for files and folders; no `/`, no attachments), placeholder `What should the reviewer look at? (optional)` (`reviewers` for a crew). Focus starts in it. Its text is a draft of this PR (`projectId · repo id · N`) kept in the renderer until the review starts or the window reloads; `Esc`, `Cancel` and a click outside keep it.
+  - Under it the [project review notes](#review-notes) row when the project has notes: `Project review notes · N lines` or `· REVIEW.md`, with `Edit…`.
+  - A hairline, then a grid of S rows: `Where` — segments `Quickly · In a worktree` with the caption of the chosen one (`In the main tree, the branch stays` / `Branch pr-N-review, dependencies can be installed and run`); `Who` — segments `Agent · Crew` and one `ui/Controls` `Popup`: the models (the Default agent with its tail `Default agent`) or the library crews (`Review crew · Astra · Opus`; none → the popup is disabled with `No crews`). With a crew, the caption `The foreman passes your notes to each reviewer`. Then `Remember for reviews with an agent` (`ui/RememberCheck`).
+  - Footer: `Cancel`, `Start review` (primary; `⌘↩` from anywhere in the dialog, also with an empty field). Starting: the button shows a spinner and `Starting…`, the controls are inactive. Success closes the dialog (and the review modal, if it was opened from it), opens the review task with the PR panel on this PR and shows the toast `The task «…» started` (from elsewhere than the modal, with `Open`). Failure keeps the dialog and its text, with `Could not start the review task.` above the footer and `Retry` as the primary button.
+  - `Where` and the choice of agent or crew start from the last ones (`agents.reviewWhere` in `settings.json`, default `quick`, missing key = `quick`; the action's agent or crew). Starting saves `Where`. The agent or crew is for this review only unless `Remember for reviews with an agent` is checked.
+- **Instructions in the prompt** (English frame, rule 12; the person's text as typed): the review prompt ends with the project notes (`Review notes of this project:` and the text, or for `REVIEW.md`: read it at the merge base with `git -C <repo> show <base>:REVIEW.md` and follow it; a missing file is no error), then `Instructions from the person for this review:` and the text. A crew's foreman gets both in its prompt and passes them word for word into each reviewer's brief. Nothing is added without notes.
 - Task `Review #N · <title>`, Reviewer template (writes no code, `readOnlyAgent`), prompt "Review PR #N… leave draft comments on the lines, do not change code" (English).
   - **Quickly**: no isolation in the main tree, no branch switch, no worktree; takes no repo lock (read-only agent). Reads the PR from git: the prompt names repo, `refs/brigadir-v2/pr/N` and the merge-base and how to read (`git diff <base> <ref>`, `git show <ref>:<path>`, `git grep <pattern> <ref>`), and warns that working-tree files are the user's branch. Does not run tests.
   - **In a worktree**: branch `pr-N-review` from `refs/brigadir-v2/pr/N`, only the PR's repo (the project root checks out its own HEAD).
 - Agent comments use MCP `pr_comment` (review tasks only, `prReview.mode = review`; in a crew review only the foreman): drafts with ✦ in your review; nothing reaches GitHub without you.
-- Started from the modal: success closes the modal and opens the review task with the PR panel on that PR; toast `The task «…» started` without `Open`. Failure: modal stays, `Could not start the review task.` + `Retry`. Started elsewhere: toast with `Open`. Return via `Continue review`.
+- Started from the modal: success closes the modal and opens the review task with the PR panel on that PR; toast `The task «…» started` without `Open`. Started elsewhere: toast with `Open`. A failure stays in the launch dialog. Return to the review via `Continue review` or `Open the review`.
 - The worktree is removed with the task ([Worktree cleanup](tasks.md)).
 
 <a id="agent-draft-thread"></a>
@@ -288,10 +298,17 @@ The only review form; the PR panel has no form of its own. Near-full-window `ui/
 - The agent answers with MCP `pr_comment_reply` (`id`, `body`, optional `text`): `body` becomes its reply; `text` rewrites the draft (header `updated by the agent`). Only own (`fromAgent`) drafts, only from the owning review task. Only the user removes a draft. The thread never goes to GitHub.
 - No live review task → `Reply to the agent` disabled: `The review task is gone`.
 
+<a id="review-notes"></a>
+### Project review notes
+
+- What every review with an agent in a project gets, written once. Dialog `Review notes` (`ui/ModalDialog` 520, note = project name, `Esc`): caption `Every review with an agent in this project gets these notes.`, segments `In the project · REVIEW.md in the repo`, then either a `TextArea` (at least 96 px) or the row `REVIEW.md` with the caption `The agent reads it at the PR base.`; footer `Cancel`, `Save` (`⌘↩`). An emptied text with `In the project` removes the notes; a failed save keeps the dialog with `Could not save the review notes.`
+- Opened by `Edit…` in the launch dialog and by `Review notes…` in the project menu ([Sidebar](sidebar.md#project-menu)). Opened from the launch dialog, it stays over it and returns to it with the row updated.
+- Stored as the project's `reviewNotes` in `project.json`: `{source: 'text', text}` (≤ 16 000 characters) or `{source: 'file'}`; absent = none. Nothing is committed to the repo.
+
 <a id="review-crew"></a>
 ### Review by a crew
 
-- `Agent · Crew` segments in the `Review with an agent ▾` menu. `Crew` lists library crews (defaults first): name + composition (`Astra · Opus`); none → `No crews` and `Settings ▸ Templates`. One-off choice; `Remember for …` stores it in `actionCrews` (next to `actionAgents`); `Customize per action` shows `Crew · <name>` and `Reset`. Agent and crew exclude each other.
+- `Agent · Crew` segments in the [launch dialog](#review-launch). `Crew` lists library crews (defaults first): name + composition (`Astra · Opus`); none → `No crews`. One-off choice; `Remember for …` stores it in `actionCrews` (next to `actionAgents`); `Customize per action` shows `Crew · <name>` and `Reset`. Agent and crew exclude each other.
 - Default crew `Review crew` (id `review`): Foreman + `Astra` (Codex, `gpt-6-astra`, effort High) + `Opus` (Claude, `opus`, effort High). A model missing from the catalog shows amber.
 - The task is still `Review #N` with `prReview`; its agent is the foreman. Both reviewers read the whole PR independently (quick: from `refs/brigadir-v2/pr/N` in their own worktree without setup; worktree: at the PR head), report `path:line` findings, write no code, have no `pr_comment`. The foreman reads reports (`read_report`), deduplicates, settles disagreements and leaves each finding once as a `pr_comment` draft ending with who found it (`— Astra, Opus`). No plan approval: in a review task `create_worker_task` takes reviewers without `propose_plan` ([Crew](crew.md)).
 - Default crews can be edited in place (`Edit…` in `Settings ▸ Templates`; `Reset` returns the app's crew), so the Review crew's reviewers and models are the person's to change. They can also be deleted (`−`): hidden in `templates/builtin/hidden-crews.json`; tasks keep their snapshots; `+ ▾` ends with `Restore default crews`. Default agents (Foreman, Developer, Reviewer) can only be duplicated. A launch sheet remembering a hidden crew starts without one ([Templates](crew-templates-and-editor.md)).
@@ -308,7 +325,7 @@ Right click, ContextMenu key or `⇧F10` on a list row → native menu built by 
 
 | PR | Items |
 | --- | --- |
-| Open | `Start review…` / `Continue review…`; `Review with an agent ▸ Quickly / In a worktree` (not on the PR this task reviews); `Resolve conflicts…` (only with a conflict and push access); separator; `Open on GitHub`, `Copy link`, `Copy branch name` |
+| Open | `Start review…` / `Continue review…`; `Review with an agent…` (opens the [launch dialog](#review-launch)) or `Open the review` while a review task of this PR is live (neither on the PR this task reviews); `Resolve conflicts…` (only with a conflict and push access); separator; `Open on GitHub`, `Copy link`, `Copy branch name` |
 | Merged / closed | `Open on GitHub`, `Copy link`, `Copy branch name` |
 
 Conflict state comes from PR details: known → immediate; otherwise the menu waits ≤0.5 s, then omits `Resolve conflicts…`. Copy goes to the clipboard of the machine showing the menu ([Remote access](remote-access-and-mobile.md)).
@@ -402,6 +419,7 @@ The PR is Brigadir's own domain model; no agent-protocol type reaches a view.
 - Arrow-key navigation in the `Commits` tab (arrows move focus, `→`/`←` expand), separate from the click-like stepping of `Files`/`Comments`.
 - A preview tab that the next stepped PR file replaces (today each opened PR file stays its own tab).
 - An exact (language-server) go-to-definition mode for PR files alongside name search.
+- Attachments (files, images) and `/` in the review launch dialog; the instructions field on the phone's review sheet.
 
 <a id="non-goals"></a>
 ## Non-goals

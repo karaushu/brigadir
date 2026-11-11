@@ -448,7 +448,9 @@ leads a crew.
 | Approve | Схвалити | The approving verdict of a GitHub review. | «Погодити» (that is a plan) |
 | Request changes | Попросити змін | | |
 | Hand to the agent to fix | Передати агенту на виправлення | Give the review comments to the agent; nothing goes to GitHub. | |
-| Review with an agent | Ревʼю з агентом | A split button: a review task, `Quickly` or `In a worktree`. | |
+| Review with an agent | Ревʼю з агентом | A button that opens the launch dialog of a review task: instructions, `Quickly` or `In a worktree`, agent or crew. | |
+| Open the review | Відкрити ревʼю | The same button while a review task of the PR is live. | |
+| Review notes | Нотатки для ревʼю | What every review with an agent in a project gets. | «Інструкції» |
 | Quickly | Швидко | The agent reads the PR code from git and does not switch the branch. | |
 | In a worktree | У worktree | | |
 | Your review | Твоє ревʼю | | |

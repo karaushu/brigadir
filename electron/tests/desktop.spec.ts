@@ -286,6 +286,7 @@ test('reads v2, isolates the renderer, updates theme, and opens Kit @area:shell 
 				'pickProjectIcon',
 				'readProjectRepoIcons',
 				'setProjectRepoIcon',
+				'setProjectReviewNotes',
 				'setProjectImageIcon',
 				'readProjectImageIcon',
 				'generateProjectIcon',

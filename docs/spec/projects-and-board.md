@@ -5,10 +5,10 @@ A project is a folder on disk together with every git root found under it. A tas
 <a id="projects"></a>
 ## Projects and repos
 
-- A **project** (`Project` in `packages/core/src/workspace.ts`) has `id`, `name` and `path`, plus project-level data: `icon`, `iconPick`, `commands`, `simulator`, `pullRequestBases` and `formatter`. Its data lives in `~/.brigadir/projects/<id>/` (`project.json`, `workspace.json`, `knowledge.json`, `icon.png`).
+- A **project** (`Project` in `packages/core/src/workspace.ts`) has `id`, `name` and `path`, plus project-level data: `icon`, `iconPick`, `commands`, `simulator`, `pullRequestBases`, `formatter` and `reviewNotes` ([Project review notes](pull-requests-and-ci.md#review-notes)). Its data lives in `~/.brigadir/projects/<id>/` (`project.json`, `workspace.json`, `knowledge.json`, `icon.png`).
 - The unit of work is a set of **repos** (internally `Scope`, `scopeId`, `scopes`), not a single repository. The UI always says `Repo` / `Repos` (`1 repo`, `2 repos`). The internal names stay in IPC, JSON and JSONL for compatibility.
 - The project title shows the path with only the current user's home directory shortened to `~`, and the full path goes in a tooltip. Stored paths are never shortened. Desktop adds `homeDirectory` to the workspace snapshot only for display.
-- `Add a project…` is the folder-plus button in the sidebar's `All projects` row. The project context menu has `New task`, `Open main tree`, `Project knowledge…`, `Project icon…`, `Reveal in Finder`, `Copy path` and `Remove project…`. `Remove project…` moves the project's data folder to the Trash.
+- `Add a project…` is the folder-plus button in the sidebar's `All projects` row. The project context menu has `New task`, `Open main tree`, `Project knowledge…`, `Project icon…`, `Review notes…`, `Reveal in Finder`, `Copy path` and `Remove project…`. `Remove project…` moves the project's data folder to the Trash.
 
 <a id="repo-discovery"></a>
 ### Discovery

@@ -540,7 +540,9 @@ export type DesktopBridge = {
 		/** spec/appearance#evolution-redesign: started from step 2 of the review modal — the action «agent suggestions in review». */
 		suggestions?: boolean,
 		/** spec/pull-requests-and-ci#review-crew: the Crew segment — a library crew reviews instead of one agent; excludes `agent`. */
-		crew?: string | null
+		crew?: string | null,
+		/** spec/pull-requests-and-ci#review-launch: the person's instructions for this review, as typed. */
+		notes?: string
 	): Promise<{
 		task: import('./workspace').AgentTask;
 		created: boolean;
@@ -842,7 +844,7 @@ export type DesktopBridge = {
 	openArchiveSection(id: string, open: boolean): Promise<string[]>;
 	projectMenu(
 		id: string
-	): Promise<'new-task' | 'main-tree' | 'knowledge' | 'icon' | 'removed' | null>;
+	): Promise<'new-task' | 'main-tree' | 'knowledge' | 'icon' | 'review-notes' | 'removed' | null>;
 	copyText(text: string): Promise<void>;
 	/** spec/terminal-and-cli-agents#console-links: the system clipboard's text for Paste in the console; the page may not read it itself. */
 	readClipboardText(): Promise<string>;
@@ -1120,6 +1122,11 @@ export type DesktopBridge = {
 	restartCode(key: TaskKey): Promise<CodeRestartResult>;
 	/** spec/editor-code-intelligence#language-server-restart: tasks whose documents went through a restart; their editors reopen them. */
 	onCodeRestarted(listener: (keys: TaskKey[]) => void): () => void;
+	/** spec/pull-requests-and-ci#review-notes: saves the project's review notes (null removes them); the workspace reloads. */
+	setProjectReviewNotes(
+		projectId: string,
+		notes: import('./workspace').ProjectReviewNotes | null
+	): Promise<void>;
 	readFormatters(): Promise<ProjectFormatterInfo[]>;
 	setProjectFormatter(
 		projectId: string,

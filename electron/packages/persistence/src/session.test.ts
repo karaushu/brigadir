@@ -134,3 +134,27 @@ it('stamps completedAt on completion, drops it on any other status, archives and
 		store.archive(task, { at: 'never', by: 'manual', status: 'done', worktree: 'none' })
 	).rejects.toThrow('Invalid task');
 });
+
+it('keeps the project review notes in project.json and drops them with null (spec/pull-requests-and-ci#review-notes)', async () => {
+	const dataDir = await mkdtemp(join(tmpdir(), 'brigadir-review-notes-'));
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-review-notes-project-'));
+	try {
+		const store = await SessionStore.at(dataDir);
+		const project = await store.addProject(root);
+		await store.setProjectReviewNotes(project.id, { source: 'text', text: 'Check migrations.' });
+		expect((await store.project(project.id)).reviewNotes).toEqual({
+			source: 'text',
+			text: 'Check migrations.',
+		});
+		await store.setProjectReviewNotes(project.id, { source: 'file' });
+		expect((await store.project(project.id)).reviewNotes).toEqual({ source: 'file' });
+		await store.setProjectReviewNotes(project.id, null);
+		expect((await store.project(project.id)).reviewNotes).toBeUndefined();
+		await expect(
+			store.setProjectReviewNotes(project.id, { source: 'text', text: ' ' })
+		).rejects.toThrow('Invalid review notes');
+	} finally {
+		await rm(dataDir, { recursive: true, force: true });
+		await rm(root, { recursive: true, force: true });
+	}
+});

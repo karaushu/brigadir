@@ -304,11 +304,10 @@ test('Review with an agent from a worktree task opens the PR in the new task, an
 		// A worktree review task of #421: its apps/admin repo has another id than the main tree's.
 		await repoPRs(page, 'apps/admin');
 		await page.locator('[data-pr-row="421"]').click();
-		await page.getByRole('button', { name: 'Where the agent reviews', exact: true }).click();
-		await page
-			.getByRole('menu', { name: 'Review with an agent', exact: true })
-			.getByRole('menuitemradio', { name: /In a worktree/ })
-			.click();
+		await page.getByRole('button', { name: 'Review with an agent…', exact: true }).click();
+		const launch = page.locator('[data-review-launch]');
+		await launch.getByRole('radio', { name: 'In a worktree', exact: true }).click();
+		await page.keyboard.press('Meta+Enter');
 		await page
 			.getByRole('status')
 			.filter({ hasText: 'started' })
@@ -353,11 +352,9 @@ test('Review with an agent from a worktree task opens the PR in the new task, an
 		// From that task, a quick review of another PR (#419): the clicked ref carries the worktree's repo id.
 		await page.locator('[data-pr-panel="detail"] button[aria-label="Back to the list"]').click();
 		await page.locator('[data-pr-row="419"]').click();
-		await page.getByRole('button', { name: 'Where the agent reviews', exact: true }).click();
-		await page
-			.getByRole('menu', { name: 'Review with an agent', exact: true })
-			.getByRole('menuitemradio', { name: /Quickly/ })
-			.click();
+		await page.getByRole('button', { name: 'Review with an agent…', exact: true }).click();
+		await launch.getByRole('radio', { name: 'Quickly', exact: true }).click();
+		await page.keyboard.press('Meta+Enter');
 		await page
 			.getByRole('status')
 			.filter({ hasText: 'Review #419' })

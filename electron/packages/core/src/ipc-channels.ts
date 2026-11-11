@@ -27,6 +27,8 @@ import {
 	isId,
 	isRecord,
 	projectFormatters,
+	isProjectReviewNotes,
+	reviewNotesLimit,
 	isMainTree,
 	type ProjectFormatter,
 } from './workspace';
@@ -1136,16 +1138,29 @@ export const ipcTable = {
 		class: 'remote',
 		// spec/appearance#evolution-redesign: a 7th `true` — the review was asked from step 2 of the review modal (agent suggestions in review).
 		// spec/pull-requests-and-ci#review-crew: an 8th — the library crew of this review (the Crew segment); the 7th is then `false` when it is no suggestion.
-		encode: ([key, ref, mode, sendComments, where, agent, suggestions, crew]) =>
-			typeof crew === 'string'
-				? [key, ref, mode, sendComments, where ?? null, agent ?? null, suggestions === true, crew]
-				: suggestions === true
-					? [key, ref, mode, sendComments, where ?? null, agent ?? null, true]
-					: agent
-						? [key, ref, mode, sendComments, where ?? null, agent]
-						: where
-							? [key, ref, mode, sendComments, where]
-							: [key, ref, mode, sendComments],
+		// spec/pull-requests-and-ci#review-launch: a 9th — the person's instructions for this review, sent only when there are some.
+		encode: ([key, ref, mode, sendComments, where, agent, suggestions, crew, notes]) =>
+			typeof notes === 'string' && notes.trim()
+				? [
+						key,
+						ref,
+						mode,
+						sendComments,
+						where ?? null,
+						agent ?? null,
+						suggestions === true,
+						crew ?? null,
+						notes,
+					]
+				: typeof crew === 'string'
+					? [key, ref, mode, sendComments, where ?? null, agent ?? null, suggestions === true, crew]
+					: suggestions === true
+						? [key, ref, mode, sendComments, where ?? null, agent ?? null, true]
+						: agent
+							? [key, ref, mode, sendComments, where ?? null, agent]
+							: where
+								? [key, ref, mode, sendComments, where]
+								: [key, ref, mode, sendComments],
 		validate: (a) =>
 			(a.length === 4 ||
 				(a.length === 5 && (a[4] === 'quick' || a[4] === 'worktree')) ||
@@ -1162,6 +1177,15 @@ export const ipcTable = {
 					a[5] === null &&
 					typeof a[6] === 'boolean' &&
 					isId(a[7]) &&
+					a[2] === 'review') ||
+				(a.length === 9 &&
+					(a[4] === null || a[4] === 'quick' || a[4] === 'worktree') &&
+					(a[5] === null || isHelperRun(a[5])) &&
+					typeof a[6] === 'boolean' &&
+					(a[7] === null || (isId(a[7]) && a[5] === null)) &&
+					typeof a[8] === 'string' &&
+					a[8].trim().length > 0 &&
+					a[8].length <= reviewNotesLimit &&
 					a[2] === 'review')) &&
 			prKey(a) &&
 			(a[2] === 'review' || a[2] === 'fix') &&
@@ -2841,6 +2865,14 @@ export const ipcTable = {
 		class: 'remote',
 		arity: 0,
 		validate: noArgs,
+	},
+	/** spec/pull-requests-and-ci#review-notes: the project's review notes; null removes them. */
+	setProjectReviewNotes: {
+		kind: 'invoke',
+		channel: 'projects:review-notes',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isId(a[0]) && (a[1] === null || isProjectReviewNotes(a[1])),
 	},
 	setProjectFormatter: {
 		kind: 'invoke',

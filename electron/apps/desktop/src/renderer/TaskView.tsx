@@ -53,7 +53,8 @@ import {
 } from './browser-tabs';
 import { useSecondTick } from './ui/second-tick';
 import { TurnsPanel } from './TurnsPanel';
-import { PullRequestPanel } from './PullRequestPanel';
+import { PullRequestPanel, openReviewTask } from './PullRequestPanel';
+import type { ReviewChoice } from './ReviewLaunch';
 import { QuickTaskBar, type QuickTaskRequest } from './QuickTask';
 import { ToastHost, showToast, notify, toastError, toastWarning, resolveToast } from './ui/Toast';
 import { restartLanguageServers } from './code-intel';
@@ -2101,14 +2102,12 @@ export function TaskView({
 			return false;
 		}
 	}
+	/** spec/pull-requests-and-ci#review-launch: a failure stays in the launch dialog, so it answers false and shows nothing itself. */
 	async function agentReview(
 		ref: { scopeId: string; number: number },
-		where?: 'quick' | 'worktree',
-		agent?: HelperRun | null,
-		suggestions = false,
-		/** spec/pull-requests-and-ci#review-crew: a library crew reviews instead of one agent. */
-		crew?: string | null
-	) {
+		{ where, agent, crew, notes }: ReviewChoice,
+		suggestions = false
+	): Promise<boolean> {
 		try {
 			const result = await window.brigadir.startPullRequestAgent(
 				task,
@@ -2118,7 +2117,8 @@ export function TaskView({
 				where,
 				crew ? null : agent,
 				suggestions,
-				crew ?? null
+				crew,
+				notes
 			);
 			// spec/pull-requests-and-ci#review-drafts: the new task opens the PR by the main-tree repo id; the clicked ref may carry another worktree's id.
 			openTaskPR(result.task, {
@@ -2133,12 +2133,9 @@ export function TaskView({
 					onOpenTask(result.task);
 				showToast(started);
 			} else openToast(started, result.task);
+			return true;
 		} catch {
-			fail('Could not start the review task.', {
-				retry: () => {
-					void agentReview(ref, where, agent, suggestions, crew);
-				},
-			});
+			return false;
 		}
 	}
 	/**
@@ -3697,15 +3694,9 @@ export function TaskView({
 											onCIFix={(scopeId, detail, job, step, pr) => {
 												void ciFix(scopeId, detail, job, step, pr);
 											}}
-											onAgentReview={(detail, scopeId, where, agent, crew) => {
-												void agentReview(
-													{ scopeId, number: detail.summary.number },
-													where,
-													agent,
-													false,
-													crew
-												);
-											}}
+											onAgentReview={(detail, scopeId, choice) =>
+												agentReview({ scopeId, number: detail.summary.number }, choice)
+											}
 											onResolveConflicts={(ref) => {
 												void resolveConflicts(ref, 'manual').then(
 													(reason) => reason && toastError(reason)
@@ -3940,9 +3931,8 @@ export function TaskView({
 						onCompose={compose}
 						onDeliver={(text, to) => deliver(to, text)}
 						// spec/appearance#evolution-redesign: from the review modal it is «agent suggestions in review».
-						onAgentReview={(where, agent, crew) => {
-							void agentReview(prReviewOpen, where, agent, true, crew);
-						}}
+						onAgentReview={(choice) => agentReview(prReviewOpen, choice, true)}
+						onOpenReview={(review) => openReviewTask(review, onOpenTask)}
 						onAgentFix={(sendComments) => agentFix(prReviewOpen, sendComments)}
 						onResolveConflicts={async (how) => {
 							// spec/appearance#evolution-redesign: the Conflicts dialog opens in the PR branch's task; the review steps aside for it.

@@ -28,6 +28,8 @@ export type PRMenuState = {
 	conflicts: boolean;
 	/** This task reviews this PR (spec/pull-requests-and-ci#review-with-agent): no agent review, as with the button. */
 	reviewsThis: boolean;
+	/** A review task of this PR is live (spec/pull-requests-and-ci#review-with-agent): «Open the review» instead of a new one. */
+	liveReview: boolean;
 };
 
 /**
@@ -53,12 +55,9 @@ export function prMenuTemplate(locale: Locale, state: PRMenuState): NativeMenuIt
 		...(state.reviewsThis
 			? []
 			: [
-					item('agent-review', 'Review with an agent', {
-						submenu: [
-							{ id: 'agent-quick', label: t(locale, 'Quickly') },
-							{ id: 'agent-worktree', label: t(locale, 'In a worktree') },
-						],
-					}),
+					state.liveReview
+						? item('open-review', 'Open the review')
+						: item('agent-review', 'Review with an agent…'),
 				]),
 		...(state.conflicts ? [item('conflicts', 'Resolve conflicts…')] : []),
 		null,
@@ -86,6 +85,8 @@ export type PRMenuSource = {
 		number: number
 	): Promise<PullRequestDetail>;
 	readDraft(key: TaskKey, scopeId: string, number: number): Promise<PRReviewDraft>;
+	/** spec/pull-requests-and-ci#review-with-agent: whether a review task of this PR is live in the project. */
+	liveReview(key: TaskKey, ref: PRRefKey): Promise<boolean>;
 };
 /** How long a menu waits for a PR nobody has opened yet; past it the menu shows without «Resolve conflicts…». */
 export const prMenuDetailWait = 500;
@@ -121,7 +122,7 @@ export class PRMenus {
 		pr: PRMenuRow
 	): Promise<PRMenuAction | null> {
 		const open = isOpenPR(pr);
-		const [drafts, conflicts, task] = open
+		const [drafts, conflicts, task, liveReview] = open
 			? await Promise.all([
 					this.source
 						.readDraft(key, ref.scopeId, ref.number)
@@ -131,12 +132,13 @@ export class PRMenus {
 					SessionStore.at(this.dataDir)
 						.then((store) => store.task(key))
 						.catch((): AgentTask | null => null),
+					this.source.liveReview(key, ref).catch(() => false),
 				])
-			: [0, false, null];
+			: [0, false, null, false];
 		const reviewsThis = task?.prReview?.mode === 'review' && task.prReview.number === ref.number;
 		return (await this.ui.menu(
 			client,
-			prMenuTemplate(this.locale(), { pr, drafts, conflicts, reviewsThis })
+			prMenuTemplate(this.locale(), { pr, drafts, conflicts, reviewsThis, liveReview })
 		)) as PRMenuAction | null;
 	}
 }

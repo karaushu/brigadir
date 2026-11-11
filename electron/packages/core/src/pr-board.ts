@@ -121,3 +121,25 @@ export function prTask(
 		) ?? null
 	);
 }
+
+/**
+ * spec/pull-requests-and-ci#review-with-agent: the live review task of a PR — not archived, `prReview.mode = review`, the same number and repo (its id,
+ * or its name in the project when the PR is shown from a worktree). Several (older data): the most recently updated.
+ */
+export function liveReviewTask(
+	tasks: readonly AgentTask[],
+	pr: { projectId: string; number: number; scopeId: string; repo?: string | null }
+): AgentTask | null {
+	const found = tasks.filter(
+		(task) =>
+			task.projectId === pr.projectId &&
+			!task.archived &&
+			task.prReview?.mode === 'review' &&
+			task.prReview.number === pr.number &&
+			(task.prReview.scopeId === pr.scopeId || (!!pr.repo && task.prReview.repo === pr.repo))
+	);
+	return found.reduce<AgentTask | null>(
+		(best, task) => (!best || (task.updatedAt ?? '') > (best.updatedAt ?? '') ? task : best),
+		null
+	);
+}

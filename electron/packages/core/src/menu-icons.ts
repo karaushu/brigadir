@@ -229,6 +229,7 @@ export const projectMenuIcons = {
 	'main-tree': 'editor',
 	knowledge: 'knowledge',
 	icon: 'image',
+	'review-notes': 'review-info',
 	finder: 'folder',
 	copy: 'copy',
 	remove: 'trash',
@@ -253,6 +254,7 @@ export const fileMenuIcons = {
 export const prMenuIcons = {
 	review: 'zoom',
 	'agent-review': 'generate',
+	'open-review': 'zoom',
 	conflicts: 'review-warning',
 	github: 'external',
 	'copy-link': 'link',

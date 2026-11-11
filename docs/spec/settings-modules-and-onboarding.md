@@ -179,7 +179,7 @@ Why one switch per module: every MCP tool goes into the context of every session
 | `Remote access` | the whole remote access settings: `This machine · Connect to another` part switch (`Segments` in `tabs` style), overview scheme and facts, switch and password, name, phone, devices, log, `Change password…`, machines, `Forget`. See [Remote access](remote-access-and-mobile.md). |
 | `Slack` | see [Slack](notifications-slack-notes-and-schedules.md) |
 
-- Settings that stay where they are: a command's `agentRuns` (command editor), where Review with an agent runs (chosen in the button) and `Customize per action` (that is a choice of agent, not a module setting).
+- Settings that stay where they are: a command's `agentRuns` (command editor), where Review with an agent runs (chosen in its launch dialog), project review notes (the project menu) and `Customize per action` (that is a choice of agent, not a module setting).
 - Deep links: anything that opens remote access settings (toasts and chips, the `Remote` chip's menu items, Search Everywhere) opens `Settings ▸ Modules` with the remote access popup and the requested dialog or part. If the module is off, only `Modules` opens. The search path is `Settings ▸ Modules ▸ Remote access ▸ <section>`.
 
 <a id="intro"></a>

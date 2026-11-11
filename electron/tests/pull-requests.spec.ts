@@ -486,8 +486,17 @@ test('Review with an agent runs quickly in the main tree by default; the agent a
 		const before = await branch();
 		await repoPRs(page, 'apps/admin');
 		await page.locator('[data-pr-row="421"]').click();
-		await expect(page.locator('[data-agent-review]')).toHaveAttribute('data-agent-review', 'quick');
-		await page.getByRole('button', { name: 'Review with an agent', exact: true }).click();
+		// spec/pull-requests-and-ci#review-launch: the button opens the launch dialog; quick is the default, ⌘↩ starts with the instructions.
+		await page.getByRole('button', { name: 'Review with an agent…', exact: true }).click();
+		const launch = page.locator('[data-review-launch]');
+		await expect(launch.getByRole('radio', { name: 'Quickly', exact: true })).toHaveAttribute(
+			'aria-checked',
+			'true'
+		);
+		await expect(launch.getByRole('textbox', { name: 'Notes for the reviewer' })).toBeFocused();
+		await page.keyboard.type('Check the free count against prices.');
+		await page.keyboard.press('Meta+Enter');
+		await expect(launch).toHaveCount(0);
 		const card = page
 			.locator('aside')
 			.getByRole('button', { name: /Review #421 · Loyalty 1\+1 in admin/ })
@@ -509,19 +518,20 @@ test('Review with an agent runs quickly in the main tree by default; the agent a
 			};
 		const [review] = await reviews();
 		expect(review).toMatchObject({
-			prReview: { number: 421, mode: 'review', base: 'staging' },
+			prReview: { number: 421, mode: 'review', base: 'staging', repo: 'apps/admin' },
 			readOnlyAgent: true,
 			launch: { isolation: 'in-place' },
 		});
+		expect(review.prompt).toContain(
+			'Instructions from the person for this review:\nCheck the free count against prices.'
+		);
 		await expect(page.locator('[data-pr-draft-row]')).toHaveCount(1, { timeout: 60000 });
 		await expect(page.locator('[data-pr-draft-row]')).toContainText(
 			'The free count ignores prices.'
 		);
 		expect(await branch()).toBe(before);
 		await expect(page.locator('[data-pr-review-footer]')).toContainText('1 draft');
-		await expect(
-			page.getByRole('button', { name: 'Review with an agent', exact: true })
-		).toHaveCount(0);
+		await expect(page.locator('[data-agent-review], [data-open-review]')).toHaveCount(0);
 		// spec/pull-requests-and-ci#review-with-agent: a reply under the agent's draft goes into its thread and to the review task; the agent answers and rewrites it.
 		await page.locator('[data-pr-draft-row]').click();
 		const draft = page.locator('[data-pr-draft]').first();
@@ -543,7 +553,7 @@ test('Review with an agent runs quickly in the main tree by default; the agent a
 		await page.getByRole('button', { name: 'Back to the list', exact: true }).click();
 		await page.locator('[data-pr-row="416"]').click();
 		await expect(
-			page.getByRole('button', { name: 'Review with an agent', exact: true })
+			page.getByRole('button', { name: 'Review with an agent…', exact: true })
 		).toBeVisible();
 		expect(errors).toEqual([]);
 	} finally {
@@ -551,24 +561,26 @@ test('Review with an agent runs quickly in the main tree by default; the agent a
 	}
 });
 
-test('the chevron of Review with an agent runs it in a worktree and remembers the choice (spec/pull-requests-and-ci#review-with-agent) @area:pr', async () => {
+test('the launch dialog runs the review in a worktree, remembers the place, keeps the draft, then leads into the live review (spec/pull-requests-and-ci#review-launch) @area:pr', async () => {
 	test.setTimeout(180000);
 	const { app, close, page, errors, root } = await launchPRFixture();
 	try {
 		await repoPRs(page, 'apps/admin');
 		await page.locator('[data-pr-row="421"]').click();
-		const toggle = page.getByRole('button', { name: 'Where the agent reviews', exact: true });
-		await toggle.click();
-		const menu = page.getByRole('menu', { name: 'Review with an agent', exact: true });
-		await expect(menu.getByRole('menuitemradio', { name: /Quickly/ })).toHaveAttribute(
-			'aria-checked',
-			'true'
-		);
+		const button = page.getByRole('button', { name: 'Review with an agent…', exact: true });
+		await button.click();
+		const launch = page.locator('[data-review-launch]');
+		await page.keyboard.type('Draft that waits');
 		await page.keyboard.press('Escape');
-		await expect(menu).toHaveCount(0);
-		await expect(toggle).toBeFocused();
-		await toggle.click();
-		await menu.getByRole('menuitemradio', { name: /In a worktree/ }).click();
+		await expect(launch).toHaveCount(0);
+		await expect(button).toBeFocused();
+		await button.click();
+		await expect(launch.getByRole('textbox', { name: 'Notes for the reviewer' })).toContainText(
+			'Draft that waits'
+		);
+		await launch.getByRole('radio', { name: 'In a worktree', exact: true }).click();
+		await launch.getByRole('button', { name: 'Start review', exact: true }).click();
+		await expect(launch).toHaveCount(0);
 		await expect(page.getByRole('status').filter({ hasText: 'started' })).toBeVisible();
 		const tasks = join(root, 'data/projects/project/tasks');
 		let review: any = null;
@@ -595,10 +607,12 @@ test('the chevron of Review with an agent runs it in a worktree and remembers th
 						.reviewWhere
 			)
 			.toBe('worktree');
-		await expect(page.locator('[data-agent-review]')).toHaveAttribute(
-			'data-agent-review',
-			'worktree'
-		);
+		// spec/pull-requests-and-ci#review-with-agent: while the review task is live, the PR leads into it instead of starting another.
+		const open = page.locator('[data-open-review]');
+		await expect(open).toContainText('Open the review');
+		await open.click();
+		await expect(page.locator('[data-pr-review-footer]')).toBeVisible();
+		await expect(page.locator('[data-agent-review], [data-open-review]')).toHaveCount(0);
 		expect(errors).toEqual([]);
 	} finally {
 		await close();
@@ -659,7 +673,7 @@ test('on my own PR the reviewer threads go to the PR task as one message with an
 		await repoPRs(page, 'apps/admin');
 		await page.locator('[data-pr-row="419"]').click();
 		await expect(
-			page.getByRole('button', { name: 'Review with an agent', exact: true })
+			page.getByRole('button', { name: 'Review with an agent…', exact: true })
 		).toBeVisible();
 		const footer = page.locator('[data-pr-own-footer]');
 		await expect(footer).toContainText('2 of 2 chosen');

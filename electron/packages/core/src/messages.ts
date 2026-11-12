@@ -339,6 +339,11 @@ const uk = {
 	'The display still sleeps; closing a laptop lid still puts the Mac to sleep.':
 		'Екран може вимикатися. Сон при закритті кришки визначає система.',
 	'Now working: {count} — the Mac stays awake.': 'У роботі: {count}',
+	'Lid-close sleep follows system settings.': 'Сон при закритті кришки визначає система.',
+	Display: 'Екран',
+	'Keep the display on while agents work': 'Не вимикати екран, поки працюють агенти',
+	'While the display is on, the screen does not lock by itself.':
+		'Поки екран увімкнений, він не блокується сам.',
 	// spec/appearance#evolution-redesign: the Helper agent (spec/composer-steering-queue-and-ghost#ghost-headless) and its in-place capsule.
 	'Helper agent': 'Помічник',
 	'Short one-off jobs: PR summaries, commit and PR texts, branch names, prompt suggestions. Change it for one run where you start it.':

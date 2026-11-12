@@ -13,6 +13,8 @@ function setup() {
 		counts: 0,
 		logs: [] as string[],
 		held: false,
+		display: false,
+		kinds: [] as string[],
 	};
 	let gate: Promise<void> | null = null;
 	const keep = new KeepAwake(
@@ -24,10 +26,12 @@ function setup() {
 			},
 			enabled: () => state.enabled,
 			held: () => state.held,
+			display: () => state.display,
 			blocker: {
-				start: () => {
+				start: (kind) => {
 					const id = state.next++;
 					state.started.push(id);
+					state.kinds.push(kind);
 					return id;
 				},
 				stop: (id) => {
@@ -204,4 +208,51 @@ it('recounts on the events that move a task in or out of work, including a quest
 	])
 		expect(keepAwakeKinds.has(kind)).toBe(true);
 	expect(keepAwakeKinds.has('message.delta')).toBe(false);
+});
+it('a crew worker still working holds the computer after its foreman and the other workers are done', () => {
+	const foreman = { status: 'done' as TaskStatus },
+		workers = (['done', 'working', 'done'] as TaskStatus[]).map((status) => ({ status }));
+	expect(workingAgents([foreman, ...workers])).toBe(1);
+});
+it('keeps the display on only while agents work with its switch on, and swaps the blocker with no gap', async () => {
+	const { keep, state } = setup();
+	state.count = 1;
+	await keep.recount();
+	expect(state.kinds).toEqual(['system']);
+	// The display switch on: the display blocker starts before the system one stops.
+	state.display = true;
+	keep.settingChanged();
+	expect(state.kinds).toEqual(['system', 'display']);
+	expect(state.stopped).toEqual([1]);
+	expect(keep.status()).toEqual({ working: 1, holding: true });
+	// The last agent stops: the display stays on through the 30 s grace, then everything goes.
+	state.count = 0;
+	await keep.recount();
+	expect(state.stopped).toEqual([1]);
+	await vi.advanceTimersByTimeAsync(30_000);
+	expect(state.stopped).toEqual([1, 2]);
+	// Remote access alone never keeps the display on.
+	state.held = true;
+	await keep.recount();
+	expect(state.kinds).toEqual(['system', 'display', 'system']);
+	state.held = false;
+	await keep.recount();
+	await vi.advanceTimersByTimeAsync(30_000);
+	// The display switch going off during the grace drops back to the system blocker at once.
+	state.count = 1;
+	await keep.recount();
+	state.count = 0;
+	await keep.recount();
+	state.display = false;
+	keep.settingChanged();
+	expect(state.kinds).toEqual(['system', 'display', 'system', 'display', 'system']);
+	expect(keep.status()).toEqual({ working: 0, holding: true });
+	// Keep awake off: the display switch alone holds nothing.
+	state.display = true;
+	state.enabled = false;
+	state.count = 2;
+	keep.settingChanged();
+	await keep.recount();
+	expect(keep.status()).toEqual({ working: 0, holding: false });
+	expect(state.kinds).toHaveLength(5);
 });

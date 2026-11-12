@@ -113,6 +113,8 @@ two similar actions. Do not add a description when the name is enough.
   elsewhere).
 - Sleep prevention is **Keep awake / Без сну**, with the switch text «Keep the computer awake while agents work» /
   «Тримати компʼютер активним, поки працюють агенти» ([Keep awake](spec/architecture-and-platform.md#keep-awake)).
+  The display hold is **Display / Екран**, «Keep the display on while agents work» / «Не вимикати екран, поки
+  працюють агенти».
   The code names `agents.keepAwake`, `KeepAwakeStatus`, `KeepAwakeRow` and `keep-awake` already describe the
   behaviour and stay as they are.
 - Do not promise that the computer stays awake with the lid closed, or the same sleep policy on every OS.

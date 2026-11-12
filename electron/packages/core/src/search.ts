@@ -486,6 +486,16 @@ export const settingDefinitions: readonly SettingDefinition[] = [
 		},
 	},
 	{
+		id: 'keep-display-on',
+		tab: 'agents',
+		section: 'Agents',
+		label: key('Display'),
+		toggle: {
+			get: (s) => s.agents.keepDisplayOn,
+			set: (s, keepDisplayOn) => ({ agents: { ...s.agents, keepDisplayOn } }),
+		},
+	},
+	{
 		id: 'prompt-suggestion',
 		tab: 'agents',
 		section: 'Agents',

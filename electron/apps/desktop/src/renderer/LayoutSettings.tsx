@@ -668,7 +668,7 @@ export function LayoutSettings({
 												decreaseLabel={`${t(locale, 'Max concurrent')} · ${t(locale, 'Decrease')}`}
 											/>
 										</SettingsRow>
-										{/* spec/architecture-and-platform#keep-awake: no idle sleep while an agent works; the display and the lid behave as usual. */}
+										{/* spec/architecture-and-platform#keep-awake: no idle sleep while an agent works, and the display on with its own switch; the lid behaves as usual. */}
 										<KeepAwakeRow
 											settings={snapshot.settings}
 											locale={locale}

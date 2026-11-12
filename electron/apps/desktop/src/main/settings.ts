@@ -28,7 +28,7 @@ export class Settings {
 	constructor(private dataDir?: string) {}
 	async read(): Promise<AppSettings> {
 		const store = await SessionStore.at(this.dataDir);
-		// Editor fields added later (spec/diff-and-review#diff-base diffBase, spec/editor-code-intelligence#typing-help typing, spec/settings-modules-and-onboarding#intro codeTheme) read as their defaults; so do spec/agents-and-providers#cli-updates `agents.updateClis`, spec/architecture-and-platform#keep-awake `agents.keepAwake`, spec/tasks#archive `agents.archiveAfterDays` and spec/git#worktree-env `agents.copyEnvFiles` spec/browser-and-simulator#background `agents.browserActAnywhere` and spec/notifications-slack-notes-and-schedules#slack-agent-post `agents.slackPostWithoutAsking`.
+		// Editor fields added later (spec/diff-and-review#diff-base diffBase, spec/editor-code-intelligence#typing-help typing, spec/settings-modules-and-onboarding#intro codeTheme) read as their defaults; so do spec/agents-and-providers#cli-updates `agents.updateClis`, spec/architecture-and-platform#keep-awake `agents.keepAwake` and `agents.keepDisplayOn`, spec/tasks#archive `agents.archiveAfterDays` and spec/git#worktree-env `agents.copyEnvFiles` spec/browser-and-simulator#background `agents.browserActAnywhere` and spec/notifications-slack-notes-and-schedules#slack-agent-post `agents.slackPostWithoutAsking`.
 		// spec/settings-modules-and-onboarding#settings-keys: a settings file written before the intro existed means the app was used already, so the intro counts as seen.
 		try {
 			const doc = await readDocument(await safePath(store.root, 'settings.json'));
@@ -56,6 +56,9 @@ export class Settings {
 									: {}),
 								...(!('keepAwake' in value.agents)
 									? { keepAwake: defaultAppSettings.agents.keepAwake }
+									: {}),
+								...(!('keepDisplayOn' in value.agents)
+									? { keepDisplayOn: defaultAppSettings.agents.keepDisplayOn }
 									: {}),
 								...(!('archiveAfterDays' in value.agents)
 									? { archiveAfterDays: defaultAppSettings.agents.archiveAfterDays }

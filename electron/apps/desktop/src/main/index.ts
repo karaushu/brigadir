@@ -952,9 +952,13 @@ const keepAwake = new KeepAwake(
 	{
 		count: async () => workingAgents((await sessions.workspace()).tasks),
 		enabled: () => appliedSettings.agents.keepAwake,
+		display: () => appliedSettings.agents.keepDisplayOn,
 		held: () => remoteAccess.holding(),
 		blocker: {
-			start: () => powerSaveBlocker.start('prevent-app-suspension'),
+			start: (kind) =>
+				powerSaveBlocker.start(
+					kind === 'display' ? 'prevent-display-sleep' : 'prevent-app-suspension'
+				),
 			stop: (id) => {
 				powerSaveBlocker.stop(id);
 			},
@@ -3112,7 +3116,9 @@ void app.whenReady().then(async () => {
 	handle('slack:app-connect', (token: string) => slack.setAppToken(token));
 	handle('slack:app-disconnect', () => slack.disconnectApp());
 	handle('settings:save', async (value) => {
-		const keepAwakeChanged = value.agents.keepAwake !== appliedSettings.agents.keepAwake,
+		const keepAwakeChanged =
+				value.agents.keepAwake !== appliedSettings.agents.keepAwake ||
+				value.agents.keepDisplayOn !== appliedSettings.agents.keepDisplayOn,
 			updatesChanged = value.updates.autoDownload !== appliedSettings.updates.autoDownload,
 			archiveChanged = value.agents.archiveAfterDays !== appliedSettings.agents.archiveAfterDays,
 			keymapChanged = JSON.stringify(value.keymap) !== JSON.stringify(appliedSettings.keymap),

@@ -49,6 +49,7 @@ export type AgentDefaults = {
 		'quick' | 'worktree';
 	/** spec/agents-and-providers#cli-updates: `claude update` and `codex update` once a day in the background. */ updateClis: boolean;
 	/** spec/architecture-and-platform#keep-awake: the Mac does not idle-sleep while an agent works. */ keepAwake: boolean;
+	/** spec/architecture-and-platform#keep-awake: while agents keep the computer awake, the display does not idle off either; off by default. */ keepDisplayOn: boolean;
 	/** spec/tasks#archive: completed tasks go to the archive after this many days; null never. */ archiveAfterDays: ArchiveAfterDays;
 	/** spec/browser-and-simulator#background: agents act on any site in the browser without the `Act on <domain>` card; off by default. */ browserActAnywhere: boolean;
 	/** spec/notifications-slack-notes-and-schedules#slack-agent-post: `slack_post` goes out without the `Post to Slack` card; off by default. */ slackPostWithoutAsking: boolean;
@@ -258,6 +259,7 @@ export const defaultAppSettings: AppSettings = {
 		reviewWhere: 'quick',
 		updateClis: true,
 		keepAwake: true,
+		keepDisplayOn: false,
 		archiveAfterDays: defaultArchiveAfterDays,
 		browserActAnywhere: false,
 		slackPostWithoutAsking: false,
@@ -291,7 +293,7 @@ export const defaultAppSettings: AppSettings = {
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 14 &&
+		Object.keys(value).length === 15 &&
 		typeof value.prSummary === 'boolean' &&
 		(value.claudeSubagentModel === null ||
 			(typeof value.claudeSubagentModel === 'string' &&
@@ -305,6 +307,7 @@ export function isAgentDefaults(value: unknown): value is AgentDefaults {
 		(value.reviewWhere === 'quick' || value.reviewWhere === 'worktree') &&
 		typeof value.updateClis === 'boolean' &&
 		typeof value.keepAwake === 'boolean' &&
+		typeof value.keepDisplayOn === 'boolean' &&
 		isRecord(value.enabled) &&
 		Object.keys(value.enabled).length === agentProviders.length &&
 		agentProviders.every(

@@ -44,6 +44,7 @@ import {
 	type PRThread,
 	type PRDraft,
 	type PRSummarySpot,
+	providerName,
 } from '@brigadir/core';
 import { useTaskState, rowPosition } from './task-state';
 import { useWorkspace } from './store';
@@ -772,6 +773,13 @@ export function DiffView({
 						);
 					}}
 					{...(comment.position ? { position: comment.position } : {})}
+					agent={task.provider ? providerName(task.provider) : ''}
+					onSendBack={() => {
+						void act(
+							() => window.brigadir.sendTaskReviewComment(task, comment.id),
+							'Could not send the comment to the agent.'
+						);
+					}}
 					onEdit={() => {
 						clearSelection();
 						setTask({

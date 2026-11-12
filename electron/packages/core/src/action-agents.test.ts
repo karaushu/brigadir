@@ -141,7 +141,7 @@ describe('Remember and Reset (spec/appearance#evolution-redesign)', () => {
 		expect(isActionAgents({})).toBe(true);
 		expect(isActionAgents({ chat: sonnet })).toBe(false);
 		expect(isActionAgents({ prSummary: { provider: 'claude', model: 'sonnet' } })).toBe(false);
-		expect(agentActions).toHaveLength(14);
+		expect(agentActions).toHaveLength(15);
 		expect(isActionAgents({ slackAnswers: luna, slackCode: sonnet })).toBe(true);
 		expect(isAppSettings({ ...defaultAppSettings, actionAgents: { split: luna } })).toBe(true);
 		expect(isAppSettings({ ...defaultAppSettings, actionAgents: { split: null } })).toBe(false);

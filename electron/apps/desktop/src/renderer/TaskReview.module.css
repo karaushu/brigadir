@@ -1,0 +1,262 @@
+/* spec/diff-and-review#agent-review-ui: the review's own pieces; the card is ui/ChatCard, the strip is a list of ui/Deck, the service rows are the
+   crew's (Crew.module.css .service). */
+.summary {
+	align-self: stretch;
+	margin: 0;
+	font-size: var(--text-12);
+	line-height: 1.5;
+	color: var(--fg);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+/* `Review skipped · Start review`: a 30-px tint strip of the log, like a folded card. */
+.skipped {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin: 0 16px 12px;
+	height: 30px;
+	padding: 0 4px 0 10px;
+	border-radius: 8px;
+	background: var(--tint);
+	font-size: var(--text-11-5);
+	color: var(--fg2);
+}
+.skipped > span {
+	flex: 1;
+}
+/* A comment count is a link: dotted at rest, solid on hover (spec/diff-and-review#agent-review-ui). */
+.count {
+	flex: none;
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	color: inherit;
+	text-decoration: underline dotted;
+	text-underline-offset: 2px;
+	cursor: default;
+}
+.count:hover {
+	text-decoration-style: solid;
+}
+.count:focus-visible {
+	outline: 1.5px solid var(--accent);
+	outline-offset: 1px;
+	border-radius: 3px;
+}
+.main {
+	display: block;
+	min-width: 0;
+	width: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	color: inherit;
+	text-align: left;
+}
+.main b {
+	font-weight: 600;
+}
+.muted {
+	color: var(--fg2);
+}
+[data-review-strip='passed'] li {
+	background: var(--green-soft);
+}
+[data-review-strip='passed'] li > span:first-child {
+	color: var(--green);
+}
+[data-review-strip='disputed'] li {
+	background: var(--amber-soft);
+}
+[data-review-strip='disputed'] li > span:first-child,
+[data-review-strip='failed'] li > span:first-child {
+	color: var(--amber);
+}
+[data-review-strip='failed'] li > span:first-child {
+	color: var(--red);
+}
+.details {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 4px 0 2px;
+	font-size: var(--text-12);
+}
+.details h3 {
+	margin: 4px 0 2px;
+	font-size: var(--text-10);
+	font-weight: 600;
+	color: var(--fg2);
+}
+.details h3 > span {
+	font-weight: 400;
+	color: var(--fg3);
+}
+.details ul {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.details li {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 7px;
+	min-height: 24px;
+}
+.details li > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.details li > span {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.details li > small {
+	flex: none;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.details li[data-state='approved'] > small {
+	color: var(--green);
+}
+.details li[data-state='failed'] > small,
+.details li[data-state='disputed'] > small {
+	color: var(--amber);
+}
+/* A comment: its text, `file:line · reviewer`, a tag; the row is one target (rule 15). */
+.comment {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	margin: 0 -6px;
+	padding: 4px 6px;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	font: inherit;
+	color: inherit;
+	text-align: left;
+}
+.comment:hover {
+	background: var(--segment-hover);
+}
+.comment:active {
+	background: var(--segment-press);
+}
+.comment:focus-visible {
+	outline: none;
+	box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.comment small {
+	font-size: var(--text-10-5);
+	color: var(--fg3);
+}
+.comment code {
+	font: var(--text-10-5) var(--mono-family);
+}
+[data-comment='fixed'] .text {
+	text-decoration: line-through;
+	color: var(--fg2);
+}
+.tag {
+	flex: none;
+	padding: 1px 6px;
+	border-radius: 4px;
+	font-size: var(--text-10);
+	background: var(--tint);
+	color: var(--fg2);
+}
+.tag[data-tag='sent'] {
+	background: var(--accent-soft);
+	color: var(--accent);
+}
+.tag[data-tag='fixed'] {
+	background: var(--green-soft);
+	color: var(--green);
+}
+.tag[data-tag='disputed'] {
+	background: var(--amber-soft);
+	color: var(--amber);
+}
+.dispute {
+	flex-basis: 100%;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 0 0 6px;
+}
+.dispute blockquote {
+	margin: 0;
+	padding: 6px 9px;
+	border-radius: 6px;
+	background: var(--amber-soft);
+	color: var(--fg);
+}
+.dispute > span {
+	display: flex;
+	gap: 6px;
+}
+/* `Review…` beside Commit takes the review's tone; a dot says the tree changed after the review. */
+.button {
+	position: relative;
+}
+.button[data-tone='accent'] {
+	color: var(--accent);
+}
+.button[data-tone='green'] {
+	color: var(--green);
+}
+.button[data-tone='amber'] {
+	color: var(--amber);
+}
+.button[data-dot]::after {
+	content: '';
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--accent);
+}
+/* spec/diff-and-review#agent-review-pr: the row of the New pull request sheet. */
+.reminder {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: var(--amber-soft);
+	font-size: var(--text-12);
+}
+.reminder[data-tone='green'] {
+	background: var(--green-soft);
+}
+.reminder > svg {
+	flex: none;
+	color: var(--amber);
+}
+.reminder[data-tone='green'] > svg {
+	color: var(--green);
+}
+.reminder > span {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.reminder small {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}

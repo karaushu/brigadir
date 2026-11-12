@@ -174,5 +174,95 @@ export function taskReviewSpec(
 		},
 	};
 }
+/** spec/diff-and-review#agent-review-start: the launch dialog's choice — one agent (null: the action's own, else the Default agent) or a crew. */
+export type TaskReviewChoice = {
+	agent: { provider: AgentProvider; model: string; effort: string | null } | null;
+	crew: string | null;
+	notes: string;
+	since: 'start' | 'last';
+};
+export function isTaskReviewChoice(value: unknown): value is TaskReviewChoice {
+	return (
+		isRecord(value) &&
+		(value.agent === null ||
+			(isRecord(value.agent) &&
+				(value.agent.provider === 'claude' || value.agent.provider === 'codex') &&
+				text(value.agent.model, 200) &&
+				(value.agent.effort === null || text(value.agent.effort, 200)))) &&
+		(value.crew === null || (text(value.crew, 200) && value.crew.length > 0)) &&
+		text(value.notes, taskReviewInstructionsLimit) &&
+		(value.since === 'start' || value.since === 'last')
+	);
+}
 export const isTaskReviewSpec = (value: unknown): value is CrewSpec =>
 	isCrewSpec(value) && value.root.id === taskReviewRootId;
+
+/** spec/diff-and-review#agent-review-ui: what the strip, the button, the sidebar and the PR sheet read about a task's review. */
+export type TaskReviewMemberState =
+	'starting' | 'reading' | 'comments' | 'checking' | 'approved' | 'disputed' | 'stopped' | 'failed';
+export type TaskReviewMember = {
+	name: string;
+	provider: AgentProvider;
+	taskId: string | null;
+	state: TaskReviewMemberState;
+	comments: number;
+	/** When its current state began (a running read), for `reading · 1m 12s`. */
+	since: string | null;
+	/** Why it failed to start, as the task says. */
+	failure?: string;
+};
+export type TaskReviewCommentState = 'sent' | 'fixed' | 'answered' | 'disputed' | 'resolved';
+export type TaskReviewCommentRow = {
+	id: string;
+	text: string;
+	path: string;
+	line: number;
+	scopeId: string;
+	reviewer: string;
+	round: number;
+	state: TaskReviewCommentState;
+	/** The agent's last answer in the thread. */
+	answer: string | null;
+};
+export type TaskReviewView = TaskReviewDocument & {
+	/** The task's changes now (all of them, from the task start). */
+	changes: { files: number; additions: number; deletions: number };
+	/** The task's tree differs from the trees the review read. */
+	changed: boolean;
+	members: TaskReviewMember[];
+	comments: TaskReviewCommentRow[];
+	/** Files changed since the trees of the last finished review; null — no such review. */
+	sinceLast: number | null;
+};
+export const emptyTaskReviewView: TaskReviewView = {
+	...emptyTaskReviewDocument,
+	changes: { files: 0, additions: 0, deletions: 0 },
+	changed: false,
+	members: [],
+	comments: [],
+	sinceLast: null,
+};
+/** Counts the strip and the PR sheet say: `N comments · N fixed · N answered`. */
+export function taskReviewCounts(view: Pick<TaskReviewView, 'comments'>) {
+	const count = (state: TaskReviewCommentState) =>
+		view.comments.filter((comment) => comment.state === state).length;
+	return {
+		comments: view.comments.length,
+		fixed: count('fixed'),
+		answered: count('answered'),
+		disputed: count('disputed'),
+	};
+}
+/** spec/diff-and-review#agent-review-rounds: a comment's state from its round, its thread and the review status of the diff. */
+export function taskReviewCommentState(comment: {
+	review?: { disputed?: boolean };
+	replies?: { agent: boolean }[];
+	addressed?: boolean;
+	resolved?: boolean;
+}): TaskReviewCommentState {
+	if (comment.resolved) return 'resolved';
+	if (comment.review?.disputed) return 'disputed';
+	if (comment.addressed) return 'fixed';
+	if (comment.replies?.some((reply) => reply.agent)) return 'answered';
+	return 'sent';
+}

@@ -1524,7 +1524,7 @@ export function App() {
 																								onMenu={taskMenuStable}
 																								onOpen={openTaskStable}
 																							/>
-																						) : item.crew ? (
+																						) : item.crew || item.reviewCrew ? (
 																							<CrewCard
 																								task={item}
 																								tasks={workspace.tasks}

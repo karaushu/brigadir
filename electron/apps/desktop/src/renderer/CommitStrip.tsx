@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { onSessionEvent } from './session-events';
+import { ReviewButton } from './TaskReview';
 import {
 	t,
 	type AgentTask,
@@ -235,6 +236,8 @@ export function CommitStrip({
 							className={styles.counts}
 							split
 						/>
+						{/* spec/diff-and-review#agent-review-surfaces: `Review…` beside Commit, with the review's state. */}
+						<ReviewButton task={task} locale={locale} />
 						{/* While the dialog's commits run (it may be hidden), the button keeps its width, a spinner in place of the name. */}
 						<Button
 							appearance="primary"

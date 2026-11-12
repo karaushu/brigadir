@@ -49,7 +49,9 @@ export function CrewCard({
 		if (!preview) void loadCollapsedCrews();
 	}, [preview]);
 	const rows = crewWorkerRows(task, tasks),
-		providers = task.crew ? specProviders(task.crew.root) : [];
+		providers = task.crew ? specProviders(task.crew.root) : [],
+		// spec/diff-and-review#agent-review-surfaces: a solo task's reviewers — the card has no helmet and counts reviewers.
+		reviewOnly = !task.crew;
 	// spec/appearance#evolution-redesign: a collapsed crew says what its workers do when the foreman has no activity line.
 	const working = rows.filter(
 			(row) => !['done', 'completed', 'backlog'].includes(row.task.status)
@@ -80,11 +82,15 @@ export function CrewCard({
 					onMenu={onMenu}
 					onOpen={onOpen}
 					{...(summary ? { summary } : {})}
-					lead={
-						<span className={styles.crewHelmet} title={t(locale, 'Brigadir')}>
-							<Glyph name="helmet" size={15} />
-						</span>
-					}
+					{...(reviewOnly
+						? {}
+						: {
+								lead: (
+									<span className={styles.crewHelmet} title={t(locale, 'Brigadir')}>
+										<Glyph name="helmet" size={15} />
+									</span>
+								),
+							})}
 					tail={
 						<>
 							{collapsed &&
@@ -96,7 +102,9 @@ export function CrewCard({
 										<Glyph name={provider === 'claude' ? 'claude' : 'openai'} size={11} />
 									</span>
 								))}
-							<span className={styles.crewCount} title={t(locale, 'Workers')}>
+							<span
+								className={styles.crewCount}
+								title={t(locale, reviewOnly ? 'Reviewers' : 'Workers')}>
 								{rows.length}
 							</span>
 							<span className={styles.crewChevronSpace} />

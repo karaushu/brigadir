@@ -12,7 +12,10 @@ import {
 	type HelperRun,
 	type Locale,
 	type ProjectReviewNotes,
+	type TaskReviewChoice,
+	fileCount,
 } from '@brigadir/core';
+import { ChangeCounts } from './ui/ChangeCounts';
 import {
 	saveActionAgent,
 	saveActionCrew,
@@ -40,7 +43,9 @@ export type ReviewChoice = {
 	notes: string;
 };
 /** spec/pull-requests-and-ci#review-launch: who opens the dialog and what starts the review; `start` answers whether the task started. */
-export type ReviewLaunchRequest = {
+export type ReviewLaunchRequest = PullRequestReviewRequest | TaskReviewRequest;
+type PullRequestReviewRequest = {
+	kind?: 'pr';
 	projectId: string;
 	scopeId: string;
 	number: number;
@@ -48,6 +53,22 @@ export type ReviewLaunchRequest = {
 	/** spec/appearance#evolution-redesign: from the review modal it is «agent suggestions in review», its own row of Customize per action. */
 	action: 'review' | 'reviewSuggestions';
 	start(choice: ReviewChoice): Promise<boolean>;
+};
+/**
+ * spec/diff-and-review#agent-review-start: `Review before PR` of a task — no `Where` (reviewers work in their own worktree), `What` instead;
+ * `start` resolves the reason it did not start, else null.
+ */
+export type TaskReviewRequest = {
+	kind: 'task';
+	projectId: string;
+	taskId: string;
+	title: string;
+	changes: { files: number; additions: number; deletions: number };
+	/** Files changed since the last finished review and its last round; null — none to start from. */
+	last: { files: number; round: number } | null;
+	/** The task's agent by name, for the caption of `Who`. */
+	agent: string;
+	start(choice: TaskReviewChoice): Promise<string | null>;
 };
 
 type LaunchStore = {
@@ -74,8 +95,10 @@ export const openReviewNotes = (projectId: string) =>
 
 /** spec/pull-requests-and-ci#review-launch: the instructions of a PR wait here until its review starts or the window reloads. */
 const drafts = new Map<string, string>();
-const draftKey = (request: Pick<ReviewLaunchRequest, 'projectId' | 'scopeId' | 'number'>) =>
-	`${request.projectId}·${request.scopeId}·${request.number}`;
+const draftKey = (request: ReviewLaunchRequest) =>
+	request.kind === 'task'
+		? `task·${request.projectId}·${request.taskId}`
+		: `${request.projectId}·${request.scopeId}·${request.number}`;
 
 /** The dialogs of the window: the review launch and the project's review notes, one of each at a time. */
 export function ReviewLaunchHost({ locale }: { locale: Locale }) {
@@ -112,7 +135,12 @@ function ReviewLaunchDialog({
 	locale: Locale;
 	close(): void;
 }) {
-	const key = draftKey(request);
+	const key = draftKey(request),
+		task = request.kind === 'task' ? request : null,
+		pr = request.kind === 'task' ? null : request,
+		action = pr ? pr.action : ('taskReview' as const);
+	const [since, setSince] = useState<'start' | 'last'>('start'),
+		[error, setError] = useState<string | null>(null);
 	const [text, setText] = useState(() => drafts.get(key) ?? ''),
 		[where, setWhere] = useState<'quick' | 'worktree'>(
 			() => useWorkspace.getState().appearance.reviewWhere ?? 'quick'
@@ -169,9 +197,9 @@ function ReviewLaunchDialog({
 		: [];
 	// The one-time choice, else the action's own agent or crew of Settings; none — the Default agent (spec/pull-requests-and-ci#review-crew).
 	const own = settings
-			? actionChoice(request.action, null, settings.actionAgents, settings.enabled, catalogs).run
+			? actionChoice(action, null, settings.actionAgents, settings.enabled, catalogs).run
 			: null,
-		ownCrew = settings?.actionCrews[request.action] ?? null,
+		ownCrew = settings?.actionCrews[action] ?? null,
 		chosenCrew = crew ?? (agent ? null : (ownCrew?.templateId ?? null)),
 		chosen = chosenCrew ? null : (agent ?? own),
 		shown = segment ?? (chosenCrew ? 'crew' : 'agent'),
@@ -180,9 +208,9 @@ function ReviewLaunchDialog({
 			!pick || (pick.provider === fallback?.provider && pick.model === fallback.model);
 	const crews = library?.crews ?? [];
 	const rememberPick = (pick: HelperRun | null) => {
-		if (isDefault(pick) && ownCrew) void saveActionCrew(request.action, null).catch(() => {});
+		if (isDefault(pick) && ownCrew) void saveActionCrew(action, null).catch(() => {});
 		void saveActionAgent(
-			request.action,
+			action,
 			isDefault(pick)
 				? null
 				: {
@@ -198,9 +226,7 @@ function ReviewLaunchDialog({
 	const rememberCrew = (id: string) => {
 		const template = crews.find((item) => item.id === id);
 		if (template)
-			void saveActionCrew(request.action, { templateId: template.id, name: template.name }).catch(
-				() => {}
-			);
+			void saveActionCrew(action, { templateId: template.id, name: template.name }).catch(() => {});
 	};
 	const chooseAgent = (value: string) => {
 		const item = agents.find((entry) => `${entry.provider}:${entry.model}` === value) ?? null,
@@ -227,17 +253,19 @@ function ReviewLaunchDialog({
 		setFailed(false);
 		// A crew picked by switching the segment without opening the list is the first one.
 		const pickedCrew = shown === 'crew' ? (crew ?? (chosenCrew ? null : crewValue || null)) : null;
-		const ok = await request
-			.start({
-				where,
-				agent: shown === 'crew' ? null : agent,
-				crew: pickedCrew,
-				notes: text,
-			})
-			.catch(() => false);
+		const reason = task
+			? await task
+					.start({ agent: shown === 'crew' ? null : agent, crew: pickedCrew, notes: text, since })
+					.catch((cause: unknown) => (cause instanceof Error ? cause.message : String(cause)))
+			: (await pr!
+						.start({ where, agent: shown === 'crew' ? null : agent, crew: pickedCrew, notes: text })
+						.catch(() => false))
+				? null
+				: '';
 		setBusy(false);
-		if (!ok) {
+		if (reason !== null) {
 			setFailed(true);
+			setError(reason || null);
 			return;
 		}
 		drafts.delete(key);
@@ -249,12 +277,12 @@ function ReviewLaunchDialog({
 			? t(locale, 'In the main tree, the branch stays')
 			: t(locale, 'Branch {branch}, dependencies can be installed and run').replace(
 					'{branch}',
-					`pr-${request.number}-review`
+					`pr-${pr?.number ?? 0}-review`
 				);
 	return (
 		<ModalDialog
-			title={t(locale, 'Review with an agent')}
-			note={`#${request.number} · ${request.title}`}
+			title={t(locale, task ? 'Review before PR' : 'Review with an agent')}
+			note={task ? task.title : `#${pr!.number} · ${request.title}`}
 			locale={locale}
 			width={520}
 			close={close}
@@ -327,18 +355,54 @@ function ReviewLaunchDialog({
 					</div>
 				)}
 				<div className={styles.grid} data-size="s">
-					<span className={styles.label}>{t(locale, 'Where the agent works')}</span>
-					<Segments
-						label={t(locale, 'Where the agent reviews')}
-						value={where}
-						disabled={busy}
-						onChange={(value) => setWhere(value as 'quick' | 'worktree')}
-						options={[
-							{ value: 'quick', label: t(locale, 'Quickly') },
-							{ value: 'worktree', label: t(locale, 'In a worktree') },
-						]}
-					/>
-					<span className={styles.caption}>{caption}</span>
+					{task ? (
+						<>
+							<span className={styles.label}>{t(locale, 'What')}</span>
+							<Segments
+								label={t(locale, 'What the reviewers read')}
+								value={since}
+								disabled={busy}
+								onChange={(value) => setSince(value as 'start' | 'last')}
+								options={[
+									{ value: 'start', label: t(locale, 'All changes') },
+									...(task.last
+										? [{ value: 'last', label: t(locale, 'Since the last review') }]
+										: []),
+								]}
+							/>
+							<span className={styles.caption}>
+								{since === 'last' && task.last ? (
+									t(locale, 'Changed since round {round} of the last review: {files}')
+										.replace('{round}', String(task.last.round))
+										.replace('{files}', fileCount(locale, task.last.files))
+								) : (
+									<>
+										{`${t(locale, 'From the task start')} · ${fileCount(locale, task.changes.files)} `}
+										<ChangeCounts
+											additions={task.changes.additions}
+											deletions={task.changes.deletions}
+											locale={locale}
+										/>
+									</>
+								)}
+							</span>
+						</>
+					) : (
+						<>
+							<span className={styles.label}>{t(locale, 'Where the agent works')}</span>
+							<Segments
+								label={t(locale, 'Where the agent reviews')}
+								value={where}
+								disabled={busy}
+								onChange={(value) => setWhere(value as 'quick' | 'worktree')}
+								options={[
+									{ value: 'quick', label: t(locale, 'Quickly') },
+									{ value: 'worktree', label: t(locale, 'In a worktree') },
+								]}
+							/>
+							<span className={styles.caption}>{caption}</span>
+						</>
+					)}
 					<span className={styles.label}>{t(locale, 'Who reviews')}</span>
 					<div className={styles.who}>
 						<Segments
@@ -390,19 +454,30 @@ function ReviewLaunchDialog({
 							/>
 						)}
 					</div>
-					{shown === 'crew' && (
+					{task ? (
 						<span className={styles.caption}>
-							{t(locale, 'The foreman passes your notes to each reviewer')}
+							{t(
+								locale,
+								'Up to 2 rounds: comments go to {agent}, the reviewers check the fixes'
+							).replace('{agent}', task.agent)}
 						</span>
+					) : (
+						shown === 'crew' && (
+							<span className={styles.caption}>
+								{t(locale, 'The foreman passes your notes to each reviewer')}
+							</span>
+						)
 					)}
 				</div>
 				<div className={styles.remember}>
 					<RememberCheck
 						label={t(
 							locale,
-							request.action === 'review'
-								? 'Remember for reviews with an agent'
-								: 'Remember for agent suggestions in review'
+							action === 'taskReview'
+								? 'Remember for reviews before PR'
+								: action === 'review'
+									? 'Remember for reviews with an agent'
+									: 'Remember for agent suggestions in review'
 						)}
 						checked={remember}
 						onChange={(checked) => {
@@ -415,7 +490,9 @@ function ReviewLaunchDialog({
 				</div>
 				{failed && (
 					<p className={styles.error} role="alert">
-						{t(locale, 'Could not start the review task.')}
+						{task
+							? `${t(locale, 'Could not start the review')}${error ? `: ${error}` : '.'}`
+							: t(locale, 'Could not start the review task.')}
 					</p>
 				)}
 			</form>

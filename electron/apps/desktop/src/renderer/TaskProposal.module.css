@@ -1,50 +1,6 @@
 /* spec/tasks#agent-created-tasks: the proposed task, a card of the plan card's family (PlanApproval.module.css, spec/chat-turns-plans-and-questions#plan-row). */
 /* spec/appearance#evolution-redesign: a card of the log lifts off it — no frame, the --lift shadow, a 12-px radius;
    inside, hairlines part the head, the body and the foot. */
-.card {
-	position: relative;
-	margin: 0 16px 16px;
-	border: 0;
-	border-radius: 12px;
-	background: var(--card);
-	box-shadow: var(--lift);
-}
-.head {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	min-width: 0;
-	min-height: 36px;
-	box-sizing: border-box;
-	padding: 4px 10px 4px 14px;
-	border-bottom: 1px solid var(--hair);
-}
-.head > svg {
-	flex: none;
-	color: var(--accent);
-}
-.head > strong {
-	flex: none;
-	font-size: var(--text-13);
-	font-weight: 600;
-	color: var(--fg);
-}
-.wait {
-	flex: none;
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	background: var(--amber);
-}
-.hint {
-	flex: 0 1 auto;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: var(--text-10);
-	color: var(--fg2);
-}
 .body {
 	display: flex;
 	flex-direction: column;
@@ -93,58 +49,6 @@
 }
 .whole:hover {
 	text-decoration: underline;
-}
-.chips {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	margin-top: 2px;
-}
-.chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	max-width: 260px;
-	height: 24px;
-	min-width: 24px;
-	padding: 0 10px;
-	justify-content: center;
-	box-sizing: border-box;
-	border: 0;
-	border-radius: 6px;
-	background: var(--tint);
-	font-size: var(--text-12);
-	color: var(--fg);
-}
-.chip > svg {
-	flex: none;
-	color: var(--fg2);
-}
-.chip[data-folder] > svg {
-	color: var(--accent);
-}
-.chip > span {
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.foot {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	min-width: 0;
-	padding: 7px 10px 7px 14px;
-	border-top: 1px solid var(--hair);
-}
-.note {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: var(--text-10);
-	color: var(--fg2);
 }
 /* The folded row; hover covers the whole row (rule 15). */
 /* The folded card is a 30-px tint strip of the log; open, its body stays on the tint. */

@@ -390,6 +390,32 @@ export class Reviews {
 			return comments.filter((comment) => !ids.has(comment.id));
 		});
 	}
+	/**
+	 * spec/diff-and-review#agent-review-rounds: `Back to the agent` on a disputed reviewer's comment — a new version of it goes to the task's agent as the
+	 * person's own; the thread keeps the reviewer and the round.
+	 */
+	async sendBack(key: TaskKey, id: string): Promise<SessionCommand> {
+		await this.mutate(key, (comments) => {
+			const comment = comments.find((item) => item.id === id);
+			if (!comment?.review) throw new Error('Comment is missing');
+			return comments.map((item) =>
+				item.id === id
+					? {
+							...item,
+							version: item.version + 1,
+							review: { ...item.review!, disputed: false },
+						}
+					: item
+			);
+		});
+		const comment = (await this.read(key, null)).comments.find((item) => item.id === id)!;
+		const comments = [{ id: comment.id, version: comment.version }];
+		return {
+			kind: 'submitReview',
+			text: `The person sends this reviewer's comment back to you: fix it as it asks.\n\n1. File ${JSON.stringify(comment.anchor.path)}, scope ${comment.anchor.scopeId}, ${comment.anchor.side} side, blob ${comment.anchor.blob}, lines ${comment.anchor.start}-${comment.anchor.end}.\nComment by ${comment.review?.reviewer ?? 'the reviewer'}: ${comment.text}\nQuoted code: ${JSON.stringify(comment.anchor.quote.join('\n'))}`,
+			review: { id: sha(JSON.stringify(comments)), comments },
+		};
+	}
 	async prepare(key: TaskKey): Promise<SessionCommand> {
 		const review = await this.read(key, null);
 		const pending = [

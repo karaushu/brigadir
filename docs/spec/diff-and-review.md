@@ -597,18 +597,24 @@ reviewers check again — at most two rounds — before the person decides. It i
   the row `Review skipped` with `Start review`. A proposal of an earlier turn that a new turn followed stays as that row.
 - **Review strip** in the composer deck above the input, with the queue and background strips, while the review lives
   and after it until the next change, `×` or archive. One S row: state glyph, `Review` (bold), the state in muted text,
-  actions, chevron; the chevron (or a click on the row) shows a row per reviewer — provider glyph, name, its state
-  and time (`reading · 1m 12s`, `3 comments · waits`, `approved`), `Log`.
+  actions, chevron. The chevron (or a click on the row) opens two sections: `Reviewers N` — a row per reviewer: provider
+  glyph, `name · provider`, its state and time (`reading · 1m 12s`, `3 comments`, `checking`, `approved`), `Log`; and
+  `Comments N` once comments came — a row per comment: its text, `file:line · reviewer` (mono, muted) and a tag `sent`,
+  `fixed` (`--green`, the text struck through), `answered` (`--fg3`) or `disputed` (`--amber`). A click on a comment
+  opens its thread in the diff. A disputed comment stands first and open: the agent's answer as a quote, `Back to the
+  agent`, `Keep as is`. A passed review keeps the list with `Review again…` and `Create PR…`.
 
 | State | Row | Actions |
 | --- | --- | --- |
 | Round running | `round n of 2 · Astra reading · Opus reading`; round 2 adds `checking the fixes · N fixed · N answered` | `Stop` |
-| Agent fixing | `<agent> fixes N comments` | `Show` (Changes on the first comment), `Stop` |
+| Agent fixing | `<agent> fixes N comments` | `Stop` |
 | Passed (`--green-soft`) | `Review passed · N comments · N fixed · N answered` | `Create PR…`, `×` |
-| Disputed (`--amber-soft`, open) | `Your call · <reviewer> disputes N comments`; under it each disputed comment, the agent's answer as a quote, `Back to the agent`, `Keep as is` | chevron |
+| Disputed (`--amber-soft`, open) | `Your call · <reviewer> disputes N comments`; the sections open with the disputed comments first | chevron |
 | Stopped | `Review stopped · N comments came` | `Start again…`, `×` |
 | Did not start | `Review did not start · <reviewer>: <reason>` (`--red` glyph) | `Start with <other agent>` when another provider is signed in, `Retry` |
 
+- **The comment count is a link** wherever it stands — the strip row and the chat rows (`N comments`): a dotted
+  underline in the text colour at rest, solid on hover; a click expands the strip on `Comments`.
 - `Log` (strip, sidebar row, thread) opens the reviewer's task, which shows its log read-only.
 - **Chat rows** (service rows, not cards): `review · <who> · round 1 of 2 started`; `review · Astra, Opus → <agent> ·
   round 1 of 2 · N comments`; `review · Astra, Opus · approved · round 2 of 2 passed`; `review · Astra · <file:line> ·

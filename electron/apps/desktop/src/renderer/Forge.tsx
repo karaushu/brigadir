@@ -1,4 +1,5 @@
 import { HelperSplit, useHelperRun } from './HelperAgent';
+import { ReviewReminder } from './TaskReview';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { onSessionEvent } from './session-events';
 import {
@@ -687,6 +688,8 @@ function ForgeDialog({
 							{t(locale, 'Uncommitted changes stay local and are not included in this PR.')}
 						</p>
 					)}
+					{/* spec/diff-and-review#agent-review-pr: whether the agents reviewed these changes; Create PR stays available. */}
+					<ReviewReminder task={task} locale={locale} onLeave={close} />
 					{own && pr.canRename && (
 						<label className={styles.field}>
 							{t(locale, 'Branch')}

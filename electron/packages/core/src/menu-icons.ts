@@ -273,6 +273,7 @@ export const noteMenuIcons = {
 	chat: 'chat',
 	reveal: 'folder',
 	copy: 'copy',
+	markdown: 'copy-text',
 	delete: 'trash',
 } as const satisfies Record<string, MenuIcon>;
 /** spec/notifications-slack-notes-and-schedules#schedules: a schedule's row menu in the Schedules section, and the menu bar's Schedules items. */

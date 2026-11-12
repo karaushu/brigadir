@@ -75,6 +75,7 @@ export const webChannels: Readonly<Record<IpcMethod, WebAccess>> = {
 	stopNoteChat: 'deny',
 	undoNoteEdit: 'deny',
 	onNoteChatEvent: 'deny',
+	noteCopyMenu: 'deny',
 	noteProjectMenu: 'deny',
 	noteTaskProjectMenu: 'deny',
 	attachNote: 'deny',

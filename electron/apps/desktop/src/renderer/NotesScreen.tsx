@@ -18,7 +18,7 @@ import { Glyph } from './ui/Glyph';
 import { ProjectIcon } from './ui/ProjectIcon';
 import { SearchField } from './ui/PanelSearch';
 import { ConfirmDialog } from './ui/ConfirmDialog';
-import { toastError } from './ui/Toast';
+import { showToast, toastError } from './ui/Toast';
 import { useCommandShortcut } from './ui/use-command-shortcut';
 import { ProjectTitlebar } from './ProjectBoard';
 import { NoteChat } from './NoteChat';
@@ -316,6 +316,15 @@ export function NotesBody({
 			);
 		else if (action) onSelect(id);
 	};
+	const copyNote = async (id: string, target: HTMLElement) => {
+		const box = target.getBoundingClientRect();
+		try {
+			if (await window.brigadir.noteCopyMenu(id, note.text, box.left, box.bottom + 4))
+				showToast(t(locale, 'Copied'));
+		} catch {
+			toastError(t(locale, 'Could not copy the note.'));
+		}
+	};
 	const pickProject = async (id: string, target: HTMLElement) => {
 		const box = target.getBoundingClientRect();
 		const choice = await window.brigadir.noteProjectMenu(id, box.left, box.bottom + 4);
@@ -393,6 +402,12 @@ export function NotesBody({
 										: ''}
 							</span>
 							<span className={s.gap} />
+							<IconButton
+								size="s"
+								label={t(locale, 'Copy note')}
+								onClick={(event) => void copyNote(open, event.currentTarget)}>
+								<Glyph name="copy" size={14} />
+							</IconButton>
 							{/* spec/notifications-slack-notes-and-schedules#notes: with the chat open the header is narrow — Create task is its glyph, «Saved» goes. */}
 							{chatOpen ? (
 								<IconButton

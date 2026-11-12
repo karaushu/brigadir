@@ -226,6 +226,8 @@ export type DesktopBridge = {
 	onNoteChatEvent(listener: (event: import('./note-chat').NoteChatEvent) => void): () => void;
 	/** The «…» menu of a note: what the person chose; `reveal` and `copy` are done by the menu itself. */
 	noteMenu(id: string): Promise<'task' | 'chat' | 'delete' | null>;
+	/** `Copy note` (spec/notifications-slack-notes-and-schedules#note-file): the menu under (x, y); main copies `text` as Markdown or as a `.md` file. */
+	noteCopyMenu(id: string, text: string, x: number, y: number): Promise<'markdown' | 'file' | null>;
 	/** The project picker of a note's header: a project id, `none` — no project, null — nothing chosen. */
 	noteProjectMenu(id: string, x: number, y: number): Promise<string | null>;
 	/** A note without a project: the project of the task made from it; null — nothing chosen. */

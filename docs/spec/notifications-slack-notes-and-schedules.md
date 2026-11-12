@@ -306,9 +306,10 @@ A note is a plain Markdown file with an optional project and one persistent agen
 
 - Files (`NotesStore`, writes serialized): `notes/<id>.md` (text), `notes/<id>.json` (`{schemaVersion: 1, project: <id>|null, createdAt, tasks: [{taskId, projectId}]}`), `notes/<id>.chat.jsonl` (chat), `notes/<id>/` (chat files). Id `note-<base36>` never changes; the title is the first Markdown heading, else the first non-empty line, plain, ≤ 120 chars. Max 512 KiB.
 - Editor: the shared `CodeEditor` with `Code | Side by side | Preview` ([Editor](editor.md#markdown-views)); saves 500 ms after an edit, header shows `Saving…` → `Saved`; failure → `Could not save the note. Changes are kept.` with `Retry`.
-- Header (row S 24): title, project picker (`No project` or any project, changeable any time), view switch, `Create task`, chat toggle, `…`. With the chat open, `Create task` shrinks to its glyph and `Saved` hides.
+- Header (row S 24): title, project picker (`No project` or any project, changeable any time), `Copy note`, `Create task`, view switch, chat toggle, `…`. With the chat open, `Create task` shrinks to its glyph and `Saved` hides.
+- `Copy note` (copy glyph) opens a menu under it: `Copy Markdown` puts the text as it is in the editor on the clipboard; `Copy as file` writes that text to `<title>.md` (characters a file name cannot hold become spaces; `Untitled note.md` without a title) in a temporary folder and puts the file on the clipboard, to paste into Finder, a chat or a mail. Done → toast `Copied`; failure → `Could not copy the note.`
 - Delete: `ui/ConfirmDialog` `Delete the note?` — "The note and its chat will be deleted. Tasks from it stay." Tasks lose the link.
-- IPC: `notes:list`, `notes:read`, `notes:write`, `notes:create`, `notes:delete`, `notes:set-project`, `notes:link-task`, `notes:changed`, `notes:menu`, `notes:project-menu`, `notes:task-project-menu`, `notes:attach`, `notes:chat-*`.
+- IPC: `notes:list`, `notes:read`, `notes:write`, `notes:create`, `notes:delete`, `notes:set-project`, `notes:link-task`, `notes:changed`, `notes:menu`, `notes:copy-menu`, `notes:project-menu`, `notes:task-project-menu`, `notes:attach`, `notes:chat-*`.
 
 <a id="note-markdown"></a>
 ### Writing Markdown in a note

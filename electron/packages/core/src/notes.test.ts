@@ -3,6 +3,7 @@ import {
 	isNoteId,
 	isNoteMeta,
 	newNoteId,
+	noteFileName,
 	noteTaskLine,
 	noteTaskLinkPattern,
 	noteTitle,
@@ -34,5 +35,13 @@ describe('notes (spec/notifications-slack-notes-and-schedules#notes)', () => {
 		expect(withNoteTaskLine('a\nb\n', line, null)).toBe(`a\nb\n${line}\n`);
 		const [match] = [...`x ${line}`.matchAll(noteTaskLinkPattern)];
 		expect([match![2], match![3]]).toEqual(['business', 'phone-checks']);
+	});
+	it('names the copied file after the title, without characters a file name cannot hold', () => {
+		expect(noteFileName('# Next.js migration to AppRouter\n\ntext', 'Untitled note')).toBe(
+			'Next.js migration to AppRouter.md'
+		);
+		expect(noteFileName('# a/b: c?*\n', 'Untitled note')).toBe('a b c.md');
+		expect(noteFileName('', 'Untitled note')).toBe('Untitled note.md');
+		expect(noteFileName('# ...\n', 'Untitled note')).toBe('Untitled note.md');
 	});
 });

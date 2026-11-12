@@ -504,6 +504,17 @@ export const ipcTable = {
 			a[1].title.length <= 400 &&
 			(a[2] === null || (Number.isSafeInteger(a[2]) && Number(a[2]) >= 1)),
 	},
+	noteCopyMenu: {
+		kind: 'invoke',
+		channel: 'notes:copy-menu',
+		class: 'client',
+		arity: 4,
+		validate: (a) =>
+			a.length === 4 &&
+			isNoteId(a[0]) &&
+			isNoteText(a[1]) &&
+			[a[2], a[3]].every((value) => typeof value === 'number' && Number.isFinite(value)),
+	},
 	noteProjectMenu: {
 		kind: 'invoke',
 		channel: 'notes:project-menu',

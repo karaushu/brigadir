@@ -280,10 +280,12 @@ import {
 import { Slack } from './slack';
 import type { SlackSideThread, SlackTaskInput } from './slack-mentions';
 import { SlackSessions } from './slack-sessions';
+import { copyNoteFile } from './note-copy';
 import type { SlackAnswerResult, SlackSendResult } from './slack-answers';
 import { randomUUID } from 'node:crypto';
 import {
 	idleStopped,
+	noteFileName,
 	noteTitle,
 	notificationPermissionChoices,
 	pendingInputs,
@@ -3719,6 +3721,24 @@ void app.whenReady().then(async () => {
 			{ id: 'delete', label: t(locale, 'Delete note…'), icon: noteMenuIcons.delete },
 		])) as 'task' | 'chat' | 'delete' | null;
 	});
+	handleClient(
+		'notes:copy-menu',
+		async (client, id: string, text: string, x: number, y: number) => {
+			const locale = currentLocale();
+			const choice = (await ui.menu(
+				client,
+				[
+					{ id: 'markdown', label: t(locale, 'Copy Markdown'), icon: noteMenuIcons.markdown },
+					{ id: 'file', label: t(locale, 'Copy as file'), icon: noteMenuIcons.copy },
+				],
+				{ x, y }
+			)) as 'markdown' | 'file' | null;
+			if (choice === 'markdown') await clipboard.writeText(text);
+			else if (choice === 'file')
+				await copyNoteFile(id, noteFileName(text, t(locale, 'Untitled note')), text);
+			return choice;
+		}
+	);
 	handleClient('notes:task-project-menu', async (client) => {
 		const { projects: list } = await readWorkspace(
 			process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}

@@ -44,6 +44,16 @@ export function noteTitle(text: string): string {
 		.trim();
 	return plain.length > 120 ? `${plain.slice(0, 119)}…` : plain;
 }
+/** `Copy as file` (spec/notifications-slack-notes-and-schedules#note-file): the note's title as a file name that every system can hold. */
+export function noteFileName(text: string, untitled: string): string {
+	const name = noteTitle(text)
+		.replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.replace(/^[\s.]+|[\s.]+$/g, '')
+		.slice(0, 100)
+		.trim();
+	return `${name || untitled}.md`;
+}
 export function isNoteTaskLink(value: unknown): value is NoteTaskLink {
 	return isRecord(value) && isId(value.taskId) && isId(value.projectId);
 }

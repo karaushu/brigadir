@@ -25,7 +25,7 @@ The bottom row of the `Diff` tab of the Changes panel (`CommitStrip`, row size `
 | Part | Behavior |
 | --- | --- |
 | Left | Snapshot picker `Current snapshot · N ▾` (`Saved snapshots · N` when the agent is not connected). Opens the same `Compare snapshots` popover as the filter in the Changes header (`ui/DiffOptions`, prop `snapshot`); the snapshot name truncates with "…" in a narrow panel. |
-| Right | `+N −M` — sum over all files in the commit preview of all repos (one row per task in a monorepo) — and the soft primary button `Commit` (key `Commit changes`) with tooltip `Commit… · ⌥⌘K`. It opens the [commit dialog](#commit-dialog). Counts and button never shrink. |
+| Right | `+N −M` — sum over all files in the commit preview of all repos (one row per task in a monorepo) — then `Review…` with the state of the task's review before the PR ([Diff and review](diff-and-review.md#agent-review-surfaces); not in the main tree) and the soft primary button `Commit` (key `Commit changes`) with tooltip `Commit… · ⌥⌘K`. It opens the [commit dialog](#commit-dialog). Counts and button never shrink. |
 
 States:
 

@@ -158,7 +158,8 @@ export type SessionCommand =
 	  }
 	| { kind: 'stopReview' }
 	| { kind: 'dismissReviewProposal' }
-	| { kind: 'submitReview'; text: string; review: ReviewBatch }
+	/** `crew`: spec/diff-and-review#agent-review-rounds — the reviewers' batch of the task's own review, a service row instead of the person's message. */
+	| { kind: 'submitReview'; text: string; review: ReviewBatch; crew?: CrewTurnMarker }
 	| { kind: 'removeQueuedPrompt'; id: string }
 	/** spec/composer-steering-queue-and-ghost#steering-hold: «Надіслати зараз» on a queued row — the host holds it for the running turn like a fresh Enter. */
 	| { kind: 'steerQueuedPrompt'; id: string }
@@ -355,7 +356,8 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 				text(v.text) &&
 				v.text.trim().length > 0 &&
 				v.text.length <= 1_000_000 &&
-				isReviewBatch(v.review)
+				isReviewBatch(v.review) &&
+				(v.crew === undefined || isCrewTurnMarker(v.crew))
 			);
 		case 'attachContext':
 		case 'removeContext':

@@ -208,7 +208,13 @@ export async function startHost(config: HostConfig) {
 		busy: () => busy,
 		foreman: foremanTask,
 		existing: () => crewHost,
-		submitReview: (text, review) => command({ kind: 'submitReview', text, review }),
+		submitReview: (text, review, round) =>
+			command({
+				kind: 'submitReview',
+				text,
+				review,
+				crew: { kind: 'review-comments', round, comments: review.comments.length },
+			}),
 		crew: async (start): Promise<CrewHost> => {
 			if (crew && !foremanTask) throw new Error('A crew worker is reviewed by its crew.');
 			const current = await store.task(config.key),
@@ -441,7 +447,7 @@ export async function startHost(config: HostConfig) {
 				...(attachments.length
 					? { attachments: attachments.map((value) => value.attachment) }
 					: {}),
-				...(c.kind === 'prompt' && c.crew ? { crew: c.crew } : {}),
+				...((c.kind === 'prompt' || c.kind === 'submitReview') && c.crew ? { crew: c.crew } : {}),
 			});
 		} catch (error) {
 			busy = false;

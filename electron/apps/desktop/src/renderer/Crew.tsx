@@ -658,7 +658,12 @@ export function CrewEventRow({
 			);
 		}
 		// spec/crew#parts: the dropped part shows as its own service row (crew.part.dropped); the prompt to the foreman adds none.
-		if (marker.kind === 'question' || marker.kind === 'part-dropped') return null;
+		if (
+			marker.kind === 'question' ||
+			marker.kind === 'part-dropped' ||
+			marker.kind === 'review-comments'
+		)
+			return null;
 		return (
 			<div className={styles.service} data-crew-row="plan-decision">
 				<Glyph name="helmet" size={12} />

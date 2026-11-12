@@ -10,6 +10,8 @@ import {
 	t,
 	type AgentTask,
 	type Locale,
+	commentCount,
+	type TaskReviewView,
 } from '@brigadir/core';
 import { cardTree, statusLabels, taskActivityText } from './task-line';
 import { RateLimitTime } from './RateLimit';
@@ -18,6 +20,7 @@ import { TitleMark } from './ui/TitleMark';
 import { BranchName } from './ui/BranchName';
 import { useBrowserLive } from './browser-live';
 import { useWorkspace } from './store';
+import { useTaskReview } from './TaskReview';
 import { Glyph } from './ui/Glyph';
 import { StatusIcon } from './ui/Controls';
 import { ChangeCounts } from './ui/ChangeCounts';
@@ -51,7 +54,8 @@ export function CrewCard({
 	const rows = crewWorkerRows(task, tasks),
 		providers = task.crew ? specProviders(task.crew.root) : [],
 		// spec/diff-and-review#agent-review-surfaces: a solo task's reviewers — the card has no helmet and counts reviewers.
-		reviewOnly = !task.crew;
+		reviewOnly = !task.crew,
+		review = useTaskReview(reviewOnly && !preview ? task : null);
 	// spec/appearance#evolution-redesign: a collapsed crew says what its workers do when the foreman has no activity line.
 	const working = rows.filter(
 			(row) => !['done', 'completed', 'backlog'].includes(row.task.status)
@@ -135,12 +139,35 @@ export function CrewCard({
 							locale={locale}
 							onOpen={onOpen}
 							onMenu={onMenu}
+							{...(reviewOnly ? reviewerState(review, row.task.id, locale) : {})}
 						/>
 					))}
 				</div>
 			)}
 		</div>
 	);
+}
+/** spec/diff-and-review#agent-review-surfaces: `Review · round n`, `N comments · waits`, `Approved`, `N disputed comments`. */
+function reviewerState(view: TaskReviewView, taskId: string, locale: Locale): { state?: string } {
+	const member = view.members.find((item) => item.taskId === taskId),
+		round = Math.max(1, view.review?.round ?? 1);
+	if (!member) return {};
+	switch (member.state) {
+		case 'starting':
+		case 'reading':
+		case 'checking':
+			return {
+				state: `${t(locale, 'Review')} · ${t(locale, 'round {n}').replace('{n}', String(round))}`,
+			};
+		case 'comments':
+			return { state: `${commentCount(locale, member.comments)} · ${t(locale, 'waits')}` };
+		case 'approved':
+			return { state: t(locale, 'Approved') };
+		case 'disputed':
+			return { state: `${commentCount(locale, member.comments)} · ${t(locale, 'disputed')}` };
+		default:
+			return {};
+	}
 }
 /** One worker line of a crew card; its own component so each line keeps its spec/notifications-slack-notes-and-schedules#macos-permission attention. */
 function WorkerRow({
@@ -149,10 +176,13 @@ function WorkerRow({
 	locale,
 	onOpen,
 	onMenu,
+	state,
 }: {
 	row: ReturnType<typeof crewWorkerRows>[number];
 	selected: boolean;
 	locale: Locale;
+	/** spec/diff-and-review#agent-review-surfaces: a reviewer of the task's review says its state instead of its task title. */
+	state?: string;
 	onOpen(task: AgentTask): void;
 	onMenu(task: AgentTask): void;
 }) {
@@ -218,7 +248,7 @@ function WorkerRow({
 				<span className={styles.workerCopy}>
 					<span ref={title} className={styles.workerTitle}>
 						<span>{crewLabel(locale, row.name)} · </span>
-						{worker.title}
+						{state ?? worker.title}
 					</span>
 					{/* spec/agents-and-providers#tools-awareness: the activity line of a task card, while the worker waits for the project's one device. */}
 					{waitsForSimulator && (

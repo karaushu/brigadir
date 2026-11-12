@@ -29,7 +29,7 @@ export type TaskReviewDeps = {
 	/** The crew host that already runs the task's review after a restart, if any. */
 	existing(): CrewHost | null;
 	/** The round's comments as the task's own review batch (the `submitReview` command). */
-	submitReview(text: string, review: ReviewBatch): Promise<void>;
+	submitReview(text: string, review: ReviewBatch, round: number): Promise<void>;
 	/** A task in a crew of its own: its rounds start only when its tree changed, since it hands fixes to workers. */
 	foreman: boolean;
 };
@@ -193,7 +193,7 @@ export class TaskReviewLife {
 			guidance: () => this.doc.review?.guidance ?? '',
 			submitReview: async (text, review) => {
 				this.batch = review.id;
-				await this.deps.submitReview(text, review);
+				await this.deps.submitReview(text, review, Math.max(1, this.doc.review?.round ?? 1));
 			},
 			round: (run, state) => this.onRound(run, state),
 		};

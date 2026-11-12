@@ -113,7 +113,7 @@
 	flex: none;
 	color: var(--fg2);
 }
-.details li > span {
+.details li > span:not(.tag) {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;

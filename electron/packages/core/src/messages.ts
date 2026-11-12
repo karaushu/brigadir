@@ -2317,6 +2317,7 @@ const uk = {
 	resolved: 'закрито',
 	sent: 'надіслано',
 	'round {n}': 'раунд {n}',
+	waits: 'чекає',
 	answered: 'з відповіддю',
 	'From the task start': 'Від початку задачі',
 	'Keep as is': 'Лишити як є',

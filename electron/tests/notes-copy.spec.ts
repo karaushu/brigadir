@@ -71,9 +71,9 @@ test('Copy note copies the Markdown or the note as a titled file @area:notes', a
 		expect(formats).toContain('text/uri-list');
 		const url = await app.evaluate(async ({ clipboard }) => {
 			const item = (await clipboard.read()).find((entry) => entry.types.includes('text/uri-list'));
-			return item ? await (await item.getType('text/uri-list')).text() : '';
+			return item ? await ((await item.getType('text/uri-list')) as Blob).text() : '';
 		});
-		const path = fileURLToPath(url.trim().split(/\r?\n/)[0]);
+		const path = fileURLToPath(url.trim().split(/\r?\n/)[0] ?? '');
 		expect(basename(path)).toBe('Migration plan v2.md');
 		expect(await readFile(path, 'utf8')).toBe(text);
 	} finally {

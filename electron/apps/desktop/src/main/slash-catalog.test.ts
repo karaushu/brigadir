@@ -130,6 +130,8 @@ describe('spec/composer#slash-menu: список `/` з диска', () => {
 		expect(catalog.tools.map((tool) => tool.tool)).toEqual([
 			'ask_user',
 			'create_task',
+			'tasks_list',
+			'task_send',
 			'add_folder',
 			'browser_open',
 			'browser_state',
@@ -181,6 +183,8 @@ describe('spec/composer#slash-menu: список `/` з диска', () => {
 		expect(off.tools.map((tool) => tool.tool)).toEqual([
 			'ask_user',
 			'create_task',
+			'tasks_list',
+			'task_send',
 			'add_folder',
 			'console_list',
 			'console_read',
@@ -197,6 +201,8 @@ describe('spec/composer#slash-menu: список `/` з диска', () => {
 		expect(noPr.tools.map((tool) => tool.tool)).toEqual([
 			'ask_user',
 			'create_task',
+			'tasks_list',
+			'task_send',
 			'add_folder',
 			'console_list',
 			'console_read',

@@ -44,6 +44,7 @@ it('spec/notifications-slack-notes-and-schedules#notification-center: keeps entr
 		openTask() {},
 		openRun() {},
 		changed() {},
+		now: () => Date.UTC(2026, 9, 29, 12),
 	});
 	const center = await again.center();
 	expect(center.entries).toHaveLength(1);

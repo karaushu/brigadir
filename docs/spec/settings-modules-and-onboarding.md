@@ -9,17 +9,17 @@ Related: theme, accent, fonts and the settings form look in [Appearance](appeara
 
 `LayoutSettings` (renderer) is a modal `<dialog>` opened with `⌘,` (`Settings…`). Its header has the title and `Esc` (`ui/PopupClose`), then a tab row.
 
-| Tab | Key | Height (all `min(…, 100vh − 48px)`) | Contents |
-| --- | --- | --- | --- |
-| Appearance | `appearance` | 900 | `Appearance` (Theme, Accent), `Toolbar labels`, `Task layout`, `Tasks` ▸ `View`, typography, `Keyboard` ▸ `Keymap` |
-| Editor | `editor` | 440 | see [Editor](editor.md), [Code intelligence](editor-code-intelligence.md) |
-| Language | `language` | 470 | `Interface language` (`Follow system`, `Українська`, `English`), restart line; `Updates` card with the `Brigadir` row ([auto-update](architecture-and-platform.md#auto-update)) |
-| Notifications | `notifications` | 560 | `When`, `macOS permission`, `Sound` with per-slot sounds, quiet-while-viewing |
-| Agents | `agents` | 500 | `Providers`, `Agents`, `Tasks` cards ([below](#agents-tab)) |
-| Templates | `templates` | 640, window 780 wide | see [Crew templates](crew-templates-and-editor.md) |
-| Modules | `modules` | 410 | the module list ([below](#modules)) |
+| Tab | Key | Contents |
+| --- | --- | --- |
+| Appearance | `appearance` | `Appearance` (Theme, Accent), `Toolbar labels`, `Task layout`, `Tasks` ▸ `View`, typography, `Keyboard` ▸ `Keymap` |
+| Editor | `editor` | see [Editor](editor.md), [Code intelligence](editor-code-intelligence.md) |
+| Language | `language` | `Interface language` (`Follow system`, `Українська`, `English`), restart line; `Updates` card with the `Brigadir` row ([auto-update](architecture-and-platform.md#auto-update)) |
+| Notifications | `notifications` | `When`, `macOS permission`, `Sound` with per-slot sounds, quiet-while-viewing |
+| Agents | `agents` | `Providers`, `Agents`, `Tasks` cards ([below](#agents-tab)) |
+| Templates | `templates` | see [Crew templates](crew-templates-and-editor.md) |
+| Modules | `modules` | the module list ([below](#modules)) |
 
-- The window is 620 px wide, with seven tabs on an 80 px step (76 px each) and a sliding indicator. The tab padding is 4 / 6. Tabs move with Left/Right/Home/End.
+- The window is one size for every tab, 780 × 720 (`min(…, 100vw − 48px)` × `min(…, 100vh − 48px)`), so switching tabs never moves or resizes it; a taller page scrolls. Form tabs are a 588 px column in the middle of the page; `Templates` (list and editor) and `Modules` (the module list) take the whole width. Seven tabs on an 80 px step (76 px each) with a sliding indicator, centred. The tab padding is 4 / 6. Tabs move with Left/Right/Home/End.
 - The header uses `--sb` and styles only its own header (`.dialog > header`). Popovers, the keymap dialog and module popups inside the window keep their own headers.
 - The window loads the settings on open. While loading it shows skeleton rows. If the read fails it shows `The settings could not be loaded.` and `Retry`. A failed save shows `The settings could not be saved.` inline.
 - While a save is in flight the form is `<fieldset disabled>`. `useKeepFocusWhileBusy` (`ui/keep-focus.ts`) gives focus back to the control that started the save once the form is enabled again, unless focus has moved elsewhere. A `ui/Popover` waits for its disabled trigger before it returns focus. This keeps Tab order and Esc working across saves.

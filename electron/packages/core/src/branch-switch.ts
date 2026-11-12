@@ -66,6 +66,27 @@ export type LaunchSwitch = {
 export const FETCH_FAILED = 'Could not fetch the branch from origin.';
 /** «Bring the changes» refused by git: the target touches the same files (spec/git#main-tree-branches). */
 export const CARRY_CONFLICT_MESSAGE = 'Your changes conflict with the branch. Nothing was changed.';
+/** spec/git#pull: what a click on `↓N` did — a fast-forward or a rebase (`rebased` local commits on top), or a rebase stopped on a conflict and aborted. */
+export type PullOutcome =
+	| { kind: 'pulled'; pulled: number; rebased: number }
+	| {
+			kind: 'conflict';
+			branch: string;
+			upstream: string;
+			ahead: number;
+			behind: number;
+			files: string[];
+	  };
+/** git refused to rebase over uncommitted changes (spec/git#pull). */
+export const PULL_DIRTY = 'Commit or stash the changes first: a diverged branch pulls by rebase.';
+/** spec/git#pull-agent: the prompt that hands a stopped rebase to an agent (English, rule 12). */
+export function pullAgentPrompt(
+	repo: string,
+	conflict: Extract<PullOutcome, { kind: 'conflict' }>
+) {
+	const where = repo === '.' ? 'the project root repository' : `the repository ${repo}`;
+	return `The local branch ${conflict.branch} of ${where} has diverged from ${conflict.upstream}: ${conflict.ahead} local commit(s) are not on origin, and origin has ${conflict.behind} commit(s) that are not here. Rebasing it onto ${conflict.upstream} stops on a conflict in: ${conflict.files.join(', ') || 'files git did not name'}. Rebase it (\`git${repo === '.' ? '' : ` -C ${repo}`} rebase ${conflict.upstream}\`) and resolve each conflict, keeping what both sides meant. For a submodule pointer, take the commit that contains both sides' changes when there is one; otherwise ask the person which one to keep. Do not push. When the rebase is done, say what you chose in each conflict.`;
+}
 /** A stash message that marks our own entry; the arrow keeps it readable in `git stash list`. */
 export const stashMessage = (from: string | null, to: string) =>
 	`brigadir: ${from ?? 'HEAD'} → ${to}`;

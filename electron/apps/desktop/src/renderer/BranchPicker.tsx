@@ -128,6 +128,8 @@ function gitFailure(locale: Locale, message: string, fallback: Parameters<typeof
 		return t(locale, 'Another Git operation is in progress.');
 	if (message.includes('already exists'))
 		return t(locale, 'A branch with this name already exists.');
+	if (message.includes('a diverged branch pulls by rebase'))
+		return t(locale, 'Commit or stash the changes first: a diverged branch pulls by rebase.');
 	if (message.includes('diverged'))
 		return t(locale, 'The branch has diverged from origin. Pull only fast-forwards.');
 	if (message.includes('already on origin'))

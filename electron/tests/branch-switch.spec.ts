@@ -226,21 +226,41 @@ test('the background fetch shows ↓N beside ↑N; ↓N pulls, the sheet pulls b
 					?.launch?.pull ?? null
 		);
 		expect(saved).toHaveLength(1);
-		// ↑1 for the local commit; ↓1 pulls — diverged, so the toast says why and the tree stays.
+		// Diverged with a conflict (both sides add remote.txt): the rebase is aborted, the toast hands it to an agent (spec/git#pull-agent).
+		await writeFile(join(repo, 'remote.txt'), 'mine\n');
+		await git(repo, 'add', '-A');
+		await git(repo, 'commit', '-qm', 'Conflicting');
+		const head = await git(repo, 'rev-parse', 'HEAD');
 		// Saving the sheet selected the new task; back to the main tree.
 		await mainTree(app, page);
-		await expect(page.locator('[data-repo-root] [data-push]')).toHaveText('↑1');
+		await expect(page.locator('[data-repo-root] [data-push]')).toHaveText('↑2');
 		await pull.click();
-		await expect(page.getByRole('alert').filter({ hasText: 'diverged' })).toBeVisible();
+		const stopped = page
+			.getByRole('alert')
+			.filter({ hasText: 'the pull stopped on a conflict in remote.txt' });
+		await expect(stopped).toBeVisible();
+		expect(await git(repo, 'rev-parse', 'HEAD')).toBe(head);
+		expect(await git(repo, 'status', '--porcelain')).toBe('');
+		await stopped.getByRole('button', { name: 'Resolve with agent' }).click();
+		const quick = page.getByRole('dialog', { name: 'New quick task', exact: true });
+		await expect(quick.getByRole('textbox', { name: 'Task name' })).toHaveValue('Pull · repo');
+		await expect(quick).toContainText(
+			'Rebasing it onto origin/main stops on a conflict in: remote.txt'
+		);
+		await page.keyboard.press('Escape');
+		await expect(quick).toHaveCount(0);
+		// Without the conflict the diverged branch rebases: origin's commit below, the local one on top, ↑1 stays to push.
 		await git(repo, 'reset', '-q', '--hard', 'HEAD~1');
 		await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-		await expect(page.locator('[data-repo-root] [data-push]')).toHaveCount(0);
+		await expect(page.locator('[data-repo-root] [data-push]')).toHaveText('↑1');
 		await pull.click();
 		await expect(
-			page.getByRole('status').filter({ hasText: 'repo · pulled 1 commit' })
+			page.getByRole('status').filter({ hasText: 'repo · pulled 1 commit, 1 commit on top' })
 		).toBeVisible();
 		await expect.poll(() => readFile(join(repo, 'remote.txt'), 'utf8')).toBe('r\n');
+		expect(await git(repo, 'log', '-1', '--format=%s')).toBe('Mine');
 		await expect(pull).toHaveCount(0);
+		await expect(page.locator('[data-repo-root] [data-push]')).toHaveText('↑1');
 	} finally {
 		await app.close();
 		await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });

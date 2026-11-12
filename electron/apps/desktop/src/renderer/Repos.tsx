@@ -25,6 +25,8 @@ import {
 	type MessageKey,
 	type ScopePanelSnapshot,
 	type ScopeUpdate,
+	pullAgentPrompt,
+	type PullOutcome,
 } from '@brigadir/core';
 import { IconButton } from './ui/Controls';
 import { resolveToast, showToast as toastSuccess, toastError, toastWarning } from './ui/Toast';
@@ -92,6 +94,11 @@ type Repos = {
 	/** spec/tasks#quick-tasks: the main tree's current repo — the subtitle's, the quick task's; `null` is the first. */ current:
 		string | null;
 	removeWorktree(returnFocus: RefObject<HTMLElement | null>): void;
+	/** spec/git#pull-agent: a stopped rebase goes to an agent — this task's, or a quick task in the main tree. */ toAgent?(request: {
+		scopeId: string;
+		title: string;
+		prompt: string;
+	}): void;
 };
 const ReposContext = createContext<Repos | null>(null);
 export const useRepos = () => useContext(ReposContext);
@@ -122,7 +129,8 @@ export function useReposState(
 	task: AgentTask,
 	mainTree: boolean,
 	locale: Locale,
-	current: string | null = null
+	current: string | null = null,
+	toAgent?: Repos['toAgent']
 ): { repos: Repos | null; dialog: ReactNode } {
 	const [data, setData] = useState<ScopePanelSnapshot | null>(null),
 		[saving, setSaving] = useState(false),
@@ -278,6 +286,7 @@ export function useReposState(
 					worktree,
 					current,
 					removeWorktree: (returnFocus) => setRemoving(returnFocus),
+					...(toAgent ? { toAgent } : {}),
 				}
 			: null,
 		dialog: removing && (
@@ -655,16 +664,7 @@ export function useRepoActions(
 				tail: current?.behind ? `↓${current.behind}` : undefined,
 				disabled: off || !!pullReason,
 				reason: pullReason,
-				run: () => {
-					void gitAction(
-						locale,
-						() => window.brigadir.pullBranch(project.id, scope.id),
-						(count) =>
-							count
-								? `${name} · ${t(locale, 'pulled {commits}').replace('{commits}', commitCount(locale, count))}`
-								: t(locale, 'Nothing new on origin.')
-					);
-				},
+				run: () => void pullRepo(repos, scope, null),
 			},
 			{
 				icon: 'git-stash',
@@ -1357,17 +1357,58 @@ function PullMark({ scope, count }: { scope: RepoScope; count: number }) {
 				event.stopPropagation();
 				if (pulling) return;
 				setPulling(true);
-				void gitAction(
-					locale,
-					() => window.brigadir.pullBranch(project.id, scope.id, mainTree ? null : task.id),
-					(pulled) =>
-						pulled
-							? `${name} · ${t(locale, 'pulled {commits}').replace('{commits}', commitCount(locale, pulled))}`
-							: t(locale, 'Nothing new on origin.')
-				).finally(() => setPulling(false));
+				void pullRepo(repos, scope, mainTree ? null : task.id).finally(() => setPulling(false));
 			}}>
 			↓{count}
 		</button>
+	);
+}
+/**
+ * spec/git#pull: `↓N` and the menu's Pull — a fast-forward, or a rebase of a diverged branch. A rebase that stopped on a conflict is already
+ * aborted; the toast hands it to an agent (spec/git#pull-agent).
+ */
+async function pullRepo(repos: Repos, scope: RepoScope, taskId: string | null) {
+	const { locale, project } = repos,
+		name = repoName(project, scope);
+	let stopped: Extract<PullOutcome, { kind: 'conflict' }> | null = null;
+	await gitAction(
+		locale,
+		() => window.brigadir.pullBranch(project.id, scope.id, taskId),
+		(outcome) => {
+			if (outcome.kind === 'conflict') {
+				stopped = outcome;
+				return null;
+			}
+			if (!outcome.pulled) return t(locale, 'Nothing new on origin.');
+			const pulled = t(locale, 'pulled {commits}').replace(
+				'{commits}',
+				commitCount(locale, outcome.pulled)
+			);
+			return outcome.rebased
+				? `${name} · ${pulled}, ${t(locale, '{commits} on top').replace('{commits}', commitCount(locale, outcome.rebased))}`
+				: `${name} · ${pulled}`;
+		}
+	);
+	const conflict = stopped as Extract<PullOutcome, { kind: 'conflict' }> | null;
+	if (!conflict) return;
+	const text = t(locale, '{repo}: the pull stopped on a conflict in {files}. Nothing changed.')
+		.replace('{repo}', name)
+		.replace('{files}', conflict.files.join(', ') || '…');
+	toastError(
+		text,
+		repos.toAgent
+			? {
+					action: {
+						label: t(locale, 'Resolve with agent'),
+						run: () =>
+							repos.toAgent?.({
+								scopeId: scope.id,
+								title: `${t(locale, 'Pull')} · ${name}`,
+								prompt: pullAgentPrompt(scope.name, conflict),
+							}),
+					},
+				}
+			: undefined
 	);
 }
 /** «Add folder…» — the last row of the panel's list (spec/projects-and-board#folders-mid-task; a task only, not the main tree). */

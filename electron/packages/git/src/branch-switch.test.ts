@@ -2,7 +2,7 @@ import { afterEach, expect, it } from 'vitest';
 import { mkdtemp, writeFile, rm, realpath, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FETCH_FAILED } from '@brigadir/core';
+import { FETCH_FAILED, PULL_DIRTY } from '@brigadir/core';
 import { gitText } from './command';
 import { initRepo } from './monorepo.fixture';
 import {
@@ -11,6 +11,7 @@ import {
 	dirtyFiles,
 	discardChanges,
 	lastCommit,
+	pullBranch,
 	pullFastForward,
 	stashDrop,
 	stashPush,
@@ -232,4 +233,32 @@ it('counts commits ahead of and behind the upstream, and fast-forwards with chan
 	await gitText(repo, ['switch', '-q', '-c', 'lonely']);
 	expect(await upstreamCounts(repo)).toBeNull();
 	void seed;
+});
+
+it('pulls a diverged branch by rebase; a dirty tree refuses, a conflict aborts and leaves the branch as it was (spec/git#pull)', async () => {
+	const { repo, seed } = await fixture();
+	await gitText(repo, ['switch', '-q', 'staging']);
+	await commit(repo, 'mine.txt', 'm\n', 'Mine');
+	expect(await pullBranch(repo)).toEqual({ kind: 'pulled', pulled: 2, rebased: 1 });
+	expect(await readFile(join(repo, 's2.txt'), 'utf8')).toBe('2\n');
+	expect(await gitText(repo, ['log', '-1', '--format=%s'])).toBe('Mine');
+	expect(await pullBranch(repo)).toEqual({ kind: 'pulled', pulled: 0, rebased: 0 });
+	await commit(seed, 's1.txt', 'origin\n', 'Origin edit');
+	await gitText(seed, ['push', '-q', 'origin', 'staging']);
+	await commit(repo, 's1.txt', 'local\n', 'Local edit');
+	const before = await gitText(repo, ['rev-parse', 'HEAD']);
+	await writeFile(join(repo, 'd0', 'f0.txt'), 'dirty\n');
+	await expect(pullBranch(repo)).rejects.toThrow(PULL_DIRTY);
+	await gitText(repo, ['checkout', '--', 'd0/f0.txt']);
+	expect(await pullBranch(repo)).toEqual({
+		kind: 'conflict',
+		branch: 'staging',
+		upstream: 'origin/staging',
+		ahead: 2,
+		behind: 1,
+		files: ['s1.txt'],
+	});
+	expect(await gitText(repo, ['rev-parse', 'HEAD'])).toBe(before);
+	expect(await gitText(repo, ['status', '--porcelain'])).toBe('');
+	expect(await readFile(join(repo, 's1.txt'), 'utf8')).toBe('local\n');
 });

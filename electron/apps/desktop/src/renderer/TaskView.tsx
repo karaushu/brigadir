@@ -439,7 +439,18 @@ export function TaskView({
 			task,
 			Boolean(mainTree),
 			locale,
-			mainTree?.scopeId ?? null
+			mainTree?.scopeId ?? null,
+			// spec/git#pull-agent: a stopped rebase — a quick task in the main tree, this task's agent otherwise.
+			(request) => {
+				if (mainTree) {
+					onQuickTask?.({ scopeId: request.scopeId, title: request.title, prompt: request.prompt });
+					return;
+				}
+				void deliverPrompt(task, request.prompt).then(
+					() => showToast(t(locale, 'The conflict is with the agent.')),
+					() => toastError(t(locale, 'Could not hand the conflict to the agent.'))
+				);
+			}
 		),
 		repos = reposState.repos;
 	const modules = useWorkspace((state) => state.appearance.modules);

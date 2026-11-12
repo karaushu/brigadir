@@ -352,7 +352,11 @@ export type DesktopBridge = {
 	stashChanges(projectId: string, scopeId: string): Promise<string>;
 	restoreStash(projectId: string, scopeId: string, sha: string): Promise<void>;
 	dropStash(projectId: string, scopeId: string, sha: string): Promise<void>;
-	pullBranch(projectId: string, scopeId: string, taskId?: string | null): Promise<number>;
+	pullBranch(
+		projectId: string,
+		scopeId: string,
+		taskId?: string | null
+	): Promise<import('./branch-switch').PullOutcome>;
 	undoLastCommit(projectId: string, scopeId: string): Promise<import('./branch-switch').LastCommit>;
 	discardChanges(projectId: string, scopeId: string, untracked: string[]): Promise<void>;
 	readPullRequests(

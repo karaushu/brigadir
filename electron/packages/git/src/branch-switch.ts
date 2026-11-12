@@ -1,13 +1,15 @@
-import { open, realpath } from 'node:fs/promises';
-import { join } from 'node:path';
+import { access, open, realpath } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import {
 	CARRY_CONFLICT_MESSAGE,
 	FETCH_FAILED,
+	PULL_DIRTY,
 	isOurStash,
 	stashMessage,
 	type CreateBranchRequest,
 	type DirtyFile,
 	type LastCommit,
+	type PullOutcome,
 	type StashEntry,
 	type SwitchBranch,
 	type SwitchRequest,
@@ -387,6 +389,60 @@ export async function pullFastForward(path: string): Promise<number> {
 	if (counts[0]) throw new Error('The branch has diverged from origin. Pull only fast-forwards.');
 	await gitText(path, ['merge', '--ff-only', '-q', '@{upstream}']);
 	return counts[1];
+}
+
+/**
+ * spec/git#pull: a click on `↓N`. Only behind → fast-forward; diverged → rebase of the local commits onto the upstream, never a merge commit.
+ * A rebase that stops on a conflict is aborted before this returns, so the tree and the branch are as they were.
+ */
+export async function pullBranch(path: string): Promise<PullOutcome> {
+	const upstream = await gitText(path, ['rev-parse', '--abbrev-ref', '@{upstream}']).catch(
+		() => ''
+	);
+	if (!upstream) throw new Error('The branch has no upstream on origin.');
+	const remote = upstream.slice(0, upstream.indexOf('/'));
+	await fetchBranch(path, remote, upstream.slice(remote.length + 1)).catch(() => {
+		throw new Error(FETCH_FAILED);
+	});
+	const [ahead = 0, behind = 0] = (
+		await gitText(path, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'])
+	)
+		.split(/\s+/)
+		.map(Number);
+	if (!behind) return { kind: 'pulled', pulled: 0, rebased: 0 };
+	if (!ahead) {
+		await gitText(path, ['merge', '--ff-only', '-q', '@{upstream}']);
+		return { kind: 'pulled', pulled: behind, rebased: 0 };
+	}
+	try {
+		await gitText(path, ['rebase', '-q', '--no-autostash', '@{upstream}']);
+		return { kind: 'pulled', pulled: behind, rebased: ahead };
+	} catch (error) {
+		if (!(await rebasing(path))) {
+			const text = error instanceof Error ? error.message : String(error);
+			throw /uncommitted|unstaged|overwritten|stash/i.test(text) ? new Error(PULL_DIRTY) : error;
+		}
+		const files = (await gitText(path, ['diff', '--name-only', '--diff-filter=U']).catch(() => ''))
+			.split('\n')
+			.filter(Boolean);
+		await gitText(path, ['rebase', '--abort']);
+		const branch = await gitText(path, ['symbolic-ref', '--short', 'HEAD']).catch(() => 'HEAD');
+		return { kind: 'conflict', branch, upstream, ahead, behind, files };
+	}
+}
+async function rebasing(path: string) {
+	for (const name of ['rebase-merge', 'rebase-apply']) {
+		const at = await gitText(path, ['rev-parse', '--git-path', name]).catch(() => '');
+		if (
+			at &&
+			(await access(resolve(path, at)).then(
+				() => true,
+				() => false
+			))
+		)
+			return true;
+	}
+	return false;
 }
 
 /** The background refresh of the list (spec/git#main-tree-branches): one fetch of the remotes, pruned, quietly. */

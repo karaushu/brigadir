@@ -10,7 +10,7 @@ import {
 	fetchRemotes,
 	gitText,
 	lastCommit,
-	pullFastForward,
+	pullBranch,
 	stashDrop,
 	stashPush,
 	stashRestore,
@@ -26,6 +26,7 @@ import {
 	type BranchSwitchState,
 	type CreateBranchRequest,
 	type MainTreeBranch,
+	type PullOutcome,
 	type RepoHolder,
 	type StashEntry,
 	type SwitchRequest,
@@ -244,14 +245,15 @@ export class MainTrees {
 	drop(projectId: string, scopeId: string, sha: string) {
 		return this.write(projectId, scopeId, (path) => stashDrop(path, sha));
 	}
-	pull(projectId: string, scopeId: string, taskId?: string | null): Promise<number> {
+	/** spec/git#pull: a fast-forward, or a rebase of a diverged branch; a stopped rebase comes back aborted. */
+	pull(projectId: string, scopeId: string, taskId?: string | null): Promise<PullOutcome> {
 		return this.write(
 			projectId,
 			scopeId,
 			async (path) => {
-				const count = await pullFastForward(path);
+				const outcome = await pullBranch(path);
 				this.fetchedRepo(path);
-				return count;
+				return outcome;
 			},
 			taskId ? { projectId, id: taskId } : undefined
 		);

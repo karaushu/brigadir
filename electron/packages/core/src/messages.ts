@@ -2944,6 +2944,15 @@ const uk = {
 	'Pull before the start': 'Підтягнути перед стартом',
 	'Branch of {repo}': 'Branch {repo}',
 	'pulled {commits}': 'підтягнуто {commits}',
+	// spec/git#pull: a diverged branch pulls by rebase; a conflict stops it and goes to an agent.
+	'{commits} on top': '{commits} зверху',
+	'{repo}: the pull stopped on a conflict in {files}. Nothing changed.':
+		'{repo}: pull зупинився на конфлікті в {files}. Нічого не змінено.',
+	'Commit or stash the changes first: a diverged branch pulls by rebase.':
+		'Спершу зроби коміт або stash: branch розійшлась, і pull робить rebase.',
+	'Resolve with agent': 'Розвести з агентом',
+	'The conflict is with the agent.': 'Конфлікт у агента.',
+	'Could not hand the conflict to the agent.': 'Не вдалося передати конфлікт агенту.',
 	// spec/chat-turns-plans-and-questions#background-commands: the agent's background work (the Background deck, footer chip, Output, sidebar, notifications).
 	'In the background · {count}': 'У фоні · {count}',
 	'In the background · {name}': 'У фоні · {name}',

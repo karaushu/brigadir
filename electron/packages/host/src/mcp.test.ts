@@ -434,6 +434,8 @@ it('takes the tools of a module switched off out of the list and tells open sess
 		expect(await names(2)).toEqual([
 			'ask_user',
 			'create_task',
+			'tasks_list',
+			'task_send',
 			'add_folder',
 			'commands_list',
 			'commands_run',
@@ -459,6 +461,8 @@ it('takes the tools of a module switched off out of the list and tells open sess
 		expect(await names(6)).toEqual([
 			'ask_user',
 			'create_task',
+			'tasks_list',
+			'task_send',
 			'add_folder',
 			'commands_list',
 			'commands_run',
@@ -502,6 +506,8 @@ it('takes the tools of a module switched off out of the list and tells open sess
 		expect(await names(10)).toEqual([
 			'ask_user',
 			'create_task',
+			'tasks_list',
+			'task_send',
 			'add_folder',
 			'console_list',
 			'console_read',

@@ -10,6 +10,7 @@ import {
 	planPartCountLabel,
 	selectedLineCount,
 	t,
+	taskCount,
 	type MessageKey,
 } from './messages';
 import { isBuiltinCrewName } from './crew';
@@ -91,6 +92,8 @@ const verbs = {
 	create_task: ['Proposing a task', 'Proposed a task', 'Could not propose a task'],
 	add_folder: ['Adding a folder', 'Added a folder', 'Could not add the folder'],
 	slack_post: ['Posting to Slack', 'Posted to Slack', 'Could not post to Slack'],
+	tasks_list: ['Looking up tasks', 'Looked up tasks', 'Could not look up tasks'],
+	task_send: ['Writing to a task', 'Wrote to a task', 'Could not write to the task'],
 	browser_open: ['Opening the page', 'Opened the page', 'Could not open the page'],
 	browser_state: ['Checking the browser', 'Checked the browser', 'Could not check the browser'],
 	browser_read: ['Reading the page', 'Read the page', 'Could not read the page'],
@@ -207,7 +210,9 @@ export function mcpModule(tool: string): McpModule {
 		tool === 'ask_user' ||
 		tool === 'create_task' ||
 		tool === 'add_folder' ||
-		tool === 'slack_post'
+		tool === 'slack_post' ||
+		tool === 'tasks_list' ||
+		tool === 'task_send'
 	)
 		return 'human';
 	if (tool === 'editor_state' || tool === 'editor_restart_language_servers') return 'editor';
@@ -678,6 +683,25 @@ export function mcpRow(
 				plain(str(a.channel) ?? (str(a.thread) ? null : t(locale, 'the task’s Slack thread'))),
 				plain(
 					r.posted === false ? (reason && isMessageKey(reason) ? t(locale, reason) : reason) : null
+				)
+			);
+			text = str(a.text);
+			break;
+		}
+		// spec/tasks#task-messages: the other task by title, the text sent, and why it did not go.
+		case 'tasks_list': {
+			const tasks = Array.isArray(r.tasks) ? r.tasks.filter(isRecord) : null;
+			detail = plain(tasks ? taskCount(locale, tasks.length) : null);
+			text = tasks?.map((task) => String(task.title ?? '')).join('\n') || null;
+			break;
+		}
+		case 'task_send': {
+			const reason = str(r.reason),
+				target = isRecord(r.task) ? str(r.task.title) : null;
+			detail = join(
+				plain(target ?? str(a.taskId)),
+				plain(
+					r.sent === false ? (reason && isMessageKey(reason) ? t(locale, reason) : reason) : null
 				)
 			);
 			text = str(a.text);

@@ -276,7 +276,18 @@ An agent can propose a new task in the **same** project with context and extra f
 - Proposal is a journal event, not a task field: `task.proposal.requested` / `task.proposal.resolved` (`core/task-proposal.ts`). The source task is `needs-you` while the card waits; sidebar line `New task · <title>`; notification `The agent proposes a new task.`
 - Card `{agent} proposes a task` (plan-card family): title, first prompt lines, context and folder chips; when `agent` was given, the first chip is the agent (`Codex · <model> · <effort>`). Actions: `Create`, `Task options…` (opens the sheet pre-filled via `proposal:draft`; a task created there is linked via `proposal:adopt`; closing the sheet keeps the card), `Decline`. Stop, restart or host death answer `null` (declined).
 - Main creates the task (`main/task-proposals.ts`): first into the backlog, then attachments (summary without a model call, diff as in relay, files by link, notes as text), `originTaskId`, the resolved agent; then it answers the host and, for `start: now`, queues the launch. Folders are added as `external` (git) or `folder` (no git) to the new task only.
-- The new task shows `Created from X` in its header and board card. The agent gets the new id and title but cannot drive it (no `prompt_task` / `accept_task`).
+- The new task shows `Created from X` in its header and board card. The agent gets the new id and title but cannot drive it (no `prompt_task` / `accept_task`); it can write to it with `task_send` ([Messages between tasks](#task-messages)).
+
+<a id="task-messages"></a>
+## Messages between tasks (`tasks_list`, `task_send`)
+
+An agent can write to another task of the **same** project. The person names the task with an `@` pill ([Composer](composer.md#mention-menu)); the pill's summary carries the task ID and says which tool to call, so the agent never guesses from names.
+
+- Available to a plain task (GUI and CLI) and the root foreman, like `create_task` (`humanToolsAllowed`); no consent card: the person asked for it, and the message shows in the other task's chat.
+- `tasks_list` (read only): the project's live tasks except this one and crew workers, newest first, up to 100: `id`, `title`, `state`, `branch`, `agent`. Main tree tasks are not listed.
+- `task_send {taskId, text}` (text ≤ 100 000, English like any prompt to an agent): main delivers the text to that task as a steering prompt, the path of a Slack reply ([Steering](composer-steering-queue-and-ghost.md#steering)): into the running turn, else a new turn; a stopped agent starts first through the launch queue. The agent there reads `A message from the agent of task "<title>" (task ID <id>) in this project. To answer, call task_send with that task ID.` followed by the text.
+- Answers: `sent: true` with the task's `id` and `title`, or `sent: false` with the reason: unknown ID (`call tasks_list`), this task itself, a crew worker (`write to its crew's task <id>`), archived, a backlog task (not started), a CLI (terminal) task, or the agent could not start (`busy`).
+- The ID is the task's `id`, as `create_task` returns it and as a task summary names it.
 
 <a id="quick-tasks"></a>
 ## Main tree and quick tasks

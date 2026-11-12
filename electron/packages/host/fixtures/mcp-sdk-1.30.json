@@ -373,6 +373,48 @@
      }
     },
     {
+     "name": "tasks_list",
+     "description": "The other live tasks of this project, newest first: id (the task ID for task_send), title, state, branch and agent. Crew workers are not listed; write to their crew's task. Call it when the person names another task and you do not have its task ID, before task_send.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "task_send",
+     "description": "Send a message to another task of this project. Its agent gets the text at once, inside its running turn or as a new turn (a stopped agent is started), with your task's title and ID so it can answer with task_send. taskId: the task ID from a task summary, create_task or tasks_list. text: in English, complete on its own: the other agent does not see this conversation. Returns sent: true with the task id and title, or sent: false with the reason. Use it when the person asks you to send, hand over or tell something to another task. Never use your own messaging or agent tools for Brigadir tasks: they do not reach them.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+       }
+      },
+      "required": [
+       "taskId",
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "add_folder",
      "description": "Add a folder from outside the project to this task. A git repository becomes writable after the human allows it; a folder without git joins read-only at once. The folder shows in the diff and the workspace repositories. Use its absolute path right away; your workspace roots include it from your next turn. Folders inside the project are already in the repo list. Returns added: true with name, path and writable, or added: false with the reason. Use it when the work needs files outside the project, such as a sibling repository.",
      "inputSchema": {
@@ -1447,6 +1489,48 @@
       },
       "required": [
        "prompt"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "tasks_list",
+     "description": "The other live tasks of this project, newest first: id (the task ID for task_send), title, state, branch and agent. Crew workers are not listed; write to their crew's task. Call it when the person names another task and you do not have its task ID, before task_send.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "task_send",
+     "description": "Send a message to another task of this project. Its agent gets the text at once, inside its running turn or as a new turn (a stopped agent is started), with your task's title and ID so it can answer with task_send. taskId: the task ID from a task summary, create_task or tasks_list. text: in English, complete on its own: the other agent does not see this conversation. Returns sent: true with the task id and title, or sent: false with the reason. Use it when the person asks you to send, hand over or tell something to another task. Never use your own messaging or agent tools for Brigadir tasks: they do not reach them.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100000
+       }
+      },
+      "required": [
+       "taskId",
+       "text"
       ]
      },
      "execution": {

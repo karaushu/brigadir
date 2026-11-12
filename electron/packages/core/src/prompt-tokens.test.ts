@@ -130,6 +130,7 @@ describe('spec/composer#mentions: згадки токенами в тексті 
 		] as unknown as EventRecord[];
 		const text = taskSummaryText(
 			{
+				id: 'split-kit',
 				title: 'Split kit exports',
 				status: 'working',
 				provider: 'claude',
@@ -138,12 +139,16 @@ describe('spec/composer#mentions: згадки токенами в тексті 
 			records,
 			'"kit/src/index.ts" | +3 -1 (modified)'
 		);
-		expect(text).toContain('Task: Split kit exports');
+		expect(text).toContain('Task: Split kit exports (task ID split-kit)');
+		expect(text).toContain('call the Brigadir tool task_send with task ID split-kit.');
 		expect(text).toContain('State: working · agent: Claude · branch: feat/split');
 		expect(text).toContain('Original request:\nSplit the exports');
 		expect(text).toContain('Latest agent answer:\nMoved Icon* to kit/src/icons.');
 		expect(text).not.toContain('First answer');
 		expect(text).toContain('"kit/src/index.ts" | +3 -1 (modified)');
+		expect(
+			taskSummaryText({ id: 'w1', crewTaskId: 'root', title: 'Part', status: 'working' }, [], '')
+		).toContain('task_send with task ID root: it is a crew worker');
 	});
 });
 it('spec/composer#prompt-tokens: an agent template is a token until the message goes', () => {

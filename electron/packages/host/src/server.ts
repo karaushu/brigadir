@@ -2187,6 +2187,11 @@ export async function startHost(config: HostConfig) {
 		// spec/terminal-and-cli-agents#agent-console-tools: the console of this task, as the person sees it.
 		if (method.startsWith('console_')) return consoleTool(method.slice(8), params);
 		if (method === 'create_task') return proposeTask(params, signal);
+		// spec/tasks#task-messages: main knows the project's tasks and delivers the message.
+		if (method === 'tasks_list' || method === 'task_send') {
+			if (!ui) throw new Error('Messages between tasks need the application');
+			return ui.request(method, params);
+		}
 		if (method === 'add_folder') return addFolderTool(params, signal);
 		if (method === 'slack_post') return slackPostTool(params, signal);
 		if (method !== 'ask_user') throw new Error('Method is not available to this role');

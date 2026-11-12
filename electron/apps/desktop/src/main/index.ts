@@ -897,6 +897,15 @@ const sessions = new Sessions(
 			if (typeof params.text !== 'string' || !params.text.trim()) throw new Error('text is empty');
 			return slack.agentPost(key, { ...input, text: params.text });
 		}
+		// spec/tasks#task-messages: the agent's `tasks_list` and `task_send` — the other tasks of this project.
+		if (method === 'tasks_list') return { tasks: await projectTasksFor(key) };
+		if (
+			method === 'task_send' &&
+			isRecord(params) &&
+			typeof params.taskId === 'string' &&
+			typeof params.text === 'string'
+		)
+			return sendTaskMessage(key, params.taskId.trim(), params.text);
 		if (method === 'context' && isRecord(params) && isContextTool(params.tool)) {
 			if (params.tool === 'pr' && !appliedSettings.modules.pullRequests)
 				throw new Error(moduleOffMessages.pullRequests);
@@ -1339,7 +1348,7 @@ const slack: Slack = new Slack({
 		sideSession: (channel, ts) => slackSessions.session(channel, ts),
 		createTask: (input) => createSlackTask(input),
 		// spec/notifications-slack-notes-and-schedules#slack: a reply in the task's thread, and the buttons of Needs you and of a schedule's «Ask».
-		sendToTask: (key, text) => slackSendToTask(key, text),
+		sendToTask: (key, text) => sendToTask(key, text),
 		answer: (answer) => slackAnswer(answer),
 		tasks: (projectId) => slackTaskInfos(projectId),
 		status: (task) => slackTaskStatus(task),
@@ -1473,7 +1482,7 @@ async function createSlackTask(input: SlackTaskInput) {
  * spec/notifications-slack-notes-and-schedules#slack: a reply in a task's Slack thread goes to its agent the way the composer's Enter does (spec/composer-steering-queue-and-ghost#steering) — into the
  * running turn, else as a new one; a stopped agent starts first through the launch queue, as «resume» in the composer.
  */
-async function slackSendToTask(key: TaskKey, text: string): Promise<SlackSendResult> {
+async function sendToTask(key: TaskKey, text: string): Promise<SlackSendResult> {
 	const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR);
 	let task;
 	try {
@@ -1491,6 +1500,54 @@ async function slackSendToTask(key: TaskKey, text: string): Promise<SlackSendRes
 	}
 	await sessions.command(key, { kind: 'prompt', text, steer: true });
 	return 'sent';
+}
+/** spec/tasks#task-messages: the live tasks of the project an agent may write to, newest first; crew workers write through their crew's task. */
+async function projectTasksFor(key: TaskKey) {
+	const { tasks } = await readWorkspace(
+		process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+	);
+	return tasks
+		.filter(
+			(task) =>
+				task.projectId === key.projectId && task.id !== key.id && !task.archived && !task.crewTaskId
+		)
+		.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+		.slice(0, 100)
+		.map((task) => ({
+			id: task.id,
+			title: task.title,
+			state: task.status,
+			branch: task.taskTree?.branch ?? task.worktreeBranch ?? null,
+			agent: task.provider ?? null,
+		}));
+}
+const taskSendReasons = {
+	gone: 'No task with this ID in this project. Call tasks_list for the IDs.',
+	archived: 'The task is archived.',
+	waiting: 'The task is in the backlog and has not started.',
+	terminal: 'The task runs in a CLI terminal and takes no messages.',
+	busy: 'The task’s agent could not start. Try again later.',
+} as const satisfies Record<Exclude<SlackSendResult, 'sent'>, MessageKey>;
+/** spec/tasks#task-messages: `task_send` — the text reaches the other task's agent as a steering prompt, signed with the sender's title and ID. */
+async function sendTaskMessage(key: TaskKey, id: string, text: string) {
+	if (id === key.id) return { sent: false, reason: 'This is your own task.' };
+	const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR);
+	const target = await store.task({ projectId: key.projectId, id }).catch(() => null);
+	if (!target) return { sent: false, reason: taskSendReasons.gone };
+	if (target.crewTaskId)
+		return {
+			sent: false,
+			reason: 'A crew worker takes messages through its crew’s task: use crewTaskId.',
+			crewTaskId: target.crewTaskId,
+		};
+	const source = await store.task(key);
+	const result = await sendToTask(
+		{ projectId: key.projectId, id },
+		`A message from the agent of task "${source.title}" (task ID ${source.id}) in this project. To answer, call task_send with that task ID.\n\n${text}`
+	);
+	return result === 'sent'
+		? { sent: true, task: { id: target.id, title: target.title } }
+		: { sent: false, reason: taskSendReasons[result] };
 }
 /** Set once the scheduler exists: a schedule's «Ask» answered from Slack. */
 let slackScheduleAnswer:

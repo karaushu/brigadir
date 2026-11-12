@@ -189,7 +189,10 @@ export function promptSequence(
  * state, branch, first request, latest agent answer and the diff `--stat`, as the relay does (spec/tasks#relay) but with no generation.
  */
 export function taskSummaryText(
-	task: Pick<AgentTask, 'title' | 'status' | 'provider' | 'worktreeBranch' | 'taskTree'>,
+	task: Pick<
+		AgentTask,
+		'id' | 'crewTaskId' | 'title' | 'status' | 'provider' | 'worktreeBranch' | 'taskTree'
+	>,
 	records: readonly EventRecord[],
 	stat: string
 ): string {
@@ -215,7 +218,11 @@ export function taskSummaryText(
 	const clip = (value: string, limit: number) =>
 		value.length > limit ? `${value.slice(0, limit)}\n[…]` : value;
 	return [
-		`Task: ${task.title}`,
+		`Task: ${task.title} (task ID ${task.id})`,
+		// spec/tasks#task-messages: the ID and the tool, so the agent writes to this task without guessing from names.
+		task.crewTaskId
+			? `To write to this task, call the Brigadir tool task_send with task ID ${task.crewTaskId}: it is a crew worker, and its crew's task takes messages.`
+			: `To write to this task, call the Brigadir tool task_send with task ID ${task.id}.`,
 		`State: ${task.status}${task.provider ? ` · agent: ${task.provider === 'claude' ? 'Claude' : 'Codex'}` : ''}${branch ? ` · branch: ${branch}` : ''}`,
 		first?.kind === 'turn.started'
 			? `\nOriginal request:\n${clip(promptDisplayText(first.text, first.attachments ?? []), 4000)}`

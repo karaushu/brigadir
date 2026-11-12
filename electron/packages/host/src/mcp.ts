@@ -75,6 +75,7 @@ const readOnlyTools = new Set([
 	'commands_output',
 	'console_list',
 	'console_read',
+	'tasks_list',
 	'task_status',
 	'read_report',
 	'read_transcript',
@@ -94,6 +95,10 @@ const whenToUse: Record<string, string> = {
 		'Do not use it to ask the person to check a page, the app or a command you can check with your own tools.',
 	create_task:
 		'Use it when the person asks for a separate task, or when you find work outside this task that another agent should do.',
+	tasks_list:
+		'Call it when the person names another task and you do not have its task ID, before task_send.',
+	task_send:
+		'Use it when the person asks you to send, hand over or tell something to another task. Never use your own messaging or agent tools for Brigadir tasks: they do not reach them.',
 	add_folder: 'Use it when the work needs files outside the project, such as a sibling repository.',
 	slack_post:
 		'Use it when the person asks to post to Slack as Brigadir or as the bot. Never read a Slack token from env files or call the Slack API yourself.',
@@ -228,6 +233,24 @@ const humanTools: Tool[] = [
 				.optional(),
 		},
 		run: async (args, call, signal) => text(await call('create_task', args, signal)),
+	},
+	// spec/tasks#task-messages: the other tasks of this project, and a message to one of them as a steering prompt.
+	{
+		name: 'tasks_list',
+		description:
+			"The other live tasks of this project, newest first: id (the task ID for task_send), title, state, branch and agent. Crew workers are not listed; write to their crew's task.",
+		shape: {},
+		run: async (args, call, signal) => text(await call('tasks_list', args, signal)),
+	},
+	{
+		name: 'task_send',
+		description:
+			"Send a message to another task of this project. Its agent gets the text at once, inside its running turn or as a new turn (a stopped agent is started), with your task's title and ID so it can answer with task_send. taskId: the task ID from a task summary, create_task or tasks_list. text: in English, complete on its own: the other agent does not see this conversation. Returns sent: true with the task id and title, or sent: false with the reason.",
+		shape: {
+			taskId: z.string().trim().min(1).max(200),
+			text: z.string().trim().min(1).max(100_000),
+		},
+		run: async (args, call, signal) => text(await call('task_send', args, signal)),
 	},
 	// spec/projects-and-board#folders-mid-task: a folder from outside the project joins this task while it runs.
 	{

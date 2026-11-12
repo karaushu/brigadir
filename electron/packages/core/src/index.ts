@@ -112,6 +112,7 @@ export * from './task-activity';
 export * from './turn-status';
 
 export * from './crew';
+export * from './task-review';
 export * from './role-models';
 export * from './solo-role';
 export * from './crew-edit';

@@ -1188,6 +1188,19 @@ export type DesktopBridge = {
 	readCodeSyntax(language: string, text: string): Promise<SyntaxSnapshot>;
 	readReviewPositions(key: TaskKey, commentId: string): Promise<ReviewPosition[]>;
 	readReview(key: TaskKey, fileId: string | null): Promise<ReviewSnapshot>;
+	/** spec/diff-and-review#agent-review: the task's review before the PR as the window shows it. */
+	readTaskReview(key: TaskKey): Promise<import('./task-review').TaskReviewView>;
+	/** Starts it with the launch dialog's choice; resolves the reason when it could not start, else null. */
+	startTaskReview(
+		key: TaskKey,
+		choice: import('./task-review').TaskReviewChoice
+	): Promise<string | null>;
+	stopTaskReview(key: TaskKey): Promise<void>;
+	/** `Not now` on the agent's proposal. */
+	dismissTaskReview(key: TaskKey): Promise<void>;
+	/** A disputed comment: `Back to the agent` sends it as the person's own; `Keep as is` resolves it. */
+	sendTaskReviewComment(key: TaskKey, id: string): Promise<void>;
+	resolveTaskReviewComment(key: TaskKey, id: string): Promise<void>;
 	addReviewNote(key: TaskKey, text: string): Promise<void>;
 	addComment(key: TaskKey, input: CommentInput): Promise<void>;
 	editComment(key: TaskKey, id: string, text: string): Promise<void>;

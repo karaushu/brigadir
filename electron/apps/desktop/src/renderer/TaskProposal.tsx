@@ -13,6 +13,7 @@ import {
 } from '@brigadir/core';
 import { Button, Chevron } from './ui/Controls';
 import { Glyph } from './ui/Glyph';
+import { ChatCard, ChatCardChip, ChatCardChips } from './ui/ChatCard';
 import { useWorkspace } from './store';
 import { toastError } from './ui/Toast';
 import styles from './TaskProposal.module.css';
@@ -34,14 +35,10 @@ function contextChip(item: TaskProposalContext, index: number, locale: Locale) {
 					? ['file', item.path.split('/').at(-1) ?? item.path, item.path]
 					: ['paperclip', item.name, item.text.slice(0, 400)];
 	return (
-		<span
-			key={`${item.kind}-${index}`}
-			className={styles.chip}
-			data-context={item.kind}
-			title={title}>
+		<ChatCardChip key={`${item.kind}-${index}`} data-context={item.kind} title={title}>
 			<Glyph name={glyph} size={12} />
 			<span>{label}</span>
-		</span>
+		</ChatCardChip>
 	);
 }
 /** The chips under the prompt: the agent the proposal names (spec/tasks#agent-created-tasks), the context the new task gets, then the folders that
@@ -50,25 +47,25 @@ function Chips({ proposal, locale }: { proposal: TaskProposal; locale: Locale })
 	const agent = proposal.agent;
 	if (!agent && !proposal.context.length && !proposal.folders.length) return null;
 	return (
-		<div className={styles.chips}>
+		<ChatCardChips>
 			{agent && (
-				<span className={styles.chip} data-agent={agent.provider}>
+				<ChatCardChip data-agent={agent.provider}>
 					<Glyph name={agent.provider === 'claude' ? 'claude' : 'openai'} size={12} />
 					<span>
 						{[providerName(agent.provider), agent.modelName, agent.effortName]
 							.filter(Boolean)
 							.join(' · ')}
 					</span>
-				</span>
+				</ChatCardChip>
 			)}
 			{proposal.context.map((item, index) => contextChip(item, index, locale))}
 			{proposal.folders.map((folder) => (
-				<span key={folder} className={styles.chip} data-folder title={folder}>
+				<ChatCardChip key={folder} data-folder title={folder}>
 					<Glyph name="folder" size={12} />
 					<span>{taskProposalFolderName(folder)}</span>
-				</span>
+				</ChatCardChip>
 			))}
-		</div>
+		</ChatCardChips>
 	);
 }
 function Prompt({ proposal, folded }: { proposal: TaskProposal; folded: boolean }) {
@@ -128,35 +125,15 @@ export function TaskProposalCard({
 		}
 	};
 	return (
-		<section
-			className={styles.card}
+		<ChatCard
 			aria-label={t(locale, 'New task')}
-			data-task-proposal={proposal.id}>
-			<header className={styles.head}>
-				<span className={styles.wait} aria-hidden="true" />
-				<Glyph name="task-new" size={14} />
-				<strong>{t(locale, 'New task')}</strong>
-				{agent && (
-					<small className={styles.hint}>
-						{t(locale, '{agent} proposes a task').replace('{agent}', agent)}
-					</small>
-				)}
-			</header>
-			<div className={styles.body}>
-				<Prompt proposal={proposal} folded={long && !whole} />
-				{long && (
-					<button
-						type="button"
-						className={styles.whole}
-						aria-expanded={whole}
-						onClick={() => setWhole((value) => !value)}>
-						{t(locale, whole ? 'Collapse prompt' : 'Whole prompt')}
-					</button>
-				)}
-				<Chips proposal={proposal} locale={locale} />
-			</div>
-			<footer className={styles.foot}>
-				<small className={styles.note}>
+			data-task-proposal={proposal.id}
+			glyph="task-new"
+			title={t(locale, 'New task')}
+			waiting
+			hint={agent ? t(locale, '{agent} proposes a task').replace('{agent}', agent) : undefined}
+			note={
+				<>
 					{proposal.start === 'schedule' && proposal.schedule
 						? `${describeRule(locale, proposal.schedule.rule, proposal.schedule.timeZone)} · ${t(locale, 'Each run starts a new task.')}`
 						: t(
@@ -165,31 +142,46 @@ export function TaskProposalCard({
 									? 'Starts once created · new branch'
 									: 'Goes to the backlog · new branch'
 							)}
-				</small>
-				<Button
-					variant="ghost"
-					disabled={disabled || busy !== null}
-					onClick={() => {
-						void act('decline');
-					}}>
-					{t(locale, 'Decline')}
-				</Button>
-				{/* spec/notifications-slack-notes-and-schedules#schedules: a proposed schedule is made from the card and edited in the Schedules section. */}
-				{proposal.start !== 'schedule' && (
-					<Button disabled={disabled || busy !== null} onClick={() => onSheet(proposal)}>
-						{t(locale, 'Open in the sheet…')}
+				</>
+			}
+			actions={
+				<>
+					<Button
+						variant="ghost"
+						disabled={disabled || busy !== null}
+						onClick={() => {
+							void act('decline');
+						}}>
+						{t(locale, 'Decline')}
 					</Button>
-				)}
-				<Button
-					appearance="primary"
-					disabled={disabled || busy !== null}
-					onClick={() => {
-						void act('create');
-					}}>
-					{t(locale, proposal.start === 'schedule' ? 'Schedule (verb)' : 'Create')}
-				</Button>
-			</footer>
-		</section>
+					{/* spec/notifications-slack-notes-and-schedules#schedules: a proposed schedule is made from the card and edited in the Schedules section. */}
+					{proposal.start !== 'schedule' && (
+						<Button disabled={disabled || busy !== null} onClick={() => onSheet(proposal)}>
+							{t(locale, 'Open in the sheet…')}
+						</Button>
+					)}
+					<Button
+						appearance="primary"
+						disabled={disabled || busy !== null}
+						onClick={() => {
+							void act('create');
+						}}>
+						{t(locale, proposal.start === 'schedule' ? 'Schedule (verb)' : 'Create')}
+					</Button>
+				</>
+			}>
+			<Prompt proposal={proposal} folded={long && !whole} />
+			{long && (
+				<button
+					type="button"
+					className={styles.whole}
+					aria-expanded={whole}
+					onClick={() => setWhole((value) => !value)}>
+					{t(locale, whole ? 'Collapse prompt' : 'Whole prompt')}
+				</button>
+			)}
+			<Chips proposal={proposal} locale={locale} />
+		</ChatCard>
 	);
 }
 

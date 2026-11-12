@@ -34,7 +34,9 @@ export function snapshotHasChanges(document: SnapshotDocument | null, from = 0) 
 /** spec/notifications-slack-notes-and-schedules#schedules: a quiet scheduled run is not listed unless `quietRuns` — the filter's «Quiet scheduled runs». */
 export function personTasks<T extends AgentTask>(tasks: readonly T[], quietRuns = false): T[] {
 	const foremen = new Set(
-		tasks.filter((task) => task.crew).map((task) => `${task.projectId}/${task.id}`)
+		tasks
+			.filter((task) => task.crew || task.reviewCrew)
+			.map((task) => `${task.projectId}/${task.id}`)
 	);
 	return tasks.filter(
 		(task) =>
@@ -45,7 +47,7 @@ export function personTasks<T extends AgentTask>(tasks: readonly T[], quietRuns 
 }
 /** Every worker of a foreman's crew, leads and their workers included (they all carry the root's `crewTaskId`, spec/crew#subordinates). */
 export function crewWorkers(foreman: AgentTask, tasks: readonly AgentTask[]): AgentTask[] {
-	return foreman.crew
+	return foreman.crew || foreman.reviewCrew
 		? tasks.filter((task) => task.projectId === foreman.projectId && task.crewTaskId === foreman.id)
 		: [];
 }
@@ -115,9 +117,13 @@ export type CrewWorkerRow = {
 };
 /** Worker rows of a foreman card in tree order with the agent name as prefix and lead depth (spec/crew-templates-and-editor#after-launch, spec/crew#subordinates). */
 export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]): CrewWorkerRow[] {
-	const spec = foreman.crew;
+	// spec/diff-and-review#agent-review-surfaces: a task's reviewers are its rows like a crew's workers; a solo task shows its current review's.
+	const spec = foreman.crew ?? foreman.reviewCrew;
 	if (!spec) return [];
-	const workers = tasks.filter((task) => task.crewTaskId === foreman.id);
+	const current = foreman.crew ? null : new Set(spec.root.checkedBy);
+	const workers = tasks.filter(
+		(task) => task.crewTaskId === foreman.id && (!current || current.has(task.crewNodeId ?? ''))
+	);
 	const rows: CrewWorkerRow[] = [];
 	const visit = (agent: CrewSpecAgent, depth: number) => {
 		for (const child of agent.agents) {
@@ -151,7 +157,8 @@ export function crewTaskLabel(task: AgentTask, tasks: readonly AgentTask[]): str
 	const foreman = tasks.find(
 		(item) => item.id === task.crewTaskId && item.projectId === task.projectId
 	);
-	const name = foreman?.crew ? findSpecAgent(foreman.crew.root, task.crewNodeId)?.name : undefined;
+	const spec = foreman?.crew ?? foreman?.reviewCrew,
+		name = spec ? findSpecAgent(spec.root, task.crewNodeId)?.name : undefined;
 	return name ? `${name} · ${task.title}` : task.title;
 }
 import { findSpecAgent, type CrewSpecAgent } from './crew';

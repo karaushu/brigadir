@@ -122,7 +122,9 @@ export type CrewTurnMarker =
 	| { kind: 'question'; questionId: string; agent: string }
 	| { kind: 'plan-decision'; planId: string; approved: boolean }
 	| { kind: 'branch-report'; report: CrewReportSummary }
-	| { kind: 'part-dropped'; taskId: string; agent: string; part: number };
+	| { kind: 'part-dropped'; taskId: string; agent: string; part: number }
+	/** spec/diff-and-review#agent-review-rounds: the reviewers' comments of a round go to the task's own agent. */
+	| { kind: 'review-comments'; round: number; comments: number };
 export const crewPlanPartLimit = 64,
 	crewPlanPromptLimit = 100_000,
 	crewNoteLimit = 8 * 1024,
@@ -286,6 +288,13 @@ export function isCrewTurnMarker(value: unknown): value is CrewTurnMarker {
 			return isId(value.questionId) && isCrewName(value.agent);
 		case 'plan-decision':
 			return isId(value.planId) && typeof value.approved === 'boolean';
+		case 'review-comments':
+			return (
+				Number.isSafeInteger(value.round) &&
+				Number(value.round) >= 1 &&
+				Number.isSafeInteger(value.comments) &&
+				Number(value.comments) >= 0
+			);
 		case 'part-dropped':
 			return (
 				isId(value.taskId) &&

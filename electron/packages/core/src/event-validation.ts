@@ -17,6 +17,7 @@ import {
 import { isCrewSpecAgent } from './crew';
 import { isId } from './workspace';
 import { isTaskProposal, isTaskProposalResult } from './task-proposal';
+import { isTaskReviewWho } from './task-review';
 import { isBackgroundId, isBackgroundPath } from './background';
 type Check = (v: unknown) => boolean;
 const text: Check = (v) => typeof v === 'string';
@@ -253,6 +254,14 @@ const checks: Record<string, Check> = {
 		approved: bool,
 		comments: number,
 		state: (v) => ['reviewing', 'comments', 'approved', 'disputed'].includes(String(v)),
+	}),
+	'review.proposed': object({ summary: text }),
+	'review.dismissed': object({}),
+	'review.replied': object({ commentId: text }),
+	'review.started': object({ id: isId, reviewers: array(text), who: isTaskReviewWho }),
+	'review.finished': object({
+		id: isId,
+		state: (v) => ['approved', 'disputed', 'outdated', 'stopped'].includes(String(v)),
 	}),
 	'crew.accepted': object({ taskId: isId, nodeId: isId, name: text, conflicts: array(text) }),
 	'crew.worker.stopped': object({ taskId: isId, nodeId: isId, name: text, reason: text }),

@@ -509,6 +509,163 @@ History and merge, review popup, turn footer, turn rail and panel, tool-group fi
 - Only line-change counters use this; tokens use `formatTokenCount`, other counts format as usual; summaries for agents
   keep exact numbers.
 
+<a id="agent-review"></a>
+## Review by agents before the PR
+
+A task can have its changes checked by other agents before a PR, without leaving the task: reviewers are read-only crew
+members attached to the task, their comments go straight to the task's agent (or foreman), it fixes and answers, and the
+reviewers check again — at most two rounds — before the person decides. It is the crew's check edge
+([Crew](crew.md#reviewer)) with the task itself as the checked author.
+
+<a id="agent-review-start"></a>
+### Starting
+
+- **The agent proposes.** MCP `propose_review(summary?)` (person tool, `whenToUse`: after the task's work and the agent's
+  own checks are done, before the person creates a PR; never while a review runs). It returns at once with `proposed:
+  true`; the proposal stays until the person starts the review or dismisses it with `Not now`, and a new proposal replaces
+  it. Refused while a review of the task runs: `A review of this task is already running.`
+- **The person starts it** from the proposal, from `Review…` in the Changes panel (a task with changes; not in the main
+  tree), or from the [Create PR reminder](#agent-review-pr).
+- Each opens the launch dialog of [Review with an agent](pull-requests-and-ci.md#review-launch) with the title
+  `Review before PR` and the note `<task title> · +N −M`: instructions field, [project review notes](pull-requests-and-ci.md#review-notes),
+  `What` (`All changes · Since the last review`, caption `From the task start · N files +a −d` or `Changed since round n
+  of the last review: N files`; the second segment only after a finished review whose trees still differ), `Who`
+  (`Agent · Crew`, caption `Up to 2 rounds: comments go to <agent>, the reviewers check the fixes`) and `Remember for
+  reviews before PR` (action `taskReview` in `actionAgents` / `actionCrews`). There is no `Where`: reviewers always work
+  in their own worktree. `Starting…` on the button; a failure keeps the dialog with `Could not start the review: …`
+  above the footer and `Retry`.
+- **Agent:** one reviewer from the `Reviewer` template with the chosen model. **Crew:** every agent below the crew's
+  root becomes a reviewer with its own model and effort; the crew's foreman is not used — the task's agent leads.
+- While the task's agent is in a turn, the review waits for that turn to end and starts from its snapshot.
+
+<a id="agent-review-members"></a>
+### Reviewers
+
+- Each reviewer is a worker task of the task (`crewTaskId` = the task, or the foreman's crew for a foreman task;
+  `crewNodeId`, `parentTaskId` = the task, `readOnlyAgent`): isolated in a worktree on branch `<task branch>-<reviewer
+  slug>` (the [worker naming rule](crew.md#workers)), the task's repos, no setup command and no `.env` copying. Writes
+  are refused ("You check the work and do not write code.").
+- **Its tree is the round's snapshot.** Before a round the host sets every repo of the reviewer's worktree to the
+  round's result tree (`git read-tree -u --reset <tree>`), so the files on disk are the task's state under review,
+  uncommitted changes included.
+- The spec of the reviewers is kept in the task (`task.reviewCrew`: a crew spec whose root `Task agent` is the task's
+  agent with `checkedBy` = the reviewers), so worker hosts and restarts read it like a crew's. Reviewers of an earlier
+  review stay in it unchecked, and a new reviewer takes a free name (`Reviewer 2`).
+- A foreman task adds the reviewers below its root; comments go to the foreman, which returns work to its workers.
+
+<a id="agent-review-rounds"></a>
+### Rounds
+
+1. A round pins a snapshot per repo: base = the task's change base, result = its latest checkpoint. The host syncs the
+   reviewers' trees and prompts each one (English): `Check task <id> of \`Task agent\` (reviewId …, round n of 2)`, the
+   task's report ([report](crew.md#reports) of the task itself), the project review notes and the person's instructions,
+   then: read with `read_report` / `read_diff`, leave only real, demonstrable findings with `submit_review(taskId,
+   reviewId, comments)` or call `approve(taskId, reviewId)`; do not change files.
+2. When every reviewer has a verdict:
+   - **All approve** → the review is `approved` for that snapshot.
+   - **Comments in round 1** → one batch goes to the task's agent as a prompt (marker `review`), in the
+     [Sending a review](#send-review) format with each comment's `id`, headed `Reviewers <names> left N comments (round 1
+     of 2). Fix what is right; where you disagree, say why in your answer — the reviewers read it in the next round.` The
+     comments are review threads in Changes attributed to the reviewer and the round ([Review from the foreman](crew.md#foreman-review)).
+   - The agent answers a comment it does not fix as asked with MCP `review_reply(commentId, text)` (the task's own
+     agent only; a reply to a fixed one is optional); the reply joins the comment's thread. Round 2's prompt lists the
+     round 1 comments with their answers, and a reviewer insists on one with `submit_review` items carrying
+     `replyTo: <commentId>` — its text joins that thread instead of a new comment.
+   - **Comments in round 2** → the review is `disputed`: nothing more goes to the agent, the task shows `needs-you`, and
+     the person decides each disputed thread: `Back to the agent` sends that comment as the person's own review
+     comment ([Sending a review](#send-review)), `Keep as is` resolves it.
+   - A round 1 comment is **fixed** once it is `Addressed` ([Addressed and resolved](#addressed)), **answered** when the
+     agent replied without changing its lines, **disputed** when a reviewer insisted in round 2.
+3. The agent's turn that answers the batch ends → round 2 starts by itself from the new snapshot; the report carries the
+   agent's last message, so the reviewers read its objections. A foreman hands fixes to its workers, so its round 2 starts
+   at the first turn end after its tree changed.
+4. Any later change of the task's tree (agent or person) makes an approved review `outdated`: the approval covers only
+   the snapshot it read.
+
+- `Stop review` cancels the open round and shuts the reviewers down; their tasks stay as the review's log until the task
+  is archived or deleted. A new review starts at round 1.
+- The review is a [ReviewRun](crew.md#reviewer) of the task's host: the same idempotent deliveries, stale verdicts
+  (`stale_review`), restart recovery and the rule that silence is never approval.
+
+<a id="agent-review-ui"></a>
+### In the task: proposal, strip and chat rows
+
+- **Proposal card** in the chat after the agent's turn (a chat card like the task proposal): header `Ready for review`
+  with `<agent> thinks the task is done`, the summary, chips `N files +a −d` and the branch; footer: the remembered
+  reviewers on the left (`Review crew · Astra · Opus` or the agent's model), `Not now`, `Options…` (the launch dialog),
+  `Start review` (primary: starts at once with the remembered `Who`, all changes, no instructions). `Not now` leaves
+  the row `Review skipped` with `Start review`. A proposal of an earlier turn that a new turn followed stays as that row.
+- **Review strip** in the composer deck above the input, with the queue and background strips, while the review lives
+  and after it until the next change, `×` or archive. One S row: state glyph, `Review` (bold), the state in muted text,
+  actions, chevron. The chevron (or a click on the row) opens two sections: `Reviewers N` — a row per reviewer: provider
+  glyph, `name · provider`, its state and time (`reading · 1m 12s`, `3 comments`, `checking`, `approved`), `Log`; and
+  `Comments N` once comments came — a row per comment: its text, `file:line · reviewer` (mono, muted) and a tag `sent`,
+  `fixed` (`--green`, the text struck through), `answered` (`--fg3`) or `disputed` (`--amber`). A click on a comment
+  opens its thread in the diff. A disputed comment stands first and open: the agent's answer as a quote, `Back to the
+  agent`, `Keep as is`. A passed review keeps the list with `Review again…` and `Create PR…`.
+
+| State | Row | Actions |
+| --- | --- | --- |
+| Round running | `round n of 2 · Astra reading · Opus reading`; round 2 adds `checking the fixes · N fixed · N answered` | `Stop` |
+| Agent fixing | `<agent> fixes N comments` | `Stop` |
+| Passed (`--green-soft`) | `Review passed · N comments · N fixed · N answered` | `Create PR…`, `×` |
+| Disputed (`--amber-soft`, open) | `Your call · <reviewer> disputes N comments`; the sections open with the disputed comments first | chevron |
+| Stopped | `Review stopped · N comments came` | `Start again…`, `×` |
+| Did not start | `Review did not start · <reviewer>: <reason>` (`--red` glyph) | `Start with <other agent>` when another provider is signed in, `Retry` |
+
+- **The comment count is a link** wherever it stands — the strip row and the chat rows (`N comments`): a dotted
+  underline in the text colour at rest, solid on hover; a click expands the strip on `Comments`.
+- `Log` (strip, sidebar row, thread) opens the reviewer's task, which shows its log read-only.
+- **Chat rows** (service rows, not cards): `review · <who> · round 1 of 2 started`; `review · Astra, Opus → <agent> ·
+  round 1 of 2 · N comments`; `review · Astra, Opus · approved · round 2 of 2 passed`; `review · Astra · <file:line> ·
+  round 2 of 2 disputed`; `review · stopped by you · round n of 2`. The batch turn shows the turn status
+  `Fixing the review comments…`.
+
+<a id="agent-review-surfaces"></a>
+### Changes, threads and the sidebar
+
+- **`Review…` in the Changes commit strip**, beside `Commit`, glyph `review`. It shows the review's state: `Review · 1/2`
+  (spinner) while a round runs, `Fixing · N` while the agent fixes, `Reviewed` (`--green`) after a pass, `Your call`
+  (`--amber`) when disputed, and `Review…` with an accent dot when the tree changed after a review. A click opens the
+  launch dialog, or expands the strip while a review lives.
+- **Threads.** A reviewer's comment card shows the reviewer's provider glyph and name, the line link and a tag: `round 1`,
+  `fixed`, `answered`, `disputed`. Under it: the agent's reply (`<agent> · round 2`), a reviewer's insistence, and a
+  footer — `Sent to <agent> · fixing` with `Log`, `<reviewer> approved in round 2`, or `Your call` with `Back to the
+  agent` and `Keep as is`.
+- **Sidebar.** Reviewers are rows under the task's card, like crew workers: `<reviewer> · Review · round n`, `· N comments
+  · waits`, `· Approved`, `· N disputed comments` (amber). The card's second line says `Review · round n of 2`, `Fixing
+  N comments` or `Your call · N disputed comments` (the card takes the `needs-you` fill); its counter counts reviewers.
+  A click on a row opens the reviewer's task. The rows stay until the next change after the review, or the archive.
+
+<a id="agent-review-pr"></a>
+### Create PR reminder
+
+The New pull request sheet of a task shows a row above `Title`; `Create PR` stays available in every state. Not shown in
+the main tree.
+
+| Review | Row | Button |
+| --- | --- | --- |
+| none | `Not reviewed` · `N files changed since the task start` (`--amber-soft`) | `Review first` |
+| outdated | `Changed since the review` · `N files after round n · <reviewers> approved the rest` | `Review again` |
+| running | `Review in progress` · `Round n of 2 · <reviewers>` | `Open the review` |
+| disputed | `N disputed comments` · `<reviewers> and <agent> did not agree; your call` | `Open the review` |
+| approved, unchanged | `Reviewed` · `<reviewers> approved in round n · N comments, N fixed` (`--green-soft`) | — |
+
+`Review first` / `Review again` close the sheet and open the launch dialog; `Open the review` closes it and expands the
+strip.
+
+<a id="agent-review-data"></a>
+### Data
+
+- `task-review.json` in the task directory (`schemaVersion: 1`): the proposal (`summary`, `at`), the current review (`id`,
+  `who` = agent or crew id, `instructions`, `startedAt`, `state` ∈ `waiting | reviewing | comments | approved | disputed
+  | outdated | stopped`, `round`, `snapshot` per repo, `reviewers`). Rounds and verdicts are `ReviewRun`s in
+  `crew-reviews.json`.
+- Journal events (rule 2): `review.proposed` (`summary`), `review.dismissed`, `review.started` (`id`, `reviewers`,
+  `who`), `review.finished` (`id`, `state`); each round is a `crew.review` with the task as the checked member.
+- Host commands: `startReview` (the resolved reviewers, `who`, `instructions`, `guidance`), `stopReview`,
+  `dismissReviewProposal`.
+
 <a id="later"></a>
 ## Later
 

@@ -10,6 +10,7 @@ import {
 } from 'react';
 import {
 	t,
+	taskReviewCommentState,
 	commentCount,
 	fileCount,
 	type Locale,
@@ -337,6 +338,8 @@ export function CommentCard({
 	onEdit,
 	onRemove,
 	onResolve,
+	onSendBack,
+	agent = '',
 }: {
 	comment: ReviewComment & ReviewStatus;
 	locale: Locale;
@@ -345,12 +348,21 @@ export function CommentCard({
 	onEdit(): void;
 	onRemove(): void;
 	onResolve(): void;
+	/** spec/diff-and-review#agent-review-surfaces: `Back to the agent` on a disputed reviewer's comment. */
+	onSendBack?(): void;
+	/** The task's agent by name, for its replies in the thread. */
+	agent?: string;
 }) {
+	// spec/diff-and-review#agent-review-surfaces: a reviewer's comment of the task's review shows the reviewer, its round and where it went.
+	const round = comment.review,
+		tag = round ? taskReviewCommentState(comment) : null;
 	return (
-		<article className={styles.comment} data-size="s">
+		<article className={styles.comment} data-size="s" data-review-tag={tag ?? undefined}>
 			<header>
 				<span className={styles.avatar}>●</span>
-				<strong>{t(locale, 'You')}</strong>
+				<strong>
+					{round ? round.reviewer : (comment.author?.split(' · ')[0] ?? t(locale, 'You'))}
+				</strong>
 				<span className={styles.lineCount}>
 					{lineSpan(comment.anchor.start, comment.anchor.end)}
 					{position?.state === 'relocated' && position.start !== null && position.end !== null
@@ -391,6 +403,40 @@ export function CommentCard({
 				locale={locale}
 			/>
 			<p>{comment.text}</p>
+			{round && (
+				<>
+					{comment.replies?.map((reply) => (
+						<div className={styles.reply} key={reply.at} data-agent={reply.agent}>
+							<header>
+								<strong>{reply.agent ? agent || reply.author : reply.author}</strong>
+								<small>{t(locale, 'round {n}').replace('{n}', String(reply.round))}</small>
+							</header>
+							<p>{reply.text}</p>
+						</div>
+					))}
+					<footer className={styles.reviewFoot} data-tag={tag}>
+						<small>
+							{tag === 'disputed'
+								? t(locale, 'Your call')
+								: tag === 'fixed'
+									? t(locale, 'fixed')
+									: tag === 'answered'
+										? t(locale, 'answered')
+										: `${t(locale, 'round {n}').replace('{n}', String(round.round))} · ${t(locale, 'sent')}`}
+						</small>
+						{tag === 'disputed' && onSendBack && (
+							<Button variant="ghost" appearance="primary" onClick={onSendBack}>
+								{t(locale, 'Back to the agent')}
+							</Button>
+						)}
+						{tag === 'disputed' && (
+							<Button variant="ghost" appearance="primary" onClick={onResolve}>
+								{t(locale, 'Keep as is')}
+							</Button>
+						)}
+					</footer>
+				</>
+			)}
 		</article>
 	);
 }

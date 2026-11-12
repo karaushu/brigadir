@@ -290,3 +290,45 @@
 		opacity: 0;
 	}
 }
+/* spec/diff-and-review#agent-review-surfaces: the thread of a reviewer's comment — the agent's answer or a reviewer insisting, then where it went. */
+.reply {
+	border-top: 1px solid var(--sep);
+}
+.reply > header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 9px 0;
+	font-size: var(--text-11);
+}
+.reply > header strong {
+	color: var(--fg);
+	font-size: var(--text-11);
+}
+.reply > header small {
+	margin-left: auto;
+	font-size: var(--text-10);
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--tint);
+	color: var(--fg2);
+}
+.reviewFoot {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 6px 4px 9px;
+	border-top: 1px solid var(--sep);
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.reviewFoot > small {
+	flex: 1;
+	font-size: var(--text-11);
+}
+.reviewFoot[data-tag='fixed'] > small {
+	color: var(--green);
+}
+.reviewFoot[data-tag='disputed'] > small {
+	color: var(--amber);
+}

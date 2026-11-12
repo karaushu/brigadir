@@ -61,6 +61,7 @@ export function BackgroundDeck({
 	locale,
 	send,
 	queue,
+	review,
 	onOpenSubagent,
 }: {
 	task: AgentTask;
@@ -68,6 +69,7 @@ export function BackgroundDeck({
 	locale: Locale;
 	send(command: SessionCommand): Promise<boolean>;
 	/** The queue's own list, under the background one in the same deck. */ queue: React.ReactNode;
+	/** spec/diff-and-review#agent-review-ui: the review strip, the deck's first list. */ review?: React.ReactNode;
 	/** Scrolls the log to the subagent's block and opens it. */ onOpenSubagent(id: string): void;
 }) {
 	const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
@@ -86,10 +88,11 @@ export function BackgroundDeck({
 	useEffect(() => {
 		setNow(Date.now());
 	}, [records.length]);
-	if (!rows.length && !queue) return null;
+	if (!rows.length && !queue && !review) return null;
 	const live = rows.filter((command) => command.state === 'running').length;
 	return (
 		<Deck data-background-deck={rows.length ? true : undefined}>
+			{review}
 			{rows.length > 0 && (
 				<DeckList label={t(locale, 'Background work')} data-background-list>
 					{rows.map((command, index) => (

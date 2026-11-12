@@ -113,7 +113,9 @@ test('commit strip is one row that opens the dialog, which generates explicitly,
 			snapshot = strip.getByRole('button', { name: 'Compare snapshots', exact: true });
 		await expect(open).toBeEnabled();
 		await expect(strip.getByRole('textbox')).toHaveCount(0);
-		await expect(strip.getByRole('button')).toHaveCount(2);
+		// spec/diff-and-review#agent-review-surfaces: `Review…` stands beside Commit.
+		await expect(strip.getByRole('button')).toHaveCount(3);
+		await expect(strip.locator('[data-review-button]')).toHaveCount(1);
 		await expect(strip.locator('[aria-expanded]')).toHaveCount(1);
 		// The picker opens the funnel's «Compare snapshots» popover; Esc closes it and gives the focus back.
 		const compare = page.getByRole('dialog', { name: 'Diff options', exact: true });

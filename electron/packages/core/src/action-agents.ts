@@ -7,7 +7,13 @@ import { isHelperAgent, type AgentProviderId, type HelperAgent, type HelperRun }
  * texts from the Helper agent — until Settings ▸ Agents ▸ Customize per action (or `Remember for …` in the in-place capsule)
  * gives it its own model · effort.
  */
-export const taskActions = ['review', 'reviewSuggestions', 'agentFix', 'conflicts'] as const;
+export const taskActions = [
+	'review',
+	'reviewSuggestions',
+	'taskReview',
+	'agentFix',
+	'conflicts',
+] as const;
 export const helperActions = [
 	'prSummary',
 	'reviewDrafts',
@@ -80,7 +86,7 @@ export function changedActions(agents: ActionAgents): AgentAction[] {
  * spec/pull-requests-and-ci#review-crew: a crew instead of one agent — the Crew segment of «Review with an agent ▾». Only the review actions take a crew; the
  * entry names a library crew by id and keeps its name for Settings ▸ Agents ▸ Customize per action (`Crew · <name>`).
  */
-export const crewActions = ['review', 'reviewSuggestions'] as const;
+export const crewActions = ['review', 'reviewSuggestions', 'taskReview'] as const;
 export type CrewAction = (typeof crewActions)[number];
 export type ActionCrew = { templateId: string; name: string };
 export type ActionCrews = Partial<Record<CrewAction, ActionCrew>>;

@@ -1785,7 +1785,11 @@ export function TaskView({
 			if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
 		};
 	}, [reviewOpen]);
-	const reviewSummary = reviewFiles(review, changes);
+	// spec/diff-and-review#agent-review-surfaces: the reviewer agents' comments are threads in the diff, not the person's review to send.
+	const reviewSummary = reviewFiles(
+		{ ...review, comments: review.comments.filter((comment) => !comment.review) },
+		changes
+	);
 	const unavailable = (changes?.scopes ?? []).filter((scope) => scope.available === false);
 	const notices = (placement: 'composer' | 'shelf') => (
 		<>

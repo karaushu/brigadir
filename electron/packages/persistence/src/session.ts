@@ -429,6 +429,7 @@ export class SessionStore {
 				| 'agentRole'
 				| 'changeBase'
 				| 'crew'
+				| 'reviewCrew'
 				| 'crewTaskId'
 				| 'crewNodeId'
 				| 'parentTaskId'

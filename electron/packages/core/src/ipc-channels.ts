@@ -35,6 +35,7 @@ import {
 import { isProjectView, isBoardColumn } from './board';
 import { isProjectMode } from './pr-board';
 import { isNoteId, isNoteText } from './notes';
+import { isTaskReviewChoice } from './task-review';
 import { isScheduleDraft, isScheduleId } from './schedules';
 import { noteChatLimits } from './note-chat';
 import type { TaskSheet } from './bridge';
@@ -3161,6 +3162,51 @@ export const ipcTable = {
 		class: 'remote',
 		arity: 2,
 		validate: (a) => a.length === 2 && isTaskKey(a[0]) && isAttachmentId(a[1]),
+	},
+	/** spec/diff-and-review#agent-review: a task's review before the PR — its state, start (the launch dialog's choice), stop, `Not now`. */
+	readTaskReview: {
+		kind: 'invoke',
+		channel: 'task-review:read',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isTaskKey(a[0]),
+	},
+	startTaskReview: {
+		kind: 'invoke',
+		channel: 'task-review:start',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTaskKey(a[0]) && isTaskReviewChoice(a[1]),
+	},
+	stopTaskReview: {
+		kind: 'invoke',
+		channel: 'task-review:stop',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isTaskKey(a[0]),
+	},
+	sendTaskReviewComment: {
+		kind: 'invoke',
+		channel: 'task-review:send-comment',
+		class: 'remote',
+		arity: 2,
+		validate: (a) =>
+			a.length === 2 && isTaskKey(a[0]) && typeof a[1] === 'string' && a[1].length <= 100,
+	},
+	resolveTaskReviewComment: {
+		kind: 'invoke',
+		channel: 'task-review:resolve-comment',
+		class: 'remote',
+		arity: 2,
+		validate: (a) =>
+			a.length === 2 && isTaskKey(a[0]) && typeof a[1] === 'string' && a[1].length <= 100,
+	},
+	dismissTaskReview: {
+		kind: 'invoke',
+		channel: 'task-review:dismiss',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isTaskKey(a[0]),
 	},
 	readReview: {
 		kind: 'invoke',

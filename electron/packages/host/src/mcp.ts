@@ -99,6 +99,10 @@ const whenToUse: Record<string, string> = {
 		'Call it when the person names another task and you do not have its task ID, before task_send.',
 	task_send:
 		'Use it when the person asks you to send, hand over or tell something to another task. Never use your own messaging or agent tools for Brigadir tasks: they do not reach them.',
+	review_reply:
+		'Call it only for a comment of a review batch of this task, when you do not fix it as asked.',
+	propose_review:
+		'Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.',
 	add_folder: 'Use it when the work needs files outside the project, such as a sibling repository.',
 	slack_post:
 		'Use it when the person asks to post to Slack as Brigadir or as the bot. Never read a Slack token from env files or call the Slack API yourself.',
@@ -251,6 +255,24 @@ const humanTools: Tool[] = [
 			text: z.string().trim().min(1).max(100_000),
 		},
 		run: async (args, call, signal) => text(await call('task_send', args, signal)),
+	},
+	// spec/diff-and-review#agent-review-start: a card in the chat that offers the person a review of this task's changes by other agents.
+	{
+		name: 'propose_review',
+		description:
+			"Offer the person a review of this task's changes by other agents before the pull request. The person sees a card and starts the review or dismisses it; the call does not wait. When the person starts it, reviewer agents read your changes and their comments come back to you as a review batch: fix what is right, and where you disagree say why in your answer, since the reviewers read it in the next round. summary: one or two sentences on what was done and what the reviewers should look at. Returns proposed: true, or the reason it was refused.",
+		shape: { summary: z.string().trim().max(4000).default('') },
+		run: async (args, call, signal) => text(await call('propose_review', args, signal)),
+	},
+	{
+		name: 'review_reply',
+		description:
+			"Answer a reviewer's comment from a review batch of this task's own review: the reply joins the comment's thread, and the reviewers read it in the next round. Use it for a comment you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed.",
+		shape: {
+			commentId: z.string().trim().min(1).max(100),
+			text: z.string().trim().min(1).max(10_000),
+		},
+		run: async (args, call, signal) => text(await call('review_reply', args, signal)),
 	},
 	// spec/projects-and-board#folders-mid-task: a folder from outside the project joins this task while it runs.
 	{

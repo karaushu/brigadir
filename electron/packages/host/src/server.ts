@@ -34,6 +34,11 @@ import {
 	type AttachmentInput,
 	type PromptCommand,
 	type QueuedPrompt,
+	taskReviewers,
+	taskReviewSpec,
+	taskReviewRootName,
+	specAgents,
+	type CrewSpec,
 } from '@brigadir/core';
 import { browserUrl, localBrowserUrl } from './browser-url';
 import { Terminals } from './terminals';
@@ -122,7 +127,9 @@ import {
 	CrewHost,
 	CrewWorker,
 	isCrewToolCall,
+	type CrewContext,
 } from './crew';
+import { TaskReviewLife } from './task-review';
 import { humanToolsAllowed, isWorkspaceTool, simulatorQueued } from '@brigadir/orchestrator';
 import { serveMcp } from './mcp';
 import { ModuleSettings } from './modules';
@@ -191,6 +198,87 @@ export async function startHost(config: HostConfig) {
 		cliBriefSent = false;
 	const crewWorker = crew?.parentKey ? new CrewWorker(store, config.key, crew) : null;
 	let crewHost: CrewHost | null = null;
+	/** spec/diff-and-review#agent-review: the task's review before the PR; a solo task gets a crew host of its reviewers when one starts. */
+	const foremanTask = !!crew && crew.role === 'foreman';
+	const taskReview: TaskReviewLife = new TaskReviewLife({
+		store,
+		key: config.key,
+		emit: (event) => emit(event),
+		records: () => records,
+		busy: () => busy,
+		foreman: foremanTask,
+		existing: () => crewHost,
+		submitReview: (text, review, round) =>
+			command({
+				kind: 'submitReview',
+				text,
+				review,
+				crew: { kind: 'review-comments', round, comments: review.comments.length },
+			}),
+		crew: async (start): Promise<CrewHost> => {
+			if (crew && !foremanTask) throw new Error('A crew worker is reviewed by its crew.');
+			const current = await store.task(config.key),
+				existing = current.crew ?? current.reviewCrew,
+				reviewers = taskReviewers(
+					start.reviewers,
+					`review-${Date.now().toString(36)}`,
+					existing ? specAgents(existing.root).map((agent) => agent.name) : [taskReviewRootName]
+				);
+			if (foremanTask && crewHost && current.crew) {
+				const spec = {
+					...current.crew,
+					root: {
+						...current.crew.root,
+						agents: [...current.crew.root.agents, ...reviewers],
+						checkedBy: reviewers.map((agent) => agent.id),
+					},
+				};
+				await store.updateTask(config.key, { crew: spec });
+				crewHost.adoptSpec(spec);
+				return crewHost;
+			}
+			// Earlier reviewers stay in the spec, unchecked: their tasks keep a crew to read.
+			const spec = taskReviewSpec(current.provider ?? 'claude', reviewers);
+			if (current.reviewCrew) spec.root.agents = [...current.reviewCrew.root.agents, ...reviewers];
+			await store.updateTask(config.key, { reviewCrew: spec });
+			if (crewHost) {
+				crewHost.adoptSpec(spec);
+				return crewHost;
+			}
+			crewHost = await crewHostFor(selfContext(spec));
+			return crewHost;
+		},
+	});
+	const selfContext = (spec: CrewSpec): CrewContext => ({
+		role: 'foreman',
+		crewKey: config.key,
+		spec,
+		node: spec.root,
+		parent: null,
+		parentKey: null,
+		isRoot: true,
+	});
+	async function crewHostFor(context: CrewContext): Promise<CrewHost> {
+		const host: CrewHost = new CrewHost({
+			store,
+			key: config.key,
+			context,
+			services: {
+				dataDir: config.dataDir,
+				mcpEntry: config.mcpEntry,
+				runtime: config.runtime ?? process.execPath,
+				...(config.adapter ? { adapter: config.adapter } : {}),
+			},
+			emit,
+			records: () => records,
+			parent: () => crewWorker?.request() ?? null,
+			prompt: (text, marker) =>
+				command({ kind: 'prompt', text, ...(marker ? { crew: marker } : {}) }),
+			self: taskReview.hooks(),
+		});
+		await host.start();
+		return host;
+	}
 	// spec/settings-modules-and-onboarding#modules: the modules on in Settings decide which human tools the MCP sessions list; a switch reaches open sessions.
 	const modules = new ModuleSettings(store.root);
 	await modules.load();
@@ -359,7 +447,7 @@ export async function startHost(config: HostConfig) {
 				...(attachments.length
 					? { attachments: attachments.map((value) => value.attachment) }
 					: {}),
-				...(c.kind === 'prompt' && c.crew ? { crew: c.crew } : {}),
+				...((c.kind === 'prompt' || c.kind === 'submitReview') && c.crew ? { crew: c.crew } : {}),
 			});
 		} catch (error) {
 			busy = false;
@@ -939,6 +1027,9 @@ export async function startHost(config: HostConfig) {
 			if (event.kind === 'session.failed') status = 'failed';
 			if (event.kind === 'host.stopped' && busy) status = 'interrupted';
 			if (event.kind === 'crew.accepted' && event.conflicts.length) status = 'needs-you';
+			// spec/diff-and-review#agent-review-rounds: the reviewers and the agent did not agree in two rounds; the person decides.
+			if (event.kind === 'review.finished' && event.state === 'disputed' && !busy)
+				status = 'needs-you';
 			// The persisted expiry event is the boundary for both metadata and FIFO dispatch.
 			if (nextLimits.length && (status || quotaEvent)) status = 'rate-limited';
 			if (quotaEvent) {
@@ -1045,6 +1136,7 @@ export async function startHost(config: HostConfig) {
 						peer.close();
 					}
 				}
+			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
 			if (crewWorker && event.kind === 'turn.completed' && !stopping)
 				void (async () => {
 					if (!crewHost || (await crewHost.branchReady())) await crewWorker.report(record.seq);
@@ -1593,6 +1685,18 @@ export async function startHost(config: HostConfig) {
 			await crewHost.decidePlan(c.decision);
 			return;
 		}
+		if (c.kind === 'startReview') {
+			await taskReview.start(c);
+			return;
+		}
+		if (c.kind === 'stopReview') {
+			await taskReview.stop();
+			return;
+		}
+		if (c.kind === 'dismissReviewProposal') {
+			await taskReview.dismiss();
+			return;
+		}
 		if (c.kind === 'answerCrewQuestion') {
 			if (!crewHost) throw new Error('This task has no crew');
 			await crewHost.answerQuestion(c.id, c.answer, 'human');
@@ -1918,7 +2022,8 @@ export async function startHost(config: HostConfig) {
 		if (method === 'crew_tool') {
 			if (!isCrewToolCall(params)) throw new Error('Invalid crew tool call');
 			if (stopping) throw new Error('Host is stopping');
-			if (crewHost && params.tool !== 'ask_foreman')
+			// A solo task's crew host only runs its review: its own agent has no crew tools.
+			if (crewHost && crew && params.tool !== 'ask_foreman')
 				return crewHost.tool(params.tool, params.params, signal);
 			if (crewWorker) return crewWorker.tool(params.tool, params.params, signal);
 			throw new Error('This task has no crew');
@@ -2187,6 +2292,22 @@ export async function startHost(config: HostConfig) {
 		// spec/terminal-and-cli-agents#agent-console-tools: the console of this task, as the person sees it.
 		if (method.startsWith('console_')) return consoleTool(method.slice(8), params);
 		if (method === 'create_task') return proposeTask(params, signal);
+		if (method === 'review_reply') {
+			if (
+				!isRecord(params) ||
+				typeof params.commentId !== 'string' ||
+				typeof params.text !== 'string'
+			)
+				throw new Error('commentId and text are required');
+			return taskReview.reply(params.commentId, params.text);
+		}
+		// spec/diff-and-review#agent-review-start: the proposal card; the call does not wait for the person.
+		if (method === 'propose_review') {
+			if (task.readOnlyAgent === true) throw new Error('This task changes no code to review.');
+			return taskReview.propose(
+				isRecord(params) && typeof params.summary === 'string' ? params.summary : ''
+			);
+		}
 		// spec/tasks#task-messages: main knows the project's tasks and delivers the message.
 		if (method === 'tasks_list' || method === 'task_send') {
 			if (!ui) throw new Error('Messages between tasks need the application');
@@ -2892,25 +3013,10 @@ export async function startHost(config: HostConfig) {
 			},
 			() => snapshots?.current.scopes.map((scope) => scope.path) ?? []
 		);
-		if (crew && (crew.role === 'foreman' || crew.role === 'lead')) {
-			crewHost = new CrewHost({
-				store,
-				key: config.key,
-				context: crew,
-				services: {
-					dataDir: config.dataDir,
-					mcpEntry: config.mcpEntry,
-					runtime: config.runtime ?? process.execPath,
-					...(config.adapter ? { adapter: config.adapter } : {}),
-				},
-				emit,
-				records: () => records,
-				parent: () => crewWorker?.request() ?? null,
-				prompt: (text, marker) =>
-					command({ kind: 'prompt', text, ...(marker ? { crew: marker } : {}) }),
-			});
-			await crewHost.start();
-		}
+		if (crew && (crew.role === 'foreman' || crew.role === 'lead'))
+			crewHost = await crewHostFor(crew);
+		else if (!crew && task.reviewCrew) crewHost = await crewHostFor(selfContext(task.reviewCrew));
+		await taskReview.load();
 		await crewWorker?.start();
 		ready = true;
 		if (!config.consoleOnly) await ensureAgent();

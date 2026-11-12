@@ -125,6 +125,7 @@ export function useHelperSettings(): HelperSettings | null {
 export const actionNames: Record<AgentAction, MessageKey> = {
 	review: 'Review with an agent',
 	reviewSuggestions: 'Suggestions in review',
+	taskReview: 'Review before PR',
 	agentFix: 'Agent fixes it',
 	conflicts: 'Resolve conflicts',
 	prSummary: 'PR summary',

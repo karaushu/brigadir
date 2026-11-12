@@ -133,6 +133,7 @@ import { chatMenuMouseDown, openChatMenu } from './chat-menu';
 import { notify } from './ui/Toast';
 import { DeckList, DeckRow } from './ui/Deck';
 import { BackgroundDeck } from './BackgroundDeck';
+import { ReviewEventRow, ReviewProposalRow, ReviewStrip, useReviewStripShown } from './TaskReview';
 import styles from './Conversation.module.css';
 const ToolTerminal = lazy(() => import('./ToolTerminal'));
 import {
@@ -424,6 +425,7 @@ export function Conversation({
 	)?.event;
 	const usage = records.findLast((r) => r.event.kind === 'usage.changed')?.event;
 	const hostConnected = Boolean(snapshot?.connected);
+	const reviewStrip = useReviewStripShown(task);
 	// spec/architecture-and-platform#host-lifecycle: a host stopped for idleness is not a stopped agent: no banner, and the next message starts it again.
 	const idle = task.transport !== 'terminal' && !snapshot?.issue && idleStopped(records);
 	// A host up only for the task's consoles (spec/task-window-workspace#restore-window) is connected without an agent: the Resume banner, not a prompt it refuses.
@@ -1346,6 +1348,26 @@ export function Conversation({
 						}
 					/>
 				);
+			// spec/diff-and-review#agent-review-ui: the review before the PR — the proposal card and its own service rows; the task's own report and its
+			// reviewers' creation are the review's machinery, not rows.
+			if (e.kind === 'review.proposed')
+				return (
+					<ReviewProposalRow
+						task={task}
+						record={row.record}
+						records={records}
+						locale={locale}
+						disabled={!hostConnected}
+					/>
+				);
+			if (
+				e.kind === 'review.started' ||
+				e.kind === 'review.finished' ||
+				(e.kind === 'crew.review' && e.taskId === task.id)
+			)
+				return <ReviewEventRow task={task} record={row.record} locale={locale} />;
+			if (e.kind === 'crew.report' && e.report.taskId === task.id) return null;
+			if (e.kind === 'crew.worker.created' && e.nodeId.startsWith('review-')) return null;
 			if (e.kind === 'turn.started' || e.kind.startsWith('crew.'))
 				return (
 					<CrewEventRow
@@ -1854,6 +1876,25 @@ export function Conversation({
 					records={records}
 					locale={locale}
 					send={send}
+					review={
+						reviewStrip ? (
+							<ReviewStrip
+								task={task}
+								locale={locale}
+								disabled={!hostConnected}
+								onComment={(comment) =>
+									setTask({
+										panel: 'changes',
+										panelShown: true,
+										selected: `${comment.scopeId}/${comment.path}`,
+										surface: 'diff',
+										reviewTarget: comment.id,
+									})
+								}
+								onReviewer={(id) => useWorkspace.getState().selectTask(task.projectId, id)}
+							/>
+						) : undefined
+					}
 					onOpenSubagent={(id) =>
 						// spec/chat-turns-plans-and-questions#background-subagents: «Open» brings the subagent's block into view, open.
 						setTask((state) => ({

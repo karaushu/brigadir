@@ -22,7 +22,11 @@ import {
 	taskLaunchOptions,
 	withActionAgent,
 	withActionCrew,
+	isCrewAction,
 	actionCrewId,
+	type CrewSpecAgent,
+	type TaskReviewChoice,
+	type TaskReviewWho,
 	type AgentAction,
 	type ActionCrew,
 	type CrewAction,
@@ -69,6 +73,7 @@ import { NoticeLog } from './notice-log';
 import { QuitGuard, type PendingWrite } from './quit-guard';
 import { Boards } from './boards';
 import { resolveReviewCrew, reviewCrewPrompt, reviewGuidance } from './review-crew';
+import { readTaskReview, reviewerAgent } from './task-review';
 import { ProjectViews } from './views';
 import { personTasks } from '@brigadir/core';
 import {
@@ -3157,7 +3162,7 @@ void app.whenReady().then(async () => {
 		appliedSettings = await settings.save({
 			...appliedSettings,
 			actionAgents: withActionAgent(appliedSettings.actionAgents, action, agent),
-			...(agent && (action === 'review' || action === 'reviewSuggestions')
+			...(agent && isCrewAction(action)
 				? { actionCrews: withActionCrew(appliedSettings.actionCrews, action, null) }
 				: {}),
 		});
@@ -5001,6 +5006,52 @@ void app.whenReady().then(async () => {
 	);
 	handle('review:positions', (key, id) => reviews.positions(key, id));
 	handle('review:read', (key, fileId) => reviews.read(key, fileId));
+	// spec/diff-and-review#agent-review: the task's review before the PR. Main resolves who reviews and the guidance; the task's host runs the rounds.
+	handle('task-review:read', async (key) =>
+		readTaskReview(await SessionStore.at(process.env.BRIGADIR_DATA_DIR), key, (task) =>
+			reviews.read(task, null)
+		)
+	);
+	handle('task-review:start', async (key, choice: TaskReviewChoice) => {
+		try {
+			const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
+				project = await store.project(key.projectId),
+				library = await (await TemplateStore.at(process.env.BRIGADIR_DATA_DIR)).read();
+			const crewId = actionCrewId(
+				'taskReview',
+				choice.agent,
+				choice.crew,
+				appliedSettings.actionCrews
+			);
+			let reviewers: CrewSpecAgent[], who: TaskReviewWho;
+			if (crewId) {
+				const crew = resolveReviewCrew(library, crewId, appliedSettings.agents.provider);
+				reviewers = crew.root.agents;
+				who = { kind: 'crew', id: crewId, name: crew.name };
+			} else {
+				const { provider, launchOptions } = await taskAgent('taskReview', choice.agent);
+				reviewers = [reviewerAgent(provider, launchOptions, library.agents)];
+				who = { kind: 'agent' };
+			}
+			await sessions.command(key, {
+				kind: 'startReview',
+				reviewers,
+				who,
+				instructions: choice.notes,
+				guidance: reviewGuidance(project.reviewNotes, choice.notes, '.', 'HEAD'),
+				since: choice.since,
+			});
+			return null;
+		} catch (error) {
+			return error instanceof Error ? error.message : String(error);
+		}
+	});
+	handle('task-review:stop', (key) => sessions.command(key, { kind: 'stopReview' }));
+	handle('task-review:send-comment', async (key, id: string) =>
+		sessions.command(key, await reviews.sendBack(key, id))
+	);
+	handle('task-review:resolve-comment', (key, id: string) => reviews.resolve(key, id, true));
+	handle('task-review:dismiss', (key) => sessions.command(key, { kind: 'dismissReviewProposal' }));
 	handle('review:note', (key, text) => reviews.addNote(key, text));
 	handle('review:add', (key, input) => reviews.add(key, input));
 	handle('review:edit', (key, id, text) => reviews.edit(key, id, text));

@@ -270,6 +270,8 @@ export function CommitStrip({
 						{push}
 					</>
 				)}
+				{/* spec/diff-and-review#agent-review-surfaces: with everything committed `Review…` stays — the review reads the task's changes, not the uncommitted ones. */}
+				{active && !files.length && <ReviewButton task={task} locale={locale} />}
 			</div>
 		</section>
 	);

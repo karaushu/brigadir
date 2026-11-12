@@ -657,7 +657,7 @@ export function ReviewButton({ task, locale }: { task: AgentTask; locale: Locale
 	const view = useTaskReview(task),
 		review = view.review,
 		counts = taskReviewCounts(view);
-	if (isMainTree(task)) return null;
+	if (isMainTree(task) || (!review && !view.changes.files)) return null;
 	const live = taskReviewLive(review);
 	const [label, tone, glyph] =
 		review?.state === 'reviewing' || review?.state === 'waiting'

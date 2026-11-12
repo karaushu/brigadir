@@ -624,7 +624,7 @@ reviewers check again — at most two rounds — before the person decides. It i
 <a id="agent-review-surfaces"></a>
 ### Changes, threads and the sidebar
 
-- **`Review…` in the Changes commit strip**, beside `Commit`, glyph `review`. It shows the review's state: `Review · 1/2`
+- **`Review…` in the Changes commit strip**, beside `Commit`, glyph `review`; it stays when everything is committed (the review reads the task's changes since its start) and is absent only while the task has no changes and no review. It shows the review's state: `Review · 1/2`
   (spinner) while a round runs, `Fixing · N` while the agent fixes, `Reviewed` (`--green`) after a pass, `Your call`
   (`--amber`) when disputed, and `Review…` with an accent dot when the tree changed after a review. A click opens the
   launch dialog, or expands the strip while a review lives.

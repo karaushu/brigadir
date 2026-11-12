@@ -42,7 +42,7 @@ A checkpoint is `{id, at, reason, trees[]}`; `reason` is one of:
 | `baseline` | Before the agent starts (checkpoint 0). |
 | `tools` | After every 5 completed tool calls, and before/after each agent file write through ACP (only the touched repo). |
 | `turn` | At each turn end. |
-| `refresh` | When the repo watcher sees a HEAD change or a repo appear/disappear, and on the panel's refresh button. |
+| `refresh` | When the repo watcher sees HEAD move (commit, reset, checkout — [Git in users' repos](architecture-and-platform.md#perf-git)) or a repo appear/disappear, and on the panel's refresh button. A HEAD move also emits `scopes.changed`, so the `head` base rereads when the tree did not change. |
 | `user-before` / `user-after` | Around an explicit Save in the built-in editor and around a file revert. |
 | `quick-before` / `quick-after` | Around a quick question's edit. |
 

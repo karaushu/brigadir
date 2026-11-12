@@ -252,6 +252,18 @@ test('change marks follow the diff base, the peek reverts a hunk and Settings sw
 		await expect(emptied).toHaveCount(0);
 		await expect(editor).toContainText('beta');
 		expect(await editor.locator('.cm-line').allTextContents()).toEqual(['alpha', 'beta', '']);
+
+		// spec/diff-and-review#diff-base: a commit outside the app moves HEAD but not the tree; the panel rereads without Refresh.
+		await openPanelTab(page, 'changes');
+		const fileRow = (name: string) =>
+			aside
+				.getByRole('list', { name: 'Files', exact: true })
+				.getByRole('button', { name: new RegExp(name.replace('.', '\\.')) });
+		await expect(fileRow('before.txt')).toBeVisible();
+		await git('add', 'before.txt');
+		await git('commit', '-qm', 'Commit outside the app');
+		await expect(fileRow('before.txt')).toHaveCount(0, { timeout: 10000 });
+		await expect(fileRow('a.ts')).toBeVisible();
 		expect(errors).toEqual([]);
 	} finally {
 		await app

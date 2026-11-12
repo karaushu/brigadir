@@ -807,10 +807,12 @@ export async function startHost(config: HostConfig) {
 		}
 		return { reply: null };
 	}
+	/** spec/diff-and-review#diff-base: `headMoved` — the watcher saw a commit, reset or checkout; the base of `head` moved even when the tree did not. */
 	async function checkpoint(
 		reason: Parameters<Snapshots['capture']>[0],
 		scopeIds?: readonly string[],
-		discover?: false
+		discover?: false,
+		headMoved = false
 	) {
 		const before = snapshots?.current.checkpoints.at(-1),
 			checkReadOnly = busy && !['baseline', 'user-before', 'user-after'].includes(reason);
@@ -819,7 +821,7 @@ export async function startHost(config: HostConfig) {
 			scopeIds,
 			...(discover === false ? { discover } : {}),
 		});
-		if (revision !== snapshots?.scopeRevision) await emit({ kind: 'scopes.changed' });
+		if (headMoved || revision !== snapshots?.scopeRevision) await emit({ kind: 'scopes.changed' });
 		if (captured && captured.id !== lastCheckpoint) {
 			await emit({ kind: 'checkpoint.created', checkpoint: captured.id });
 			lastCheckpoint = captured.id;
@@ -2871,7 +2873,12 @@ export async function startHost(config: HostConfig) {
 					if (stopping) return;
 					const options = snapshots?.refreshOptions(change) ?? {};
 					try {
-						await checkpoint('refresh', options.scopeIds, options.discover);
+						await checkpoint(
+							'refresh',
+							options.scopeIds,
+							options.discover,
+							change.heads.length > 0
+						);
 					} catch (error) {
 						if (!stopping) await emit({ kind: 'snapshot.failed', message: String(error) });
 					}

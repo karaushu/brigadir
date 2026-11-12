@@ -113,3 +113,68 @@ it('five hosts: no git for plain directories, one repo on a HEAD change, discove
 		for (const close of closes) close();
 	}
 }, 120000);
+
+it('a commit moves HEAD without rewriting .git/HEAD: in the root, a submodule and a worktree outside the project', async () => {
+	const { movesHead } = await import('./watch-scopes');
+	expect(movesHead(['HEAD'])).toBe(true);
+	expect(movesHead(['logs', 'HEAD'])).toBe(true);
+	expect(movesHead(['refs', 'heads', 'feature', 'x'])).toBe(true);
+	expect(movesHead(['refs', 'heads', 'main.lock'])).toBe(false);
+	expect(movesHead(['HEAD.lock'])).toBe(false);
+	expect(movesHead(['index'])).toBe(false);
+	expect(movesHead(['refs', 'remotes', 'origin', 'main'])).toBe(false);
+	const dir = await realpath(await mkdtemp(join(tmpdir(), 'brigadir-watch-head-')));
+	roots.push(dir);
+	const m = await monorepo(dir, 4),
+		away = join(dir, 'away');
+	await git(m.repo, ['worktree', 'add', '-q', away, '-b', 'away']);
+	const changes: { discover: boolean; heads: string[] }[] = [];
+	const close = watchScopes(
+		m.repo,
+		async (change) => {
+			changes.push(change);
+		},
+		() => [m.repo, m.kit, m.skills, away]
+	);
+	const after = async (run: () => Promise<unknown>) => {
+		await new Promise((resolve) => setTimeout(resolve, 1500));
+		changes.length = 0;
+		await run();
+		await new Promise((resolve) => setTimeout(resolve, 1500));
+		return new Set(changes.flatMap((change) => change.heads));
+	};
+	const commit = (path: string) =>
+		git(path, [
+			'-c',
+			'user.name=F',
+			'-c',
+			'user.email=f@localhost',
+			'commit',
+			'-q',
+			'--allow-empty',
+			'-m',
+			'x',
+		]);
+	try {
+		expect(await after(() => commit(m.repo))).toEqual(new Set([m.repo]));
+		expect(await after(() => commit(m.kit))).toEqual(new Set([m.kit]));
+		// The worktree's branch ref lives in the shared git dir, so the root may refresh too.
+		expect(await after(() => commit(away))).toContain(away);
+		expect(changes.every((change) => !change.discover)).toBe(true);
+	} finally {
+		close();
+	}
+	// A task in its own worktree: the project is the worktree, its git dir lies outside it.
+	const closeAway = watchScopes(
+		away,
+		async (change) => {
+			changes.push(change);
+		},
+		() => [away]
+	);
+	try {
+		expect(await after(() => commit(away))).toEqual(new Set([away]));
+	} finally {
+		closeAway();
+	}
+}, 60000);

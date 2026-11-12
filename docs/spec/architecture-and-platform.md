@@ -455,7 +455,7 @@ A tool that lags is not used, so these rules are contracts, not tuning. Each one
 ### Git in users' repos
 
 - Every read-only git call in a user's repo runs with `GIT_OPTIONAL_LOCKS=0`, so `git status` never rewrites the user's index or takes `index.lock` while an agent works; unmerged paths come from `ls-files -u`.
-- The repo watcher reruns discovery only when a `.git` appears or disappears, `.gitmodules` changes, or a new folder is a known repo or its ancestor; a HEAD change rescans only that repo. History does not reload separately on `checkpoint.created`. A relay runs one `git diff` per repo.
+- The repo watcher reruns discovery only when a `.git` appears or disappears, `.gitmodules` changes, or a new folder is a known repo or its ancestor; a HEAD move rescans only that repo. A move is a write of `HEAD`, `logs/HEAD`, `refs/heads/*` or `packed-refs` in the repo's git dir (a commit on a branch never rewrites `HEAD`); a submodule's `.git/modules/<name>` maps to the submodule, and a known repo whose git dir is outside the project (a linked worktree, an external folder) gets a watcher on that git dir. The host then emits `scopes.changed` even when the tree is unchanged, so `head`-based readers reread. History does not reload separately on `checkpoint.created`. A relay runs one `git diff` per repo.
 - `gh` responses are cached per repo: metadata 10 min, auth `ready` 5 min, PR and checks 20 s. `forge:read` takes a third argument `fresh`; focus, Retry, the Checks dialog and our own push/PR read fresh, switching tasks uses the cache. At most 4 `gh` and 6 git processes run at once. A default-branch change on GitHub shows within 10 minutes.
 
 <a id="perf-limits"></a>

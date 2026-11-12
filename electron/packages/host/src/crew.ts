@@ -49,6 +49,7 @@ import {
 	type CrewNextPart,
 	type EventRecord,
 	type ReviewComment,
+	type ReviewBatch,
 	type SessionCommand,
 	type SessionEvent,
 	type SessionSnapshot,
@@ -136,8 +137,10 @@ export async function readCrewContext(
 	if (!task.crewTaskId || !task.crewNodeId) return null;
 	const crewKey = { projectId: task.projectId, id: task.crewTaskId },
 		crewTask = await store.task(crewKey);
-	if (!crewTask.crew) throw new Error('The crew task has no crew');
-	const node = findSpecAgent(crewTask.crew.root, task.crewNodeId);
+	// spec/diff-and-review#agent-review-members: a reviewer of a solo task's changes reads the task's review crew.
+	const spec = crewTask.crew ?? crewTask.reviewCrew;
+	if (!spec) throw new Error('The crew task has no crew');
+	const node = findSpecAgent(spec.root, task.crewNodeId);
 	if (!node) throw new Error('The crew node is missing');
 	const parentKey = task.parentTaskId
 		? { projectId: task.projectId, id: task.parentTaskId }
@@ -145,9 +148,9 @@ export async function readCrewContext(
 	return {
 		role: crewProcessRole(node.role, false),
 		crewKey,
-		spec: crewTask.crew,
+		spec,
 		node,
-		parent: specParent(crewTask.crew.root, node.id),
+		parent: specParent(spec.root, node.id),
 		parentKey,
 		isRoot: false,
 	};
@@ -240,6 +243,15 @@ export type CrewHostDeps = {
 	records(): readonly EventRecord[];
 	/** A worker connects up to its parent through this link; leads forward notes upward. */
 	parent(): { request(method: string, params: unknown): Promise<unknown> } | null;
+	/** spec/diff-and-review#agent-review: reviewers check this task itself (the root's `checkedBy`); the task side hears every round. */
+	self?: SelfReviewHooks;
+};
+export type SelfReviewHooks = {
+	/** What every reviewer's prompt ends with: the project's review notes and the person's instructions. */
+	guidance(): string;
+	/** The round's comments, as one batch to this task's own agent. */
+	submitReview(text: string, review: ReviewBatch): Promise<void>;
+	round(run: ReviewRun, state: 'reviewing' | 'comments' | 'approved' | 'disputed'): Promise<void>;
 };
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const name = (key: TaskKey) => `${key.projectId}/${key.id}`;
@@ -518,7 +530,32 @@ export class CrewHost {
 			questions: this.questions,
 		});
 	}
+	/**
+	 * spec/diff-and-review#agent-review-members: when reviewers check the root itself, the task is a member of its own check edges —
+	 * the same report, diff, comments and rounds as a worker's, read from this task.
+	 */
+	private selfTitle = '';
+	private selfRecord(): CrewWorkerRecord | null {
+		if (!this.node.checkedBy.length) return null;
+		return {
+			taskId: this.deps.key.id,
+			nodeId: this.node.id,
+			name: this.node.name,
+			title: this.selfTitle,
+			createdAt: '',
+			planPartId: null,
+		};
+	}
+	private isSelf(worker: { taskId: string }) {
+		return worker.taskId === this.deps.key.id;
+	}
+	/** A reviewer of the task itself rather than of a worker. */
+	private checksSelf(agentId: string) {
+		return this.node.checkedBy.includes(agentId);
+	}
 	private worker(taskId: unknown): CrewWorkerRecord {
+		const self = taskId === this.deps.key.id ? this.selfRecord() : null;
+		if (self) return self;
 		const worker =
 			typeof taskId === 'string' ? this.workers.find((item) => item.taskId === taskId) : undefined;
 		if (!worker)
@@ -707,6 +744,11 @@ export class CrewHost {
 		this.deps.context.spec = spec;
 		this.deps.context.node = spec.root;
 	}
+	/** spec/diff-and-review#agent-review-members: a review adds its reviewers below the root; the running host reads the new spec at once. */
+	adoptSpec(spec: CrewSpec) {
+		this.deps.context.spec = spec;
+		this.deps.context.node = spec.root;
+	}
 	private async pendingPlan(): Promise<CrewPlan | null> {
 		try {
 			const doc = await readDocument(await this.file('crew-plan.json'));
@@ -794,7 +836,9 @@ export class CrewHost {
 		agent: CrewSpecAgent,
 		title: string,
 		prompt: string,
-		requestedScopes: string[]
+		requestedScopes: string[],
+		/** spec/diff-and-review#agent-review-members: a reviewer of the task's own changes reads the round's snapshot; it runs nothing. */
+		selfReviewer = false
 	): Promise<CrewWorkerRecord> {
 		const store = this.deps.store,
 			parentTask = await store.task(this.deps.key),
@@ -876,8 +920,8 @@ export class CrewHost {
 				branch,
 				baseRef,
 				// spec/pull-requests-and-ci#review-crew: a quick review installs nothing — the reviewers read the PR.
-				setupCommand: review?.quick ? '' : (parentLaunch?.setupCommand ?? ''),
-				copyEnvFiles: parentLaunch?.copyEnvFiles === true,
+				setupCommand: review?.quick || selfReviewer ? '' : (parentLaunch?.setupCommand ?? ''),
+				copyEnvFiles: !selfReviewer && parentLaunch?.copyEnvFiles === true,
 				scopes: launchScopes,
 			}
 		);
@@ -936,6 +980,14 @@ export class CrewHost {
 			(worker) => worker.nodeId === checker.id && !worker.acceptedAt
 		);
 		if (existing) return existing;
+		if (this.checksSelf(checker.id))
+			return this.spawnWorkerTask(
+				checker,
+				'reviews the changes',
+				`You review the changes of this task before its pull request. Reports to check arrive as prompts with a reviewId. Until then, wait; do not modify files.`,
+				[],
+				true
+			);
 		const checks = this.node.agents
 			.filter((agent) => agent.checkedBy.includes(checker.id))
 			.map((agent) => agent.name);
@@ -1652,6 +1704,44 @@ export class CrewHost {
 			);
 			return;
 		}
+		await this.openCheck(worker, reviewers, seq);
+	}
+	/**
+	 * spec/diff-and-review#agent-review-rounds: a round of the task's own review — after the person started it, and after the agent's turn that answered
+	 * the comments. `title` is the task's title for the report's header.
+	 */
+	async checkSelf(seq: number, title: string) {
+		this.selfTitle = title;
+		const self = this.selfRecord();
+		if (!self) throw new Error('This task has no reviewers');
+		const reviewers = this.node.checkedBy
+			.map((id) => this.node.agents.find((agent) => agent.id === id))
+			.filter((agent): agent is CrewSpecAgent => Boolean(agent));
+		await this.serial(() => this.openCheck(self, reviewers, seq));
+	}
+	/** spec/diff-and-review#agent-review-rounds: `Stop review` — the open round ends unanswered and the reviewers stop; their tasks stay. */
+	async stopSelf() {
+		await this.serial(async () => {
+			for (const run of this.reviews)
+				if (this.isSelf(run) && ['reviewing', 'comments'].includes(run.state))
+					run.state = 'cancelled';
+			await this.saveReviews();
+			for (const reviewer of this.workers.filter((worker) => this.checksSelf(worker.nodeId))) {
+				const link = this.links.get(name(this.workerKey(reviewer)));
+				this.retired.add(reviewer.taskId);
+				if (link) await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
+			}
+		});
+	}
+	/** The trees the newest checkpoint of the task holds, per repo, as a round of its review would pin them. */
+	async selfTrees() {
+		const snapshots = await readSnapshots(this.deps.store, this.deps.key).catch(() => null);
+		return (snapshots?.checkpoints.at(-1)?.trees ?? []).map((tree) => ({
+			scopeId: tree.scopeId,
+			tree: tree.tree,
+		}));
+	}
+	private async openCheck(worker: CrewWorkerRecord, reviewers: CrewSpecAgent[], seq: number) {
 		const previous = this.reviews
 			.filter(
 				(run) => run.taskId === worker.taskId && ['reviewing', 'comments'].includes(run.state)
@@ -1708,8 +1798,25 @@ export class CrewHost {
 		for (const worker of this.workers)
 			if (run.reviewerNodeIds.includes(worker.nodeId)) this.retired.delete(worker.taskId);
 		await this.deps.emit({ kind: 'crew.report', report: report.summary });
+		if (this.isSelf(worker)) await this.deps.self?.round(run, 'reviewing');
 		for (const reviewer of reviewers) await this.ensureReviewer(reviewer).catch(() => {});
 		await this.dispatchReviews();
+	}
+	/**
+	 * spec/diff-and-review#agent-review-members: each repo of the reviewer's worktree takes the round's result tree of the same repo of the task
+	 * (matched by its name in the project), index and files; the reviewer writes nothing, so nothing of its own is lost.
+	 */
+	private async syncReviewerTree(reviewer: CrewWorkerRecord, run: ReviewRun) {
+		const [own, theirs] = await Promise.all([
+			readSnapshots(this.deps.store, this.deps.key),
+			readSnapshots(this.deps.store, this.workerKey(reviewer)),
+		]);
+		for (const item of run.scopeSnapshots) {
+			const scope = own?.scopes.find((entry) => entry.id === item.scopeId),
+				target = scope && theirs?.scopes.find((entry) => entry.name === scope.name);
+			if (target && target.available !== false)
+				await gitText(target.path, ['read-tree', '-u', '--reset', item.result]);
+		}
 	}
 	/** One reviewer serves one check at a time; the rest wait FIFO and survive a restart (spec/crew#reviewer). */
 	private async dispatchReviews() {
@@ -1728,20 +1835,27 @@ export class CrewHost {
 			);
 			if (!runs.length || runs.some((run) => run.dispatched.includes(reviewerId))) continue;
 			const run = runs[0]!,
-				worker = this.workers.find((item) => item.taskId === run.taskId);
+				worker =
+					this.workers.find((item) => item.taskId === run.taskId) ??
+					(this.isSelf(run) ? this.selfRecord() : undefined);
 			if (!worker) continue;
 			const key = this.workerKey(reviewer),
 				task = await this.deps.store.task(key).catch(() => null);
 			if (!task || task.status === 'queued' || task.status === 'preparing') continue;
 			const link = await this.spawn(key).catch(() => null);
 			if (!link) continue;
+			const self = this.isSelf(worker);
+			// spec/diff-and-review#agent-review-members: the reviewer's files are the round's snapshot of the task, uncommitted changes included.
+			if (self) await this.syncReviewerTree(reviewer, run).catch(() => {});
 			const report = await this.buildWorkerReport(worker, 'pending', run.round);
 			run.dispatched.push(reviewerId);
 			await this.saveReviews();
 			await link.peer
 				.request('command', {
 					kind: 'prompt',
-					text: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId).`,
+					text: self
+						? `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nThis is the review of the task's changes before its pull request. The files of your tree are the task's state for this round. Read with read_report and read_diff passing this reviewId. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). In round 2 the report ends with the agent's answer to your comments: read its reasons before you insist. Do not change files.${this.deps.self?.guidance() ?? ''}`
+						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId).`,
 					crew: { kind: 'report', report: report.summary },
 				})
 				.catch(async () => {
@@ -1883,6 +1997,22 @@ export class CrewHost {
 			}
 			run.state = 'approved';
 			await this.saveReviews();
+			if (this.isSelf(worker)) {
+				await this.deps.emit({
+					kind: 'crew.review',
+					reviewId: run.reviewId,
+					taskId: run.taskId,
+					name: worker.name,
+					reviewer: run.verdicts.map((item) => item.reviewer).join(', '),
+					round: run.round,
+					approved: true,
+					comments: 0,
+					state: 'approved',
+				});
+				await this.deps.self?.round(run, 'approved');
+				await this.dispatchReviews();
+				return;
+			}
 			const report = await this.buildWorkerReport(
 				worker,
 				'approved',
@@ -1911,6 +2041,26 @@ export class CrewHost {
 		if (run.round >= crewReviewRounds) {
 			run.state = 'disputed';
 			await this.saveReviews();
+			// spec/diff-and-review#agent-review-rounds: the task's own review stops at the dispute; the person decides with the open threads.
+			if (this.isSelf(worker)) {
+				await this.deps.emit({
+					kind: 'crew.review',
+					reviewId: run.reviewId,
+					taskId: run.taskId,
+					name: worker.name,
+					reviewer: run.verdicts
+						.filter((item) => !item.approved)
+						.map((item) => item.reviewer)
+						.join(', '),
+					round: run.round,
+					approved: false,
+					comments: comments.length,
+					state: 'disputed',
+				});
+				await this.deps.self?.round(run, 'disputed');
+				await this.dispatchReviews();
+				return;
+			}
 			await this.finishDisputed(worker, run, 'The reviewer did not agree after two rounds.');
 			await this.dispatchReviews();
 			return;
@@ -1935,6 +2085,7 @@ export class CrewHost {
 			comments: comments.length,
 			state: 'comments',
 		});
+		if (this.isSelf(worker)) await this.deps.self?.round(run, 'comments');
 		await this.dispatchReviews();
 	}
 	private async finishDisputed(worker: CrewWorkerRecord, run: ReviewRun, why: string) {
@@ -2611,6 +2762,15 @@ export class CrewHost {
 						`${index + 1}. File ${JSON.stringify(comment.anchor.path)}, scope ${comment.anchor.scopeId}, new side, blob ${comment.anchor.blob}, lines ${comment.anchor.start}-${comment.anchor.end}.\nComment: ${comment.text}\nQuoted code: ${JSON.stringify(comment.anchor.quote.join('\n'))}`
 				)
 				.join('\n\n');
+		if (this.isSelf(worker)) {
+			const names = [...new Set(comments.map((comment) => (comment.author ?? '').split(' · ')[0]))];
+			// spec/diff-and-review#agent-review-rounds: the task's agent fixes or says why not; the next round reads its answer.
+			await this.deps.self?.submitReview(
+				`Reviewers ${names.join(', ')} left ${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} (round 1 of ${crewReviewRounds}). Fix what is right; where you disagree, say why in your answer — the reviewers read it in the next round.\n\n${text}`,
+				batch
+			);
+			return batch.id;
+		}
 		const link = await this.spawn(this.workerKey(worker));
 		await link.peer.request('command', { kind: 'submitReview', text, review: batch });
 		return batch.id;
@@ -2847,8 +3007,9 @@ export class CrewHost {
 			const parts = this.workers.filter((worker) =>
 				findSpecAgent(root, worker.nodeId)?.checkedBy.includes(reviewer.nodeId)
 			);
+			// A reviewer of the task itself has no parts to wait for: it stops once no round of the task needs it.
 			if (
-				!parts.length ||
+				(!parts.length && !this.checksSelf(reviewer.nodeId)) ||
 				parts.some((worker) => !worker.acceptedAt) ||
 				this.reviews.some(
 					(run) => run.state === 'reviewing' && run.reviewerNodeIds.includes(reviewer.nodeId)

@@ -94,6 +94,7 @@ const verbs = {
 	slack_post: ['Posting to Slack', 'Posted to Slack', 'Could not post to Slack'],
 	tasks_list: ['Looking up tasks', 'Looked up tasks', 'Could not look up tasks'],
 	task_send: ['Writing to a task', 'Wrote to a task', 'Could not write to the task'],
+	propose_review: ['Offering a review', 'Offered a review', 'Could not offer a review'],
 	browser_open: ['Opening the page', 'Opened the page', 'Could not open the page'],
 	browser_state: ['Checking the browser', 'Checked the browser', 'Could not check the browser'],
 	browser_read: ['Reading the page', 'Read the page', 'Could not read the page'],
@@ -212,7 +213,8 @@ export function mcpModule(tool: string): McpModule {
 		tool === 'add_folder' ||
 		tool === 'slack_post' ||
 		tool === 'tasks_list' ||
-		tool === 'task_send'
+		tool === 'task_send' ||
+		tool === 'propose_review'
 	)
 		return 'human';
 	if (tool === 'editor_state' || tool === 'editor_restart_language_servers') return 'editor';
@@ -705,6 +707,11 @@ export function mcpRow(
 				)
 			);
 			text = str(a.text);
+			break;
+		}
+		// spec/diff-and-review#agent-review-start: the summary the card shows.
+		case 'propose_review': {
+			text = str(a.summary);
 			break;
 		}
 		case 'ask_user': {

@@ -127,6 +127,7 @@ export type AgentTask = {
 	/** spec/tasks#archive: when the person marked it completed. */ completedAt?: string;
 	prReview?: TaskPRReview;
 	crew?: CrewSpec;
+	/** spec/diff-and-review#agent-review-members: the reviewers of the task's own changes, as a crew whose root is the task's agent. */ reviewCrew?: CrewSpec;
 	crewTaskId?: string;
 	crewNodeId?: string;
 	parentTaskId?: string;
@@ -306,6 +307,7 @@ export function isAgentTask(value: unknown): value is AgentTask {
 				(value.taskTree.branch === null || typeof value.taskTree.branch === 'string') &&
 				(value.taskTree.scopeId === undefined || typeof value.taskTree.scopeId === 'string'))) &&
 		(value.crew === undefined || isCrewSpec(value.crew)) &&
+		(value.reviewCrew === undefined || isCrewSpec(value.reviewCrew)) &&
 		(value.crewTaskId === undefined || isId(value.crewTaskId)) &&
 		(value.crewNodeId === undefined || isId(value.crewNodeId)) &&
 		(value.parentTaskId === undefined ||

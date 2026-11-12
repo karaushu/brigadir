@@ -855,7 +855,12 @@ export function isCrewSpec(value: unknown): value is CrewSpec {
 				(child.checkedBy.length === 0 || child.role === 'developer') &&
 				edges(child)
 		);
-	return root.checkedBy.length === 0 && edges(root);
+	// spec/diff-and-review#agent-review-members: the root may be checked too — by reviewers among its own agents (a task's review before the PR).
+	return (
+		root.checkedBy.every((checker) =>
+			root.agents.some((item) => item.id === checker && item.role === 'reviewer')
+		) && edges(root)
+	);
 }
 export function specAgents(root: CrewSpecAgent): CrewSpecAgent[] {
 	return [root, ...root.agents.flatMap(specAgents)];

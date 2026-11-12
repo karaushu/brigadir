@@ -415,6 +415,24 @@
      }
     },
     {
+     "name": "propose_review",
+     "description": "Offer the person a review of this task's changes by other agents before the pull request. The person sees a card and starts the review or dismisses it; the call does not wait. When the person starts it, reviewer agents read your changes and their comments come back to you as a review batch: fix what is right, and where you disagree say why in your answer, since the reviewers read it in the next round. summary: one or two sentences on what was done and what the reviewers should look at. Returns proposed: true, or the reason it was refused. Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "summary": {
+        "default": "",
+        "type": "string",
+        "maxLength": 4000
+       }
+      }
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "add_folder",
      "description": "Add a folder from outside the project to this task. A git repository becomes writable after the human allows it; a folder without git joins read-only at once. The folder shows in the diff and the workspace repositories. Use its absolute path right away; your workspace roots include it from your next turn. Folders inside the project are already in the repo list. Returns added: true with name, path and writable, or added: false with the reason. Use it when the work needs files outside the project, such as a sibling repository.",
      "inputSchema": {
@@ -1532,6 +1550,24 @@
        "taskId",
        "text"
       ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "propose_review",
+     "description": "Offer the person a review of this task's changes by other agents before the pull request. The person sees a card and starts the review or dismisses it; the call does not wait. When the person starts it, reviewer agents read your changes and their comments come back to you as a review batch: fix what is right, and where you disagree say why in your answer, since the reviewers read it in the next round. summary: one or two sentences on what was done and what the reviewers should look at. Returns proposed: true, or the reason it was refused. Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "summary": {
+        "default": "",
+        "type": "string",
+        "maxLength": 4000
+       }
+      }
      },
      "execution": {
       "taskSupport": "forbidden"

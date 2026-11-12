@@ -1424,7 +1424,7 @@ export async function startHost(config: HostConfig) {
 	}
 	/**
 	 * spec/notifications-slack-notes-and-schedules#slack-agent-post: `slack_post` — main says where and as whom, the person allows or denies
-	 * with the text in front of them, then main posts it as the bot. The token never leaves main.
+	 * with the text in front of them (unless they let agents post without asking), then main posts it as the bot. The token never leaves main.
 	 */
 	async function slackPostTool(value: unknown, signal: AbortSignal): Promise<unknown> {
 		if (!modules.current().slack) throw new Error(moduleOffMessages.slack);
@@ -1438,23 +1438,29 @@ export async function startHost(config: HostConfig) {
 		const target = await ui.request('slack_target', where);
 		if (!isRecord(target) || typeof target.bot !== 'string' || typeof target.label !== 'string')
 			throw new Error('Slack could not be reached.');
-		const request: PermissionRequest = {
-			id: randomUUID(),
-			tool: {
+		// `agents.slackPostWithoutAsking` (main answers `ask: false`) skips the card; the MCP row still shows the text.
+		if (target.ask !== false) {
+			const request: PermissionRequest = {
 				id: randomUUID(),
-				title: `Post to Slack as ${target.bot} · ${target.label}`,
-				category: 'other',
-				input: value.text,
-			},
-			options: [
-				{ id: 'post', name: 'Allow', kind: 'allow_once' },
-				{ id: 'deny', name: 'Deny', kind: 'reject_once' },
-			],
-		};
-		const answer = permission(request, signal);
-		await emit({ kind: 'permission.requested', request });
-		if ((await answer) !== 'post')
-			return { posted: false, reason: 'The person declined the message.' };
+				tool: {
+					id: randomUUID(),
+					title: `Post to Slack as ${target.bot} · ${target.label}`,
+					category: 'other',
+					input: value.text,
+				},
+				options: [
+					{ id: 'post', name: 'Allow', kind: 'allow_once' },
+					{ id: 'always', name: 'Always allow', kind: 'allow_always' },
+					{ id: 'deny', name: 'Deny', kind: 'reject_once' },
+				],
+			};
+			const answer = permission(request, signal);
+			await emit({ kind: 'permission.requested', request });
+			const choice = await answer;
+			if (choice !== 'post' && choice !== 'always')
+				return { posted: false, reason: 'The person declined the message.' };
+			if (choice === 'always') await ui.request('slack_allow_always', {});
+		}
 		return ui.request('slack_post', { ...where, text: value.text });
 	}
 	/** spec/projects-and-board#folders-mid-task: `add_folder` — the app registers the folder in the project (spec/projects-and-board#external-folders) and adds it to the task once the person allows;

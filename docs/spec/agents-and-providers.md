@@ -157,7 +157,7 @@ Tool families: crew ([crew](crew.md)), human (`ask_user`, `create_task` — [tas
 | Rule | Detail |
 | --- | --- |
 | No agent permission card for our tools | When the adapter asks permission for a tool of the `brigadir` server (`skipsAgentPermission` in `core/mcp-tools.ts`), the transport answers `allow_once` with no `permission.requested` event and no card. A tool of another server with the same name is not covered. |
-| The host asks where consent matters | External domain in `browser_open` / `browser_act`; a project command without `agentRuns`; a folder in `add_folder` (git or not, e.g. `Add docs to the task · read only`); every `slack_post` (`Post to Slack as <bot> · <channel>`). |
+| The host asks where consent matters | External domain in `browser_open` / `browser_act`; a project command without `agentRuns`; a folder in `add_folder` (git or not, e.g. `Add docs to the task · read only`); `slack_post` (`Post to Slack as <bot> · <channel>`) unless `agents.slackPostWithoutAsking`. |
 | No consent at all | `ask_user`, `create_task`, `propose_plan`, `ask_foreman`, `post_note`, `prompt_task`, `create_worker_task`, `submit_review`, `approve`, `accept_task`, `pr_comment`, `pr_comment_reply`, `simulator_open`, `simulator_act`, and all reads. |
 | `readOnlyHint: true` | `browser_state/read/console/network/screenshot/ui`, `simulator_state/ui/screenshot/logs/network`, `editor_state`, `pr_state`, `commands_list`, `commands_output`, `console_list`, `console_read`, `task_status`, `read_report`, `read_transcript`, `read_diff`, `read_notes` — so Claude calls them in Plan mode like `Read`. |
 

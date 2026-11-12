@@ -17,13 +17,13 @@ import {
 	type SlackSettings as Settings,
 	type SlackState,
 } from '@brigadir/core';
-import { Button, Popup, Segments, Switch } from './ui/Controls';
+import { Button, Choice, Popup, Segments, Switch } from './ui/Controls';
 import { Glyph } from './ui/Glyph';
 import { optionChoices } from './ui/OptionIcon';
 import { Spinner } from './ui/Loading';
 import { readCatalog, useProviderCatalogs } from './HelperAgent';
 import { TextInput } from './ui/Input';
-import { SettingsRow, SettingsSection } from './SettingsForm';
+import { SettingsOption, SettingsRow, SettingsSection } from './SettingsForm';
 import styles from './RemoteSettings.module.css';
 
 const eventNames: Record<SlackEvent, MessageKey> = {
@@ -281,6 +281,27 @@ export function SlackSettings({
 						/>
 					</SettingsRow>
 				))}
+			</SettingsSection>
+			{/* spec/notifications-slack-notes-and-schedules#slack-agent-post: without it, every `slack_post` asks `Post to Slack as …`. */}
+			<SettingsSection title={t(locale, 'Agents')} disabled={busy}>
+				<SettingsOption
+					title={t(locale, 'Agents can post without confirmation')}
+					detail={t(
+						locale,
+						"No permission card before an agent's message. The message still shows in the chat."
+					)}>
+					<Choice
+						type="checkbox"
+						label={t(locale, 'Agents can post without confirmation')}
+						checked={settings.agents.slackPostWithoutAsking}
+						disabled={busy}
+						onChange={(event) => {
+							update({
+								agents: { ...settings.agents, slackPostWithoutAsking: event.currentTarget.checked },
+							});
+						}}
+					/>
+				</SettingsOption>
 			</SettingsSection>
 		</>
 	);

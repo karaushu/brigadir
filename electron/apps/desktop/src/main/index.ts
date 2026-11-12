@@ -876,6 +876,14 @@ const sessions = new Sessions(
 		// spec/editor-code-intelligence#language-server-restart: the agent's `editor_restart_language_servers`.
 		if (method === 'code_restart') return restartCode(key);
 		// spec/notifications-slack-notes-and-schedules#slack-agent-post: the agent's `slack_post` — where and as whom, then the post itself.
+		// `Always allow` on the card: every task's agents post without asking from now on (Settings ▸ Modules ▸ Slack turns it off).
+		if (method === 'slack_allow_always') {
+			appliedSettings = await settings.save({
+				...appliedSettings,
+				agents: { ...appliedSettings.agents, slackPostWithoutAsking: true },
+			});
+			return true;
+		}
 		if ((method === 'slack_target' || method === 'slack_post') && isRecord(params)) {
 			if (!appliedSettings.modules.slack) throw new Error(moduleOffMessages.slack);
 			const input = {
@@ -884,7 +892,7 @@ const sessions = new Sessions(
 			};
 			if (method === 'slack_target') {
 				const { bot, label } = await slack.agentTarget(key, input);
-				return { bot, label };
+				return { bot, label, ask: !appliedSettings.agents.slackPostWithoutAsking };
 			}
 			if (typeof params.text !== 'string' || !params.text.trim()) throw new Error('text is empty');
 			return slack.agentPost(key, { ...input, text: params.text });

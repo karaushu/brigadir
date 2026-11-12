@@ -51,6 +51,7 @@ export type AgentDefaults = {
 	/** spec/architecture-and-platform#keep-awake: the Mac does not idle-sleep while an agent works. */ keepAwake: boolean;
 	/** spec/tasks#archive: completed tasks go to the archive after this many days; null never. */ archiveAfterDays: ArchiveAfterDays;
 	/** spec/browser-and-simulator#background: agents act on any site in the browser without the `Act on <domain>` card; off by default. */ browserActAnywhere: boolean;
+	/** spec/notifications-slack-notes-and-schedules#slack-agent-post: `slack_post` goes out without the `Post to Slack` card; off by default. */ slackPostWithoutAsking: boolean;
 	/** spec/appearance#evolution-redesign: the review of a PR writes the agent summary by itself on its first open; on by default. */ prSummary: boolean;
 	/** spec/agents-and-providers#subagent-model: the Claude catalog model its own subagents run on; null — the session's model. */ claudeSubagentModel:
 		string | null;
@@ -259,6 +260,7 @@ export const defaultAppSettings: AppSettings = {
 		keepAwake: true,
 		archiveAfterDays: defaultArchiveAfterDays,
 		browserActAnywhere: false,
+		slackPostWithoutAsking: false,
 		prSummary: true,
 		claudeSubagentModel: null,
 	},
@@ -289,7 +291,7 @@ export const defaultAppSettings: AppSettings = {
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 13 &&
+		Object.keys(value).length === 14 &&
 		typeof value.prSummary === 'boolean' &&
 		(value.claudeSubagentModel === null ||
 			(typeof value.claudeSubagentModel === 'string' &&
@@ -298,6 +300,7 @@ export function isAgentDefaults(value: unknown): value is AgentDefaults {
 				!/[\0\r\n]/.test(value.claudeSubagentModel))) &&
 		typeof value.copyEnvFiles === 'boolean' &&
 		typeof value.browserActAnywhere === 'boolean' &&
+		typeof value.slackPostWithoutAsking === 'boolean' &&
 		isArchiveAfterDays(value.archiveAfterDays) &&
 		(value.reviewWhere === 'quick' || value.reviewWhere === 'worktree') &&
 		typeof value.updateClis === 'boolean' &&

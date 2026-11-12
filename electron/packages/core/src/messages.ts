@@ -2356,6 +2356,10 @@ const uk = {
 		'Агенти можуть діяти на будь-якому сайті без підтвердження',
 	'No permission card for actions. Local pages never ask.':
 		'Без картки дозволу на дії. Локальні сторінки не питають.',
+	// spec/notifications-slack-notes-and-schedules#slack-agent-post: Settings ▸ Modules ▸ Slack.
+	'Agents can post without confirmation': 'Агенти можуть писати без підтвердження',
+	"No permission card before an agent's message. The message still shows in the chat.":
+		'Без картки дозволу перед повідомленням агента. Повідомлення все одно видно в чаті.',
 	'Checking the simulator': 'Перевіряє симулятор',
 	'Checked the simulator': 'Перевірив симулятор',
 	'Could not check the simulator': 'Симулятор не перевірено',

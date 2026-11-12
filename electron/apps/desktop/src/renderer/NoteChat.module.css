@@ -1,6 +1,5 @@
-/* spec/notifications-slack-notes-and-schedules#notes: the note's chat — 352 px right of the note, its head 40, the log, the island. */
+/* spec/notifications-slack-notes-and-schedules#note-chat: the note's chat — `noteChatWidth` right of the note (inline), its head 40, the log, the island. */
 .chat {
-	width: 352px;
 	flex: none;
 	display: flex;
 	flex-direction: column;

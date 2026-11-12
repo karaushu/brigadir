@@ -191,6 +191,7 @@ The project tree is not a plain folder tree: a project is several git roots (roo
 | `browserWidth` | 420–8000 | 460 |
 | `simulatorWidth` | 360–800 | 460 |
 | `reviewFilesWidth` / `reviewColumnWidth` | 180–480 / 280–600 | 220 / 340 |
+| `noteChatWidth` ([note chat](notifications-slack-notes-and-schedules.md#note-chat)) | 300–8000 | 352 |
 
 8000 only rejects a broken file; the real ceiling is the window. `isSurfaceLayout` validates the file; an unreadable one falls back to `defaultSurfaceLayout`.
 

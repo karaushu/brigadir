@@ -186,8 +186,8 @@ function EditCard({
 	);
 }
 /**
- * spec/notifications-slack-notes-and-schedules#notes: the note's one chat, kept like a task's. The agent gets the note's text with every message (the chip
- * over the field says so, amber when the note changed since the last message); its edits come as cards with Undo.
+ * spec/notifications-slack-notes-and-schedules#notes: the note's one chat, kept like a task's. The agent gets the note's text with every message (the header
+ * says so; an amber chip over the field appears when the note changed since the last message); its edits come as cards with Undo.
  */
 export function NoteChat({
 	note,
@@ -195,10 +195,12 @@ export function NoteChat({
 	locale,
 	defaultProvider,
 	quote,
+	width,
 	onHide,
 	onLines,
 }: {
 	note: NoteDocument;
+	/** spec/notifications-slack-notes-and-schedules#note-chat: `noteChatWidth`, clamped to the window. */ width: number;
 	/** The note as the editor holds it now. */ text: string;
 	locale: Locale;
 	defaultProvider: AgentProvider;
@@ -277,10 +279,10 @@ export function NoteChat({
 			toastError(t(locale, 'Could not send the message.'));
 		});
 	};
-	const file = `${note.id}.md`;
 	return (
 		<aside
 			className={s.chat}
+			style={{ width }}
 			aria-label={t(locale, 'Chat about the note')}
 			data-note-chat={note.id}>
 			<header className={s.head} data-size="s">
@@ -381,13 +383,14 @@ export function NoteChat({
 						event.preventDefault();
 						send();
 					}}>
-					<div className={s.context}>
-						<span className={s.chip} data-changed={changed || undefined}>
-							<Glyph name="note" size={12} />
-							{file}
-							<i>· {t(locale, changed ? 'changed since the last message' : 'the note, always')}</i>
-						</span>
-					</div>
+					{changed && (
+						<div className={s.context}>
+							<span className={s.chip} data-changed>
+								<Glyph name="note" size={12} />
+								<i>{t(locale, 'The note changed since the last message')}</i>
+							</span>
+						</div>
+					)}
 					<TextArea
 						ref={field}
 						embedded

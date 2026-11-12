@@ -27,6 +27,7 @@ export class Layout {
 			const layout = {
 				sidebarWidth: defaultSurfaceLayout.sidebarWidth,
 				chatWidth: defaultSurfaceLayout.chatWidth,
+				noteChatWidth: defaultSurfaceLayout.noteChatWidth,
 				simulatorWidth: defaultSurfaceLayout.simulatorWidth,
 				reviewFilesWidth: defaultSurfaceLayout.reviewFilesWidth,
 				reviewColumnWidth: defaultSurfaceLayout.reviewColumnWidth,

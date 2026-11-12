@@ -3530,8 +3530,7 @@ const uk = {
 	'You edited the note after the answer. Undo is off.':
 		'Ти змінив нотатку після відповіді. Скасувати не можна.',
 	'You edited the note': 'Ти змінив нотатку',
-	'changed since the last message': 'змінено після останнього повідомлення',
-	'the note, always': 'нотатка, завжди',
+	'The note changed since the last message': 'Нотатка змінилась після останнього повідомлення',
 	'Ask about this note': 'Спитай про цю нотатку',
 	'Could not undo the edit.': 'Не вдалося скасувати правку.',
 	'This machine': 'Ця машина',

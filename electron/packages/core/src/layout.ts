@@ -17,6 +17,7 @@ export type SurfaceLayout = {
 	simulatorWidth: number;
 	consoleHeight: number;
 	chatWidth: number;
+	/** spec/notifications-slack-notes-and-schedules#note-chat: the note's chat column, 352 by default. */ noteChatWidth: number;
 	reviewFilesWidth: number;
 	reviewColumnWidth: number;
 	composerCapsuleCompact: boolean;
@@ -30,6 +31,7 @@ export const defaultSurfaceLayout: SurfaceLayout = {
 	simulatorWidth: 460,
 	consoleHeight: 260,
 	chatWidth: 420,
+	noteChatWidth: 352,
 	reviewFilesWidth: 220,
 	reviewColumnWidth: 340,
 	composerCapsuleCompact: false,
@@ -44,6 +46,7 @@ export const layoutLimits = {
 	simulatorWidth: [360, 800],
 	consoleHeight: [120, 600],
 	chatWidth: [380, 8000],
+	noteChatWidth: [300, 8000],
 	reviewFilesWidth: [180, 480],
 	reviewColumnWidth: [280, 600],
 } as const;

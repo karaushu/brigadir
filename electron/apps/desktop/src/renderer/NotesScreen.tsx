@@ -22,6 +22,8 @@ import { toastError } from './ui/Toast';
 import { useCommandShortcut } from './ui/use-command-shortcut';
 import { ProjectTitlebar } from './ProjectBoard';
 import { NoteChat } from './NoteChat';
+import { ResizeHandle } from './ui/ResizeHandle';
+import { useSurfaceLayout } from './surface-layout';
 import {
 	collapseSelection,
 	revealLines,
@@ -224,7 +226,21 @@ export function NotesBody({
 		[quote, setQuote] = useState<{ id: number; text: string } | null>(null),
 		chatShortcut = useCommandShortcut()('layout-chat'),
 		[provider, setProvider] = useState<AgentProvider>('claude'),
-		noteRef = useRef<HTMLElement>(null);
+		noteRef = useRef<HTMLElement>(null),
+		bodyRef = useRef<HTMLDivElement>(null),
+		[bodyWidth, setBodyWidth] = useState(0),
+		chatWish = useSurfaceLayout((state) => state.layout.noteChatWidth);
+	useEffect(() => void useSurfaceLayout.getState().load(), []);
+	// spec/notifications-slack-notes-and-schedules#note-chat: the note keeps 400 px, so the window is the chat's ceiling.
+	useEffect(() => {
+		const body = bodyRef.current;
+		if (!body) return;
+		const observer = new ResizeObserver(() => setBodyWidth(body.clientWidth));
+		observer.observe(body);
+		return () => observer.disconnect();
+	}, []);
+	const chatMax = Math.max(300, bodyWidth - (list ? 249 : 0) - 401),
+		chatWidth = bodyWidth ? Math.min(chatWish, chatMax) : chatWish;
 	// spec/diff-and-review#selection-panel: the selection's panel lives under its last line in the editor's flow, like the code editor's.
 	const selectionHost = useMemo(() => {
 		const node = document.createElement('div');
@@ -309,7 +325,7 @@ export function NotesBody({
 	const title = doc ? noteTitle(note.text) || t(locale, 'Untitled note') : '';
 	const owner = doc ? project(doc.project) : undefined;
 	return (
-		<div className={s.body} data-notes-body data-chat={chatOpen}>
+		<div className={s.body} ref={bodyRef} data-notes-body data-chat={chatOpen}>
 			{list && (
 				<nav className={s.list} aria-label={t(locale, 'Notes')}>
 					<div className={s.listHead} data-size="s">
@@ -509,8 +525,19 @@ export function NotesBody({
 							)}
 					</section>
 					{chatOpen && (
+						<ResizeHandle
+							label={t(locale, 'Resize chat')}
+							value={chatWidth}
+							min={300}
+							max={chatMax}
+							onChange={(value) => useSurfaceLayout.getState().resize('noteChatWidth', value)}
+							onCommit={() => useSurfaceLayout.getState().save()}
+						/>
+					)}
+					{chatOpen && (
 						<NoteChat
 							key={doc.id}
+							width={chatWidth}
 							note={doc}
 							text={note.text}
 							locale={locale}

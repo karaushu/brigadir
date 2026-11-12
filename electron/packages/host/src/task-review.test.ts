@@ -218,3 +218,49 @@ it('stops a review: the open round ends, nothing more reaches the agent (spec/di
 			: undefined
 	);
 }, 120_000);
+
+it('a dispute after round 2 goes to the person; the agent answers a comment in its thread (spec/diff-and-review#agent-review-rounds)', async () => {
+	const { store, task } = await setup('dispute the output');
+	const client = await launch(store, task);
+	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(client, (r) => r.event.kind === 'turn.completed');
+	await client.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const disputed = await find(
+		client,
+		(r) => r.event.kind === 'review.finished' && r.event.state === 'disputed',
+		90_000
+	);
+	expect(disputed.event).toMatchObject({ state: 'disputed' });
+	await until(async () => ((await store.task(task)).status === 'needs-you' ? true : undefined));
+	const path = join(await store.taskDir(task), 'review.json');
+	const comments = JSON.parse(await readFile(path, 'utf8')).comments as {
+		id: string;
+		review?: { round: number; disputed?: boolean; reviewer: string };
+	}[];
+	expect(
+		comments.map((comment) => [comment.review?.round, comment.review?.disputed ?? false])
+	).toEqual([
+		[1, false],
+		[2, true],
+	]);
+	// The agent's answer joins the thread of the comment it names.
+	const first = comments[0]!.id;
+	await client.command({
+		kind: 'prompt',
+		text: `@call review_reply {"commentId":"${first}","text":"The list is deliberate."}`,
+	});
+	await find(client, (r) => r.event.kind === 'review.replied');
+	const threads = JSON.parse(await readFile(path, 'utf8')).comments as {
+		id: string;
+		replies?: { author: string; text: string; agent: boolean }[];
+	}[];
+	expect(threads.find((comment) => comment.id === first)!.replies).toEqual([
+		expect.objectContaining({ author: 'Task agent', text: 'The list is deliberate.', agent: true }),
+	]);
+}, 240_000);

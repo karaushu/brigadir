@@ -93,7 +93,9 @@ export class TaskReviewLife {
 			if (taskReviewLive(this.doc.review))
 				throw new Error('A review of this task is already running.');
 			this.host = await this.deps.crew(command);
-			const id = randomUUID();
+			const id = randomUUID(),
+				previous = this.doc.review,
+				base = command.since === 'last' && previous?.trees.length ? previous.trees : undefined;
 			this.doc = {
 				schemaVersion: 1,
 				proposal: null,
@@ -107,6 +109,7 @@ export class TaskReviewLife {
 					round: 0,
 					reviewers: command.reviewers.map((agent) => agent.name),
 					trees: [],
+					...(base ? { base } : {}),
 				},
 			};
 			this.batch = null;
@@ -119,6 +122,16 @@ export class TaskReviewLife {
 			});
 			// spec/diff-and-review#agent-review-start: a turn that runs now ends first; the review starts from its snapshot.
 			if (!this.deps.busy()) await this.round();
+		});
+	}
+	/** spec/diff-and-review#agent-review-rounds: `review_reply` — the task's agent answers a reviewer's comment in its thread. */
+	reply(commentId: string, text: string) {
+		return this.serial(async () => {
+			const review = this.doc.review;
+			if (!review || !this.host) throw new Error('This task has no review.');
+			await this.host.replySelf(commentId, text, Math.max(1, review.round));
+			await this.deps.emit({ kind: 'review.replied', commentId });
+			return { replied: true };
 		});
 	}
 	stop() {
@@ -175,6 +188,8 @@ export class TaskReviewLife {
 	/** What the crew host calls back on each round of the task's review. */
 	hooks(): SelfReviewHooks {
 		return {
+			id: () => this.doc.review?.id ?? '',
+			base: () => this.doc.review?.base ?? null,
 			guidance: () => this.doc.review?.guidance ?? '',
 			submitReview: async (text, review) => {
 				this.batch = review.id;

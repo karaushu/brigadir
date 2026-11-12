@@ -433,6 +433,33 @@
      }
     },
     {
+     "name": "review_reply",
+     "description": "Answer a reviewer's comment from a review batch of this task's own review: the reply joins the comment's thread, and the reviewers read it in the next round. Use it for a comment you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a comment of a review batch of this task, when you do not fix it as asked.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "commentId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 10000
+       }
+      },
+      "required": [
+       "commentId",
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "add_folder",
      "description": "Add a folder from outside the project to this task. A git repository becomes writable after the human allows it; a folder without git joins read-only at once. The folder shows in the diff and the workspace repositories. Use its absolute path right away; your workspace roots include it from your next turn. Folders inside the project are already in the repo list. Returns added: true with name, path and writable, or added: false with the reason. Use it when the work needs files outside the project, such as a sibling repository.",
      "inputSchema": {
@@ -1568,6 +1595,33 @@
         "maxLength": 4000
        }
       }
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "review_reply",
+     "description": "Answer a reviewer's comment from a review batch of this task's own review: the reply joins the comment's thread, and the reviewers read it in the next round. Use it for a comment you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a comment of a review batch of this task, when you do not fix it as asked.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "commentId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 10000
+       }
+      },
+      "required": [
+       "commentId",
+       "text"
+      ]
      },
      "execution": {
       "taskSupport": "forbidden"

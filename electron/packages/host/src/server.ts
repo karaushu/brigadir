@@ -2286,6 +2286,15 @@ export async function startHost(config: HostConfig) {
 		// spec/terminal-and-cli-agents#agent-console-tools: the console of this task, as the person sees it.
 		if (method.startsWith('console_')) return consoleTool(method.slice(8), params);
 		if (method === 'create_task') return proposeTask(params, signal);
+		if (method === 'review_reply') {
+			if (
+				!isRecord(params) ||
+				typeof params.commentId !== 'string' ||
+				typeof params.text !== 'string'
+			)
+				throw new Error('commentId and text are required');
+			return taskReview.reply(params.commentId, params.text);
+		}
 		// spec/diff-and-review#agent-review-start: the proposal card; the call does not wait for the person.
 		if (method === 'propose_review') {
 			if (task.readOnlyAgent === true) throw new Error('This task changes no code to review.');

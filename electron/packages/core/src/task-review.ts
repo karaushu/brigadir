@@ -26,6 +26,8 @@ export type TaskReview = {
 	reviewers: string[];
 	/** The result tree of each repo the last round read: an approval covers only these. */
 	trees: TaskReviewTree[];
+	/** `Since the last review`: the trees the rounds start from instead of the task's change base. */
+	base?: TaskReviewTree[];
 	finishedAt?: string;
 };
 export type TaskReviewDocument = {
@@ -83,6 +85,7 @@ export function isTaskReview(value: unknown): value is TaskReview {
 		value.reviewers.every((name) => text(name, 200)) &&
 		Array.isArray(value.trees) &&
 		value.trees.every(isTree) &&
+		(value.base === undefined || (Array.isArray(value.base) && value.base.every(isTree))) &&
 		(value.finishedAt === undefined || text(value.finishedAt, 64))
 	);
 }

@@ -50,6 +50,8 @@ import {
 	type EventRecord,
 	type ReviewComment,
 	type ReviewBatch,
+	reviewReplyLimit,
+	taskReviewRootName,
 	type SessionCommand,
 	type SessionEvent,
 	type SessionSnapshot,
@@ -247,6 +249,10 @@ export type CrewHostDeps = {
 	self?: SelfReviewHooks;
 };
 export type SelfReviewHooks = {
+	/** The task review the round belongs to (`task-review.json`). */
+	id(): string;
+	/** spec/diff-and-review#agent-review-start: `Since the last review` — the trees a round starts from instead of the change base. */
+	base(): readonly { scopeId: string; tree: string }[] | null;
 	/** What every reviewer's prompt ends with: the project's review notes and the person's instructions. */
 	guidance(): string;
 	/** The round's comments, as one batch to this task's own agent. */
@@ -1719,6 +1725,18 @@ export class CrewHost {
 			.filter((agent): agent is CrewSpecAgent => Boolean(agent));
 		await this.serial(() => this.openCheck(self, reviewers, seq));
 	}
+	/** spec/diff-and-review#agent-review-rounds: the task's agent answers a comment of its own review. */
+	async replySelf(commentId: string, text: string, round: number) {
+		const self = this.selfRecord();
+		if (!self) throw new Error('This task has no reviewers');
+		await this.serial(() =>
+			this.replyOnComments(self, [{ id: commentId, text }], {
+				author: taskReviewRootName,
+				round,
+				agent: true,
+			})
+		);
+	}
 	/** spec/diff-and-review#agent-review-rounds: `Stop review` — the open round ends unanswered and the reviewers stop; their tasks stay. */
 	async stopSelf() {
 		await this.serial(async () => {
@@ -1769,10 +1787,12 @@ export class CrewHost {
 			snapshots,
 			(await this.deps.store.task(key).catch(() => null))?.changeBase
 		);
+		const since = this.isSelf(worker) ? (this.deps.self?.base() ?? null) : null;
 		const scopeSnapshots = (snapshots?.scopes ?? [])
 			.filter((scope) => inTask(scope) && scope.available !== false)
 			.flatMap((scope) => {
-				const base = baseTree(snapshots!, scope.id, from),
+				const last = since?.find((tree) => tree.scopeId === scope.id),
+					base = last ? { tree: last.tree } : baseTree(snapshots!, scope.id, from),
 					result = snapshots!.checkpoints.at(-1)?.trees.find((tree) => tree.scopeId === scope.id);
 				return base && result ? [{ scopeId: scope.id, base: base.tree, result: result.tree }] : [];
 			});
@@ -1854,7 +1874,7 @@ export class CrewHost {
 				.request('command', {
 					kind: 'prompt',
 					text: self
-						? `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nThis is the review of the task's changes before its pull request. The files of your tree are the task's state for this round. Read with read_report and read_diff passing this reviewId. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). In round 2 the report ends with the agent's answer to your comments: read its reasons before you insist. Do not change files.${this.deps.self?.guidance() ?? ''}`
+						? `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nThis is the review of the task's changes before its pull request. The files of your tree are the task's state for this round. Read with read_report and read_diff passing this reviewId. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). In round 2 the report ends with the agent's last message: read its reasons before you insist. Do not change files.${run.round > 1 ? await this.selfThreads(run.round) : ''}${this.deps.self?.guidance() ?? ''}`
 						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId).`,
 					crew: { kind: 'report', report: report.summary },
 				})
@@ -1940,20 +1960,40 @@ export class CrewHost {
 			await this.settleRun(run);
 			return { approved: true, reviewId: run.reviewId };
 		}
-		const items = Array.isArray(input.comments) ? input.comments : [];
-		if (!items.length) throw new Error('comments is required, or call approve');
-		const comments = await this.anchorComments(
-			target,
-			items,
-			`${reviewer.name} · checks ${target.name}`,
-			run
-		);
+		const all = Array.isArray(input.comments) ? input.comments : [];
+		if (!all.length) throw new Error('comments is required, or call approve');
+		// spec/diff-and-review#agent-review-rounds: in the task's own review a reviewer insists on an earlier comment by `replyTo`; it joins that thread.
+		const self = this.isSelf(target),
+			insist = self ? all.filter((item) => isRecord(item) && typeof item.replyTo === 'string') : [],
+			items = all.filter((item) => !insist.includes(item));
+		if (insist.length)
+			await this.replyOnComments(
+				target,
+				insist.map((item) => {
+					const value = item as Record<string, unknown>;
+					return { id: String(value.replyTo), text: String(value.text ?? '') };
+				}),
+				{ author: reviewer.name, round: run.round, agent: false }
+			);
+		const comments = items.length
+			? await this.anchorComments(target, items, `${reviewer.name} · checks ${target.name}`, run)
+			: [];
+		if (self) {
+			const reviewId = this.deps.self?.id() ?? run.reviewId;
+			for (const comment of comments)
+				comment.review = {
+					reviewId,
+					round: run.round,
+					reviewer: reviewer.name,
+					...(run.round >= crewReviewRounds ? { disputed: true } : {}),
+				};
+		}
 		await this.storeComments(target, comments);
 		run.verdicts.push({
 			reviewerNodeId: reviewer.nodeId,
 			reviewer: reviewer.name,
 			approved: false,
-			comments: comments.length,
+			comments: comments.length + insist.length,
 			at: new Date().toISOString(),
 		});
 		this.pendingBatches.set(`${run.reviewId}/${reviewer.nodeId}`, comments);
@@ -2745,6 +2785,67 @@ export class CrewHost {
 			notes: Array.isArray(doc.notes) ? doc.notes : [],
 		});
 	}
+	/** spec/diff-and-review#agent-review-rounds: what round 2 reads — the earlier comments of this review with the agent's answers. */
+	private async selfThreads(round: number) {
+		const path = await safePath(await this.deps.store.taskDir(this.deps.key), 'review.json');
+		const doc = await readDocument(path, 16 * 1024 * 1024).catch(
+			() => ({}) as Record<string, unknown>
+		);
+		const reviewId = this.deps.self?.id();
+		const comments = ((Array.isArray(doc.comments) ? doc.comments : []) as ReviewComment[]).filter(
+			(item) => item.review && item.review.reviewId === reviewId && item.review.round < round
+		);
+		if (!comments.length) return '';
+		return `\n\nComments of the earlier round and the agent's answers:\n${comments
+			.map(
+				(item) =>
+					`- id ${item.id} (${item.anchor.path}:${item.anchor.start}) ${item.review!.reviewer}: ${item.text}${(item.replies ?? []).map((reply) => `\n  ${reply.agent ? 'Agent' : reply.author}: ${reply.text}`).join('')}`
+			)
+			.join(
+				'\n'
+			)}\nTo insist on one of these, put an item with replyTo: <its id> and your text in submit_review; a new problem is a new comment.`;
+	}
+	/**
+	 * spec/diff-and-review#agent-review-rounds: the thread under a comment of the task's own review — the agent's `review_reply`, or a reviewer insisting
+	 * in round 2 (that marks the comment disputed). Unknown ids fail with the comments of the review.
+	 */
+	async replyOnComments(
+		target: CrewWorkerRecord,
+		replies: { id: string; text: string }[],
+		who: { author: string; round: number; agent: boolean }
+	) {
+		const path = await safePath(
+			await this.deps.store.taskDir(this.workerKey(target)),
+			'review.json'
+		);
+		const doc = await readDocument(path, 16 * 1024 * 1024);
+		const comments = (Array.isArray(doc.comments) ? doc.comments : []) as ReviewComment[];
+		for (const reply of replies) {
+			const comment = comments.find((item) => item.id === reply.id && item.review);
+			if (!comment)
+				throw new Error(
+					`No review comment ${reply.id}. Comments: ${comments
+						.filter((item) => item.review)
+						.map((item) => item.id)
+						.join(', ')}`
+				);
+			if (!reply.text.trim() || reply.text.length > 10000) throw new Error('A reply needs text');
+			if ((comment.replies?.length ?? 0) >= reviewReplyLimit)
+				throw new Error('This thread holds no more replies');
+			comment.replies = [
+				...(comment.replies ?? []),
+				{
+					author: who.author,
+					text: reply.text,
+					at: new Date().toISOString(),
+					round: who.round,
+					agent: who.agent,
+				},
+			];
+			if (!who.agent && comment.review) comment.review = { ...comment.review, disputed: true };
+		}
+		await atomicJson(path, { ...doc, comments });
+	}
 	/** The same batch a human sends (spec/diff-and-review#review-comments, spec/crew#task-type): the worker sees `<review_comment>`s, the UI shows the author. */
 	private async deliverReview(
 		worker: CrewWorkerRecord,
@@ -2754,15 +2855,19 @@ export class CrewHost {
 			id: sha(JSON.stringify(comments.map((comment) => ({ id: comment.id, version: 1 })))),
 			comments: comments.map((comment) => ({ id: comment.id, version: 1 })),
 		};
+		const self = this.isSelf(worker);
 		const text =
 			'Address the following review comments for this task. The quoted code belongs to the specified snapshot; verify its current location before editing.\n\n' +
 			comments
 				.map(
 					(comment, index) =>
-						`${index + 1}. File ${JSON.stringify(comment.anchor.path)}, scope ${comment.anchor.scopeId}, new side, blob ${comment.anchor.blob}, lines ${comment.anchor.start}-${comment.anchor.end}.\nComment: ${comment.text}\nQuoted code: ${JSON.stringify(comment.anchor.quote.join('\n'))}`
+						`${index + 1}. ${self ? `Comment id ${comment.id} by ${comment.review?.reviewer ?? comment.author}. ` : ''}File ${JSON.stringify(comment.anchor.path)}, scope ${comment.anchor.scopeId}, new side, blob ${comment.anchor.blob}, lines ${comment.anchor.start}-${comment.anchor.end}.\nComment: ${comment.text}\nQuoted code: ${JSON.stringify(comment.anchor.quote.join('\n'))}`
 				)
-				.join('\n\n');
-		if (this.isSelf(worker)) {
+				.join('\n\n') +
+			(self
+				? '\n\nFor a comment you do not fix as asked, call review_reply with its comment id and your reason; the reviewers read it in the next round.'
+				: '');
+		if (self) {
 			const names = [...new Set(comments.map((comment) => (comment.author ?? '').split(' · ')[0]))];
 			// spec/diff-and-review#agent-review-rounds: the task's agent fixes or says why not; the next round reads its answer.
 			await this.deps.self?.submitReview(

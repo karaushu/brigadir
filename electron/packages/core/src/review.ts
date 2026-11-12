@@ -13,8 +13,26 @@ export type Anchor = {
 	symbolPath: string | null;
 };
 /** `author` names an agent reviewer (`<agent> · checks <agent>`, spec/crew#reviewer); human comments have none. */
+/** spec/diff-and-review#agent-review-rounds: a reviewer's comment of a task's review before the PR — its round, and whether a reviewer insisted in round 2. */
+export type ReviewCommentRound = {
+	reviewId: string;
+	round: number;
+	reviewer: string;
+	disputed?: boolean;
+};
+/** The thread under a reviewer's comment: the task agent's answer (`review_reply`) or a reviewer insisting in round 2. */
+export type ReviewReply = {
+	author: string;
+	text: string;
+	at: string;
+	round: number;
+	agent: boolean;
+};
+export const reviewReplyLimit = 20;
 export type ReviewComment = {
 	author?: string;
+	review?: ReviewCommentRound;
+	replies?: ReviewReply[];
 	/** spec/appearance#evolution-redesign: the selected text verbatim (a partial line stays partial); the anchor stays the lines it touches. */
 	excerpt?: string;
 	id: string;
@@ -88,6 +106,34 @@ export function isCommentInput(value: unknown): value is CommentInput {
 export function isCommentText(value: unknown): value is string {
 	return typeof value === 'string' && value.trim().length > 0 && value.length <= 10000;
 }
+function isReviewCommentRound(value: unknown): value is ReviewCommentRound {
+	return (
+		isRecord(value) &&
+		typeof value.reviewId === 'string' &&
+		value.reviewId.length > 0 &&
+		value.reviewId.length <= 100 &&
+		Number.isSafeInteger(value.round) &&
+		Number(value.round) >= 1 &&
+		typeof value.reviewer === 'string' &&
+		value.reviewer.length > 0 &&
+		value.reviewer.length <= 200 &&
+		(value.disputed === undefined || typeof value.disputed === 'boolean')
+	);
+}
+export function isReviewReply(value: unknown): value is ReviewReply {
+	return (
+		isRecord(value) &&
+		typeof value.author === 'string' &&
+		value.author.length > 0 &&
+		value.author.length <= 200 &&
+		isCommentText(value.text) &&
+		typeof value.at === 'string' &&
+		Number.isFinite(Date.parse(value.at)) &&
+		Number.isSafeInteger(value.round) &&
+		Number(value.round) >= 1 &&
+		typeof value.agent === 'boolean'
+	);
+}
 export function isReviewComment(value: unknown): value is ReviewComment {
 	if (
 		!isRecord(value) ||
@@ -104,6 +150,13 @@ export function isReviewComment(value: unknown): value is ReviewComment {
 				Number(value.addressedVersion) <= Number(value.version) &&
 				Number.isSafeInteger(value.addressedCheckpoint) &&
 				Number(value.addressedCheckpoint) > 0)
+		) ||
+		!(value.review === undefined || isReviewCommentRound(value.review)) ||
+		!(
+			value.replies === undefined ||
+			(Array.isArray(value.replies) &&
+				value.replies.length <= reviewReplyLimit &&
+				value.replies.every(isReviewReply))
 		) ||
 		typeof value.id !== 'string' ||
 		!/^[a-f0-9-]{36}$/.test(value.id) ||

@@ -257,6 +257,7 @@ const checks: Record<string, Check> = {
 	}),
 	'review.proposed': object({ summary: text }),
 	'review.dismissed': object({}),
+	'review.replied': object({ commentId: text }),
 	'review.started': object({ id: isId, reviewers: array(text), who: isTaskReviewWho }),
 	'review.finished': object({
 		id: isId,

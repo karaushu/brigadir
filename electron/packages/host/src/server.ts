@@ -311,19 +311,30 @@ export async function startHost(config: HostConfig) {
 		planWaiting,
 		// spec/reviews#plan-loop: the findings answer the waiting plan — its reject option (else it is cancelled), or the foreman's propose_plan — and run after the turn.
 		planFeedback: async (text, review, round) => {
+			// spec/reviews#plan-loop: a batch of a review the plan's approval ended is not sent.
+			if (!taskReview.planBatchLive(review.id)) return 'dropped';
 			if (foremanTask) {
-				await crewHost?.rejectPlanForReview(text);
-				return;
+				if (await crewHost?.rejectPlanForReview(text)) return 'answered';
+			} else {
+				const pending = [...permissions.values()].find((item) => isPlanApproval(item.request));
+				if (pending) await pending.finish(planRejectOption(pending.request)?.id ?? null);
 			}
-			const pending = [...permissions.values()].find((item) => isPlanApproval(item.request));
-			if (pending) await pending.finish(planRejectOption(pending.request)?.id ?? null);
+			if (!taskReview.planBatchLive(review.id)) return 'dropped';
+			// With no split waiting (the person rejected it meanwhile) the foreman gets the batch as its next turn too.
 			await command({
 				kind: 'submitReview',
 				text,
 				review,
 				crew: { kind: 'review-comments', round, comments: review.comments.length },
 			});
+			return 'queued';
 		},
+		dropBatch: (batch) =>
+			serialPrompt(async () => {
+				for (const item of [...queue.prompts, ...(queue.held ?? [])])
+					if (item.command.kind === 'submitReview' && item.command.review.id === batch)
+						await emit({ kind: 'prompt.removed', id: item.id });
+			}),
 		prompt: (text) => command({ kind: 'prompt', text, crew: { kind: 'review-continue' } }),
 		// spec/reviews#reviewer-sessions: the task's first prompt, and a crew worker's part with its acceptance criteria.
 		brief: async () => {

@@ -8,6 +8,8 @@ import {
 	planFindingState,
 	planReadLimit,
 	planReviewItemLimit,
+	planFindingStoreLimit,
+	taskReviewDocumentBytes,
 	emptyTaskReviewDocument,
 	readTaskReviewDocument,
 	reviewLoop,
@@ -96,7 +98,13 @@ export type TaskReviewDeps = {
 	planWaiting(): PresentedPlan | null;
 	/** spec/reviews#plan-loop: findings to the plan's author — the waiting plan is answered (its reject option, or `propose_plan` returns
 	 *  them), then the batch runs. The same batch twice only answers the waiting plan again. */
-	planFeedback(text: string, batch: ReviewBatch, round: number): Promise<void>;
+	planFeedback(
+		text: string,
+		batch: ReviewBatch,
+		round: number
+	): Promise<'answered' | 'queued' | 'dropped'>;
+	/** spec/reviews#plan-loop: an approval ended the review — a batch still in the author's queue is taken out. */
+	dropBatch(batch: string): Promise<void>;
 	/** The task's changed files from its start. */
 	changes(): Promise<number>;
 	/** A snapshot of the task's files now: a review the agent asks for reads its state at the call. */
@@ -134,7 +142,7 @@ export class TaskReviewLife {
 	async load() {
 		try {
 			// spec/reviews#data: version 1 reads as a review before the PR; it is written back as version 2.
-			const value = await readDocument(await this.file(), undefined, [1, 2]);
+			const value = await readDocument(await this.file(), taskReviewDocumentBytes, [1, 2]);
 			this.doc = readTaskReviewDocument(value, this.deps.key.id) ?? emptyTaskReviewDocument;
 		} catch (error) {
 			if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== 'ENOENT')
@@ -575,6 +583,8 @@ export class TaskReviewLife {
 					['sent', 'open', 'new'].includes(planFindingState(item))
 				);
 				await this.host?.stopSelf().catch(() => {});
+				// A batch still in the author's queue would send the author back to a plan the person approved.
+				if (review.batch) await this.deps.dropBatch(review.batch).catch(() => {});
 				const state = open.length ? 'accepted' : 'stopped';
 				await this.update({
 					state,
@@ -602,7 +612,7 @@ export class TaskReviewLife {
 	/** The author has taken the last batch: a solo task's batch turn started; a foreman got it as its `propose_plan` result. `presenting`: a
 	 *  plan is being presented now, which for a foreman is its answer. */
 	private planAnswered(review: TaskReview, presenting = false) {
-		if (review.plan?.kind === 'split') {
+		if (review.plan?.kind === 'split' && !review.plan.queued) {
 			const sent = review.plan.sentAt;
 			if (sent === undefined) return false;
 			return (
@@ -665,14 +675,32 @@ export class TaskReviewLife {
 			batch: batch.id,
 			plan: { ...review.plan, sentAt: this.deps.records().at(-1)?.seq ?? 0 },
 		});
-		await this.deps.planFeedback(text, batch, Math.max(1, review.round));
+		await this.sendPlan(text, batch, review.round);
+	}
+	/**
+	 * spec/reviews#plan-loop: the batch reaches the author — as the answer to the waiting plan, or queued when none waits. An approval that ended
+	 * the review meanwhile drops it (the host checks again right before sending).
+	 */
+	private async sendPlan(text: string, batch: ReviewBatch, round: number) {
+		const how = await this.deps.planFeedback(text, batch, Math.max(1, round));
+		const review = this.doc.review;
+		if (how === 'dropped' || !review?.plan || review.batch !== batch.id) return;
+		// The waiting plan took the batch after it was queued: the queued copy goes, so the author reads it once.
+		if (how === 'answered' && review.plan.queued)
+			await this.deps.dropBatch(batch.id).catch(() => {});
+		await this.update({ plan: { ...review.plan, queued: how === 'queued' } });
+	}
+	/** The batch the author may still get: the plan review is with the author and this is its last batch. */
+	planBatchLive(batch: string) {
+		const review = this.doc.review;
+		return review?.point === 'plan' && review.state === 'fixing' && review.batch === batch;
 	}
 	/** The batch waits behind a plan presented before the author took it: answer that plan so the batch runs. */
 	private async redeliver() {
 		const review = this.doc.review;
 		if (!review?.plan || !review.passes) return;
 		const { text, batch } = this.planBatch(review, review.passes, review.passes > 1);
-		await this.deps.planFeedback(text, batch, Math.max(1, review.round));
+		await this.sendPlan(text, batch, review.round);
 	}
 	private async decidePlan(review: TaskReview, decision: 'fix' | 'accept') {
 		const open = openPlanFindings(review.findings);
@@ -753,6 +781,11 @@ export class TaskReviewLife {
 			),
 			{ items, replies } = parsePlanVerdict(input, closure, own),
 			findings = review.findings ?? [];
+		// spec/reviews#plan-verdict: the record holds at most this many items; past it only replies to open findings are taken.
+		if (findings.length + items.length > planFindingStoreLimit)
+			throw new Error(
+				`This review holds at most ${planFindingStoreLimit} findings and has ${findings.length}: answer the open ones with replyTo only.`
+			);
 		// Ids as a code finding's: a review batch names its findings by UUID.
 		const added: PlanFinding[] = items.map((item) => ({
 			...item,

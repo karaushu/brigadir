@@ -231,6 +231,17 @@ export function readTaskReviewDocument(value: unknown, taskId: string): TaskRevi
 		? { ...emptyTaskReviewDocument, proposal, review }
 		: { ...emptyTaskReviewDocument, proposal };
 }
+/**
+ * spec/reviews#data: a review that went to `past` keeps its plan's revisions and whether it was approved, not the plan's texts — the document
+ * stays within what its readers take however many plan reviews a task had.
+ */
+export function settledReview(review: TaskReview): TaskReview {
+	if (!review.plan) return review;
+	const { seenText: _seen, baseText: _base, ...plan } = review.plan;
+	return { ...review, plan: { ...plan, text: '' } };
+}
+/** spec/reviews#data: what a reader of `task-review.json` takes — the current review holds at most three plan texts of 200 000 characters. */
+export const taskReviewDocumentBytes = 16 * 1024 * 1024;
 /** A review under way: its rounds run, wait, or wait for the person — a second one cannot start. */
 export const taskReviewLive = (review: TaskReview | null | undefined) =>
 	!!review && ['waiting', 'reading', 'fixing', 'verifying', 'yours'].includes(review.state);
@@ -247,7 +258,7 @@ export function taskReviewAt(
 }
 /** spec/reviews#loop: the finished review goes to `past`, which keeps the newest ones. */
 export function withNextReview(doc: TaskReviewDocument, next: TaskReview): TaskReviewDocument {
-	const past = doc.review ? [...doc.past, doc.review] : doc.past;
+	const past = doc.review ? [...doc.past, settledReview(doc.review)] : doc.past;
 	return { ...doc, proposal: null, review: next, past: past.slice(-taskReviewPastLimit) };
 }
 /**
@@ -639,6 +650,8 @@ export type TaskReviewPlan = {
 	baseText?: string;
 	/** The journal seq after the last batch to the author: a turn that ends after it without a new plan opens the closure check. */
 	sentAt?: number;
+	/** The last batch waits in the author's queue (no plan waited to answer): the turn that takes it is the author's pass. */
+	queued?: boolean;
 	/** The plan was approved: the next presentation is a new plan with a read of its own. */
 	approved?: boolean;
 };
@@ -656,6 +669,7 @@ export function isTaskReviewPlan(value: unknown): value is TaskReviewPlan {
 		mark(value.base) &&
 		(value.baseText === undefined || text(value.baseText, planReadLimit)) &&
 		mark(value.sentAt) &&
+		(value.queued === undefined || typeof value.queued === 'boolean') &&
 		(value.approved === undefined || typeof value.approved === 'boolean')
 	);
 }

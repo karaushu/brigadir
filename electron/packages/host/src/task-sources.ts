@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import {
 	checkSource,
 	emptyTaskSources,
@@ -11,7 +11,13 @@ import {
 	type TaskSourceEntry,
 	type TaskSourcesDocument,
 } from '@brigadir/core';
-import { atomicJson, readDocument, safePath, type SessionStore } from '@brigadir/persistence';
+import {
+	atomicJson,
+	atomicText,
+	readDocument,
+	safePath,
+	type SessionStore,
+} from '@brigadir/persistence';
 
 /**
  * spec/reviews#save-source: the sources a task's agent saves next to its plans — `sources/sources.json` and one Markdown file per source — and
@@ -63,9 +69,8 @@ async function save(
 		file = `${sourceSlug(checked.title)}-${hash}.md`,
 		dir = await folder(store, key);
 	await mkdir(dir, { recursive: true });
-	if (checked.replaces && checked.replaces.file !== file)
-		await rm(await safePath(dir, checked.replaces.file), { force: true });
-	await writeFile(await safePath(dir, file), checked.text, 'utf8');
+	// The text is replaced whole or not at all; an older file under another name goes only after the index names the new one.
+	await atomicText(await safePath(dir, file), checked.text);
 	const entry: TaskSourceEntry = {
 		id,
 		title: checked.title,
@@ -76,6 +81,8 @@ async function save(
 	};
 	const sources = [...doc.sources.filter((item) => item.id !== id), entry];
 	await atomicJson(await safePath(dir, 'sources.json'), { schemaVersion: 1, sources });
+	if (checked.replaces && checked.replaces.file !== file)
+		await rm(await safePath(dir, checked.replaces.file), { force: true });
 	await emit({
 		kind: 'source.saved',
 		id,

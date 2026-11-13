@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
@@ -11,6 +11,7 @@ import {
 	templateLookup,
 	isReviewBatch,
 	isSessionEvent,
+	isTaskReviewDocument,
 	type EventRecord,
 	type ReviewBatch,
 	type ReviewComment,
@@ -76,6 +77,11 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 		settled: true,
 		/** spec/reviews#plan-review: the plan that waits for the person. */
 		plan: null as PresentedPlan | null,
+		/** How the host delivers a plan batch: as the waiting plan's answer, or queued. */
+		planHow: 'answered' as 'answered' | 'queued',
+		/** Runs inside the delivery, before the host's last check (a race with the person). */
+		beforeFeedback: null as (() => Promise<unknown>) | null,
+		dropped: [] as string[],
 	};
 	const planBatches: { text: string; batch: ReviewBatch }[] = [];
 	const host = {
@@ -124,9 +130,16 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 		part: async () => null,
 		planWaiting: () => state.plan,
 		planFeedback: async (text, batch) => {
+			// As the host: a batch of a review that ended is not sent.
+			await state.beforeFeedback?.();
+			if (!life.planBatchLive(batch.id)) return 'dropped';
 			planBatches.push({ text, batch });
 			// The waiting plan is answered with its reject option.
 			state.plan = null;
+			return state.planHow;
+		},
+		dropBatch: async (batch) => {
+			state.dropped.push(batch);
 		},
 		foreman: false,
 		...patch,
@@ -940,5 +953,122 @@ describe('sources (spec/reviews#save-source)', () => {
 				s.emit
 			)
 		).rejects.toThrow('url is an http(s) address');
+	});
+});
+
+describe('fixes of an independent review of the plan review', () => {
+	const plan = (revision: number, kind: PresentedPlan['kind'] = 'approval'): PresentedPlan => ({
+		kind,
+		id: `plan-${revision}`,
+		revision,
+		text: `# Plan\n\n- step ${revision}`,
+	});
+	const present = async (s: Awaited<ReturnType<typeof setup>>, value: PresentedPlan) => {
+		s.state.plan = value;
+		await s.life.planPresented(value);
+	};
+	const read = async (s: Awaited<ReturnType<typeof setup>>, value = plan(1)) => {
+		await present(s, value);
+		await s.life.hooks().planVerdict('Codex', 1, {
+			findings: [{ kind: 'missed', text: 'Edit is missing' }],
+		});
+		await s.verdict(1, 'comments');
+	};
+
+	const take = (s: Awaited<ReturnType<typeof setup>>) =>
+		s.emit({
+			kind: 'turn.started',
+			text: 'revise',
+			review: { id: s.doc().review!.batch!, comments: [] },
+		});
+	it('a document with large plans and past plan reviews loads after a restart (spec/reviews#data)', async () => {
+		const s = await setup();
+		// Ukrainian text: two bytes a character, three plan texts pass 1 MiB.
+		const big = 'ж'.repeat(199_000);
+		await present(s, { ...plan(1), text: big });
+		await s.life.hooks().planVerdict('Codex', 1, { findings: [{ kind: 'missed', text: 'a' }] });
+		await s.verdict(1, 'comments');
+		await take(s);
+		await present(s, { ...plan(2), text: `${big}и` });
+		await present(s, { ...plan(3), text: `${big}ї` });
+		const file = join(await s.store.taskDir(s.key), 'task-review.json');
+		expect((await readFile(file)).byteLength).toBeGreaterThan(1024 * 1024);
+		const again = new TaskReviewLife(s.deps);
+		await again.load();
+		expect(again.document().review!.id).toBe(s.doc().review!.id);
+		// A finished review keeps no plan text in `past`.
+		await s.life.planDecided(true);
+		await present(s, { ...plan(4), text: 'short' });
+		expect(s.doc().past.at(-1)!.plan).toMatchObject({ text: '', approved: true });
+		expect(s.doc().past.at(-1)!.plan!.seenText).toBeUndefined();
+	});
+
+	it('a verdict that would pass the record’s limit is refused and the findings stay', async () => {
+		const s = await setup();
+		await present(s, plan(1));
+		const twelve = Array.from({ length: 12 }, (_, n) => ({ kind: 'missed', text: `f${n}` }));
+		await s.life.hooks().planVerdict('Codex', 1, { findings: twelve });
+		await s.verdict(1, 'comments');
+		for (const round of [2, 3, 4]) {
+			await take(s);
+			await present(s, plan(round));
+			await s.life.hooks().planVerdict('Codex', round, {
+				findings: twelve.map((item) => ({ ...item, introduced: true })),
+			});
+			await s.verdict(round, 'disputed');
+			await s.life.decide('fix');
+		}
+		expect(s.doc().review!.findings).toHaveLength(48);
+		await take(s);
+		await present(s, plan(5));
+		await expect(
+			s.life.hooks().planVerdict('Codex', 5, {
+				findings: [{ kind: 'missed', text: 'one more', introduced: true }],
+			})
+		).rejects.toThrow('at most 48 findings');
+		expect(s.doc().review!.findings).toHaveLength(48);
+		expect(isTaskReviewDocument(s.doc())).toBe(true);
+	});
+
+	it('an approval during the delivery drops the batch; an approval after it takes the queued batch out', async () => {
+		const s = await setup();
+		s.state.beforeFeedback = () => s.life.planDecided(true);
+		await read(s);
+		expect(s.doc().review!.state).toBe('accepted');
+		expect(s.planBatches).toHaveLength(0);
+
+		const later = await setup();
+		later.state.planHow = 'queued';
+		await read(later);
+		expect(later.planBatches).toHaveLength(1);
+		await later.life.planDecided(true);
+		expect(later.state.dropped).toEqual([later.planBatches[0]!.batch.id]);
+	});
+
+	it('foreman findings with no split waiting are queued, and the next proposal before that turn does not count as the answer', async () => {
+		const s = await setup({ foreman: true });
+		s.state.planHow = 'queued';
+		await read(s, plan(1, 'split'));
+		expect(s.doc().review!.plan).toMatchObject({ queued: true });
+		// The person rejected the split while the reviewer read: the foreman proposes again before taking the batch.
+		s.state.planHow = 'answered';
+		await present(s, plan(2, 'split'));
+		expect(s.doc().review!.state).toBe('fixing');
+		expect(s.planBatches).toHaveLength(2);
+		// The new split took the findings as its rejection: the queued copy goes.
+		expect(s.state.dropped).toEqual([s.planBatches[0]!.batch.id]);
+		expect(s.doc().review!.plan!.queued).toBe(false);
+		await present(s, plan(3, 'split'));
+		expect(s.doc().review!.state).toBe('verifying');
+	});
+
+	it('a replaced source is written whole before the index names it', async () => {
+		const s = await setup();
+		await saveTaskSource(s.store, s.key, { title: 'Ticket', text: 'first' }, s.emit);
+		await saveTaskSource(s.store, s.key, { title: 'ticket', text: 'second' }, s.emit);
+		const [entry] = (await readTaskSources(s.store, s.key)).sources;
+		const dir = join(await s.store.taskDir(s.key), 'sources');
+		expect(await readFile(join(dir, entry!.file), 'utf8')).toBe('second');
+		expect((await readdir(dir)).sort()).toEqual([entry!.file, 'sources.json'].sort());
 	});
 });

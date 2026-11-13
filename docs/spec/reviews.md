@@ -316,7 +316,8 @@ provider reads the same version the plan was written from.
   example from Notion, Jira or Linear); save it before presenting a plan. The session brief of a solo task and of the
   root foreman says the same (`sourcesBrief`).
 - Limits: `title` 1–200 characters, `url` an `http(s)` address of at most 2000, `text` 1–200 000 characters; at most 20
-  sources and 1 000 000 characters per task. A source with the same title (case ignored) replaces the earlier one.
+  sources and 1 000 000 characters per task. A source with the same title (case ignored) replaces the earlier one: its text is written whole
+  (an atomic replace) before the index names it.
 - Files: `sources/<slug>-<hash8>.md` (the slug of the title as for plan copies, the hash of the source's id) and the
   index `sources/sources.json` ([Data](#data)). Returns `{saved: true, id, chars}`; an error names the limit.
 - The journal gets `source.saved` (`id`, `title`, `url?`, `chars`).
@@ -325,7 +326,8 @@ provider reads the same version the plan was written from.
 ### The verdict
 
 MCP `submit_plan_review(taskId, reviewId, findings, gaps)` (a reviewer's tool; `approve(taskId, reviewId)` when nothing
-must change and the ticket has no gaps). At most 12 items in all, ranked: the most severe first.
+must change and the ticket has no gaps). At most 12 items in all (a closure check adds at most 12 `introduced` ones, and a review
+holds at most 48 findings: past that the host takes replies only — `This review holds at most 48 findings…`), ranked: the most severe first.
 
 | List | `kind` | Tag | Goes to |
 | --- | --- | --- | --- |
@@ -352,7 +354,9 @@ must change and the ticket has no gaps). At most 12 items in all, ranked: the mo
    to fix N findings of the plan review that are still open…` with the reviewer's reasons. A solo task's waiting plan is answered with its first `reject_once` (else the first
    `reject_*`, else the request is cancelled), as in [plan chat](chat-turns-plans-and-questions.md#plan-chat), and the batch runs right after the
    turn; a foreman's waiting `propose_plan` returns `approved: false` with the batch as `review` (after its turn ended,
-   the batch comes as the decision prompt). With no plan waiting, the batch only queues.
+   the batch comes as the decision prompt). With no plan waiting (the person answered it meanwhile, a foreman's split too), the batch only queues, and the turn
+   that takes it is the author's pass; if the author presents the plan before that turn, that plan is answered with the
+   batch and the queued copy is taken out.
 3. **Check closure once.** The next presentation of the plan opens the closure check on that revision:
    `Check the plan of task <id> (reviewId …, closure check)` with the reviewer's findings, the author's objections and
    `read_plan` with the revision diff. The reviewer answers `approve`, or `submit_plan_review` with
@@ -364,7 +368,8 @@ must change and the ticket has no gaps). At most 12 items in all, ranked: the mo
    the review as `accepted`; the plan keeps waiting for approval. A revision presented while the person decides (from
    chat, `Plan further…` or edits) gets a closure check of the open findings.
 
-- **Approval ends it.** `Approve plan`, `Start workers` or any approving option ends a live plan review: an open round is
+- **Approval ends it, also mid-delivery.** A batch not yet sent is not sent, and one waiting in the author's queue is
+  taken out. `Approve plan`, `Start workers` or any approving option ends a live plan review: an open round is
   cancelled; findings still open are recorded as `accepted` and the review ends `accepted`, or `stopped` when it had no
   findings yet. The chat row says `ended by the approval`.
 - A rejection by the person (`Plan further…`, `Send edits`, a message in chat, `Reject`) does not stop the review.
@@ -406,9 +411,10 @@ a part that depends on another part's files while both run in parallel, and an e
   (`kind` ∈ `approval | split`; `id`, `revision`, `text` — the permission request or the crew plan presented last, its
   revision and its plan; `read` — the revision of the first read; `seen`, `seenText?` — the revision the current round
   reads; `base?`, `baseText?` — the one the previous round read, the closure check's diff base; `sentAt?` — the journal
-  seq of the last batch; `approved?` — the plan was approved, so the next presentation is a new plan) and `findings` (`id`, `kind`, `text`, `where?`,
+  seq of the last batch; `queued?` — that batch waits in the author's queue; `approved?` — the plan was approved, so the next presentation is a new plan) and `findings` (`id`, `kind`, `text`, `where?`,
   `reviewer`, `round`, and the marks `open?`, `closed?`, `introduced?`, `accepted?`, `answer?`, `reason?`). Both
-  are optional: earlier documents load as they are. A version-1 document reads as
+  are optional: earlier documents load as they are. A review that goes to `past` keeps its plan's revisions and `approved`,
+  not its texts; readers take the document up to 16 MiB. A version-1 document reads as
   a `pre-pr` review started by the person; a review that was fixing takes its batch from the journal (the turn that
   took it, else the queued prompt); it is written back as version 2 on the next change.
 - Sources: `sources/sources.json`, `schemaVersion: 1`, `sources` (`id`, `title`, `url?`, `file`, `chars`,

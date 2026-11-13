@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import { defaultAppSettings } from '../packages/core/src/settings';
 
 const run = promisify(execFile);
 const desktop = resolve('apps/desktop'),
@@ -68,7 +69,16 @@ test('a task is reviewed inside it before the PR @area:review', async () => {
 	);
 	await writeFile(
 		join(data, 'settings.json'),
-		JSON.stringify({ schemaVersion: 1, settings: { appearance: 'light', language: 'en' } })
+		// spec/reviews#who: with another provider signed in on this computer it would review; Codex off makes the reviewer a fresh session
+		// of the task's own provider, which the fixture agent plays.
+		JSON.stringify({
+			schemaVersion: 1,
+			settings: {
+				appearance: 'light',
+				language: 'en',
+				agents: { ...defaultAppSettings.agents, enabled: { claude: true, codex: false } },
+			},
+		})
 	);
 	const app = await electron.launch({
 		executablePath,
@@ -104,8 +114,8 @@ test('a task is reviewed inside it before the PR @area:review', async () => {
 		await expect(details).toContainText('Round 1: say hello instead');
 		await expect(page.locator('[data-review-strip="passed"]')).toBeVisible({ timeout: 120_000 });
 		await expect(page.locator('[data-review-row="passed"]')).toBeVisible();
-		// The Changes button says the changes are reviewed; the sidebar lists the reviewer under the task.
-		await expect(page.locator('[data-crew-card="task"]')).toContainText('Reviewer');
+		// The sidebar lists the reviewer under the task with its verdict.
+		await expect(page.locator('[data-crew-card="task"]')).toContainText('Claude · Approved');
 	} finally {
 		await app.close();
 		await run('pkill', ['-f', root]).catch(() => {});

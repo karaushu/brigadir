@@ -82,6 +82,7 @@ import {
 	type QuestionAnswer,
 	type SessionCommand,
 	type SessionEvent,
+	type CrewAssignment,
 	type TaskKey,
 	type UserQuestion,
 } from '@brigadir/core';
@@ -131,7 +132,13 @@ import {
 	type CrewContext,
 } from './crew';
 import { TaskReviewLife } from './task-review';
-import { humanToolsAllowed, isWorkspaceTool, simulatorQueued } from '@brigadir/orchestrator';
+import {
+	assignmentBlock,
+	compactionDue,
+	humanToolsAllowed,
+	isWorkspaceTool,
+	simulatorQueued,
+} from '@brigadir/orchestrator';
 import { hiddenToolMessages, serveMcp, type HiddenToolSource } from './mcp';
 import { ModuleSettings } from './modules';
 import { claudeSubagentModel, compactionWindow } from './agent-settings';
@@ -197,6 +204,8 @@ export async function startHost(config: HostConfig) {
 	});
 	let briefPending = false,
 		cliBriefSent = false;
+	/** spec/crew#assignment-after-compaction: the newest compaction of a crew member's session that no assignment block answered yet. */
+	let assignmentDue = crew && task.transport !== 'terminal' ? compactionDue(records) : null;
 	const crewWorker = crew?.parentKey ? new CrewWorker(store, config.key, crew) : null;
 	let crewHost: CrewHost | null = null;
 	/** spec/diff-and-review#agent-review: the task's review before the PR; a solo task gets a crew host of its reviewers when one starts. */
@@ -438,6 +447,7 @@ export async function startHost(config: HostConfig) {
 			context = manifest !== sentScopeContext ? manifest : '';
 		let attachments: Awaited<ReturnType<Attachments['resolve']>>;
 		let relay: Awaited<ReturnType<typeof relayContext>> = { attachmentIds: [], resources: [] };
+		let pieces: CrewAssignment[] | null = null;
 		try {
 			if (!records.some((record) => record.event.kind === 'turn.started'))
 				relay = await relayContext(store, config.key);
@@ -448,6 +458,7 @@ export async function startHost(config: HostConfig) {
 				]),
 			]);
 			transport.validateAttachments(attachments.map((value) => value.input));
+			pieces = await dueAssignment(c.kind === 'prompt' ? (c.assignment ?? null) : null);
 			await checkpoint('turn');
 			await emit({
 				kind: 'turn.started',
@@ -468,6 +479,14 @@ export async function startHost(config: HostConfig) {
 		const briefBlock =
 			briefPending && brief ? [{ kind: 'text' as const, name: 'Brigadir brief', text: brief }] : [];
 		briefPending = false;
+		// spec/crew#assignment-after-compaction: the prompt answers the newest compaction before it goes out; the answer is journaled once the agent took
+		// the turn, so a request that fails — also before a restart — leaves the compaction due for the next prompt.
+		const answered = pieces ? assignmentDue : null,
+			given = answered === null ? [] : (pieces ?? []);
+		if (answered !== null) assignmentDue = null;
+		const assignmentInput = given.length
+			? [{ kind: 'text' as const, name: 'Brigadir assignment', text: assignmentBlock(given) }]
+			: [];
 		const gen = ++turnGen;
 		starting = false;
 		turnFinished = transport
@@ -476,15 +495,25 @@ export async function startHost(config: HostConfig) {
 				[
 					...attachments.map((value) => ({ ...value.input, id: value.attachment.id })),
 					...briefBlock,
+					...assignmentInput,
 					...(context
 						? [{ kind: 'text' as const, name: 'Workspace repositories', text: context }]
 						: []),
 				],
 				relay.resources
 			)
+			.then(async () => {
+				if (answered !== null)
+					await emit({
+						kind: 'crew.assignment.restored',
+						compactedSeq: answered,
+						assignment: given.map((piece) => piece.kind),
+					});
+			})
 			.catch(() => {
 				sentScopeContext = '';
 				if (briefBlock.length) briefPending = true;
+				if (answered !== null && assignmentDue === null) assignmentDue = answered;
 			})
 			.finally(() => {
 				if (turnGen === gen && !steerPending) busy = false;
@@ -549,16 +578,30 @@ export async function startHost(config: HostConfig) {
 	/** spec/composer-steering-queue-and-ghost#steering: a person's prompt into the running GUI turn. Journaled as `prompt.steered` before the request; false — the agent
 	 *  declined it (the turn just ended, or no steering) and the caller queues it as usual. */
 	async function steerPrompt(prompt: QueuedPrompt, inputs: PromptInput[]): Promise<boolean> {
+		if (!transport) return false;
+		await emit({ kind: 'prompt.steered', prompt });
+		return steerTurn(prompt.command.text, inputs, {
+			kind: 'turn.started',
+			text: prompt.command.text,
+			queuedPromptId: prompt.id,
+			...(prompt.attachments.length ? { attachments: prompt.attachments } : {}),
+		});
+	}
+	/** The running turn takes `text` and `inputs` (`_session/steering`); `started` opens the turn the agent adopts instead (codex-acp). False — declined. */
+	async function steerTurn(
+		text: string,
+		inputs: PromptInput[],
+		started: Extract<SessionEvent, { kind: 'turn.started' }>
+	): Promise<boolean> {
 		const agent = transport;
 		if (!agent) return false;
-		await emit({ kind: 'prompt.steered', prompt });
 		const before = turnGen;
 		let gen = 0;
 		steerPending = true;
 		let result: Awaited<ReturnType<AgentTransport['steer']>>;
 		try {
 			result = await agent
-				.steer(prompt.command.text, inputs, [], async () => {
+				.steer(text, inputs, [], async () => {
 					try {
 						await checkpoint('turn');
 					} catch (error) {
@@ -574,12 +617,7 @@ export async function startHost(config: HostConfig) {
 					boundaryTools.clear();
 					turnHeld.clear();
 					toolCount = 0;
-					await emit({
-						kind: 'turn.started',
-						text: prompt.command.text,
-						queuedPromptId: prompt.id,
-						...(prompt.attachments.length ? { attachments: prompt.attachments } : {}),
-					});
+					await emit(started);
 				})
 				.catch(() => ({ outcome: 'declined' as const }));
 		} finally {
@@ -597,6 +635,54 @@ export async function startHost(config: HostConfig) {
 		// The aimed-at turn ended while the steer was out, or an adopted turn failed to open: nothing runs any more.
 		if ((turnGen === before || turnGen === gen) && !agent.running) busy = false;
 		return result.outcome === 'injected';
+	}
+	/**
+	 * spec/crew#assignment-after-compaction: the pieces of the member's current assignment that a prompt does not give itself — `given` is the id
+	 * of the assignment the sending host marked the prompt with. Null — no compaction is due, or the assignment could not be read (the parent is
+	 * away): the block waits.
+	 */
+	async function dueAssignment(given: string | null): Promise<CrewAssignment[] | null> {
+		if (assignmentDue === null || !crew) return null;
+		try {
+			const pieces: CrewAssignment[] = [];
+			if (crewWorker) {
+				const own = await crewWorker.assignment();
+				if (own) pieces.push(own);
+			}
+			if (crewHost && (crew.role === 'foreman' || crew.role === 'lead')) {
+				const plan = await crewHost.planAssignment();
+				if (plan) pieces.push(plan);
+			}
+			return pieces.filter((piece) => given === null || piece.id !== given);
+		} catch {
+			return null;
+		}
+	}
+	/** spec/crew#assignment-after-compaction: at a step boundary of the running turn the block goes in through steering; declined, it waits for the next prompt. */
+	function flushAssignment() {
+		void serialPrompt(async () => {
+			if (assignmentDue === null || !busy || steerPending || !transport?.steering) return;
+			const pieces = await dueAssignment(null),
+				// The newest compaction at dispatch: one that came while the parent answered is answered by this block too.
+				answered = assignmentDue;
+			if (!pieces || answered === null || !busy || !transport?.steering) return;
+			const record = (given: CrewAssignment[]) =>
+				emit({
+					kind: 'crew.assignment.restored',
+					compactedSeq: answered,
+					assignment: given.map((piece) => piece.kind),
+				});
+			if (!pieces.length) {
+				await record([]);
+				return;
+			}
+			const given = await steerTurn(
+				'',
+				[{ kind: 'text', name: 'Brigadir assignment', text: assignmentBlock(pieces) }],
+				{ kind: 'turn.started', text: '', origin: 'agent' }
+			);
+			if (given) await record(pieces);
+		}).catch(() => {});
 	}
 	let saving = false;
 	let saveFinished: Promise<unknown> = Promise.resolve();
@@ -1128,6 +1214,15 @@ export async function startHost(config: HostConfig) {
 			// Snapshots must not expose an event before its durable metadata and live delivery are ready.
 			records.push(record);
 			queue = reducePromptQueue(queue, event);
+			if (crew && task.transport !== 'terminal') {
+				if (event.kind === 'context.compacted') assignmentDue = record.seq;
+				if (
+					event.kind === 'crew.assignment.restored' &&
+					assignmentDue !== null &&
+					event.compactedSeq >= assignmentDue
+				)
+					assignmentDue = null;
+			}
 			touchIdle();
 			if (quotaEvent) {
 				scheduleRateReset();
@@ -2838,6 +2933,7 @@ export async function startHost(config: HostConfig) {
 				}
 				await emit(event);
 				if (boundary && queue.held?.length) flushHeld(true);
+				if (boundary && assignmentDue !== null) flushAssignment();
 				// spec/chat-turns-plans-and-questions#plan-approval: the agent left the plan's mode; bring back the one the person had, unless it is already there.
 				const mode = recordModeId(event);
 				if (modeReturn && mode !== null && mode !== modeReturn.plan) {

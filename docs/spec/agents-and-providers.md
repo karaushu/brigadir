@@ -27,7 +27,7 @@ Brigadir talks to coding agents through their ACP adapters (`claude-agent-acp`, 
 - **Tool patches.** A patch with a missing field keeps the previous value; an empty array clears the field. Boolean options and grouped selects are kept as the agent sent them.
 - **Parentage.** `_meta.claudeCode.parentToolUseId` (also on a subagent's message chunks) lives on the event record envelope, not on the event.
 - `usage.changed` carries `used`, `capacity` and the adapter's `cost`; cost is never displayed (see [usage](#usage-principles)).
-- <a id="context-compacted"></a>`context.compacted` says the agent compacted its context: `before` and `after` are the context sizes in tokens around the compaction, each a non-negative integer or null when the adapter gave none. It comes once per compaction that the adapter reports as completed ([compaction signal](#compaction-signal)), and the chat shows it as a [service row](chat.md#context-compacted).
+- <a id="context-compacted"></a>`context.compacted` says the agent compacted its context: `before` and `after` are the context sizes in tokens around the compaction, each a non-negative integer or null when the adapter gave none. It comes once per compaction that the adapter reports as completed ([compaction signal](#compaction-signal)), and the chat shows it as a [service row](chat.md#context-compacted). For a crew member, the host then gives the member's current assignment back ([Crew](crew.md#assignment-after-compaction)).
 - <a id="turn-usage"></a>`turn.usage` carries the tokens of one finished turn as the adapter reported them in the `session/prompt` result: `input`, `output`, `cacheRead`, `cacheWrite` (non-negative integers; a missing counter is 0). It is journaled just before that turn's `turn.completed`, and not at all when the result has no `usage`. Nothing displays it; the crew report sums it (see [Crew](crew.md#reports)).
 
 <a id="acp-connection"></a>
@@ -123,7 +123,7 @@ Every GUI session gets one brief, built by `sessionBrief` (`packages/host/src/cr
 - Otherwise the brief goes as the hidden `Brigadir brief` `.context` block of the session's first prompt.
 - When the agent rejects the `systemPrompt` as invalid params, the transport repeats that request without it, and the brief goes as `.context` of the next prompt. This holds for a `session/load` after a restart as well: the brief rebuilt by the new host still reaches the agent.
 - Either way, the transcript and the journal never show it.
-- A crew part prompt, a review batch and the scope manifest are prompts, not the brief: they change during the session.
+- A crew part prompt, a review batch and the scope manifest are prompts, not the brief: they change during the session. After a compaction the host gives a crew member its current assignment again as a hidden `.context` block ([Crew](crew.md#assignment-after-compaction)).
 - Claude keeps the system prompt it got at the session's first request. A brief that changed on a later load (a setting changed between two host starts) takes effect after the next compaction.
 
 <a id="compaction-signal"></a>
@@ -133,6 +133,8 @@ Every GUI session gets one brief, built by `sessionBrief` (`packages/host/src/cr
 
 - turns each compaction of the session that reaches `completed` into one `context.compacted`. `before` is `used` of the last `usage_update` before the compaction. The event goes on the event chain with the next update of the session that is not about the compaction: when that is a `usage_update`, `after` is its `used` (Claude sends one at once with the retained size) and the event goes ahead of its `usage.changed`; when it is anything else, or the turn ends first (`turn.completed` or `session.failed`), `after` is null (Codex reports usage only after its next request);
 - ignores the other statuses, `compaction_summary_chunk` (the summary is neither shown nor journaled), the compactions of a subagent's session and those replayed while `session/load` runs.
+
+codex-acp completes a compaction when its `contextCompaction` item ends (`thread/compacted` from an older Codex). A compaction still running when the turn ends is finished `failed` or `cancelled`, so it gives no `context.compacted`.
 
 Journals written before the capability keep their `Compact conversation` tool rows.
 
@@ -459,7 +461,6 @@ Two read-only tools of the `brigadir` server, input schema `{}`. The agent pulls
 - Codex `session_info_update.title` as the task title.
 - Verify whether two Codex processes on one `~/.codex` race on token refresh; status line `rate_limits` on Team plans.
 - Compaction at the turn boundary: when a turn ends with the context near the [compaction window](#compaction-window) and nothing is queued, the host sends `/compact` before the next prompt. An automatic compaction in the middle of a turn was measured as mostly uncached; one at a turn boundary is several times cheaper. It needs a marker on the host's own `turn.started` so the chat draws it as a service row, crew hosts that do not take that turn's end for a worker's report, a trigger point per provider (Claude compacts about 33k under the window, so 80 % of 200k leaves only 7k), and a check of Codex's own `model_post_turn_compact_threshold_percent`.
-- The part prompt after a compaction: a Claude `SessionStart` hook with matcher `compact` that gives the current part back to the agent. The role brief already survives in the system prompt; a part prompt survives only as the summary quotes it.
 - Verify a Codex compaction at the configured limit in a live run.
 
 <a id="non-goals"></a>

@@ -506,6 +506,32 @@ export const crewReviewRounds = 2;
 export const crewAcceptanceLimit = 20_000;
 /** spec/crew#reviewer: the part's prompt as a reviewer's prompt carries it. */
 export const crewReviewerPromptLimit = 100_000;
+/** spec/crew#assignment-after-compaction: the whole block that gives a member its assignment back, one open comment in it, the plan summary in a digest. */
+export const crewAssignmentLimit = 128_000,
+	crewAssignmentCommentLimit = 2_000,
+	crewDigestSummaryLimit = 4_000;
+/** spec/crew#assignment-after-compaction: what a member's assignment holds — its open part, its open check, the digest of its plan. */
+export type CrewAssignmentKind = 'part' | 'check' | 'plan';
+export function isCrewAssignmentKind(value: unknown): value is CrewAssignmentKind {
+	return value === 'part' || value === 'check' || value === 'plan';
+}
+/**
+ * spec/crew#assignment-after-compaction: one piece of a member's current assignment, as the host that gave it builds it. `id` names the part
+ * (`part:<taskId>:<n>`) or the check (`check:<reviewId>`); the host marks the prompt that gives it with the same id, so that prompt gets no block.
+ */
+export type CrewAssignment = { kind: CrewAssignmentKind; text: string; id?: string };
+export function isCrewAssignmentId(value: unknown): value is string {
+	return typeof value === 'string' && /^(part|check):[A-Za-z0-9_:-]{1,200}$/.test(value);
+}
+export function isCrewAssignment(value: unknown): value is CrewAssignment {
+	return (
+		isRecord(value) &&
+		isCrewAssignmentKind(value.kind) &&
+		typeof value.text === 'string' &&
+		value.text.length <= crewAssignmentLimit &&
+		(value.id === undefined || isCrewAssignmentId(value.id))
+	);
+}
 /**
  * spec/crew#workers: `crew-part.json` in the member's own task directory — the current part's prompt (clipped to `crewReviewerPromptLimit`) and
  * acceptance criteria for its reviewers. Its own file keeps `crew-workers.json` small whatever the prompts weigh.

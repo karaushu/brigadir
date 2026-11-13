@@ -8,8 +8,10 @@ import {
 	isCrewPlan,
 	isCrewPlanDecision,
 	isCrewTurnMarker,
+	isCrewAssignmentId,
 	type CrewNote,
 	type CrewPlan,
+	type CrewAssignmentKind,
 	type CrewPlanDecision,
 	type CrewQuestion,
 	type CrewReportSummary,
@@ -81,6 +83,9 @@ export type SessionEvent =
 			title: string;
 			part: number;
 	  }
+	/** spec/crew#assignment-after-compaction: the host gave the member its current assignment back after the compaction at `compactedSeq` (or later ones up to it);
+	 *  `assignment` — what the block held, empty when nothing was open or the prompt itself carried it. The block's text is never journaled. */
+	| { kind: 'crew.assignment.restored'; compactedSeq: number; assignment: CrewAssignmentKind[] }
 	| { kind: 'crew.report'; report: CrewReportSummary }
 	| { kind: 'crew.note'; note: CrewNote }
 	| { kind: 'crew.question.requested'; question: CrewQuestion }
@@ -371,6 +376,7 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 				(v.attachmentIds === undefined || isAttachmentIds(v.attachmentIds)) &&
 				(v.crew === undefined || isCrewTurnMarker(v.crew)) &&
 				(v.steer === undefined || (v.steer === true && v.crew === undefined)) &&
+				(v.assignment === undefined || isCrewAssignmentId(v.assignment)) &&
 				(v.text.trim().length > 0 || (Array.isArray(v.attachmentIds) && v.attachmentIds.length > 0))
 			);
 		case 'retryTurn':

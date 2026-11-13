@@ -236,7 +236,10 @@ export async function readTaskReview(
 								node.id,
 								worker?.status ?? null,
 								comments.filter(
-									(item) => item.reviewId === current.id && item.reviewer === node.name
+									(item) =>
+										item.reviewId === current.id &&
+										item.reviewer === node.name &&
+										item.kind !== 'gap'
 								).length
 							),
 							...(worker?.status === 'failed' && worker.failure ? { failure: worker.failure } : {}),

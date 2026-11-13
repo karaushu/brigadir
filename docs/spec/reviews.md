@@ -333,7 +333,8 @@ must change and the ticket has no gaps). At most 12 items in all, ranked: the mo
 | Plan vs code | `assumption` (a wrong assumption about existing code), `left-open` (a decision left open that will produce defects: concurrency, failures and retries, data loss, empty and error states), `unverifiable` (a check that cannot be verified as written), `split` (the foreman's split, [below](#plan-split)) | `wrong assumption`, `left open`, `cannot verify`, `split` (`--amber`) | the author |
 | Gaps in the ticket | `gaps[]` — what the ticket itself leaves open | `gap` (`--tint`, `--fg2`) | the person |
 
-- A finding is `{kind, text, where?}`; a gap `{text, where?}`. `text` ≤ 2000 characters; `where` ≤ 200, the place in the
+- A finding is `{kind, text, where?}`; a gap `{text, where?}`. Gaps never count as findings: not in the strip's counts, a
+  reviewer's row or the chat rows. `text` ≤ 2000 characters; `where` ≤ 200, the place in the
   ticket, the contract or the plan (`CRM-412 · Notes`, `api-contract.yaml:88`, `plan.md:41`).
 - A first read without findings and gaps is an `approve`. Gaps alone pass the review: they are questions for the
   person, not for the author, and they never keep the review open.
@@ -345,8 +346,8 @@ must change and the ticket has no gaps). At most 12 items in all, ranked: the mo
    instruction to read the plan, the sources and the repo once, and to answer with the verdict above.
 2. **Revise once or object.** The findings go to the author as one batch: `<reviewer> left N findings in the plan
    review. Revise the plan once: fix each finding in the plan, or object to it with review_reply(commentId, reason) where
-   commentId is the finding's id; then present the plan for approval again with ExitPlanMode` (a foreman: `then call
-   propose_plan again with the revised split`) `. <reviewer> then checks only whether each finding is closed.` with each
+   commentId is the finding's id; then present the plan for approval again with ExitPlanMode, unchanged if you object to every
+   finding` (a foreman: `then call propose_plan again with the revised split, …`) `. <reviewer> then checks only whether each finding is closed.` with each
    finding's id, kind, place and text (`- id p1 [missed] (CRM-412 · Notes): …`). `Fix {n}` sends `The person asks you
    to fix N findings of the plan review that are still open…` with the reviewer's reasons. A solo task's waiting plan is answered with its first `reject_once` (else the first
    `reject_*`, else the request is cancelled), as in [plan chat](chat-turns-plans-and-questions.md#plan-chat), and the batch runs right after the

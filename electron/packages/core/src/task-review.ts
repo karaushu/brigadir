@@ -534,7 +534,10 @@ export const emptyTaskReviewView: TaskReviewView = {
 };
 /** Counts the strip, the chat rows and the PR sheet say, for one review. */
 export function taskReviewCounts(view: Pick<TaskReviewView, 'comments'>, reviewId?: string) {
-	const rows = reviewId ? view.comments.filter((c) => c.reviewId === reviewId) : view.comments;
+	// spec/reviews#plan-verdict: a plan review's gaps are the person's questions, not findings.
+	const rows = (
+		reviewId ? view.comments.filter((c) => c.reviewId === reviewId) : view.comments
+	).filter((c) => c.kind !== 'gap');
 	const by = (...states: TaskReviewFindingState[]) =>
 		rows.filter((comment) => states.includes(comment.state)).length;
 	return {

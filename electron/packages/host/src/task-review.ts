@@ -639,8 +639,8 @@ export class TaskReviewLife {
 			findings = `${n} ${n === 1 ? 'finding' : 'findings'}`,
 			again =
 				review.plan?.kind === 'split'
-					? 'then call propose_plan again with the revised split'
-					: 'then present the plan for approval again with ExitPlanMode',
+					? 'then call propose_plan again with the revised split, unchanged if you object to every finding'
+					: 'then present the plan for approval again with ExitPlanMode, unchanged if you object to every finding',
 			checks = `${names} then ${names.includes(',') ? 'check' : 'checks'} only whether each finding is closed.`;
 		const text = person
 			? `The person asks you to fix ${findings} of the plan review that ${n === 1 ? 'is' : 'are'} still open. Revise the plan: fix each one in the plan, or object to it with review_reply(commentId, reason) where commentId is the finding's id; ${again}. ${checks}\n\n${planFindingsText(list, true)}`

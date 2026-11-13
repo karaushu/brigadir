@@ -671,7 +671,7 @@ export function ReviewStripView({
 		gaps = plan
 			? view.comments.filter((item) => item.reviewId === review.id && item.kind === 'gap').length
 			: 0,
-		findings = counts.findings - gaps,
+		findings = counts.findings,
 		gapsTail = gaps ? (
 			<>
 				{' · '}
@@ -1333,7 +1333,7 @@ export function PlanReviewLine({ task, locale }: { task: AgentTask; locale: Loca
 									: current.state === 'failed'
 										? t(locale, 'Review did not start')
 										: t(locale, 'Review stopped');
-		const findings = counts.findings - gaps;
+		const findings = counts.findings;
 		state = (
 			<span className={styles.planState} data-state={tone}>
 				<span className={styles.glyph} data-state={tone}>

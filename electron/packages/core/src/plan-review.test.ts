@@ -315,3 +315,35 @@ describe('a plan review of a composing foreman (spec/reviews#reviewer-sessions, 
 		expect(withoutTaskReviewers(composed).root.agents.map((agent) => agent.id)).toEqual(['API']);
 	});
 });
+
+describe('counts (spec/reviews#plan-verdict)', () => {
+	it("a plan review's gaps are not findings", async () => {
+		const { taskReviewCounts } = await import('./task-review');
+		const row = (id: string, kind: PlanFinding['kind'], state: 'sent' | 'open') => ({
+			id,
+			reviewId: 'r1',
+			text: id,
+			path: '',
+			line: 0,
+			scopeId: '',
+			reviewer: 'Codex',
+			round: 1,
+			state,
+			answer: null,
+			reason: null,
+			kind,
+		});
+		expect(
+			taskReviewCounts(
+				{
+					comments: [
+						row('a', 'missed', 'open'),
+						row('b', 'gap', 'sent'),
+						row('c', 'split', 'sent'),
+					],
+				},
+				'r1'
+			)
+		).toMatchObject({ findings: 2, open: 1 });
+	});
+});

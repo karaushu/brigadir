@@ -309,7 +309,7 @@ export const defaultAppSettings: AppSettings = {
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 16 &&
+		Object.keys(value).length === 17 &&
 		(value.compactionWindow === null || isCompactionWindow(value.compactionWindow)) &&
 		isTaskBudgetSetting(value.taskBudget) &&
 		typeof value.prSummary === 'boolean' &&

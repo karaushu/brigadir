@@ -1398,11 +1398,18 @@ export async function startHost(config: HostConfig) {
 		});
 		return result;
 	}
+	/** The plan requests the review has heard of: the journal row and the waiting request come in either order (the transport writes the row first). */
+	const presentedPlans = new Set<string>();
+	function presentPlan(id: string) {
+		const plan = planWaiting();
+		if (plan?.id !== id || presentedPlans.has(id)) return;
+		presentedPlans.add(id);
+		void taskReview.planPresented(plan).catch(() => {});
+	}
 	/** spec/reviews#plan-start, spec/reviews#plan-loop: a plan presented, answered or approved — the plan review hears it. */
 	function planEvent(event: SessionEvent) {
 		if (event.kind === 'permission.requested' && isPlanApproval(event.request)) {
-			const plan = planWaiting();
-			if (plan?.id === event.request.id) void taskReview.planPresented(plan).catch(() => {});
+			presentPlan(event.request.id);
 			return;
 		}
 		if (event.kind === 'permission.resolved') {
@@ -1457,6 +1464,8 @@ export async function startHost(config: HostConfig) {
 				}
 			};
 			permissions.set(request.id, { request, finish });
+			// spec/reviews#plan-start: the agent's plan request is registered after its journal row.
+			if (isPlanApproval(request)) presentPlan(request.id);
 			signal.addEventListener('abort', abort, { once: true });
 			if (signal.aborted) abort();
 		});

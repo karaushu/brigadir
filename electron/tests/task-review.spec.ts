@@ -225,6 +225,8 @@ test('a plan is reviewed before the person approves it @area:review', async ({},
 					String(entry.params).includes('Claude left 1 finding in the plan review.')
 			)
 		).toBe(true);
+		// Every event the review wrote reads back: the journal stays readable.
+		await expect(page.getByText('Some data could not be read.')).toHaveCount(0);
 		const strip = page.locator('[data-review-strip]');
 		await expect(strip).toContainText('Review passed');
 		await expect(strip).toContainText('1 finding');

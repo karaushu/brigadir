@@ -753,10 +753,10 @@ export class TaskReviewLife {
 			),
 			{ items, replies } = parsePlanVerdict(input, closure, own),
 			findings = review.findings ?? [];
-		let next = findings.length;
+		// Ids as a code finding's: a review batch names its findings by UUID.
 		const added: PlanFinding[] = items.map((item) => ({
 			...item,
-			id: `p${++next}`,
+			id: randomUUID(),
 			reviewer,
 			round,
 			...(closure ? { introduced: round } : {}),

@@ -9,6 +9,8 @@ import {
 	builtinAgentTemplates,
 	resolveCrewAgent,
 	templateLookup,
+	isReviewBatch,
+	isSessionEvent,
 	type EventRecord,
 	type ReviewBatch,
 	type ReviewComment,
@@ -87,6 +89,12 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 		selfTrees: async () => state.trees,
 	};
 	const emit = async (event: SessionEvent) => {
+		// The journal takes only valid events: the review's own kinds are checked as the reader checks them.
+		if (
+			(event.kind.startsWith('task-review.') || event.kind === 'source.saved') &&
+			!isSessionEvent(event)
+		)
+			throw new Error(`Invalid event ${JSON.stringify(event)}`);
 		records.push({
 			schemaVersion: 1,
 			seq: records.length + 1,
@@ -648,6 +656,8 @@ describe('the plan review (spec/reviews#plan-review)', () => {
 		});
 		await s.verdict(1, 'comments');
 	};
+	/** The id of the n-th finding of the current review. */
+	const id = (s: Awaited<ReturnType<typeof setup>>, n: number) => s.doc().review!.findings![n]!.id;
 	/** The author's turn took the batch (a solo task: the batch runs as its own turn). */
 	const takeBatch = (s: Awaited<ReturnType<typeof setup>>) =>
 		s.emit({
@@ -712,13 +722,17 @@ describe('the plan review (spec/reviews#plan-review)', () => {
 		expect(s.planBatches).toHaveLength(1);
 		const batch = s.planBatches[0]!;
 		expect(batch.text).toContain('Codex left 2 findings in the plan review. Revise the plan once');
-		expect(batch.text).toContain('- id p1 [missed] (CRM-412 · Notes): Edit and delete are missing');
+		expect(batch.text).toContain(
+			`- id ${id(s, 0)} [missed] (CRM-412 · Notes): Edit and delete are missing`
+		);
 		// Gaps never go to the author.
 		expect(batch.text).not.toContain('empty state');
-		expect(batch.batch.comments.map((item) => item.id)).toEqual(['p1', 'p2']);
+		expect(batch.batch.comments.map((item) => item.id)).toEqual([id(s, 0), id(s, 1)]);
+		// The batch is a review batch the journal accepts (a queued prompt and the turn carry it).
+		expect(isReviewBatch(batch.batch)).toBe(true);
 
 		await takeBatch(s);
-		await s.life.reply('p2', 'The store already serializes saves');
+		await s.life.reply(id(s, 1), 'The store already serializes saves');
 		await present(s, plan(2, '# Client notes\n\n- read notes\n- edit and delete notes'));
 		expect(s.doc().review!.state).toBe('verifying');
 		expect(s.state.checks).toBe(2);
@@ -730,13 +744,13 @@ describe('the plan review (spec/reviews#plan-review)', () => {
 		expect(prompt).toContain("Author's objection: The store already serializes saves");
 
 		await s.life.hooks().planVerdict('Codex', 2, {
-			findings: [{ replyTo: 'p2', text: 'A retry after a failed save still races' }],
+			findings: [{ replyTo: id(s, 1), text: 'A retry after a failed save still races' }],
 		});
 		await s.verdict(2, 'disputed');
 		const review = s.doc().review!;
 		expect(review.state).toBe('yours');
-		expect(review.findings!.find((f) => f.id === 'p1')).toMatchObject({ closed: 2 });
-		expect(review.findings!.find((f) => f.id === 'p2')).toMatchObject({
+		expect(review.findings!.find((f) => f.id === id(s, 0))).toMatchObject({ closed: 2 });
+		expect(review.findings!.find((f) => f.id === id(s, 1))).toMatchObject({
 			open: 2,
 			reason: 'A retry after a failed save still races',
 		});
@@ -761,7 +775,7 @@ describe('the plan review (spec/reviews#plan-review)', () => {
 		await takeBatch(s);
 		await present(s, plan(2));
 		await s.life.hooks().planVerdict('Codex', 2, {
-			findings: [{ replyTo: 'p1', text: 'Delete is still missing' }],
+			findings: [{ replyTo: id(s, 0), text: 'Delete is still missing' }],
 		});
 		await s.verdict(2, 'disputed');
 		expect(s.doc().review!.state).toBe('yours');
@@ -777,15 +791,15 @@ describe('the plan review (spec/reviews#plan-review)', () => {
 		await takeBatch(s);
 		await present(s, plan(2));
 		await s.life.hooks().planVerdict('Codex', 2, {
-			findings: [{ replyTo: 'p2', text: 'Still races' }],
+			findings: [{ replyTo: id(s, 1), text: 'Still races' }],
 		});
 		await s.verdict(2, 'disputed');
 		await s.life.planDecided(true);
 		const review = s.doc().review!;
 		expect(review.state).toBe('accepted');
 		expect(review.plan!.approved).toBe(true);
-		expect(review.findings!.find((f) => f.id === 'p2')!.accepted).toBe(true);
-		expect(review.findings!.find((f) => f.id === 'p1')!.accepted).toBeUndefined();
+		expect(review.findings!.find((f) => f.id === id(s, 1))!.accepted).toBe(true);
+		expect(review.findings!.find((f) => f.id === id(s, 0))!.accepted).toBeUndefined();
 		expect(s.state.stopped).toBe(1);
 		expect(s.records.at(-1)!.event).toMatchObject({
 			kind: 'task-review.finished',

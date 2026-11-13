@@ -24,7 +24,10 @@ async function noPlanReview(root: string) {
 	await mkdir(join(root, 'data'), { recursive: true });
 	await writeFile(
 		join(root, 'data', 'settings.json'),
-		JSON.stringify({ schemaVersion: 1, settings: { planReviewOff: true } })
+		JSON.stringify({
+			schemaVersion: 1,
+			settings: { appearance: 'light', language: 'en', planReviewOff: true },
+		})
 	);
 }
 

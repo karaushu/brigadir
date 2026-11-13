@@ -297,6 +297,25 @@ A question is a **tool call**, not text in the turn. The agent calls the Brigadi
 - **After resolution** the card collapses to the plain-text line `<question> · Resolved`. The `question.resolved` row shows the answer, `labels · text`, or `No answer`. One-line summaries (the resolved line, the sidebar activity, the crew question row) stay plain text.
 - On the phone the card uses touch sizes (52 px rows, 44 px buttons) and no key hint. A crew question on the phone has no `Skip`, because the worker waits for an answer.
 
+<a id="budget-card"></a>
+### Budget question card
+
+The question of a task that [reached its token budget](agents-and-providers.md#budget-reached), in the chat at the place of `budget.reached` while it waits. Same family as the question card (amber header strip and border; `ui/ChatCard` look):
+
+| Part | Look |
+| --- | --- |
+| Header | pause glyph, `{Provider} budget reached`, hint `{tokens} of {budget} tokens` (`≈` when the count was an estimate), `waiting {age}` after a minute |
+| Body | `The task is paused.`, or `The task and its {n} workers are paused.` for a crew (four `uk` forms); below, muted: `Turns that run now finish. Nothing new starts: no hires, no deliveries, no queued messages.` |
+| Actions | `Stop now` (ghost), `Finish turns, then stop` (soft), `Raise to {n}` — the primary split button; its menu (`ui/MenuPopover` with `Esc`) lists `Raise to {n}` and the next two values, then `No limit for this task` |
+
+- **After the answer** the card folds into the plain line `{Provider} budget reached · Resolved` with the answer under it: `Raise to {n}`, `No limit for this task`, `Finish turns, then stop` or `Stop now`. `budget.decided` draws nothing of its own.
+- A card whose question was already answered elsewhere (the strip, the popover) folds at once; one asked again with a new budget folds to `{Provider} budget reached · Resolved` without an answer line.
+
+<a id="budget-strip"></a>
+### Budget strip above the composer
+
+While the budget question waits, the same question stands as the first row of the [deck](composer.md#queue-deck) over the composer, `amber` tone: pause glyph, `Budget reached`, then `Stop now`, `Finish turns` (the short label), and the `Raise to {n}` split button with the same menu. The row's chevron expands the provider breakdown of `Task usage` with the account lines and the sentence `Turns that run now finish; nothing new starts.` An answer in the strip or in the card closes both; the strip leaves the deck when nothing waits.
+
 <a id="later"></a>
 ## Later
 

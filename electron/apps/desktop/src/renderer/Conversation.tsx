@@ -134,6 +134,14 @@ import { chatMenuMouseDown, openChatMenu } from './chat-menu';
 import { notify } from './ui/Toast';
 import { DeckList, DeckRow } from './ui/Deck';
 import { BackgroundDeck } from './BackgroundDeck';
+import {
+	BudgetCard,
+	BudgetStrip,
+	TaskUsageCounterView,
+	budgetAnswerText,
+	budgetTitle,
+	useTaskTokens,
+} from './TaskUsage';
 import { ReviewEventRow, ReviewProposalRow, ReviewStrip, useReviewStripShown } from './TaskReview';
 import styles from './Conversation.module.css';
 const ToolTerminal = lazy(() => import('./ToolTerminal'));
@@ -172,6 +180,8 @@ const sendFailures: Partial<Record<SessionCommand['kind'], MessageKey>> = {
 	retryTurn: 'Could not retry the turn.',
 	stopBackground: 'Could not stop the background command.',
 	stopSubagent: 'Could not stop the subagent.',
+	setTokenBudget: 'Could not change the budget.',
+	decideBudget: 'Could not send the answer to the agent.',
 };
 /** Texts the composer editor reports as they are; anything else it reports is the raw failure of the `@` file search. */
 const editorFailures: readonly MessageKey[] = [
@@ -348,6 +358,8 @@ export function Conversation({
 	const summarize = useRef(turnSummarizer()).current;
 	const turns = useMemo(() => summarize(records), [records]);
 	const pending = useMemo(() => pendingInputs(records), [records]);
+	// spec/agents-and-providers#task-tokens: the counter, the budget card and strip read one view of the task's tokens.
+	const tokens = useTaskTokens(task, locale);
 	// spec/chat-turns-plans-and-questions#turn-rail: one rail mark per prompt; the text is the prompt's own row (a human message or a crew event).
 	const railTurns = useMemo((): RailTurn[] => {
 		const texts = new Map<string, string>();
@@ -1370,6 +1382,39 @@ export function Conversation({
 				return <ReviewEventRow task={task} record={row.record} locale={locale} />;
 			// spec/chat#context-compacted
 			if (e.kind === 'context.compacted') return <ContextCompactedRow event={e} locale={locale} />;
+			// spec/chat-turns-plans-and-questions#budget-card: the question while it waits, then one folded line with the answer.
+			if (e.kind === 'budget.reached') {
+				if (pending.budget?.id === e.id)
+					return (
+						<BudgetCard
+							question={pending.budget}
+							view={tokens}
+							locale={locale}
+							disabled={!hostConnected || sending}
+							send={(c) => {
+								void send(c);
+							}}
+						/>
+					);
+				const decided = records.find(
+					(record) =>
+						record.seq > row.record.seq &&
+						record.event.kind === 'budget.decided' &&
+						record.event.id === e.id
+				)?.event;
+				return (
+					<>
+						<div className={styles.resolved} data-budget-card="resolved">
+							{budgetTitle(locale, e.provider)} · {t(locale, 'Resolved')}
+						</div>
+						{decided?.kind === 'budget.decided' && (
+							<div className={styles.answer}>
+								{budgetAnswerText(locale, decided.decision, decided.budget)}
+							</div>
+						)}
+					</>
+				);
+			}
 			if (e.kind === 'crew.report' && e.report.taskId === task.id) return null;
 			if (e.kind === 'crew.worker.created' && e.nodeId.startsWith('review-')) return null;
 			if (e.kind === 'turn.started' || e.kind.startsWith('crew.'))
@@ -1881,22 +1926,38 @@ export function Conversation({
 					locale={locale}
 					send={send}
 					review={
-						reviewStrip ? (
-							<ReviewStrip
-								task={task}
-								locale={locale}
-								disabled={!hostConnected}
-								onComment={(comment) =>
-									setTask({
-										panel: 'changes',
-										panelShown: true,
-										selected: `${comment.scopeId}/${comment.path}`,
-										surface: 'diff',
-										reviewTarget: comment.id,
-									})
-								}
-								onReviewer={(id) => useWorkspace.getState().selectTask(task.projectId, id)}
-							/>
+						reviewStrip || pending.budget ? (
+							<>
+								{/* spec/chat-turns-plans-and-questions#budget-strip: the budget question over the composer while it waits. */}
+								{pending.budget && (
+									<BudgetStrip
+										question={pending.budget}
+										view={tokens}
+										locale={locale}
+										disabled={!hostConnected || sending}
+										send={(c) => {
+											void send(c);
+										}}
+									/>
+								)}
+								{reviewStrip ? (
+									<ReviewStrip
+										task={task}
+										locale={locale}
+										disabled={!hostConnected}
+										onComment={(comment) =>
+											setTask({
+												panel: 'changes',
+												panelShown: true,
+												selected: `${comment.scopeId}/${comment.path}`,
+												surface: 'diff',
+												reviewTarget: comment.id,
+											})
+										}
+										onReviewer={(id) => useWorkspace.getState().selectTask(task.projectId, id)}
+									/>
+								) : null}
+							</>
 						) : undefined
 					}
 					onOpenSubagent={(id) =>
@@ -2110,6 +2171,15 @@ export function Conversation({
 						task={task}
 						locale={locale}
 						contended={contended}
+						usage={
+							<TaskUsageCounterView
+								view={tokens}
+								locale={locale}
+								// spec/agents-and-providers#task-budget: without a host the budget is changed in task.json by main.
+								disabled={sending}
+								send={send}
+							/>
+						}
 						notices={
 							<>
 								{authFailure && task.provider && (

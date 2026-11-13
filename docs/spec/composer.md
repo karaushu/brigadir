@@ -53,7 +53,7 @@ Shows where the agent writes, from task data only (no extra git calls). A task w
 - Geometry: 26 px tall (27 with the line), `--hair` top border, bottom corners follow the island, 11 px `--fg2`, no fill. Branch uses `ui/BranchName` (full name with prefix, shrinks in the middle, full name in the tooltip); `+N −M` via `ui/ChangeCounts` (mono 10.5).
 - The whole footer is one button (`aria-label`/`title`: `Worktree · <branch>` or `No isolation · <branch>`). Hover and open state: `--accent` at 10 % over the whole bar.
 - Click opens the **Task repos** popover (340 px) above the island from its left edge: one row per selected repo (glyph, name — the project name for the root `.` — branch or Detached HEAD, `+N −M` or **No isolation**), footer note `Worktree · from <base>`. Data comes from `readScopePanel`, the same source as the sidebar's repo section. Esc closes and returns focus.
-- Class S chips (repo contention, auth, rate limit and others; see [notice chips](notifications-slack-notes-and-schedules.md)) stand to the right of the footer button as their own targets; the branch shrinks first.
+- The [token counter](#task-usage) stands at the right end of the footer as its own target; class S chips (repo contention, auth, rate limit and others; see [notice chips](notifications-slack-notes-and-schedules.md)) stand to the right of the footer button, before it. The branch shrinks first.
 - The footer never folds. A legacy `composerEnvironmentCollapsed` field in `surface-layout.json` is read and dropped; the next save omits it.
 
 <a id="agent-capsule"></a>
@@ -119,6 +119,24 @@ The squeeze level is measured on the row itself (`ResizeObserver` on `[data-comp
 
 - **View ▸ Next agent mode** (default ⇧⇥, keymap-driven) cycles the mode option's choices in the agent's order (`nextAgentMode`), or the legacy modes when there is no mode option.
 - The composer catches the key in its capture phase while it has focus, so ⇧⇥ does not move focus backwards. It is not taken while the caret is on a Markdown list item (there ⇧⇥ outdents; see [formatting](#formatting)) or while the `@` / `/` menu is open.
+
+<a id="task-usage"></a>
+### Token counter and `Task usage`
+
+The task's [token count](agents-and-providers.md#task-tokens) at the right end of the environment footer, mono 10.5, `--fg2`; a button of its own (hover `--tint`, open state underlined). A task whose agents reported no usage yet has no counter.
+
+| State | Shows |
+| --- | --- |
+| Normal | `1.2m tokens` — the sum over providers |
+| Estimate | `≈1.3m tokens` while a turn of the task or a member runs |
+| Near the budget | `--amber`, the provider nearest its budget and the budget: `Claude 1.7m of 2m` (`≈` when estimated) |
+| Paused | `--red`: `Claude 2m of 2m · paused` while the task is held at that provider's budget |
+| No budget | the sum only, never amber or red |
+
+- **`Task usage` popover** (shared `ui/Popover`, 340 px, above the island from the counter's right edge, Esc closes and returns focus): header `Task usage` and the sum; then one group per provider that used tokens or has a budget: glyph and name, the count (`930k`, with `≈`), `of` and the budget popup (`No limit`, `500k`, `1m`, `2m`, `5m`, `10m`, plus the current value when it is not in the list), a `ui/ProgressBar` while a budget is set (accent, `--amber` near, `--red` reached), and the member rows of that provider: `Agent` for the task's own agent, `{agent} · {part}` for crew members and reviewers, each with its count. The foot holds the [account lines](agents-and-providers.md#task-quota-span).
+- The provider line's tooltip gives the parts: `New input {a} · written to cache {b} · output {c} · re-read from cache {d}, not counted`.
+- On a member task (a worker, a lead, a reviewer) the popover shows only its own group without the popup, with the note `Counted in the budget of {task}.`; the budget belongs to the root task.
+- The popup applies at once to this task (`setTokenBudget`; without a host main writes it to `task.json`), and the workspace is read again after it, so the popup, the counter and the card show the new budget; while the [budget question](chat-turns-plans-and-questions.md#budget-card) waits it can answer it ([reaching the budget](agents-and-providers.md#budget-reached)).
 
 <a id="context-ring"></a>
 ## Context ring
@@ -352,7 +370,7 @@ The selection panel and its actions (Comment, Attach comment, Attach comment and
 <a id="queue-deck"></a>
 ## Queue deck placement
 
-The queue deck (and the background commands deck) share `ui/Deck`, which stands on the island's top edge: the island overlaps the deck's last pixel, so the island's own top border is the line between them, and nothing of the deck hides under the glass. Deck rows, editing and pausing are specified in [Steering, queue and ghost](composer-steering-queue-and-ghost.md).
+The queue deck (and the background commands deck) share `ui/Deck`, which stands on the island's top edge: the island overlaps the deck's last pixel, so the island's own top border is the line between them, and nothing of the deck hides under the glass. Deck rows, editing and pausing are specified in [Steering, queue and ghost](composer-steering-queue-and-ghost.md). While the [budget question](chat-turns-plans-and-questions.md#budget-strip) waits, its strip is the deck's first list.
 
 <a id="later"></a>
 ## Later

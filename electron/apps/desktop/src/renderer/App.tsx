@@ -743,7 +743,10 @@ export function App() {
 		const stopEvents = onSessionEvent(({ record }) => {
 			if (!record || workspaceEventKinds.has(record.event.kind)) {
 				// Tool updates stream with command output; the sidebar activity line can trail them by a second.
-				const wait = record?.event.kind === 'tool.changed' ? 1000 : 150;
+				const wait =
+					record?.event.kind === 'tool.changed' || record?.event.kind === 'usage.changed'
+						? 1000
+						: 150;
 				if (refresh && refreshAt > Date.now() + wait) {
 					clearTimeout(refresh);
 					refresh = undefined;

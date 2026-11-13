@@ -130,7 +130,7 @@ When a task is created, its crew is resolved into a `CrewSpec` and stored whole 
 - A worker task stores `crewTaskId` (the root foreman task), `crewNodeId` and `parentTaskId` (its direct foreman or lead).
 - The tree defines the crew size. Plan parts belong to developers and leads only, never to reviewers.
 - Each worker is a separate host process with its own provider. One process still hosts exactly one agent session, so providers never mix inside one ACP session.
-- The worker's role text reaches it as a `.context` block of its first prompt: template instructions, then the node's addition, then its place in the tree. The agent reads it; the transcript and journal never show it. Because the source is `task.json`, it survives a restart. The foreman's prompt follows as `.text`. On the ACP wire `.context` is a plain text block, so Claude and Codex receive it the same way.
+- The worker's role text reaches it in its [session brief](agents-and-providers.md#session-brief): template instructions, then the node's addition, then its place in the tree. It is the appended system prompt where the agent takes one, else a `.context` block of its first prompt (a plain text block on the ACP wire, so Claude and Codex receive it the same way). The agent reads it; the transcript and journal never show it. Because the source is `task.json`, it survives a restart. The foreman's prompt is the first prompt's `.text`.
 
 <a id="resolution-contract"></a>
 ## Tree and resolution contract

@@ -56,7 +56,15 @@ export type AgentDefaults = {
 	/** spec/appearance#evolution-redesign: the review of a PR writes the agent summary by itself on its first open; on by default. */ prSummary: boolean;
 	/** spec/agents-and-providers#subagent-model: the Claude catalog model its own subagents run on; null — the session's model. */ claudeSubagentModel:
 		string | null;
+	/** spec/agents-and-providers#compaction-window: the context size in tokens at which a new session compacts; null — the agent's own default. */ compactionWindow:
+		number | null;
 };
+/** spec/agents-and-providers#compaction-window: the window a settings file without the key reads as, and the bounds a saved value keeps to. */
+export const defaultCompactionWindow = 200_000;
+export const compactionWindowChoices = [100_000, 200_000, 400_000] as const;
+export function isCompactionWindow(value: unknown): value is number {
+	return Number.isSafeInteger(value) && Number(value) >= 100_000 && Number(value) <= 1_000_000;
+}
 export const maxConcurrentLimit = 99;
 /** spec/appearance#accent: palette order is the swatch order in Settings ▸ Appearance; `system` follows macOS. */
 export const accentColors = [
@@ -265,6 +273,7 @@ export const defaultAppSettings: AppSettings = {
 		slackPostWithoutAsking: false,
 		prSummary: true,
 		claudeSubagentModel: null,
+		compactionWindow: defaultCompactionWindow,
 	},
 	notifications: defaultNotificationPreferences,
 	editor: {
@@ -293,7 +302,8 @@ export const defaultAppSettings: AppSettings = {
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 15 &&
+		Object.keys(value).length === 16 &&
+		(value.compactionWindow === null || isCompactionWindow(value.compactionWindow)) &&
 		typeof value.prSummary === 'boolean' &&
 		(value.claudeSubagentModel === null ||
 			(typeof value.claudeSubagentModel === 'string' &&

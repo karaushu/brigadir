@@ -230,6 +230,23 @@ export function mapUpdate(update: ACP.SessionUpdate): AgentEvent {
 	}
 }
 
+/**
+ * spec/agents-and-providers#compaction-signal: a compaction update of the session — `completed` with the agent's id of a finished compaction, `other` for
+ * its other statuses and summary chunks (never shown); null for any other update.
+ */
+export function compactionUpdate(
+	update: ACP.SessionUpdate
+): { kind: 'completed'; id: string } | { kind: 'other' } | null {
+	if (update.sessionUpdate === 'compaction_summary_chunk') return { kind: 'other' };
+	if (update.sessionUpdate !== 'compaction_update') return null;
+	return update.status === 'completed' && typeof update.compactionId === 'string'
+		? { kind: 'completed', id: update.compactionId }
+		: { kind: 'other' };
+}
+/** spec/agents-and-providers#context-compacted: a context size in tokens as the event keeps it — a non-negative integer, else null. */
+export function contextSize(value: unknown): number | null {
+	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
 /** spec/agents-and-providers#turn-usage: the `usage` of a `session/prompt` result as one record; a missing counter is 0, no `usage` is no record. */
 export function turnUsage(usage: unknown): Extract<AgentEvent, { kind: 'turn.usage' }> | null {
 	if (!isRecord(usage)) return null;

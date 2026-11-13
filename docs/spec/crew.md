@@ -74,7 +74,7 @@ Every agent session gets the app's MCP server `brigadir` in `session/new` (stdio
 <a id="brief"></a>
 ## Role briefs
 
-Briefs are English (rule 12), built by code (`packages/orchestrator/src/brief.ts`) and delivered as a `.context` block of the session's first prompt: the agent reads it, the transcript never shows it, it is not journaled, and a restarted host re-briefs its new session itself.
+Briefs are English (rule 12), built by code (`packages/orchestrator/src/brief.ts`) and delivered as the [session brief](agents-and-providers.md#session-brief): the appended system prompt where the agent takes one, else a `.context` block of the session's first prompt. The agent reads it, the transcript never shows it, it is not journaled, and a restarted host re-briefs its new session itself.
 
 <a id="foreman-brief"></a>
 ### Foreman and lead brief (`foremanBrief`)
@@ -180,7 +180,7 @@ A crew node has one task, one session, one worktree and one branch for the crew'
 - The part prompt starts with an English header: part number and title, the previous part was accepted, the crew tree was merged in, so re-read files before changing them.
 - The task title is the current part's title; the card row stays `<agent> · <part title>` and the `Workers` counter counts members, not parts. `part` lives in `crew-workers.json`, `task_status` returns it, and reports say `part N` from the second part on.
 - Zones and files are checked per part; locks and worktree belong to the task; nothing is cleaned up after acceptance (cleanup happens with the task, see [Tasks](tasks.md#delete-task)).
-- Context growth is left to the agent's own compaction.
+- Context growth: a member's session compacts at the [compaction window](agents-and-providers.md#compaction-window) (200k by default), and its role brief rides in the appended system prompt, so it survives every compaction; the part prompt survives only as the compaction summary quotes it. The chat shows each compaction as a [service row](chat.md#context-compacted).
 - Compatibility: a record without `part` is part 1; without `acceptedTips` the sync base is the worker branch `HEAD`; crews with several tasks per node continue in the newest.
 
 <a id="reports"></a>

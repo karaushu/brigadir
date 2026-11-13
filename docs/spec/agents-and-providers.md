@@ -22,11 +22,12 @@ Brigadir talks to coding agents through their ACP adapters (`claude-agent-acp`, 
 <a id="domain-model"></a>
 ### Domain model
 
-- **Events** (`AgentEvent.kind`): `session.started`, `session.info`, `session.failed`, `message.delta` (roles `assistant`, `thought`, `user`), `tool.changed`, `plan.changed`, `plan.document`, `plan.removed`, `options.changed`, `mode.changed`, `commands.changed`, `usage.changed`, `turn.usage`, `rate-limit.changed`, `quota.observed`, `permission.requested`, `subagent.started`, `subagent.changed`, `background.started`, `background.changed`, `turn.completed`, `unhandled`. The host adds its own boundary records (`turn.started`, `host.stopped`, `rate-limit.expired`, …).
+- **Events** (`AgentEvent.kind`): `session.started`, `session.info`, `session.failed`, `message.delta` (roles `assistant`, `thought`, `user`), `tool.changed`, `plan.changed`, `plan.document`, `plan.removed`, `options.changed`, `mode.changed`, `commands.changed`, `usage.changed`, `context.compacted`, `turn.usage`, `rate-limit.changed`, `quota.observed`, `permission.requested`, `subagent.started`, `subagent.changed`, `background.started`, `background.changed`, `turn.completed`, `unhandled`. The host adds its own boundary records (`turn.started`, `host.stopped`, `rate-limit.expired`, …).
 - **Commands** (`AgentCommand.kind`): `prompt`, `cancel`, `setMode`, `setOption`, `stopBackground`. Host-level session commands include `retryTurn` (see [sign-in recovery](#sign-in-recovery)).
 - **Tool patches.** A patch with a missing field keeps the previous value; an empty array clears the field. Boolean options and grouped selects are kept as the agent sent them.
 - **Parentage.** `_meta.claudeCode.parentToolUseId` (also on a subagent's message chunks) lives on the event record envelope, not on the event.
 - `usage.changed` carries `used`, `capacity` and the adapter's `cost`; cost is never displayed (see [usage](#usage-principles)).
+- <a id="context-compacted"></a>`context.compacted` says the agent compacted its context: `before` and `after` are the context sizes in tokens around the compaction, each a non-negative integer or null when the adapter gave none. It comes once per compaction that the adapter reports as completed ([compaction signal](#compaction-signal)), and the chat shows it as a [service row](chat.md#context-compacted).
 - <a id="turn-usage"></a>`turn.usage` carries the tokens of one finished turn as the adapter reported them in the `session/prompt` result: `input`, `output`, `cacheRead`, `cacheWrite` (non-negative integers; a missing counter is 0). It is journaled just before that turn's `turn.completed`, and not at all when the result has no `usage`. Nothing displays it; the crew report sums it (see [Crew](crew.md#reports)).
 
 <a id="acp-connection"></a>
@@ -34,17 +35,17 @@ Brigadir talks to coding agents through their ACP adapters (`claude-agent-acp`, 
 
 One `AgentTransport` owns exactly one adapter process and one session; the host owns persistence and task identity.
 
-- **Framing.** Newline-delimited JSON-RPC over stdio, ACP `protocolVersion: 1`, `@agentclientprotocol/sdk` 1.4.0. Another protocol version fails the start.
-- **`initialize` client capabilities:** `fs.readTextFile` / `fs.writeTextFile` (true when the host supplies handlers, so an agent can read unsaved editor buffers), `terminal: false`, `plan: {}`, and `subagents: {}` added on the wire. `clientInfo.name` is `brigadir`.
+- **Framing.** Newline-delimited JSON-RPC over stdio, ACP `protocolVersion: 1`, `@agentclientprotocol/sdk` 1.4.0. Another protocol version fails the start. The SDK sends request params as given, so fields newer than its types (`systemPrompt`, `session.compaction`) reach the adapter unchanged.
+- **`initialize` client capabilities:** `fs.readTextFile` / `fs.writeTextFile` (true when the host supplies handlers, so an agent can read unsaved editor buffers), `terminal: false`, `plan: {}`, `session: {compaction: {}}` ([compaction signal](#compaction-signal)), and `subagents: {}` added on the wire. `clientInfo.name` is `brigadir`.
 - **Start timeout** 60 s (`startupTimeoutMs`). A human permission or question has no timeout.
-- **Session open.** `session/new` with `cwd` (absolute), `additionalDirectories` (deduplicated, absolute, only when the agent advertises `sessionCapabilities.additionalDirectories` — this is how monorepo scopes reach the agent structurally), and `mcpServers`. Resume uses `session/load` (requires `loadSession`). Fork uses `session/fork`, then `session/resume` or `session/load` when the fork answer carries no options; a failed fork falls back to a new session.
+- **Session open.** `session/new` with `cwd` (absolute), `additionalDirectories` (deduplicated, absolute, only when the agent advertises `sessionCapabilities.additionalDirectories` — this is how monorepo scopes reach the agent structurally), and `mcpServers`. Resume uses `session/load` (requires `loadSession`). Fork uses `session/fork`, then `session/resume` or `session/load` when the fork answer carries no options; a failed fork falls back to a new session. When the agent advertises `sessionCapabilities.systemPrompt`, each of these requests carries the [session brief](#session-brief) as `systemPrompt` in `append` mode.
 - **Claude raw SDK messages.** Claude sessions always pass `_meta.claudeCode.emitRawSDKMessages` with `rate_limit_event` plus `system` subtypes `session_state_changed`, `task_started`, `task_updated`, `task_notification` (agent-started turns and background tasks, see [turns](chat-turns-plans-and-questions.md)).
 - **Permissions.** Cancel, connection close or stop answer `cancelled` and never become approval. A chosen option must be one of the offered ids. A `preapprove` hook may pick an option with no event and no card (used for [our own tools](#tool-permissions)).
 - **Steering.** `_meta.steering.supported` of `initialize` enables `_session/steering`; see [steering](composer-steering-queue-and-ghost.md).
 - **Stop.** The adapter runs in its own process group; close sends `SIGTERM` to the group, then `SIGKILL` after 1.5 s.
 - **Adapter environment.**
-  - Claude: `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` (the SDK session otherwise has no plan tool); with our MCP server, `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` = 7 days. A value the person set is kept.
-  - Codex: `CODEX_CONFIG` merged over the person's own value: `tools.update_plan.enabled = true`, and full stdio descriptions of every MCP server in `mcp_servers`, with `tool_timeout_sec = 604800` for `brigadir` only. `session/new.mcpServers` is then `[]` (codex-acp overwrites `mcp_servers` from ACP and would drop the timeout). `~/.codex/config.toml` is never touched.
+  - Claude: `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` (the SDK session otherwise has no plan tool); with our MCP server, `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` = 7 days; `CLAUDE_CODE_AUTO_COMPACT_WINDOW` = the [compaction window](#compaction-window). A value the person set is kept.
+  - Codex: `CODEX_CONFIG` merged over the person's own value: `tools.update_plan.enabled = true`, `model_auto_compact_token_limit` = the [compaction window](#compaction-window), and full stdio descriptions of every MCP server in `mcp_servers`, with `tool_timeout_sec = 604800` for `brigadir` only. `session/new.mcpServers` is then `[]` (codex-acp overwrites `mcp_servers` from ACP and would drop the timeout). `~/.codex/config.toml` is never touched.
 
 **Why the long MCP timeouts.** `ask_user`, `propose_plan` and similar tools wait for a person, possibly overnight; codex-acp aborts a tool call after 300 s and Claude after 30 min of silence by default.
 
@@ -79,7 +80,7 @@ Facts measured on live `claude-agent-acp` sessions; the mapper relies on them.
 | --- | --- |
 | Package | `@agentclientprotocol/claude-agent-acp`, bin `claude-agent-acp`, Node ≥ 22, runs on the Claude Agent SDK. |
 | Auth | With a logged-in `claude`, `authMethods: []` and credentials are inherited. On another machine the list is non-empty (`claude-ai-login`, `console-login`, `gateway`, `gateway-bedrock`). `agentCapabilities.auth.logout` present. |
-| Capabilities | `promptCapabilities {image, embeddedContext}`, `mcpCapabilities {http, sse}`, `loadSession`, `sessionCapabilities {additionalDirectories, close, delete, fork, list, resume}`, `_meta.claudeCode.promptQueueing`. `_meta` also carries `steering`, `goal` (`_session/goal`, unused) and `jetbrains.air` (`sessionFailure`, `agentFileChangeReport`; neither sends anything in practice). `initialize` carries no quota. |
+| Capabilities | `promptCapabilities {image, embeddedContext}`, `mcpCapabilities {http, sse}`, `loadSession`, `sessionCapabilities {additionalDirectories, close, delete, fork, list, resume, systemPrompt}` (`systemPrompt` takes `append` and `override` on new, load, resume and fork), `_meta.claudeCode.promptQueueing`. `_meta` also carries `steering`, `goal` (`_session/goal`, unused) and `jetbrains.air` (`sessionFailure`, `agentFileChangeReport`; neither sends anything in practice). `initialize` carries no quota. |
 | Modes | One axis: `mode` is both `modes.availableModes` and a config option: `auto` (classifier decides permissions; default), `default` (Manual), `acceptEdits`, `plan`, `dontAsk`, `bypassPermissions`. In `auto`, `session/request_permission` is rarely called. |
 | Config options | `select` options with `id`/`category`/`name`/`description`/`currentValue`/`options[]`: `mode`, `model` (first entry `Default (recommended)`), `effort` (`default`, `low` … `max`, per model), `fast` (`on`/`off`). A generic renderer draws all of them. |
 | Messages | `agent_message_chunk` grouped into one row by `messageId`. |
@@ -90,12 +91,50 @@ Facts measured on live `claude-agent-acp` sessions; the mapper relies on them.
 | Usage | `usage_update {used, size}` for the context ring; `session/prompt` result `usage {inputTokens, outputTokens, cachedReadTokens, cachedWriteTokens, totalTokens}`; `_meta.quota.model_usage[]` per model including subagents. |
 | Rate limit | `usage_update._meta["_claude/rateLimit"]` (see [quota sources](#quota-sources)). |
 | Auth failure | `session/new` passes; `session/prompt` sends one assistant line with the CLI text, then fails with `RequestError` −32000 (`authRequired`). |
+| Compaction | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (clamped to 100k–1M) wins over `autoCompactWindow` in the person's settings. Compaction fires about 33k below the window: near 167k at 200k, near 967k on a 1M model without the variable. With `session.compaction` declared, a compaction is `compaction_update` (`in_progress`, summary chunks, `completed`, often sent twice), then `usage_update` with the retained size; sizes and trigger travel only in a JetBrains `_meta`. Without the capability it is a `Compact conversation` tool call (`kind: think`, facts in `rawOutput`). The appended system prompt is re-sent with every request and came back verbatim after two compactions; text of the first user message survives only as the summary quotes it. After about 54 idle minutes with a context of at least 200k the adapter sends `/compact` itself. |
 | Transcripts | ACP sessions are persisted by the CLI to `~/.claude/projects/<escaped-cwd>/<session-id>.jsonl`. |
 
 <a id="subagent-model"></a>
 ### Subagent model
 
 A Claude session's own subagents (search, reading, summaries) run on the session's model unless told otherwise. `agents.claudeSubagentModel` (Settings ▸ Agents ▸ `Subagent model`; null = `Same as the agent`) is a model value from the Claude catalog. The host reads it from `settings.json` when it starts an agent and passes it to the adapter as `CLAUDE_CODE_SUBAGENT_MODEL`; a value the person set in the environment stays. It applies to sessions started after the change, to every Claude task, crew members included. Such a session also gets one sentence in its first-prompt brief (`subagentBrief`): subagents run on their own model, so they get the work whose mistakes are cheap to spot (finding files, reading logs and long output, running tests), while edits and decisions stay with the agent, which checks a subagent's answer against the code before acting on it. Terminal sessions get neither the variable nor the sentence. **Why:** a foreman on the strongest model otherwise reads files at that model's price, and a mistake in a search is cheap to spot.
+
+<a id="compaction-window"></a>
+### Compaction window
+
+`agents.compactionWindow` (Settings ▸ Agents ▸ `Compaction window`) is the context size in tokens at which a session Brigadir starts compacts its context. The menu offers `Agent's default` (null: nothing is passed), 100k, 200k and 400k; the default is 200k, and a settings file without the key reads as 200k. A saved value from 100k to 1M that the menu does not list stays shown as it is. The host reads it from `settings.json` when it starts an agent and passes it to the transport:
+
+- Claude: `CLAUDE_CODE_AUTO_COMPACT_WINDOW`. Claude compacts about 33k under it.
+- Codex: `model_auto_compact_token_limit` in `CODEX_CONFIG`. Codex compacts when the context reaches it.
+
+A value the person set wins, and then nothing is passed:
+
+- Claude: the variable in the environment; `autoCompactWindow`, or `env.CLAUDE_CODE_AUTO_COMPACT_WINDOW`, in `settings.json` of the Claude config folder (`CLAUDE_CONFIG_DIR`, else `~/.claude`) or in `.claude/settings.json` / `.claude/settings.local.json` of the session folder.
+- Codex: the key in the person's own `CODEX_CONFIG`, or a `model_auto_compact_token_limit` key, in any table, in `config.toml` of `CODEX_HOME` (else `~/.codex`) or in `.codex/config.toml` of the session folder. Only real keys count: the same text inside a string (multi-line ones included), a comment or an array is not one.
+
+A file that does not exist or cannot be parsed sets nothing. The window is fixed for an adapter process, so the setting applies to sessions started after the change: every GUI task, crew members included. Terminal sessions do not get it. **Why:** models with a 1M window otherwise compact near 967k, and every tool call of a long session re-reads that context.
+
+<a id="session-brief"></a>
+### Session brief
+
+Every GUI session gets one brief, built by `sessionBrief` (`packages/host/src/crew.ts`) when the host starts: the crew role brief, the task's agent role and the tool sentences (checklist, plan, subagents, project commands, tool modules). It is built from `task.json` and the settings, never from the conversation, so it stays the same for the session.
+
+- When the agent advertises `sessionCapabilities.systemPrompt`, the brief goes as ACP `systemPrompt` (`{mode: "append", content: [{type: "text", text}]}`) on `session/new`, and again on every `session/load`, `session/fork` and `session/resume`. Claude appends it to its own system prompt and Codex to its developer instructions. The system prompt is re-sent with every model request, so the brief survives compaction word for word.
+- Otherwise the brief goes as the hidden `Brigadir brief` `.context` block of the session's first prompt.
+- When the agent rejects the `systemPrompt` as invalid params, the transport repeats that request without it, and the brief goes as `.context` of the next prompt. This holds for a `session/load` after a restart as well: the brief rebuilt by the new host still reaches the agent.
+- Either way, the transcript and the journal never show it.
+- A crew part prompt, a review batch and the scope manifest are prompts, not the brief: they change during the session.
+- Claude keeps the system prompt it got at the session's first request. A brief that changed on a later load (a setting changed between two host starts) takes effect after the next compaction.
+
+<a id="compaction-signal"></a>
+### Compaction signal
+
+`initialize` declares `clientCapabilities.session.compaction: {}`, so both adapters report a compaction as ACP `compaction_update` (one `compactionId`: `in_progress`, then `completed`, `failed` or `cancelled`) instead of a `Compact conversation` tool call. The transport:
+
+- turns each compaction of the session that reaches `completed` into one `context.compacted`. `before` is `used` of the last `usage_update` before the compaction. The event goes on the event chain with the next update of the session that is not about the compaction: when that is a `usage_update`, `after` is its `used` (Claude sends one at once with the retained size) and the event goes ahead of its `usage.changed`; when it is anything else, or the turn ends first (`turn.completed` or `session.failed`), `after` is null (Codex reports usage only after its next request);
+- ignores the other statuses, `compaction_summary_chunk` (the summary is neither shown nor journaled), the compactions of a subagent's session and those replayed while `session/load` runs.
+
+Journals written before the capability keep their `Compact conversation` tool rows.
 
 <a id="codex-adapter"></a>
 ## Codex adapter: verified behaviour
@@ -115,6 +154,8 @@ Only differences from Claude are listed. `codex-acp` is a Node wrapper over `cod
 | MCP calls | No tool name; `title` `mcp.<server>.<tool>`, `rawInput {server, tool, arguments}`. |
 | Usage | `usage_update {used, size}` only; no quota over ACP (codex-acp swallows `account/rateLimits/updated`). `PromptResponse.usage` and `_meta.quota` count only the last request of a turn. |
 | Session info | `session_info_update.title` (auto thread name) maps to `session.info`. |
+| System prompt | `sessionCapabilities.systemPrompt: {}`: `append` mode with text blocks only, on new, load and fork. It is joined to the configured `developer_instructions`; a changed one on a loaded, busy thread is refused. |
+| Compaction | Config key `model_auto_compact_token_limit` (also `model_auto_compact_token_limit_scope` and `model_post_turn_compact_threshold_percent`, unused). With `session.compaction` declared, `compaction_update` without sizes; the sizes come from `usage_update`, sent after each request. A compaction under a configured limit was not observed in a run. |
 | Permissions | None requested in `agent` mode for reads, commands or edits in the work tree. |
 
 <a id="mapper-rules"></a>
@@ -125,6 +166,7 @@ Only differences from Claude are listed. `codex-acp` is a Node wrapper over `cod
 3. An edit without `locations` takes paths from the `content` diff blocks; a preview patch is synthesised from `oldText`/`newText` as one hunk without file headers, only when `rawOutput` is empty.
 4. A non-zero `_meta.terminal_exit.exit_code` turns `completed` into `failed`.
 5. MCP calls are recognised from either spelling (`mcp__<server>__<tool>` or `mcp.<server>.<tool>`) by `mcpCall`, without knowing the provider.
+6. A compaction is `context.compacted`, never a tool row ([compaction signal](#compaction-signal)).
 
 No provider-specific row renderer exists; both adapters go through the one row engine.
 
@@ -416,6 +458,9 @@ Two read-only tools of the `brigadir` server, input schema `{}`. The agent pulls
 - `_session/goal` and `agentFileChangeReport` (advertised, unused).
 - Codex `session_info_update.title` as the task title.
 - Verify whether two Codex processes on one `~/.codex` race on token refresh; status line `rate_limits` on Team plans.
+- Compaction at the turn boundary: when a turn ends with the context near the [compaction window](#compaction-window) and nothing is queued, the host sends `/compact` before the next prompt. An automatic compaction in the middle of a turn was measured as mostly uncached; one at a turn boundary is several times cheaper. It needs a marker on the host's own `turn.started` so the chat draws it as a service row, crew hosts that do not take that turn's end for a worker's report, a trigger point per provider (Claude compacts about 33k under the window, so 80 % of 200k leaves only 7k), and a check of Codex's own `model_post_turn_compact_threshold_percent`.
+- The part prompt after a compaction: a Claude `SessionStart` hook with matcher `compact` that gives the current part back to the agent. The role brief already survives in the system prompt; a part prompt survives only as the summary quotes it.
+- Verify a Codex compaction at the configured limit in a live run.
 
 <a id="non-goals"></a>
 ## Non-goals
@@ -425,5 +470,5 @@ Two read-only tools of the `brigadir` server, input schema `{}`. The agent pulls
 - Dollar cost display on subscriptions.
 - Mixing two providers in one host process.
 - Auto-approving permissions or answering human questions with placeholders.
-- A Brigadir system prompt separate from MCP instructions and the first-prompt brief.
+- A Brigadir system prompt other than the appended [session brief](#session-brief) and MCP instructions.
 - Proxies or account rotation around provider limits.

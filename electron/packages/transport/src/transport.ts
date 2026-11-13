@@ -43,6 +43,8 @@ import {
 export type PromptInput = AttachmentInput & { id?: string };
 import { adapterCommand, type AdapterCommand } from './adapter';
 import {
+	compactionUpdate,
+	contextSize,
 	mapOptions,
 	mapRateLimitInfo,
 	mapPermission,
@@ -57,6 +59,7 @@ import {
 } from './mapper';
 import { authAccess, claudeRateLimitReadings } from './quota';
 import { stopBackgroundProcesses } from './background-stop';
+import { personClaudeWindow, personCodexLimit } from './compaction';
 import type { QuotaAccess } from '@brigadir/core';
 export type McpCommand = {
 	name: string;
@@ -76,6 +79,10 @@ export type TransportOptions = {
 	mcpServers?: McpCommand[];
 	/** spec/agents-and-providers#subagent-model: the model of a Claude session's own subagents; a value in the environment stays. */
 	subagentModel?: string;
+	/** spec/agents-and-providers#compaction-window: the context size in tokens to compact at; a value the person set stays. */
+	compactionWindow?: number;
+	/** spec/agents-and-providers#session-brief: the session brief, sent as the appended system prompt where the agent takes one. */
+	systemPrompt?: string;
 	additionalDirectories?: string[];
 	onEvent(event: AgentEvent): void | Promise<void>;
 	requestPermission?(request: PermissionRequest, signal: AbortSignal): Promise<string | null>;
@@ -147,6 +154,13 @@ export class AgentTransport {
 	/** spec/agents-and-providers#one-shot: `sessionCapabilities.delete` of `initialize`; the memoised removal of this session. */
 	private canDelete = false;
 	private deleting: Promise<void> | null = null;
+	/** spec/agents-and-providers#session-brief: the session opened with the brief as its appended system prompt, or the agent refused it. */
+	private systemPromptSent = false;
+	private systemPromptRefused = false;
+	/** spec/agents-and-providers#compaction-signal: `used` of the last `usage_update`, the compactions already reported, and a completed one waiting for the size after it. */
+	private contextUsed: number | null = null;
+	private compactions = new Set<string>();
+	private compacted: { before: number | null } | null = null;
 	/** spec/composer-steering-queue-and-ghost#steering: `_meta.steering.supported` of `initialize`. */
 	private canSteer = false;
 	/** `_meta.codex.threadStatus` of `session_info_update`: whether the adapter reports it, and the steer waiting for an adopted turn to go idle. */
@@ -227,6 +241,14 @@ export class AgentTransport {
 	get forked(): boolean {
 		return this.forkedFrom;
 	}
+	/** spec/agents-and-providers#session-brief: false — the host sends the brief as the first prompt's `.context` block instead. */
+	get briefInSystemPrompt(): boolean {
+		return this.systemPromptSent;
+	}
+	/** spec/agents-and-providers#session-brief: the agent refused the brief as a system prompt — on a load too, so the host sends it as `.context`. */
+	get briefRefused(): boolean {
+		return this.systemPromptRefused;
+	}
 	get id(): string {
 		if (!this.sessionId) throw new Error('Session is not ready');
 		return this.sessionId;
@@ -235,12 +257,22 @@ export class AgentTransport {
 		return this.connection.closed;
 	}
 	private emit(event: AgentEvent): Promise<void> {
+		// spec/agents-and-providers#compaction-signal: a turn's end, also a failed one, journals the compaction still waiting for its size after.
+		if (event.kind === 'turn.completed' || event.kind === 'session.failed')
+			void this.flushCompaction(null);
 		if (event.kind === 'options.changed' || event.kind === 'session.started')
 			this.options = new Map(event.options.map((option) => [option.id, option]));
 		if (event.kind === 'session.started')
 			this.modeIds = new Set(event.modes.map((mode) => mode.id));
 		this.eventTail = this.eventTail.then(() => this.config.onEvent(event));
 		return this.eventTail;
+	}
+	/** spec/agents-and-providers#compaction-signal: the completed compaction waiting for its size after, onto the event chain. */
+	private flushCompaction(after: number | null): Promise<void> {
+		const pending = this.compacted;
+		if (!pending) return Promise.resolve();
+		this.compacted = null;
+		return this.emit({ kind: 'context.compacted', before: pending.before, after });
 	}
 	/** One payload can arrive twice (adapter `usage_update` and the raw SDK event); identical repeats are dropped. */
 	private async rateLimit(info: unknown): Promise<void> {
@@ -271,6 +303,13 @@ export class AgentTransport {
 			env.CLAUDE_CODE_SUBAGENT_MODEL === undefined
 		)
 			env.CLAUDE_CODE_SUBAGENT_MODEL = config.subagentModel;
+		// spec/agents-and-providers#compaction-window: the person's own window (environment or Claude settings) stays.
+		if (
+			config.provider === 'claude' &&
+			config.compactionWindow !== undefined &&
+			!personClaudeWindow(env, config.cwd)
+		)
+			env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(config.compactionWindow);
 		// A plan or a question of ours waits for the person; Claude aborts a tool call silent for 30 minutes (Codex: tool_timeout_sec below).
 		if (
 			config.provider === 'claude' &&
@@ -291,6 +330,12 @@ export class AgentTransport {
 			const tools = record(next.tools);
 			if (tools.update_plan === undefined)
 				next.tools = { ...tools, update_plan: { enabled: true } };
+			// spec/agents-and-providers#compaction-window: the person's own limit (their CODEX_CONFIG or config.toml) stays.
+			if (
+				config.compactionWindow !== undefined &&
+				!personCodexLimit(overrides as Record<string, unknown>, env, config.cwd)
+			)
+				next.model_auto_compact_token_limit = config.compactionWindow;
 			if (config.mcpServers?.some((server) => server.name === 'brigadir'))
 				next.mcp_servers = {
 					...record(next.mcp_servers),
@@ -383,7 +428,26 @@ export class AgentTransport {
 					params.update.sessionUpdate === 'session_info_update'
 						? this.threadStatus(params.update._meta)
 						: undefined;
+				// spec/agents-and-providers#compaction-signal: one `context.compacted` per completed compaction, with the sizes of the usage before and after it.
+				// The SDK does not wait for one handler before the next: nothing here awaits before its event is on the chain.
+				const compaction = compactionUpdate(params.update);
+				if (compaction) {
+					if (
+						compaction.kind === 'completed' &&
+						this.opened &&
+						!this.compactions.has(compaction.id)
+					) {
+						this.compactions.add(compaction.id);
+						void this.flushCompaction(null);
+						this.compacted = { before: this.contextUsed };
+					}
+					return;
+				}
+				void this.flushCompaction(
+					params.update.sessionUpdate === 'usage_update' ? contextSize(params.update.used) : null
+				);
 				if (params.update.sessionUpdate === 'usage_update') {
+					this.contextUsed = contextSize(params.update.used);
 					const meta = params.update._meta;
 					await this.rateLimit(
 						meta && typeof meta === 'object'
@@ -591,6 +655,8 @@ export class AgentTransport {
 				},
 				terminal: false,
 				plan: {},
+				// spec/agents-and-providers#compaction-signal: a compaction comes as `compaction_update`, not as a tool call.
+				session: { compaction: {} },
 			},
 			clientInfo: { name: 'brigadir', version: '0.0.0' },
 		});
@@ -632,7 +698,14 @@ export class AgentTransport {
 					},
 				}
 			: {};
-		const params = {
+		// spec/agents-and-providers#session-brief: the brief as the appended system prompt where the agent takes one (on new, load, fork and resume alike).
+		const brief = this.config.systemPrompt;
+		// SDK 1.4.0 types lack `sessionCapabilities.systemPrompt`; the answer keeps it as the agent sent it.
+		const advertised: unknown = result.agentCapabilities?.sessionCapabilities;
+		this.systemPromptSent = Boolean(
+			brief && isRecord(advertised) && advertised.systemPrompt != null
+		);
+		const base = {
 			cwd: this.config.cwd,
 			...directories,
 			...meta,
@@ -642,14 +715,40 @@ export class AgentTransport {
 					? []
 					: (this.config.mcpServers ?? []),
 		};
+		const params = (): typeof base => ({
+			...base,
+			...(this.systemPromptSent
+				? { systemPrompt: { mode: 'append', content: [{ type: 'text', text: brief }] } }
+				: {}),
+		});
+		// An agent that refuses the system prompt as invalid params opens the session without it; the host then sends the brief as `.context`.
+		const open = async <T>(request: (params: typeof base) => Promise<T>): Promise<T> => {
+			try {
+				return await request(params());
+			} catch (error) {
+				if (
+					!this.systemPromptSent ||
+					!(error instanceof RequestError) ||
+					error.code !== RequestError.invalidParams().code
+				)
+					throw error;
+				this.config.onDiagnostic?.(`System prompt refused: ${error.message}`);
+				this.systemPromptSent = false;
+				this.systemPromptRefused = true;
+				return request(params());
+			}
+		};
 		// spec/composer-steering-queue-and-ghost#quick-question: claude-agent-acp answers a fork with the new id only (the session opens with `session/resume`, or `session/load`
 		// that replays history); codex-acp returns the opened session. A failed fork falls back to a new session.
 		const capabilities = result.agentCapabilities?.sessionCapabilities;
 		if (this.config.forkSessionId && capabilities?.fork != null && !this.config.resumeSessionId) {
 			try {
-				const forked = await this.connection.agent.request<ForkSessionResponse, ForkSessionRequest>(
-					methods.agent.session.fork,
-					{ ...params, sessionId: this.config.forkSessionId }
+				const forkId = this.config.forkSessionId;
+				const forked = await open((params) =>
+					this.connection.agent.request<ForkSessionResponse, ForkSessionRequest>(
+						methods.agent.session.fork,
+						{ ...params, sessionId: forkId }
+					)
 				);
 				let opened: {
 					modes?: NewSessionResponse['modes'] | undefined;
@@ -657,15 +756,19 @@ export class AgentTransport {
 				} = forked;
 				if (forked.configOptions === undefined && forked.modes === undefined) {
 					if (capabilities?.resume != null)
-						opened = await this.connection.agent.request<
-							ResumeSessionResponse,
-							ResumeSessionRequest
-						>(methods.agent.session.resume, { ...params, sessionId: forked.sessionId });
+						opened = await open((params) =>
+							this.connection.agent.request<ResumeSessionResponse, ResumeSessionRequest>(
+								methods.agent.session.resume,
+								{ ...params, sessionId: forked.sessionId }
+							)
+						);
 					else if (this.canLoad) {
 						this.sessionId = forked.sessionId;
-						opened = await this.connection.agent.request<LoadSessionResponse, LoadSessionRequest>(
-							methods.agent.session.load,
-							{ ...params, sessionId: forked.sessionId }
+						opened = await open((params) =>
+							this.connection.agent.request<LoadSessionResponse, LoadSessionRequest>(
+								methods.agent.session.load,
+								{ ...params, sessionId: forked.sessionId }
+							)
 						);
 					} else throw new Error('The forked session cannot be opened');
 				}
@@ -692,16 +795,20 @@ export class AgentTransport {
 		}
 		if (this.config.resumeSessionId) {
 			if (!this.canLoad) throw new Error('This agent cannot load a previous session');
-			this.sessionId = this.config.resumeSessionId;
-			const session = await this.connection.agent.request<LoadSessionResponse, LoadSessionRequest>(
-				methods.agent.session.load,
-				{ ...params, sessionId: this.sessionId }
+			const sessionId = (this.sessionId = this.config.resumeSessionId);
+			const session = await open((params) =>
+				this.connection.agent.request<LoadSessionResponse, LoadSessionRequest>(
+					methods.agent.session.load,
+					{ ...params, sessionId }
+				)
 			);
 			await this.emit(this.withSteering(mapSession({ ...session, sessionId: this.sessionId })));
 		} else {
-			const session = await this.connection.agent.request<NewSessionResponse, NewSessionRequest>(
-				methods.agent.session.new,
-				params
+			const session = await open((params) =>
+				this.connection.agent.request<NewSessionResponse, NewSessionRequest>(
+					methods.agent.session.new,
+					params
+				)
 			);
 			this.sessionId = session.sessionId;
 			await this.emit(this.withSteering(mapSession(session)));
@@ -1023,6 +1130,7 @@ export class AgentTransport {
 				this.connection.signal.removeEventListener('abort', abort);
 				// Chained here, in the handler of the status that ended the turn: after everything the turn sent before its end, and
 				// before anything of a turn that begins later.
+				void this.flushCompaction(null);
 				const step = this.eventTail.then(async () => {
 					if (turn.begun && !this.stopping)
 						await this.config.onEvent({ kind: 'turn.completed', reason });

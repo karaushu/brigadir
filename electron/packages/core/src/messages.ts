@@ -144,6 +144,12 @@ const uk = {
 	'Same as the agent': 'Як в агента',
 	"Claude's own subagents search and read on this model.":
 		'На цій моделі власні субагенти Claude шукають і читають.',
+	// spec/agents-and-providers#compaction-window, spec/chat#context-compacted
+	'Compaction window': 'Вікно стиснення',
+	"Agent's default": 'Як задано в агенті',
+	'New sessions compact their context when it reaches this many tokens.':
+		'Нові сесії стискають контекст, коли він сягає стількох токенів.',
+	'Context compacted': 'Контекст стиснуто',
 	Reviewer: 'Ревʼюер',
 	'The plan has no parts.': 'У плані немає частин.',
 	'No agent named {agent}. Crew agents: {agents}.':

@@ -75,6 +75,10 @@ export class Settings {
 									: {}),
 								// spec/agents-and-providers#subagent-model: a file written before the setting keeps the session's model for subagents.
 								...(!('claudeSubagentModel' in value.agents) ? { claudeSubagentModel: null } : {}),
+								// spec/agents-and-providers#compaction-window: a file written before the setting reads as the default window.
+								...(!('compactionWindow' in value.agents)
+									? { compactionWindow: defaultAppSettings.agents.compactionWindow }
+									: {}),
 							},
 						}
 					: {};

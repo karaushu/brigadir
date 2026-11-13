@@ -237,3 +237,25 @@ it("spec/agents-and-providers#sign-in-recovery: a sign-in failure folds the CLI 
 	expect(isSessionEvent({ kind: 'session.failed', message: 'm', reason: 'auth' })).toBe(true);
 	expect(isSessionEvent({ kind: 'session.failed', message: 'm', reason: 'network' })).toBe(false);
 });
+// spec/agents-and-providers#context-compacted
+it('validates a context compaction and keeps it as one event row of its turn', () => {
+	expect(isSessionEvent({ kind: 'context.compacted', before: 940000, after: 62000 })).toBe(true);
+	expect(isSessionEvent({ kind: 'context.compacted', before: 300000, after: null })).toBe(true);
+	for (const bad of [
+		{ kind: 'context.compacted', before: -1, after: null },
+		{ kind: 'context.compacted', before: 1.5, after: null },
+		{ kind: 'context.compacted', before: null },
+		{ kind: 'context.compacted', before: '940k', after: null },
+	])
+		expect(isSessionEvent(bad)).toBe(false);
+	const rows = activityRows(
+		records([
+			{ kind: 'turn.started', text: 'go' },
+			{ kind: 'context.compacted', before: 940000, after: 62000 },
+			{ kind: 'turn.completed', reason: 'end_turn' },
+		])
+	);
+	expect(
+		rows.filter((row) => row.kind === 'event' && row.record.event.kind === 'context.compacted')
+	).toHaveLength(1);
+});

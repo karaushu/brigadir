@@ -51,24 +51,33 @@ const session = () => ({ sessionId:'fixture-session', configOptions:options, mod
 const update = (client, payload) => client.notify(methods.client.session.update, {sessionId:'fixture-session',update:payload});
 // spec/chat#subagents: the SDK schema here drops capabilities it does not know; the raw `initialize` line shows what the client sent.
 let rawIn='';if(scenario==='subagents')process.stdin.on('data',chunk=>{rawIn+=chunk.toString();let index;while((index=rawIn.indexOf('\n'))>=0){const line=rawIn.slice(0,index);rawIn=rawIn.slice(index+1);if(line.includes('"initialize"'))try{record('raw-initialize',JSON.parse(line).params);}catch{}}});
+// spec/agents-and-providers#session-brief: `system-prompt` advertises `sessionCapabilities.systemPrompt`; `system-prompt-refused` also answers invalid params to a request that carries one.
+// The raw request lines show what the client sent (`raw-session/new`, `raw-session/load`, …). `compaction` advertises it too and plays compactions (spec/agents-and-providers#compaction-signal).
+const systemPromptScenario=scenario==='system-prompt'||scenario==='system-prompt-refused'||scenario==='compaction';const rawSeen={};
+if(systemPromptScenario){let rawTail='';process.stdin.on('data',chunk=>{rawTail+=chunk.toString();let index;while((index=rawTail.indexOf('\n'))>=0){const line=rawTail.slice(0,index);rawTail=rawTail.slice(index+1);try{const message=JSON.parse(line);if(typeof message.method==='string'&&message.method.startsWith('session/')&&message.method!=='session/prompt'){rawSeen[message.method]=message.params;record(`raw-${message.method}`,message.params);}}catch{}}});}
+const refuseSystemPrompt=method=>{if(scenario==='system-prompt-refused'&&rawSeen[method]?.systemPrompt)throw RequestError.invalidParams(undefined,'systemPrompt requires append mode and text content');};
 connection = agent({name:'fixture'})
  .onRequest(methods.agent.initialize, async ({params}) => {
   record('initialize',params);
   if (process.env.CODEX_CONFIG) record('codex-config',JSON.parse(process.env.CODEX_CONFIG));
   if (process.env.CLAUDE_CODE_ENABLE_TODO_TOOLS !== undefined) record('todo-tools',process.env.CLAUDE_CODE_ENABLE_TODO_TOOLS);
   if (process.env.CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT !== undefined) record('mcp-idle-timeout',process.env.CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT);
+  if (process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW !== undefined) record('compact-window',process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW);
   if(scenario === 'hang-init') await new Promise(() => {});
   if(scenario === 'slow-init') await new Promise(resolve => setTimeout(resolve, 800));
   // spec/composer-steering-queue-and-ghost#quick-question: fork and resume as claude-agent-acp advertises them; `no-fork` leaves them out.
-  return {protocolVersion:PROTOCOL_VERSION,agentCapabilities:{loadSession:scenario !== 'no-load',promptCapabilities:{image:scenario!=='no-image'},sessionCapabilities:{...(['directories','fs-policy'].includes(scenario)?{additionalDirectories:{}}:{}),...(scenario==='no-fork'?{}:{fork:{},resume:{}}),...(scenario==='no-delete'?{}:{delete:{}})}},authMethods:[],...(steering||agentTurns?{_meta:{steering:{supported:true}}}:{})};
+  return {protocolVersion:PROTOCOL_VERSION,agentCapabilities:{loadSession:scenario !== 'no-load',promptCapabilities:{image:scenario!=='no-image'},sessionCapabilities:{...(['directories','fs-policy'].includes(scenario)?{additionalDirectories:{}}:{}),...(scenario==='no-fork'?{}:{fork:{},resume:{}}),...(scenario==='no-delete'?{}:{delete:{}}),...(systemPromptScenario?{systemPrompt:{}}:{})}},authMethods:[],...(steering||agentTurns?{_meta:{steering:{supported:true}}}:{})};
  })
- .onRequest(methods.agent.session.new, ({params,client}) => {if(scenario==='auth-startup'&&signedOut())throw RequestError.authRequired();record('new',params); mcpServers = params.mcpServers; if(scenario==='steering-codex')setTimeout(()=>{void threadStatus(client,'idle');},20); return session();})
+ .onRequest(methods.agent.session.new, ({params,client}) => {if(scenario==='auth-startup'&&signedOut())throw RequestError.authRequired();refuseSystemPrompt('session/new');record('new',params); mcpServers = params.mcpServers; if(scenario==='steering-codex')setTimeout(()=>{void threadStatus(client,'idle');},20); return session();})
  // spec/composer-steering-queue-and-ghost#quick-question: like claude-agent-acp, the fork answers with the id only; the client opens it with `session/resume`.
- .onRequest(methods.agent.session.fork, async ({params}) => {record('fork',params); mcpServers = params.mcpServers; return {sessionId:'fixture-session'};})
+ .onRequest(methods.agent.session.fork, async ({params}) => {refuseSystemPrompt('session/fork');record('fork',params); mcpServers = params.mcpServers; return {sessionId:'fixture-session'};})
  // spec/agents-and-providers#one-shot: one-shot calls delete their session; claude-agent-acp and codex-acp advertise `delete`.
  .onRequest(methods.agent.session.delete, async ({params}) => {record('delete',params); return {};})
- .onRequest(methods.agent.session.resume, async ({params}) => {record('resume',params); mcpServers = params.mcpServers; return session();})
- .onRequest(methods.agent.session.load, async ({params,client}) => {if(scenario==='auth-startup'&&signedOut())throw RequestError.authRequired();record('load',params); mcpServers = params.mcpServers; await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Historical replay'}}); return session();})
+ .onRequest(methods.agent.session.resume, async ({params}) => {refuseSystemPrompt('session/resume');record('resume',params); mcpServers = params.mcpServers; return session();})
+ .onRequest(methods.agent.session.load, async ({params,client}) => {if(scenario==='auth-startup'&&signedOut())throw RequestError.authRequired();refuseSystemPrompt('session/load');record('load',params); mcpServers = params.mcpServers; await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Historical replay'}});
+  // A loaded Claude session replays its compactions as completed updates; they are history, not a new compaction.
+  if(scenario==='compaction'){await update(client,{sessionUpdate:'usage_update',used:500000,size:1000000});await update(client,{sessionUpdate:'compaction_update',compactionId:'replayed',status:'completed'});}
+  return session();})
  .onRequest(methods.agent.session.setMode, async ({params,client}) => {record('mode',params);if(planModes)syncMode(params.modeId); if(quotaRejected&&params.modeId==='manual'){quotaRejected=false;await update(client,{sessionUpdate:'usage_update',used:1,size:100,_meta:{'_claude/rateLimit':{status:'allowed',rateLimitType:'five_hour'}}});}return {};})
  .onRequest(methods.agent.session.setConfigOption, async ({params,client}) => {
   record('option',params);if(scenario==='ghost-option-fail')throw new Error('Option unavailable');
@@ -107,6 +116,20 @@ connection = agent({name:'fixture'})
   // spec/chat-turns-plans-and-questions#agent-started-turns: a prompt while the agent's own turn runs joins that turn; the turn answers it at its end.
   if(agentHold){const hold=agentHold;agentHold=null;return new Promise(answer=>hold({text,answer}));}
   if(agentTurns&&text==='background')return backgroundTurn(client);
+  // spec/agents-and-providers#compaction-signal: `compact` — a compaction with its sizes around it (the completed update twice, as claude-agent-acp sends it);
+  // `compact-end` — the turn ends right after it, before any other update; `compact-error` — the request fails right after it; `compact-failed` — a failed one.
+  if(scenario==='compaction'&&text.startsWith('compact')){
+   const id=text,size=1000000;
+   await update(client,{sessionUpdate:'usage_update',used:text==='compact'?940000:300000,size});
+   await update(client,{sessionUpdate:'compaction_update',compactionId:id,status:'in_progress'});
+   await update(client,{sessionUpdate:'compaction_summary_chunk',compactionId:id,content:{type:'text',text:'Summary of the work'}});
+   await update(client,{sessionUpdate:'compaction_update',compactionId:id,status:text==='compact-failed'?'failed':'completed',...(text==='compact-failed'?{error:'Too long'}:{})});
+   if(text==='compact'){await update(client,{sessionUpdate:'compaction_update',compactionId:id,status:'completed'});await update(client,{sessionUpdate:'usage_update',used:62000,size});}
+   if(text==='compact-end')return {stopReason:'end_turn'};
+   if(text==='compact-error')throw new Error('Request failed after the compaction');
+   await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'after'}});
+   return {stopReason:'end_turn'};
+  }
   if(scenario?.startsWith('background-'))return backgroundScenario(client);
   if(scenario==='fs-policy'&&text.startsWith('test files')){
    const read=await client.request(methods.client.fs.readTextFile,{sessionId:'fixture-session',path:join(process.cwd(),'read.txt'),line:2,limit:1});record('fs-read',read);

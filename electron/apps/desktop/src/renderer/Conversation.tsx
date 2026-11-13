@@ -123,6 +123,7 @@ import {
 } from '@brigadir/core';
 import { CrewAnswerRow, CrewEventRow, PlanCard, PlanSummary } from './Crew';
 import { QuickAskLogRow } from './QuickAsk';
+import { ContextCompactedRow } from './ContextCompactedRow';
 import { PlanApproval, PlanApprovalSummary, PlanDocument, PlanReadOnly } from './PlanApproval';
 import { TaskProposalCard, TaskProposalSummary } from './TaskProposal';
 import { useWorkspace } from './store';
@@ -1366,6 +1367,8 @@ export function Conversation({
 				(e.kind === 'crew.review' && e.taskId === task.id)
 			)
 				return <ReviewEventRow task={task} record={row.record} locale={locale} />;
+			// spec/chat#context-compacted
+			if (e.kind === 'context.compacted') return <ContextCompactedRow event={e} locale={locale} />;
 			if (e.kind === 'crew.report' && e.report.taskId === task.id) return null;
 			if (e.kind === 'crew.worker.created' && e.nodeId.startsWith('review-')) return null;
 			if (e.kind === 'turn.started' || e.kind.startsWith('crew.'))

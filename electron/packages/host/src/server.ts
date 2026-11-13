@@ -134,7 +134,7 @@ import { TaskReviewLife } from './task-review';
 import { humanToolsAllowed, isWorkspaceTool, simulatorQueued } from '@brigadir/orchestrator';
 import { hiddenToolMessages, serveMcp, type HiddenToolSource } from './mcp';
 import { ModuleSettings } from './modules';
-import { claudeSubagentModel } from './agent-settings';
+import { claudeSubagentModel, compactionWindow } from './agent-settings';
 import { terminalColors } from './terminal-colors';
 import { idleBlocker, idleTimeout } from './idle';
 export type HostConfig = {
@@ -189,7 +189,7 @@ export async function startHost(config: HostConfig) {
 	const records = writer.records;
 	const peers = new Set<Peer>();
 	let ui: Peer | null = null;
-	// spec/crew-templates-and-editor#snapshot: a foreman task carries its crew; a worker points at the crew task. Both get their role brief as `.context` of the first prompt; every session gets the checklist sentence (spec/chat-turns-plans-and-questions#checklist-tools), a Claude session the plan sentence (spec/chat-turns-plans-and-questions#plan-approval).
+	// spec/crew-templates-and-editor#snapshot: a foreman task carries its crew; a worker points at the crew task. Both get their role brief as the session brief (spec/agents-and-providers#session-brief); every session gets the checklist sentence (spec/chat-turns-plans-and-questions#checklist-tools), a Claude session the plan sentence (spec/chat-turns-plans-and-questions#plan-approval).
 	const crew = await readCrewContext(store, task).catch(async (error) => {
 		await writer.close();
 		await release();
@@ -2748,10 +2748,14 @@ export async function startHost(config: HostConfig) {
 		sentScopeContext = '';
 		briefPending = !replaying;
 		const subagentModel = task.provider === 'claude' ? await claudeSubagentModel(store.root) : null;
+		// spec/agents-and-providers#compaction-window, spec/agents-and-providers#session-brief
+		const window = await compactionWindow(store.root);
 		transport = await AgentTransport.start({
 			provider: task.provider!,
 			cwd: project.path,
 			...(subagentModel ? { subagentModel } : {}),
+			...(window !== null ? { compactionWindow: window } : {}),
+			...(brief ? { systemPrompt: brief } : {}),
 			additionalDirectories: scopeDirectories(snapshots?.current.scopes ?? []),
 			...(config.adapter ? { adapter: config.adapter } : {}),
 			readTextFile: (path, line, limit) => agentFiles.read(path, line, limit),
@@ -2884,6 +2888,10 @@ export async function startHost(config: HostConfig) {
 				return true;
 			},
 		});
+		// spec/agents-and-providers#session-brief: a brief in the system prompt never goes into the first prompt as well; one the agent refused,
+		// on a load too, goes as `.context` of the next prompt.
+		if (transport.briefInSystemPrompt) briefPending = false;
+		else if (transport.briefRefused) briefPending = true;
 		ready = true;
 		kickPrompts();
 		// spec/agents-and-providers#sign-in-recovery: `retryTurn` closes this process on purpose; only the current transport's exit stops the host.

@@ -132,6 +132,8 @@ export type AgentEvent =
 			capacity: number;
 			cost: { amount: number; currency: string } | null;
 	  }
+	/** spec/agents-and-providers#context-compacted: the agent compacted its context; the sizes in tokens around it, null when the adapter gave none. */
+	| { kind: 'context.compacted'; before: number | null; after: number | null }
 	| { kind: 'session.info'; title?: string; updatedAt?: string }
 	| { kind: 'permission.requested'; request: PermissionRequest }
 	/** spec/agents-and-providers#turn-usage: the tokens of one finished turn as the adapter reported them; journaled just before its `turn.completed`. */

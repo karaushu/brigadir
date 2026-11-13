@@ -252,3 +252,23 @@ describe('keep awake (spec/architecture-and-platform#keep-awake)', () => {
 			expect(isKeepAwakeStatus(value)).toBe(false);
 	});
 });
+// spec/agents-and-providers#compaction-window
+describe('compaction window', () => {
+	it('defaults to 200k, takes null for the agent default and any whole size from 100k to 1M', () => {
+		expect(defaultAppSettings.agents.compactionWindow).toBe(200_000);
+		for (const compactionWindow of [null, 100_000, 250_000, 1_000_000])
+			expect(
+				isAppSettings({
+					...defaultAppSettings,
+					agents: { ...defaultAppSettings.agents, compactionWindow },
+				})
+			).toBe(true);
+		for (const compactionWindow of [99_999, 1_000_001, 150_000.5, '200000', undefined])
+			expect(
+				isAppSettings({
+					...defaultAppSettings,
+					agents: { ...defaultAppSettings.agents, compactionWindow },
+				})
+			).toBe(false);
+	});
+});

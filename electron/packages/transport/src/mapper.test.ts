@@ -1,7 +1,15 @@
 import { expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { NewSessionResponse, SessionUpdate } from '@agentclientprotocol/sdk';
-import { mapOptions, mapSession, mapTool, mapUpdate, turnUsage } from './mapper';
+import {
+	compactionUpdate,
+	contextSize,
+	mapOptions,
+	mapSession,
+	mapTool,
+	mapUpdate,
+	turnUsage,
+} from './mapper';
 // spec/agents-and-providers#turn-usage
 it('turns the usage of a prompt result into one record; a missing counter is 0, no usage is no record', () => {
 	expect(
@@ -200,4 +208,33 @@ it('marks a subagent tool with the parent tool call (spec/composer-steering-queu
 	expect(
 		mapTool({ toolCallId: 'top', title: 'Agent', _meta: { claudeCode: { toolName: 'Agent' } } })
 	).not.toHaveProperty('parentId');
+});
+// spec/agents-and-providers#compaction-signal
+it('tells a completed compaction by its id and keeps every other compaction update apart from the rest', () => {
+	const update = (value: Record<string, unknown>) => value as unknown as SessionUpdate;
+	expect(
+		compactionUpdate(
+			update({ sessionUpdate: 'compaction_update', compactionId: 'c1', status: 'completed' })
+		)
+	).toEqual({ kind: 'completed', id: 'c1' });
+	for (const status of ['in_progress', 'failed', 'cancelled'])
+		expect(
+			compactionUpdate(update({ sessionUpdate: 'compaction_update', compactionId: 'c1', status }))
+		).toEqual({ kind: 'other' });
+	expect(
+		compactionUpdate(
+			update({
+				sessionUpdate: 'compaction_summary_chunk',
+				compactionId: 'c1',
+				content: { type: 'text', text: 'Summary' },
+			})
+		)
+	).toEqual({ kind: 'other' });
+	expect(compactionUpdate(update({ sessionUpdate: 'usage_update', used: 1, size: 2 }))).toBeNull();
+	expect([contextSize(62000), contextSize(-1), contextSize(1.5), contextSize('9')]).toEqual([
+		62000,
+		null,
+		null,
+		null,
+	]);
 });

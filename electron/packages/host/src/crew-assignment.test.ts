@@ -131,15 +131,7 @@ async function worker(node: 'developer' | 'reviewer' = 'developer') {
 			...(extra.assignment ? { assignment: extra.assignment } : {}),
 		});
 		await expect.poll(ended, { timeout: 10_000 }).toBe(before + (extra.turns ?? 1));
-		await idle();
 	};
-	/** The host let go of the turn: what it journals once the agent took the prompt is written by then. */
-	const idle = () =>
-		expect
-			.poll(async () => ((await state.parent!.request('status', {})) as { busy?: boolean }).busy, {
-				timeout: 10_000,
-			})
-			.toBe(false);
 	/** One prompt the agent fails with an error. */
 	const fails = async (text: string) => {
 		const count = () => records().filter((record) => record.event.kind === 'session.failed').length;
@@ -194,9 +186,11 @@ it('steers the part back into the running turn at the next step boundary, once p
 	expect(steer).toBe(
 		`<attached_context name="Brigadir assignment">\n${assignmentHeader}\n\n${part.text}\n</attached_context>`
 	);
-	expect(w.restored()).toEqual([
-		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
-	]);
+	await expect
+		.poll(() => w.restored())
+		.toEqual([
+			{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
+		]);
 	// Hidden: no steered prompt, no second turn, and the agent heard it inside the turn.
 	const kinds = w.records().map((record) => record.event.kind);
 	expect(kinds).not.toContain('prompt.steered');
@@ -216,7 +210,7 @@ it('steers the part back into the running turn at the next step boundary, once p
 	await w.prompt('plain');
 	await w.prompt('compact-step two');
 	expect(await w.steers()).toHaveLength(2);
-	expect(w.restored().map((event) => event.compactedSeq)).toEqual(w.compactions());
+	await expect.poll(() => w.restored().map((event) => event.compactedSeq)).toEqual(w.compactions());
 	expect(await w.blocks()).toEqual([null, null, null]);
 }, 60_000);
 
@@ -234,9 +228,20 @@ it('gives an idle member its part with the next prompt — a Codex compaction jo
 	expect(blocks[0]).toBeNull();
 	expect(blocks[1]).toContain(`${assignmentHeader}\n\n${part.text}`);
 	expect(blocks[2]).toBeNull();
-	expect(w.restored()).toEqual([
-		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
-	]);
+	await expect
+		.poll(() => w.restored())
+		.toEqual([
+			{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
+		]);
+	// The answer is written after the end of the turn that carried the block, and before the next turn begins.
+	const seqs = (kind: string) =>
+			w
+				.records()
+				.filter((record) => record.event.kind === kind)
+				.map((record) => record.seq),
+		answer = seqs('crew.assignment.restored')[0]!;
+	expect(answer).toBeGreaterThan(seqs('turn.completed')[1]!);
+	expect(answer).toBeLessThan(seqs('turn.started')[2]!);
 	// The block is journaled as a fact, never as text.
 	expect(JSON.stringify(w.records())).not.toContain('PART-PROMPT-MARK');
 }, 60_000);
@@ -252,9 +257,11 @@ it('gives the part after a restart between the compaction and the next prompt, a
 	const blocks = await w.blocks();
 	expect(blocks.at(-2)).toContain(part.text);
 	expect(blocks.at(-1)).toBeNull();
-	expect(w.restored()).toEqual([
-		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
-	]);
+	await expect
+		.poll(() => w.restored())
+		.toEqual([
+			{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
+		]);
 	// A third host start finds the compaction answered.
 	await w.stop();
 	await w.start();
@@ -268,9 +275,11 @@ it('gives nothing without an open part or when the prompt is the assignment itse
 	await w.start();
 	await w.prompt('compact-step');
 	expect(await w.steers()).toEqual([]);
-	expect(w.restored()).toEqual([
-		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: [] },
-	]);
+	await expect
+		.poll(() => w.restored())
+		.toEqual([
+			{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: [] },
+		]);
 	// The next part's prompt is the assignment — the parent marks it with the part's id — so no block rides on it.
 	w.state.answer = part;
 	await w.prompt('compact-late');
@@ -278,17 +287,19 @@ it('gives nothing without an open part or when the prompt is the assignment itse
 		assignment: 'part:t1:1',
 	});
 	expect(await w.blocks()).toEqual([null, null, null]);
-	expect(w.restored().at(-1)).toEqual({
-		kind: 'crew.assignment.restored',
-		compactedSeq: w.compactions()[1],
-		assignment: [],
-	});
+	await expect
+		.poll(() => w.restored().at(-1))
+		.toEqual({
+			kind: 'crew.assignment.restored',
+			compactedSeq: w.compactions()[1],
+			assignment: [],
+		});
 	expect(w.state.asked).toBe(2);
 	// A prompt that only quotes the part's text is not the part: the block rides on it.
 	await w.prompt('compact-late');
 	await w.prompt('About PART-PROMPT-MARK: keep the old field.');
 	expect((await w.blocks()).at(-1)).toContain(part.text);
-	expect(w.restored().at(-1)!.assignment).toEqual(['part']);
+	await expect.poll(() => w.restored().at(-1)!.assignment).toEqual(['part']);
 }, 60_000);
 
 it('keeps the assignment due while the parent does not answer, and gives it once the parent is back (spec/crew#assignment-after-compaction)', async () => {
@@ -312,7 +323,7 @@ it('keeps the assignment due while the parent does not answer, and gives it once
 	await w.start();
 	await w.prompt('Back.');
 	expect((await w.blocks()).at(-1)).toContain(part.text);
-	expect(w.restored()).toHaveLength(1);
+	await expect.poll(() => w.restored()).toHaveLength(1);
 }, 90_000);
 
 it('writes nothing for a compaction of a solo task (spec/crew#assignment-after-compaction)', async () => {
@@ -380,7 +391,9 @@ it('gives a reviewer its open check back, but not with the check prompt itself (
 		null,
 		null,
 	]);
-	expect(w.restored().map((event) => event.assignment)).toEqual([['check'], ['check'], []]);
+	await expect
+		.poll(() => w.restored().map((event) => event.assignment))
+		.toEqual([['check'], ['check'], []]);
 }, 60_000);
 
 it('keeps the compaction due when the prompt that carried the block fails, also across a restart (spec/crew#assignment-after-compaction)', async () => {
@@ -398,9 +411,11 @@ it('keeps the compaction due when the prompt that carried the block fails, also 
 	const blocks = await w.blocks();
 	expect(blocks.at(-2)).toContain(part.text);
 	expect(blocks.at(-1)).toBeNull();
-	expect(w.restored()).toEqual([
-		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
-	]);
+	await expect
+		.poll(() => w.restored())
+		.toEqual([
+			{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
+		]);
 }, 90_000);
 
 it('answers a compaction that came while the parent was answering with the same block (spec/crew#assignment-after-compaction)', async () => {
@@ -410,9 +425,11 @@ it('answers a compaction that came while the parent was answering with the same 
 	await w.prompt('compact-step-twice');
 	expect(w.compactions()).toHaveLength(2);
 	expect(await w.steers()).toHaveLength(1);
-	expect(w.restored()).toEqual([
-		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[1], assignment: ['part'] },
-	]);
+	await expect
+		.poll(() => w.restored())
+		.toEqual([
+			{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[1], assignment: ['part'] },
+		]);
 	await w.prompt('plain');
 	expect(await w.steers()).toHaveLength(1);
 	expect((await w.blocks()).at(-1)).toBeNull();
@@ -426,9 +443,11 @@ it('keeps the block for the next prompt when the turn ends while the steer is ou
 	expect(w.restored()).toEqual([]);
 	await w.prompt('Next.');
 	expect((await w.blocks()).at(-1)).toContain(part.text);
-	expect(w.restored()).toEqual([
-		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
-	]);
+	await expect
+		.poll(() => w.restored())
+		.toEqual([
+			{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
+		]);
 }, 60_000);
 
 it('opens a hidden agent turn when the agent adopts the steer as a turn of its own, and reports each turn once (spec/crew#assignment-after-compaction)', async () => {
@@ -453,9 +472,11 @@ it('opens a hidden agent turn when the agent adopts the steer as a turn of its o
 					)
 			)
 	).toBe(true);
-	expect(w.restored()).toEqual([
-		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
-	]);
+	await expect
+		.poll(() => w.restored())
+		.toEqual([
+			{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
+		]);
 	expect(w.records().filter((record) => record.event.kind === 'prompt.steered')).toEqual([]);
 	// One report per turn, at its own end.
 	const completed = w

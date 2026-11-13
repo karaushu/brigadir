@@ -34,14 +34,13 @@ export type TaskLaunch = {
 	/** spec/git#main-tree-branches: without isolation, the branches to switch to before the agent starts; never remembered for the project. */ switches?: LaunchSwitch[];
 	/** spec/git#pull: without isolation, the repos to fetch and fast-forward before the agent starts; never remembered for the project. */ pull?: string[];
 };
-/** `crewTemplateId` remembers the last crew chosen for a Brigadir task in this project (spec/tasks#sheet-rail). */
+/** spec/tasks#sheet-rail: what a project remembers for its next sheet. The crew is not remembered: a sheet starts on `Auto`. */
 export type LaunchSettings = {
 	isolation: TaskLaunch['isolation'];
 	baseRef: string;
 	setupCommand: string;
 	copyEnvFiles?: boolean;
 	scopes: ScopeChoice[];
-	crewTemplateId?: string;
 };
 export type TaskPreparation = {
 	state: 'preparing' | 'failed' | 'ready';
@@ -95,6 +94,7 @@ export function isLaunchSettings(value: unknown): value is LaunchSettings {
 		value.scopes.length <= 512 &&
 		value.scopes.every(isScopeChoice) &&
 		new Set(value.scopes.map((scope) => scope.id)).size === value.scopes.length &&
+		// spec/tasks#sheet-rail: a `crewTemplateId` from a file written when the crew was remembered still reads; it is dropped.
 		(value.crewTemplateId === undefined || isId(value.crewTemplateId))
 	);
 }

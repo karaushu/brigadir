@@ -138,6 +138,14 @@ export class SidebarMenus {
 										: 'Move to in progress',
 					}))
 			: [];
+		// spec/crew#auto-dismiss: a worker of an Auto task can be dismissed from its row; the Auto task's host does it.
+		const autoCrew =
+			stored.crewTaskId && stored.status !== 'completed'
+				? await store
+						.task({ projectId: key.projectId, id: stored.crewTaskId })
+						.then((owner) => (owner.auto ? owner : null))
+						.catch(() => null)
+				: null;
 		const canContinue =
 			Boolean(task.provider) &&
 			!connected &&
@@ -182,6 +190,7 @@ export class SidebarMenus {
 				this.launches.isQueued(key)
 					? [{ id: 'stop', label: 'Stop' as const }]
 					: []),
+				...(autoCrew ? [{ id: 'dismiss', label: 'Dismiss worker' as const }] : []),
 				null,
 				...(this.archives
 					? [
@@ -211,6 +220,10 @@ export class SidebarMenus {
 			return null;
 		}
 		if (action === 'open') return 'open';
+		if (action === 'dismiss' && autoCrew) {
+			await this.sessions.command(autoCrew, { kind: 'dismissWorker', taskId: key.id });
+			return null;
+		}
 		if (action === 'resume') {
 			const current = await store.task(key);
 			if (

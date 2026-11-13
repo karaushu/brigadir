@@ -11,6 +11,7 @@ import {
 	isBuiltinTemplateId,
 	starterCrewTemplate,
 	unshippedCrewLaunch,
+	isCrewLaunch,
 	rememberedCrewId,
 	unshippedCrewTemplateIds,
 	type CrewSpec,
@@ -540,10 +541,22 @@ it('ships the specialists as a Developer or a Reviewer with a specialty, and the
 		['Reviewer', 'reviewer', undefined],
 	]);
 });
-it('runs a schedule that names a crew the app no longer ships as «Foreman composes» (spec/crew-templates-and-editor#unshipped-crew-ids)', () => {
+it('runs a stored launch of a crew the app no longer ships, or of a composing foreman, as Auto (spec/crew-templates-and-editor#unshipped-crew-ids)', () => {
 	const crews = [...builtinCrewTemplates];
-	expect(unshippedCrewLaunch({ templateId: 'default' }, crews)).toEqual({ compose: true });
-	expect(unshippedCrewLaunch({ templateId: 'tests' }, crews)).toEqual({ compose: true });
+	expect(unshippedCrewLaunch({ templateId: 'default' }, crews)).toEqual({ auto: true });
+	expect(unshippedCrewLaunch({ templateId: 'tests' }, crews)).toEqual({ auto: true });
+	expect(unshippedCrewLaunch({ templateId: 'compose' }, crews)).toEqual({ auto: true });
+	expect(unshippedCrewLaunch({ compose: true }, crews)).toEqual({ auto: true });
+	expect(
+		unshippedCrewLaunch(
+			{
+				compose: true,
+				template: { ...starterCrewTemplate, root: { ...starterCrewTemplate.root, agents: [] } },
+			},
+			crews
+		)
+	).toEqual({ auto: true });
+	expect(unshippedCrewLaunch({ auto: true }, crews)).toEqual({ auto: true });
 	// A person's edit moved to an own crew under the same id keeps the schedule on that crew.
 	const adopted = [...crews, { ...starterCrewTemplate, id: 'default' }];
 	expect(unshippedCrewLaunch({ templateId: 'default' }, adopted)).toEqual({
@@ -552,16 +565,18 @@ it('runs a schedule that names a crew the app no longer ships as «Foreman compo
 	// Any other missing id stays as it is, so the run fails as for a deleted crew.
 	expect(unshippedCrewLaunch({ templateId: 'gone' }, crews)).toEqual({ templateId: 'gone' });
 	expect(unshippedCrewLaunch({ templateId: 'review' }, crews)).toEqual({ templateId: 'review' });
-	expect(unshippedCrewLaunch({ compose: true }, crews)).toEqual({ compose: true });
+	expect(isCrewLaunch({ auto: true })).toBe(true);
+	expect(isCrewLaunch({ auto: true, templateId: 'review' })).toBe(false);
 });
-it('starts the launch sheet with «Foreman composes» when the remembered crew is one the app no longer ships (spec/crew-templates-and-editor#unshipped-crew-ids)', () => {
+it('opens the sheet on Auto unless the task’s own crew is still in the library (spec/tasks#sheet-rail)', () => {
 	const crews = [...builtinCrewTemplates];
-	expect(rememberedCrewId('default', crews)).toBe('compose');
-	expect(rememberedCrewId('tests', crews)).toBe('compose');
-	expect(rememberedCrewId(undefined, crews)).toBe('compose');
-	expect(rememberedCrewId('compose', crews)).toBe('compose');
+	expect(rememberedCrewId('default', crews)).toBe('auto');
+	expect(rememberedCrewId('tests', crews)).toBe('auto');
+	expect(rememberedCrewId(undefined, crews)).toBe('auto');
+	expect(rememberedCrewId('compose', crews)).toBe('auto');
+	expect(rememberedCrewId('gone', crews)).toBe('auto');
 	expect(rememberedCrewId('review', crews)).toBe('review');
-	// A person's edit moved to an own crew under the same id stays the remembered crew.
+	// A person's edit moved to an own crew under the same id stays that crew.
 	expect(rememberedCrewId('default', [...crews, { ...starterCrewTemplate, id: 'default' }])).toBe(
 		'default'
 	);

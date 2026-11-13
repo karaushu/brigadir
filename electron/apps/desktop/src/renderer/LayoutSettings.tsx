@@ -37,6 +37,7 @@ import {
 } from './ModuleSettings';
 import { AccentPicker } from './ui/AccentPicker';
 import { SettingsOption, SettingsRow, SettingsSection } from './SettingsForm';
+import { AutoSettings } from './AutoSettings';
 import { type RemoteDialog, type RemotePart } from './RemoteSettings';
 import styles from './LayoutSettings.module.css';
 import { SkeletonRows } from './ui/Loading';
@@ -640,9 +641,9 @@ export function LayoutSettings({
 												}}
 											/>
 										</SettingsRow>
-										<SettingsRow label={t(locale, 'Isolation for new tasks')}>
+										<SettingsRow label={t(locale, 'Isolation for CLI tasks')}>
 											<Segments
-												label={t(locale, 'Isolation for new tasks')}
+												label={t(locale, 'Isolation for CLI tasks')}
 												value={snapshot.settings.agents.isolation}
 												options={[
 													{ value: 'in-place', label: t(locale, 'No isolation') },
@@ -702,6 +703,15 @@ export function LayoutSettings({
 											</label>
 										</SettingsRow>
 									</SettingsSection>
+									{/* spec/crew#auto-model, spec/crew#auto-budget: Settings ▸ Agents ▸ Auto. */}
+									<AutoSettings
+										settings={snapshot.settings}
+										locale={locale}
+										busy={busy}
+										update={(patch) => {
+											void update(patch);
+										}}
+									/>
 									{/* spec/tasks#archive: completed tasks go to the archive after N days; Never turns only the timer off. */}
 									<SettingsSection title={t(locale, 'Tasks')} disabled={busy}>
 										<SettingsRow

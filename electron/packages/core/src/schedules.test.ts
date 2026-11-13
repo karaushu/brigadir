@@ -20,6 +20,7 @@ import {
 	type Schedule,
 	type ScheduleRule,
 } from './schedules';
+import { unshippedCrewLaunch } from './crew';
 
 const kyiv = 'Europe/Kyiv';
 const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
@@ -159,6 +160,16 @@ describe('due and missed slots', () => {
 		expect(isSchedule(schedule())).toBe(true);
 		expect(isSchedule(schedule({ timeZone: 'Mars/Olympus' }))).toBe(false);
 		expect(isSchedule(schedule({ name: ' ' }))).toBe(false);
+	});
+	it('keeps an Auto schedule and one saved for a composing foreman (spec/crew-templates-and-editor#unshipped-crew-ids)', () => {
+		const task = {
+			prompt: 'Review yesterday',
+			provider: 'claude' as const,
+			transport: 'gui' as const,
+		};
+		expect(isSchedule(schedule({ task: { ...task, crew: { auto: true } } }))).toBe(true);
+		expect(isSchedule(schedule({ task: { ...task, crew: { compose: true } } }))).toBe(true);
+		expect(unshippedCrewLaunch({ compose: true }, [])).toEqual({ auto: true });
 	});
 	it('runs a slot on time', () => {
 		expect(dueDecision(schedule(), at('2026-10-30T07:00:30Z'))).toEqual({

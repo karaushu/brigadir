@@ -127,6 +127,7 @@ import {
 } from './client-ui';
 import { RoutedNotices } from './remote-notices';
 import { composeAppearance } from './appearance';
+import { autoModelAnswer, autoTaskSnapshot } from './auto-launch';
 import { Fonts } from './fonts';
 import { Settings } from './settings';
 import {
@@ -197,13 +198,12 @@ import {
 	resolveCrew,
 	templateLookup,
 	crewIssues,
-	crewPalette,
-	composeCrewId,
 	unshippedCrewLaunch,
-	foremanTemplateId,
+	isAutoModelRequest,
 	isAgentTemplateDocument,
 	isCrewTemplateDocument,
 	type CrewLaunch,
+	type AutoTask,
 	type ProviderCatalog,
 	editedSchedule,
 	missedRunsText,
@@ -884,6 +884,17 @@ const sessions = new Sessions(
 				params.model || params.effort
 					? await providerCatalogs(params.provider).catch(() => null)
 					: null
+			);
+		}
+		// spec/crew#auto-model: with `Any catalog model` the agent's model is checked against the catalog; otherwise the person is asked on a card.
+		if (method === 'auto_model' && isAutoModelRequest(params)) {
+			if (!appliedSettings.auto.anyModel || !params.model || !params.provider) return { ask: true };
+			if (!appliedSettings.agents.enabled[params.provider])
+				throw new Error(`${providerName(params.provider)} is turned off in the Brigadir settings.`);
+			return autoModelAnswer(
+				params,
+				true,
+				await providerCatalogs(params.provider).catch(() => null)
 			);
 		}
 		// spec/editor-code-intelligence#language-server-restart: the agent's `editor_restart_language_servers`.
@@ -4513,58 +4524,34 @@ void app.whenReady().then(async () => {
 		const launch = await launchSettings.resolve(projectId, input),
 			store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR);
 		// spec/crew-templates-and-editor#snapshot: the crew resolves into an immutable snapshot at creation; the task never reads the library again.
-		let crew;
+		let crew, auto: AutoTask | undefined;
 		if (crewInput) {
 			const library = await (await TemplateStore.at(process.env.BRIGADIR_DATA_DIR)).read(),
 				lookup = templateLookup(library.agents);
-			// spec/crew-templates-and-editor#unshipped-crew-ids: a schedule that names a crew the app no longer ships runs as «Foreman composes».
+			// spec/crew-templates-and-editor#unshipped-crew-ids: a schedule that names a crew the app no longer ships, or one that asked the foreman to compose, runs as `Auto`.
 			const crewChoice = unshippedCrewLaunch(crewInput, library.crews);
-			const template =
-				'compose' in crewChoice
-					? (crewChoice.template ?? {
-							schemaVersion: 1 as const,
-							id: composeCrewId,
-							name: 'Crew',
-							builtin: true,
-							root: { id: 'root', name: 'Foreman', template: foremanTemplateId },
-						})
-					: 'templateId' in crewChoice
+			if ('auto' in crewChoice) {
+				// spec/crew#auto: a GUI task of a writing agent is an Auto task; in the terminal, or with a checker's role, it stays one agent.
+				const checker = sheet?.role ? (await sheetRole(sheet.role))?.readOnlyAgent === true : false;
+				if (transport === 'gui' && !checker)
+					auto = autoTaskSnapshot(
+						library.agents,
+						appliedSettings.agents.provider,
+						appliedSettings.agents.enabled,
+						appliedSettings.auto.partBudget
+					);
+			} else {
+				const template =
+					'templateId' in crewChoice
 						? library.crews.find((item) => item.id === crewChoice.templateId)
 						: crewChoice.template;
-			if (!template) throw new Error('The crew template is unavailable');
-			const issues = crewIssues(template, lookup);
-			if (issues.length) throw new Error(issues[0]!.message);
-			const context = { lookup, defaultProvider: appliedSettings.agents.provider };
-			crew = resolveCrew(template, context);
-			// spec/crew#compose: the foreman composes from a snapshot of the library and of the enabled providers' models; the task never reads the library again.
-			if ('compose' in crewChoice) {
-				const enabled = (['claude', 'codex'] as const).filter(
-						(item) => appliedSettings.agents.enabled[item]
-					),
-					catalogs = (
-						await Promise.all(
-							enabled.map((item) =>
-								Promise.race([
-									providerCatalog(item).catch(() => null),
-									new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000).unref()),
-								])
-							)
-						)
-					).flatMap((catalog, index) =>
-						catalog ? [catalog] : [{ provider: enabled[index]!, options: [], modes: [] }]
-					);
-				const palette = crewPalette(library.agents, context, catalogs);
-				crew = {
-					...crew,
-					templateId: composeCrewId,
-					compose: {
-						...palette,
-						templates: palette.templates.filter((item) => enabled.includes(item.provider)),
-					},
-				};
+				if (!template) throw new Error('The crew template is unavailable');
+				const issues = crewIssues(template, lookup);
+				if (issues.length) throw new Error(issues[0]!.message);
+				crew = resolveCrew(template, { lookup, defaultProvider: appliedSettings.agents.provider });
 			}
 		}
-		if (remember) await launchSettings.save(projectId, launch, crew?.templateId ?? undefined);
+		if (remember) await launchSettings.save(projectId, launch);
 		const task = await store.createTask(
 			projectId,
 			title,
@@ -4598,6 +4585,7 @@ void app.whenReady().then(async () => {
 			if (!role) throw new Error('The agent template is unavailable');
 			chosen = await store.updateTask(chosen, role);
 		}
+		if (auto) chosen = await store.updateTask(chosen, { auto });
 		return crew ? store.updateTask(chosen, { crew }) : chosen;
 	}
 	handle('task:create', (projectId, title, provider, transport, backlog, input, crew, sheet) =>

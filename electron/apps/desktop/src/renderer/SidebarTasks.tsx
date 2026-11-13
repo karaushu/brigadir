@@ -28,6 +28,7 @@ import { Popover, useHoverPopover } from './ui/Popover';
 import { TaskPreviewContent } from './ui/TaskPreviewContent';
 import { collapseCrew, loadCollapsedCrews, useCrewCollapse } from './crew-collapse';
 import { useWaitsForSimulator } from './simulator-waiting';
+import { workerRowState } from './worker-row';
 import styles from './App.module.css';
 /* The sidebar's task row and crew card (spec/sidebar#layout, spec/crew#task-type, spec/appearance#evolution-redesign). The intro's sample window shows the same card at rest
    (`preview`, spec/settings-modules-and-onboarding#intro-steps, rule 17): nothing read through main, the crew expanded. */
@@ -186,6 +187,7 @@ function WorkerRow({
 	onMenu(task: AgentTask): void;
 }) {
 	const worker = row.task,
+		look = workerRowState(row),
 		activity = worker.activity,
 		{ attention, beat } = useAttention(worker.status, selected),
 		waitsForSimulator = useWaitsForSimulator(worker.projectId, worker.id);
@@ -218,6 +220,8 @@ function WorkerRow({
 				// Nested crews: 14 px a level; a nested foreman's row opens its level, its helmet first.
 				style={{ paddingLeft: 6 + (row.depth + (row.role === 'foreman' ? 1 : 0)) * 14 }}
 				data-status={worker.status}
+				data-dismissed={look.quiet || undefined}
+				data-over-budget={look.overBudget || undefined}
 				data-attention={attention ?? undefined}
 				data-attention-beat={beat}
 				aria-pressed={selected}
@@ -247,7 +251,12 @@ function WorkerRow({
 				<span className={styles.workerCopy}>
 					<span ref={title} className={styles.workerTitle}>
 						<span>{crewLabel(locale, row.name)} · </span>
-						{state ?? worker.title}
+						{/* spec/sidebar#crew-card: an Auto worker over its budget says so in amber in place of its part. */}
+						{look.overBudget ? (
+							<span className={styles.workerOverBudget}>{t(locale, 'over budget')}</span>
+						) : (
+							(state ?? worker.title)
+						)}
 					</span>
 					{/* spec/agents-and-providers#tools-awareness: the activity line of a task card, while the worker waits for the project's one device. */}
 					{waitsForSimulator && (
@@ -263,12 +272,24 @@ function WorkerRow({
 						title={t(locale, 'Unread')}
 					/>
 				)}
-				{row.provider && (
-					<span
-						className={styles.workerProvider}
-						title={t(locale, row.provider === 'claude' ? 'Claude' : 'Codex')}>
-						<Glyph name={row.provider === 'claude' ? 'claude' : 'openai'} size={11} />
-					</span>
+				{/* spec/sidebar#crew-card: a dismissed Auto worker keeps its `+N −M` in place of its provider; a click opens the worker. */}
+				{look.counts ? (
+					<ChangeCounts
+						additions={look.counts.additions}
+						deletions={look.counts.deletions}
+						locale={locale}
+						tone="diff"
+						className={styles.workerCounts}
+					/>
+				) : (
+					!look.quiet &&
+					row.provider && (
+						<span
+							className={styles.workerProvider}
+							title={t(locale, row.provider === 'claude' ? 'Claude' : 'Codex')}>
+							<Glyph name={row.provider === 'claude' ? 'claude' : 'openai'} size={11} />
+						</span>
+					)
 				)}
 			</button>
 			<Popover

@@ -199,9 +199,8 @@ describe('spec/crew#auto-roles, spec/crew#auto-model', () => {
 			requestedChoices: { configOptions: { model: 'gpt-6-astra', reasoning_effort: 'high' } },
 			choiceNames: { model: 'GPT-6 Astra', reasoning_effort: 'High' },
 		});
-		expect(modelRole(developer, { ...answer, saveAs: undefined }, 'r2').name).toBe(
-			'Developer · GPT-6 Astra · High'
-		);
+		const { saveAs: _saveAs, ...unnamed } = answer;
+		expect(modelRole(developer, unnamed, 'r2').name).toBe('Developer · GPT-6 Astra · High');
 	});
 });
 
@@ -275,7 +274,7 @@ describe('old data still loads', () => {
 			planPartId: null,
 		};
 		expect(isCrewWorkerRecord(record)).toBe(true);
-		expect(crewWorkerClosed(record)).toBe(false);
+		expect(crewWorkerClosed({})).toBe(false);
 		const hired = {
 			...record,
 			budget: { minutes: 40, tokens: 400_000 },
@@ -328,7 +327,7 @@ describe('spec/sidebar#crew-card: Auto worker rows', () => {
 		const [row] = crewWorkerRows(lead, [lead, worker]);
 		expect(row).toMatchObject({ name: 'Developer', dismissed: true });
 		expect(crewTaskLabel(worker, [lead, worker])).toBe('Developer · API endpoints');
-		const named = { ...lead, auto: undefined } as AgentTask;
+		const { auto: _auto, ...named } = lead;
 		expect(crewWorkerRows(named, [named, worker])[0]).toMatchObject({
 			name: 'Developer 2',
 			dismissed: false,

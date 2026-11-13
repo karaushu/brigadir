@@ -118,7 +118,7 @@ An `Auto` task can give its agent a **role**: an agent template from the library
 <a id="sheet-base-ref"></a>
 ### Base ref
 
-A searchable popup, not a text field. List: `for-each-ref refs/heads refs/remotes` of the **root** repo, sorted by last commit date, without `*/HEAD`, at most 60 (`listRefs`). A remembered value that no longer exists stays first rather than being silently replaced. The list scrolls on its own and opens where there is room; the search field `Search branches` on top handles arrows, `Enter`, `Esc`; empty result `No branches match`. In a monorepo the one base name is checked in every root during preparation.
+A searchable popup, not a text field. List: `for-each-ref refs/heads refs/remotes` of the **root** repo, sorted by last commit date, without `*/HEAD`, at most 60 (`listRefs`). A remembered value that no longer exists stays first rather than being silently replaced. The list scrolls on its own and opens where there is room; the search field `Search branches` on top handles arrows, `Enter`, `Esc`; empty result `No branches match`. In a monorepo the one base name is checked in every root during preparation. A project with no remembered base starts from its root repo's default: the remote's default branch (`origin/HEAD`), else `origin/main` or `origin/master` when they exist, else `HEAD` (a repo without a remote starts from its checkout).
 
 <a id="sheet-repos"></a>
 ### Repos and folders
@@ -168,7 +168,7 @@ Storage: for a task that does not exist yet, files go to `drafts/<projectId>/<dr
 
 A worktree task's root is used by the host, files, editor, terminals and snapshots. Managed nested copies keep the source scope's kind; other nested worktrees are not discovered as scopes.
 
-- An `Auto` task on GUI starts in `Worktree` on the sheet: hiring workers needs one, since workers start from the task's branch ([Auto](crew.md#auto-isolation)). The person may pick `No isolation` for a task that will not hire; such a task works alone, and its agent says so when the task would need workers. A CLI task starts from Settings ▸ Agents ▸ `Isolation`.
+- An `Auto` task on GUI starts in `Worktree` on the sheet when the project has a git repository: hiring workers needs one, since workers start from the task's branch ([Auto](crew.md#auto-isolation)). A project without one starts from Settings ▸ Agents ▸ `Isolation`. The person may pick `No isolation` for a task that will not hire; such a task works alone, and its agent says so when the task would need workers. A CLI task starts from Settings ▸ Agents ▸ `Isolation`.
 
 <a id="worktree-preparation"></a>
 ### Worktree preparation

@@ -13,6 +13,27 @@ import { basename, dirname } from 'node:path';
 import { realpath, stat } from 'node:fs/promises';
 import { atomicJson, readDocument, safePath, SessionStore } from '@brigadir/persistence';
 import { defaultAppSettings, isRecord } from '@brigadir/core';
+/**
+ * spec/tasks#sheet-base-ref: a project with no remembered base starts from its root repo's own default: the remote's default branch,
+ * else `origin/main` or `origin/master` when they exist, else the checkout's `HEAD` (a repo without a remote).
+ */
+export async function defaultBaseRef(path: string): Promise<string> {
+	const remote = await gitText(path, [
+		'symbolic-ref',
+		'--quiet',
+		'--short',
+		'refs/remotes/origin/HEAD',
+	]).catch(() => '');
+	if (/^origin\/[\w./-]+$/.test(remote)) return remote;
+	for (const name of ['origin/main', 'origin/master'])
+		if (
+			await gitText(path, ['rev-parse', '--verify', '--quiet', `refs/remotes/${name}`]).catch(
+				() => ''
+			)
+		)
+			return name;
+	return 'HEAD';
+}
 export class LaunchSettingsStore {
 	private writes: Promise<unknown> = Promise.resolve();
 	private pending = 0;
@@ -71,7 +92,11 @@ export class LaunchSettingsStore {
 			);
 			if (doc.settings === undefined) return null;
 			if (!isLaunchSettings(doc.settings)) throw new Error('Invalid launch settings');
-			return doc.settings;
+			// spec/tasks#sheet-rail: the crew is not remembered per project; a stored choice is left out and not written back.
+			const { crewTemplateId: _crew, ...settings } = doc.settings as LaunchSettings & {
+				crewTemplateId?: string;
+			};
+			return settings;
 		} catch (error) {
 			if (isRecord(error) && error.code === 'ENOENT') return null;
 			throw error;
@@ -92,9 +117,8 @@ export class LaunchSettingsStore {
 		return {
 			isolation: this.defaultIsolation(),
 			copyEnvFiles: this.defaultCopyEnv(),
-			baseRef: saved?.baseRef ?? 'origin/main',
+			baseRef: saved?.baseRef ?? (await defaultBaseRef(project.path)),
 			setupCommand: saved?.setupCommand ?? '',
-			...(saved?.crewTemplateId ? { crewTemplateId: saved.crewTemplateId } : {}),
 			scopes: merged.map((scope) => {
 				const choice = saved?.scopes.find((value) => value.id === scope.id);
 				/* spec/projects-and-board#repo-selection: a repo found after the project was set up comes unselected. */ return {
@@ -173,9 +197,8 @@ export class LaunchSettingsStore {
 			scopesCollapsed,
 		});
 	}
-	save(projectId: string, value: TaskLaunch, crewTemplateId?: string) {
+	save(projectId: string, value: TaskLaunch) {
 		return this.serial(async () => {
-			const previous = await this.saved(projectId);
 			const {
 				branch,
 				branchAuto: _auto,
@@ -184,12 +207,7 @@ export class LaunchSettingsStore {
 				pull: _pull,
 				...settings
 			} = value;
-			const chosen = crewTemplateId ?? previous?.crewTemplateId;
-			await this.write(
-				projectId,
-				{ ...settings, ...(chosen ? { crewTemplateId: chosen } : {}) },
-				await this.collapsed(projectId)
-			);
+			await this.write(projectId, settings, await this.collapsed(projectId));
 		});
 	}
 	collapse(projectId: string, collapsed: boolean) {

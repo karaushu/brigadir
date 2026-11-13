@@ -53,7 +53,10 @@ export function crewWorkers(foreman: AgentTask, tasks: readonly AgentTask[]): Ag
 }
 /** spec/crew#attention: a worker of this crew waits for the person (permission, or a question after escalation); the foreman carries the attention. */
 export function crewNeedsYou(foreman: AgentTask, tasks: readonly AgentTask[]): boolean {
-	return crewWorkers(foreman, tasks).some((task) => task.status === 'needs-you');
+	// spec/sidebar#crew-card: a worker over its budget waits in its own row; the card keeps its fill.
+	return crewWorkers(foreman, tasks).some(
+		(task) => task.status === 'needs-you' && !task.overBudget
+	);
 }
 /** Workers that hold an agent right now: the number beside the helmet on a board card (spec/projects-and-board#board). */
 export function liveCrewWorkers(foreman: AgentTask, tasks: readonly AgentTask[]): number {

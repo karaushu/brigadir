@@ -215,7 +215,7 @@ describe('spec/crew#auto-tools: the tool set of an Auto session', () => {
 		const { store, task } = await setup();
 		const context = (await readCrewContext(store, {
 			...task,
-			launch: { isolation: 'worktree' } as AgentTask['launch'],
+			launch: { isolation: 'worktree' } as NonNullable<AgentTask['launch']>,
 		}))!;
 		expect(context.role).toBe('auto');
 		const tools = { browser: true, simulator: false, commands: false };

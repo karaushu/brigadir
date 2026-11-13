@@ -473,7 +473,7 @@ A node with `agents` is a **lead**: its host runs with `BRIGADIR_ROLE=lead`, the
   - board and list: the foreman card takes the `needs-you` amber border and `--amber-soft` fill and sorts with waiting tasks;
   - sidebar: the foreman card's header takes the `needs-you` fill, expanded or collapsed; worker rows have no fill, the amber stays in their icon.
   - It clears by itself when no worker waits.
-- **Auto:** a waiting hire card or model question sets the Auto task `needs-you`; a worker over its budget is `needs-you` itself and draws the attention onto the card like any waiting worker.
+- **Auto:** a waiting hire card or model question sets the Auto task `needs-you`. A worker over its budget is `needs-you` in its own row only: the card keeps its fill and sort place (`crewNeedsYou` leaves it out), since the agent goes on with its own work.
 - **Foreman status:** `needs-you` on a waiting plan; a foreman turn that ends with a worker's question unanswered ends `needs-you` instead of `done` (it relayed the question to the person); answering it outside a turn clears it if nothing else waits. During a turn the question is the foreman's, not the person's. A conflicted `accept_task` also sets `needs-you`.
 - **Notification** `A worker is waiting for your answer.` with sound and Dock badge at the end of such a turn or on escalation (once), closed by the answer.
 - **Repeated flash:** a sidebar row (task, foreman or worker) in `needs-you` repeats the attention flash every 30 s until the person has seen it (task selected in a focused window); after a restart repeats run for tasks already waiting, without the first flash. Notifications are not repeated.

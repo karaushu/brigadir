@@ -1108,6 +1108,7 @@ export function Chip({
 	className = '',
 	...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
+	/** A popover's anchor (spec/chat-turns-plans-and-questions#hire-card budget chip). */ ref?: Ref<HTMLButtonElement>;
 	/** spec/appearance#component-details (rule 17): `warning` is the one amber pill — NoticeChip's look, its styles. */ tone?:
 		'normal' | 'selected' | 'warning';
 	/** spec/crew-templates-and-editor#editor-inspector: a chip that is only a glyph (the «+» of a chip row) is square. */ square?: boolean;

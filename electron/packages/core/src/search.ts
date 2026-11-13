@@ -462,7 +462,7 @@ export const settingDefinitions: readonly SettingDefinition[] = [
 		id: 'isolation',
 		tab: 'agents',
 		section: 'Agents',
-		label: key('Isolation for new tasks'),
+		label: key('Isolation for CLI tasks'),
 		value: (s) => (s.agents.isolation === 'in-place' ? key('No isolation') : raw('Worktree')),
 	},
 	{
@@ -504,6 +504,25 @@ export const settingDefinitions: readonly SettingDefinition[] = [
 			get: (s) => s.suggestNextPrompt,
 			set: (_, suggestNextPrompt) => ({ suggestNextPrompt }),
 		},
+	},
+	// spec/settings-modules-and-onboarding#settings-keys: the Auto card of Settings ▸ Agents.
+	{
+		id: 'auto-any-model',
+		tab: 'agents',
+		section: 'Auto',
+		label: key('Any catalog model'),
+		toggle: {
+			get: (s) => s.auto.anyModel,
+			set: (s, anyModel) => ({ auto: { ...s.auto, anyModel } }),
+		},
+	},
+	{
+		id: 'auto-part-budget',
+		tab: 'agents',
+		section: 'Auto',
+		label: key('Part budget'),
+		value: (s) =>
+			raw(`${s.auto.partBudget.minutes} min · ${Math.round(s.auto.partBudget.tokens / 1000)}k`),
 	},
 	{
 		id: 'helper-agent',

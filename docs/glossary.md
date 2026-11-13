@@ -300,7 +300,7 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 |---|---|---|---|
 | Crew | Бригада | A foreman and its workers as one team. | «команда», «ростер» |
 | Crews | Бригади | The label over the library's crews in the `Crew` popup. | |
-| Auto | Авто | The `Crew` popup's first item and the default task: one agent writes the code and may hire workers. | «Агент вирішить», «Бригадир збере» |
+| Auto | Авто | The `Crew` popup's first item and the default task: one agent writes the code and may hire workers. | «Агент вирішить» |
 | Hire · Hire {n} | Найняти · Найняти {n} | The hire card's primary action: start workers for the parts. | «Запустити воркерів» |
 | Do it yourself | Роби сам | The hire card's refusal: the agent does the parts itself. | «Відхилити» |
 | hire / dismiss | наймати / відпускати | What an Auto agent does with workers. Dismissed: «відпущено». | «звільнити», «вигнати» |

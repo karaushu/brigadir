@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Glyph } from './Glyph';
 import { useSecondTick } from './second-tick';
-import { TextArea } from './Input';
+import { TextArea, TextInput } from './Input';
 import {
 	t,
 	ageShort,
@@ -14,7 +14,7 @@ import {
 	type PermissionRequest,
 	browserShowCard,
 } from '@brigadir/core';
-import { Button, Choice } from './Controls';
+import { Button, Choice, Segments } from './Controls';
 import styles from './SessionInputs.module.css';
 export function Question({
 	question,
@@ -144,6 +144,167 @@ export function Question({
 					onClick={() => send({ kind: 'answerQuestion', id: question.id, answer })}>
 					{t(locale, 'Submit answer')}
 				</Button>
+			</footer>
+		</section>
+	);
+}
+/** spec/chat-turns-plans-and-questions#model-card: one model of a catalog on the model question card. */
+export type ModelRow = { key: string; name: string; note?: string };
+/**
+ * spec/chat-turns-plans-and-questions#model-card: the Auto agent asks for a model outside its roles. The question card's look (rule 17): the reason,
+ * the catalog models grouped by provider, the effort of the chosen model, `Save as role`, and `Keep {role}` / `Use this model`.
+ * `groups` null — the catalogs are still loading; empty — no other models.
+ */
+export function ModelQuestion({
+	title,
+	part,
+	reason,
+	groups,
+	selected,
+	onSelect,
+	efforts,
+	effort,
+	onEffort,
+	saveAs,
+	onSaveAs,
+	keepLabel,
+	onKeep,
+	onUse,
+	onSettings,
+	waited = null,
+	submitShortcut = null,
+	disabled,
+	locale,
+}: {
+	title: string;
+	part?: string | undefined;
+	reason: string;
+	groups: { label: string; rows: ModelRow[] }[] | null;
+	selected: string | null;
+	onSelect(key: string): void;
+	efforts: { value: string; name: string }[] | null;
+	effort: string | null;
+	onEffort(value: string): void;
+	/** null — `Save as role` is off; a string — on, with the role's name. */ saveAs: string | null;
+	onSaveAs(value: string | null): void;
+	keepLabel: string;
+	onKeep(): void;
+	onUse(): void;
+	onSettings(): void;
+	/** `waiting 3 min`, from the caller's clock. */ waited?: string | null;
+	submitShortcut?: string | null;
+	disabled: boolean;
+	locale: Locale;
+}) {
+	const empty = groups !== null && groups.every((group) => !group.rows.length);
+	return (
+		<section
+			className={styles.question}
+			data-model-question
+			aria-label={title}
+			onKeyDown={(event) => {
+				if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && selected && !disabled) {
+					event.preventDefault();
+					onUse();
+				}
+			}}>
+			<header>
+				<Glyph name="question" size={14} />
+				<strong>{title}</strong>
+				{part && <small>{part}</small>}
+				{waited && <span className={styles.waited}>{waited}</span>}
+			</header>
+			<h3>{reason}</h3>
+			{groups === null ? (
+				<p className={styles.description}>{t(locale, 'Loading models…')}</p>
+			) : empty ? (
+				<p className={styles.description}>{t(locale, 'No other models.')}</p>
+			) : (
+				groups.map((group) =>
+					group.rows.length ? (
+						<div key={group.label} className={styles.modelGroup}>
+							<span className={styles.modelGroupLabel}>{group.label}</span>
+							<div className={styles.options} role="radiogroup" aria-label={group.label}>
+								{group.rows.map((row) => (
+									<label
+										key={row.key}
+										className={styles.questionOption}
+										data-selected={selected === row.key}>
+										<Choice
+											type="radio"
+											name="model"
+											label={row.name}
+											disabled={disabled}
+											checked={selected === row.key}
+											onChange={() => onSelect(row.key)}
+										/>
+										<span>
+											<strong>{row.name}</strong>
+											{row.note && <span className={styles.description}>{row.note}</span>}
+										</span>
+									</label>
+								))}
+							</div>
+						</div>
+					) : null
+				)
+			)}
+			{!empty && groups !== null && efforts && efforts.length > 0 && (
+				<div className={styles.modelRow} data-size="s">
+					<span>{t(locale, 'Effort')}</span>
+					<Segments
+						size="s"
+						label={t(locale, 'Effort')}
+						value={effort ?? ''}
+						disabled={disabled}
+						options={efforts.map((level) => ({ value: level.value, label: level.name }))}
+						onChange={onEffort}
+					/>
+				</div>
+			)}
+			{!empty && groups !== null && (
+				<div className={styles.modelRow} data-size="s">
+					<label className={styles.saveAs}>
+						<Choice
+							type="checkbox"
+							label={t(locale, 'Save as role')}
+							disabled={disabled}
+							checked={saveAs !== null}
+							onChange={(event) => onSaveAs(event.currentTarget.checked ? '' : null)}
+						/>
+						<span>{t(locale, 'Save as role')}</span>
+					</label>
+					{saveAs !== null && (
+						<TextInput
+							size="s"
+							aria-label={t(locale, 'Role name')}
+							placeholder={t(locale, 'Role name')}
+							maxLength={80}
+							value={saveAs}
+							disabled={disabled}
+							onChange={(event) => onSaveAs(event.target.value)}
+						/>
+					)}
+				</div>
+			)}
+			<footer className={styles.actions} data-size="m">
+				{empty ? (
+					<Button className={styles.footStart} disabled={disabled} onClick={onSettings}>
+						{t(locale, 'Settings…')}
+					</Button>
+				) : submitShortcut ? (
+					<small className={styles.footHint}>
+						{t(locale, '{key} to answer').replace('{key}', submitShortcut)}
+					</small>
+				) : null}
+				<Button disabled={disabled} onClick={onKeep}>
+					{keepLabel}
+				</Button>
+				{!empty && (
+					<Button appearance="primary" disabled={disabled || !selected} onClick={onUse}>
+						{t(locale, 'Use this model')}
+					</Button>
+				)}
 			</footer>
 		</section>
 	);

@@ -2212,7 +2212,7 @@ export async function startHost(config: HostConfig) {
 			if (stopping) throw new Error('Host is stopping');
 			// A solo task's crew host only runs its review: its own agent has no crew tools. A developer's crew host runs only its own review
 			// (spec/reviews#points): its crew tools go up to its foreman.
-			if (crewHost && foremanTask && params.tool !== 'ask_foreman')
+			if (crewHost && crew && crew.role !== 'developer' && params.tool !== 'ask_foreman')
 				return crewHost.tool(params.tool, params.params, signal);
 			if (crewWorker) return crewWorker.tool(params.tool, params.params, signal);
 			throw new Error('This task has no crew');

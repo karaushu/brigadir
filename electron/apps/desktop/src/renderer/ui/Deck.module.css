@@ -124,6 +124,10 @@
 .list li[data-hover] > div > button {
 	outline: none;
 }
+/* The row's fill is the hover: the stretched button draws none of its own (the global button layer would be a patch inside the padding). */
+.list li[data-hover] > div > button:is(:hover, :active) {
+	background-image: none;
+}
 .list li[data-hover] > div > button::after {
 	content: '';
 	position: absolute;

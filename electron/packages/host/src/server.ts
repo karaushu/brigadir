@@ -1192,7 +1192,8 @@ export async function startHost(config: HostConfig) {
 			if (event.kind === 'review.finished' && event.state === 'disputed' && !busy)
 				status = 'needs-you';
 			// spec/reviews#surfaces: the closure check left findings open; the person decides with `Fix {n}` or `Accept`.
-			if (event.kind === 'task-review.verified' && event.open > 0 && !busy) status = 'needs-you';
+			if (event.kind === 'task-review.verified' && event.open + event.introduced > 0 && !busy)
+				status = 'needs-you';
 			if (
 				event.kind === 'task-review.decided' &&
 				event.decision === 'accept' &&

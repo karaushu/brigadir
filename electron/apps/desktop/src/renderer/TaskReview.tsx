@@ -625,7 +625,11 @@ export function ReviewStripView({
 		) : state === 'accepted' ? (
 			t(locale, '{n} accepted').replace('{n}', String(counts.accepted))
 		) : state === 'stopped' ? (
-			count(counts.findings)
+			counts.findings ? (
+				count(counts.findings)
+			) : (
+				t(locale, 'no findings')
+			)
 		) : (
 			(review.failure ??
 			(failed ? `${failed.name}: ${failed.failure ?? t(locale, 'did not start')}` : ''))

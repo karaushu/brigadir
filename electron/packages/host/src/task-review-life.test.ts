@@ -68,7 +68,12 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 		selfTrees: async () => state.trees,
 	};
 	const emit = async (event: SessionEvent) => {
-		records.push({ seq: records.length + 1, at: new Date().toISOString(), event });
+		records.push({
+			schemaVersion: 1,
+			seq: records.length + 1,
+			at: new Date().toISOString(),
+			event,
+		});
 	};
 	const deps: TaskReviewDeps = {
 		store,

@@ -126,6 +126,8 @@ deliveries, stale verdicts (`stale_review`), restart recovery and the rule that 
    reviewer accepts counts as closed; call `approve` when all are closed and the fix introduced no problem; otherwise
    `submit_review` with one item `{replyTo: <findingId>, text: why it is still open}` per open finding and, only for a
    problem the fix itself brought in, `{path, line, text, introduced: true}`. Nothing else may be raised.
+   - `submit_review` items carry `path`/`start`/`text` as in a first read, or `replyTo` without a path; the tool's own
+     description says so.
    - The host refuses any other item (`In a closure check only replyTo (a finding still open) or introduced: true (a
      problem the fix brought in) is accepted.`), a `replyTo` that is not this reviewer's finding of this review, and an
      `introduced` item in a file that did not change since the previous round (`<path> did not change since the last
@@ -142,8 +144,8 @@ deliveries, stale verdicts (`stale_review`), restart recovery and the rule that 
 - **Restart.** The review's record and its runs are on disk; after a host restart the review continues from its state:
   a round being read is dispatched again, a batch waiting for the agent's turn stays queued, a review waiting for the
   person keeps waiting.
-- **Outdated.** A later change of the task's tree (agent or person) makes a passed or accepted review `outdated`: it
-  covers only the snapshot it read.
+- **Outdated.** A later change of the task's tree (agent or person) makes a passed or accepted review before the PR
+  `outdated`: it covers only the snapshot it read. A mid-task review stays as it ended: the agent works on after it.
 - **A mid-task review that ends** `passed` with no findings, or `accepted`, while the task's agent waits prompts it once
   with `The mid-task review passed. Continue the task.` (or `The person accepted the open findings of the mid-task
   review as they are. Continue the task.`).
@@ -191,8 +193,8 @@ the state in muted text, the **step track**, actions, chevron.
 | Open findings handed to the person | `agent-question` | `Your call` · `<N findings> open` | `Fix {n}`, `Accept`; the list opens by itself | `--amber-soft` |
 | Passed | `check-pass` | `Review passed` · `<N findings>` or `no findings` | before PR: `Create PR` (primary), `×`; mid-task: `×` | `--green-soft` |
 | Accepted | `check-pass` (`--fg2`) | `Review closed` · `N accepted` | before PR: `Create PR`, `×`; mid-task: `×` | — |
-| Stopped | `stop` | `Review stopped` · `<N findings>` | `Start again…`, `×` | — |
-| Could not start | `agent-failed` (`--red`) | `Review did not start` · `<reviewer>: <reason>` or `No reviewer is available` | `Retry` (primary) | — |
+| Stopped | `stop` | `Review stopped` · `<N findings>` or `no findings` | `Start again…`, `×` | — |
+| Could not start | `agent-failed` (`--red`) | `Review did not start` · `<reviewer>: <reason>` or `No reviewer is available: …` | `Retry` (primary), `×` | — |
 
 - `<point>` is `plan`, `mid-task` or `before PR`. **The findings count is a link** wherever it stands — the strip row
   and the chat rows: a dotted underline in the text colour at rest, solid on hover; a click expands the strip on the
@@ -206,11 +208,10 @@ the state in muted text, the **step track**, actions, chevron.
   stand first with the reviewer's reason under them. A click on a finding opens its thread in the diff.
 - `Log` (strip, sidebar row, thread) opens the reviewer's task, which shows its log read-only.
 - **Chat rows** (service rows, not cards): `review · <point> · <reviewer> · started` (a `mid` review adds `after
-  <reason>`); `review · <point> · <reviewer> → <agent> · <N findings>`; `review · <point> · <agent> → <reviewer> ·
-  N fixed · N answered`; `review · <point> · <reviewer> · N open` (amber) or `passed` (green); `review · <point> · fix
-  N · by you`; `review · <point> · accepted by you`; `review · <point> · stopped by you`; `review · <point> · did not
-  start`. The batch turn shows the turn status `Fixing the review findings…`. Journals written before these rows keep
-  their older rows (`review · <who> · round 1 of 2 started` and the round rows).
+  <reason>`); `review · <point> · <reviewer> → <agent> · <N findings>` or `review · <point> · <reviewer> · passed`;
+  `review · <point> · <agent> · N fixed · N answered`; `review · <point> · <N findings> open` (amber) or `passed`
+  (green); `review · <point> · Fix N · by you`; `review · <point> · accepted · by you`; `review · <point> · stopped by
+  you`; `review · <point> · did not start`; `review · <point> · changed after the review`. Journals written before these rows keep their older rows (`review · <who> · round 1 of 2 started` and the round rows).
 
 <a id="surfaces"></a>
 ## Changes, threads, the sidebar and notifications
@@ -261,15 +262,16 @@ the strip.
   (`provider`, `model`, `effort`, `source` ∈ `setting | other | same | person`), `instructions`, `guidance`,
   `startedAt`, `state` ∈ `waiting | reading | fixing | verifying | yours | passed | accepted | stopped | failed |
   outdated`, `round` (runs opened: 1 = the read, then closure checks), `passes` (author passes), `reviewers`,
-  `trees` (the result tree per repo of the last run), `base?`, `failure?`, `finishedAt?`. A version-1 document reads as
+  `trees` (the result tree per repo of the last run), `base?`, `batch?` (the last batch sent to the agent: the turn
+  that takes it opens the closure check, also after a restart), `failure?`, `finishedAt?`. A version-1 document reads as
   a `pre-pr` review started by the person; it is written back as version 2 on the next change.
 - Findings are review comments in the task's `review.json` with `review` = `{reviewId, round, reviewer, open?, closed?,
   introduced?, accepted?}` (`disputed` of older files reads as `open`).
-- Journal events (rule 2): `task-review.started` (`id`, `point`, `startedBy`, `reviewer`, `reason?`),
-  `task-review.findings` (`id`, `findings`), `task-review.answered` (`id`, `fixed`, `answered`),
-  `task-review.verified` (`id`, `closed`, `open`, `introduced`), `task-review.decided` (`id`, `decision` ∈ `fix |
-  accept`, `findings`), `task-review.finished` (`id`, `state` ∈ `passed | accepted | stopped | failed | outdated`,
-  `failure?`). The proposal keeps `review.proposed`, `review.dismissed` and `review.replied`. The kinds of older
+- Journal events (rule 2), each with `id` and `point`: `task-review.started` (`startedBy`, `reviewers`, `reason?`),
+  `task-review.findings` (`findings`, `reviewers`), `task-review.answered` (`fixed`, `answered`: the findings of the
+  pass the agent answered with `review_reply`, the rest count as fixed until the closure check),
+  `task-review.verified` (`closed`, `open`, `introduced`), `task-review.decided` (`decision` ∈ `fix | accept`,
+  `findings`), `task-review.finished` (`state` ∈ `passed | accepted | stopped | failed | outdated`, `failure?`). The proposal keeps `review.proposed`, `review.dismissed` and `review.replied`. The kinds of older
   journals — `review.started`, `review.finished` and the task's own `crew.review` rows — stay valid and replay as they
   were drawn.
 - Host commands: `startReview` (the resolved reviewers, `who`, `reviewer`, `point`, `instructions`, `guidance`,

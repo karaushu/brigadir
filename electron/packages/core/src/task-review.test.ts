@@ -17,7 +17,9 @@ import {
 	type TaskReviewState,
 } from './task-review';
 import { isSessionEvent } from './event-validation';
-import { isSessionCommand } from './session';
+import { isSessionCommand, type EventRecord, type SessionEvent } from './session';
+import { taskActivity } from './task-activity';
+import { noticeKind } from './notifications';
 
 /** Runs the loop from `waiting` and returns every state it passed and the actions the host took. */
 function run(events: ReviewLoopEvent[], from: TaskReviewState = 'waiting') {
@@ -348,5 +350,45 @@ describe('journal and commands (spec/reviews#data, rule 2)', () => {
 		);
 		expect(isSessionCommand({ kind: 'decideReview', decision: 'accept' })).toBe(true);
 		expect(isSessionCommand({ kind: 'decideReview', decision: 'later' })).toBe(false);
+	});
+});
+
+describe('a review waiting for the person (spec/reviews#surfaces)', () => {
+	const records = (...events: SessionEvent[]): EventRecord[] =>
+		events.map((event, index) => ({ schemaVersion: 1, seq: index + 1, at: '', event }));
+	const verified = (open: number, introduced = 0): SessionEvent => ({
+		kind: 'task-review.verified',
+		id: 'r1',
+		point: 'pre-pr',
+		closed: 1,
+		open,
+		introduced,
+	});
+	it('is the needs-you reason line until the person decides', () => {
+		expect(taskActivity(records(verified(2)))).toEqual({
+			kind: 'review',
+			title: '',
+			path: null,
+			count: 2,
+		});
+		expect(taskActivity(records(verified(0)))).toBeNull();
+		// A problem the fix introduced waits for the person too.
+		expect(taskActivity(records(verified(0, 1)))).toMatchObject({ kind: 'review', count: 1 });
+		expect(
+			taskActivity(
+				records(verified(1), {
+					kind: 'task-review.decided',
+					id: 'r1',
+					point: 'pre-pr',
+					decision: 'accept',
+					findings: 1,
+				})
+			)
+		).toBeNull();
+	});
+	it('notifies as needs-you only when something is open', () => {
+		expect(noticeKind(verified(1))).toBe('needs-you');
+		expect(noticeKind(verified(0, 1))).toBe('needs-you');
+		expect(noticeKind(verified(0))).toBeNull();
 	});
 });

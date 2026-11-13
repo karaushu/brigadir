@@ -79,6 +79,10 @@ export class Settings {
 								...(!('compactionWindow' in value.agents)
 									? { compactionWindow: defaultAppSettings.agents.compactionWindow }
 									: {}),
+								// spec/browser-and-simulator#sim-cap: a file written before the setting reads as the default cap.
+								...(!('simulatorDevices' in value.agents)
+									? { simulatorDevices: defaultAppSettings.agents.simulatorDevices }
+									: {}),
 							},
 						}
 					: {};

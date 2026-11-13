@@ -133,7 +133,8 @@ const whenToUse: Record<string, string> = {
 		'Call it when the person speaks of the console, a terminal, a log or a server they started, before you ask them for its output.',
 	console_read:
 		'Call it to read an error or a log the person sees in the console, and again after a change to see the new lines.',
-	simulator_state: 'Call it before simulator_open to see the selected device and whether it runs.',
+	simulator_state:
+		'Call it before simulator_open to see your device, whether it runs, and which devices are free; pass device to any simulator tool to take another kind.',
 	simulator_open: 'Call it before you check a React Native or mobile change on the device.',
 	simulator_ui:
 		'Call it to find what to tap. After simulator_act you do not need it: the answer already lists what changed.',
@@ -485,27 +486,28 @@ const humanTools: Tool[] = [
 	},
 ];
 // spec/browser-and-simulator#sim-tools: eight simulator tools — six see and drive the screen (points, not pixels), two read the app through Metro.
-// The device is not an argument yet: every tool works on the project device.
+// spec/browser-and-simulator#sim-lease: every tool takes `device`; without it the task's own device, else the project's.
 const point = z.number().min(0).max(10_000);
+const device = z
+	.string()
+	.min(1)
+	.max(128)
+	.optional()
+	.describe(
+		"The device to use: a kind (iPhone, iPad, Android), a model (iPhone 17 Pro, Pixel 9), or a name or id from simulator_state. It becomes your task's device. Leave it out to keep your task's device, else the project's. A crew worker gets a device of its own (an iOS copy with the app installed) when one can start, and its own Metro port."
+	);
 const simulatorTools: Tool[] = (
 	[
 		[
 			'state',
-			'State of the project simulator: the selected device, whether it runs, its screen size in points, the devices available.',
-			{},
+			"State of your task's simulator device (or the project's, until you use one): whether it runs, its screen size in points, the local devices running against the cap, low memory, your task's Metro port, and every device with who holds it.",
+			{ device },
 		],
 		[
 			'open',
-			'Start the project simulator device (or the one named by device: a name or id from simulator_state) and wait until it runs; optionally launch an app by bundle id or open a URL or deep link on it. The human sees the device in the task window.',
+			"Start your task's simulator device (or the one named by device) and wait until it runs, then point the app at your task's Metro when it runs in your worktree; optionally launch an app by bundle id or open a URL or deep link on it. The human sees the device in the task window. When simulator_state says no device is chosen, pass the device the app is built and installed on.",
 			{
-				device: z
-					.string()
-					.min(1)
-					.max(128)
-					.optional()
-					.describe(
-						'Pass the device the app is built and installed on when simulator_state says no device is chosen; the device you pass becomes the project device.'
-					),
+				device,
 				app: z
 					.string()
 					.regex(/^[A-Za-z0-9._-]{1,255}$/)
@@ -516,12 +518,13 @@ const simulatorTools: Tool[] = (
 		[
 			'ui',
 			'The accessibility tree of the device screen, one element a line: role, label, #testID and frame in points. Use it before simulator_screenshot: it is cheaper and gives exact targets. Long screens come in pages: pass offset.',
-			{ grid: z.boolean().optional(), offset: z.number().int().min(0).optional() },
+			{ device, grid: z.boolean().optional(), offset: z.number().int().min(0).optional() },
 		],
 		[
 			'act',
 			'One action on the device: tap, longpress or swipe at x,y (points) or at an element by id (testID) or label; swipe ends at x2,y2; type text into the focused field; key presses a KeyboardEvent code (Enter, Backspace, ArrowDown); button presses home, lock or (Android) back; rotate turns the device right. Answers once the screen has been still for 0.4 s (5 s at most, and it says so when the screen was still moving), with what changed in the accessibility tree: elements that appeared (+), disappeared (-) or changed label or value (~); on Android it gives no tree changes. The human sees each touch marked on the screen.',
 			{
+				device,
 				action: z.enum(['tap', 'longpress', 'swipe', 'type', 'key', 'button', 'rotate']),
 				x: point.optional(),
 				y: point.optional(),
@@ -538,6 +541,7 @@ const simulatorTools: Tool[] = (
 			'wait',
 			'Waits on the device until an element appears, or with gone: true disappears: text (in a label or value, ignoring case), id (testID) or label, exactly one. Reads the accessibility tree each time the screen changes, up to timeoutMs (default 10000, at most 30000). Answers with the element found, or a timeout and the screen as it was last read.',
 			{
+				device,
 				text: z.string().min(1).max(500).optional(),
 				id: z.string().min(1).max(500).optional(),
 				label: z.string().min(1).max(500).optional(),
@@ -548,12 +552,13 @@ const simulatorTools: Tool[] = (
 		[
 			'screenshot',
 			'A JPEG of the device screen as the human sees it, the longer side up to 1000 px: for looking at pixels. Prefer simulator_ui for finding elements; simulator_act already says whether an action worked.',
-			{},
+			{ device },
 		],
 		[
 			'logs',
 			'Logs of the React Native app on the device, newest last (up to 100): source js (console and errors with stacks, through Metro; default) or native (the app process, last 2 minutes). Filter by the lowest level and by text.',
 			{
+				device,
 				source: z.enum(['js', 'native']).optional(),
 				level: z.enum(['debug', 'log', 'info', 'warn', 'error']).optional(),
 				grep: z.string().min(1).max(500).optional(),
@@ -563,6 +568,7 @@ const simulatorTools: Tool[] = (
 			'network',
 			'Requests of the React Native app through Metro, one a line (id, method, status, time, size, URL), newest last; filter by URL text. With requestId: headers and the body (text up to 16 KiB).',
 			{
+				device,
 				requestId: z
 					.string()
 					.regex(/^[A-Za-z0-9._-]{1,128}$/)

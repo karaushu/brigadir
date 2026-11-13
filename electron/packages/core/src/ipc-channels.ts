@@ -2556,7 +2556,7 @@ export const ipcTable = {
 		channel: 'simulator:command',
 		class: 'remote',
 		arity: 2,
-		validate: (a) => a.length === 2 && isId(a[0]) && isSimulatorCommand(a[1]),
+		validate: (a) => a.length === 2 && isTaskKey(a[0]) && isSimulatorCommand(a[1]),
 	},
 	readSimulatorToolchain: {
 		kind: 'invoke',
@@ -3488,6 +3488,7 @@ export const ipcTable = {
 			isTaskKey(a[0]) &&
 			isSessionCommand(a[1]) &&
 			a[1].kind !== 'quickAsk' &&
+			a[1].kind !== 'recordDevice' &&
 			(!isMainTree(a[0]) || ['checkpoint', 'setScope', 'recordPullRequest'].includes(a[1].kind)),
 	},
 	onSessionEvent: { kind: 'subscribe', channel: 'session:event', class: 'remote' },

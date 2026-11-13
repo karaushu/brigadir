@@ -10,6 +10,7 @@ import {
 	type Typography,
 } from './typography';
 import { isRecord } from './workspace';
+import { isSimulatorDeviceLimit, simulatorDeviceLimits } from './simulator';
 import { defaultIndentSize, indentStyles, isIndentWidth, type IndentStyle } from './indent';
 import { selectLocale, type Locale } from './messages';
 import {
@@ -58,6 +59,7 @@ export type AgentDefaults = {
 		string | null;
 	/** spec/agents-and-providers#compaction-window: the context size in tokens at which a new session compacts; null — the agent's own default. */ compactionWindow:
 		number | null;
+	/** spec/browser-and-simulator#sim-cap: how many local simulator devices may run at once. */ simulatorDevices: number;
 };
 /** spec/agents-and-providers#compaction-window: the window a settings file without the key reads as, and the bounds a saved value keeps to. */
 export const defaultCompactionWindow = 200_000;
@@ -274,6 +276,7 @@ export const defaultAppSettings: AppSettings = {
 		prSummary: true,
 		claudeSubagentModel: null,
 		compactionWindow: defaultCompactionWindow,
+		simulatorDevices: simulatorDeviceLimits.default,
 	},
 	notifications: defaultNotificationPreferences,
 	editor: {
@@ -302,7 +305,8 @@ export const defaultAppSettings: AppSettings = {
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 16 &&
+		Object.keys(value).length === 17 &&
+		isSimulatorDeviceLimit(value.simulatorDevices) &&
 		(value.compactionWindow === null || isCompactionWindow(value.compactionWindow)) &&
 		typeof value.prSummary === 'boolean' &&
 		(value.claudeSubagentModel === null ||

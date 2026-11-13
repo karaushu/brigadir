@@ -1,11 +1,18 @@
 import { expect, it } from 'vitest';
 import {
 	devicePoint,
+	gateOpen,
 	hidUsage,
 	isProjectSimulator,
 	isSimulatorCommand,
+	matchDevices,
 	orientationAngle,
+	simulatorLeases,
+	type SimulatorDevice,
 } from './simulator';
+import { isSimulatorAgentCommand } from './simulator-agent';
+import { isSessionCommand, isSessionEvent } from './index';
+import { ipcTable } from './ipc-channels';
 it('accepts only the simulator commands the column and the agent send (spec/browser-and-simulator#simulator)', () => {
 	for (const command of [
 		{ kind: 'state' },
@@ -65,4 +72,113 @@ it('turns an interface point into the device frame the way the iOS frame lies (p
 		orientationAngle('landscapeRight'),
 		orientationAngle('portraitUpsideDown'),
 	]).toEqual([0, -90, 90, 180]);
+});
+
+it('reads lease records leniently: a bad entry goes, the others and old documents stay (spec/browser-and-simulator#sim-lease)', () => {
+	expect(
+		simulatorLeases({
+			solo: { platform: 'ios', device: 'AAAA-1' },
+			worker: {
+				platform: 'ios',
+				device: 'COPY',
+				own: { source: 'AAAA-1', reinstalled: false },
+				metroPort: 8083,
+			},
+			port: { metroPort: 8084 },
+			half: { platform: 'ios' },
+			path: { platform: 'ios', device: '../etc' },
+			extra: { platform: 'ios', device: 'X', color: 'red' },
+			low: { metroPort: 80 },
+			'bad id!': { platform: 'ios', device: 'X' },
+		})
+	).toEqual({
+		solo: { platform: 'ios', device: 'AAAA-1' },
+		worker: {
+			platform: 'ios',
+			device: 'COPY',
+			own: { source: 'AAAA-1', reinstalled: false },
+			metroPort: 8083,
+		},
+		port: { metroPort: 8084 },
+	});
+	expect(simulatorLeases(undefined)).toEqual({});
+	// project.json keeps its old `simulator` shape: the project's device.
+	expect(isProjectSimulator({ platform: 'ios', device: 'AAAA-1' })).toBe(true);
+});
+it('matches a device by id, name, kind or part of the name, running and newer first (spec/browser-and-simulator#sim-lease)', () => {
+	const devices: SimulatorDevice[] = [
+		{ id: 'A', name: 'iPhone 17 Pro', platform: 'ios', os: 'iOS 27', booted: false },
+		{ id: 'B', name: 'iPhone 16', platform: 'ios', os: 'iOS 26.5', booted: true },
+		{ id: 'C', name: 'iPad Air 11-inch (M4)', platform: 'ios', os: 'iOS 27', booted: false },
+		{ id: 'D', name: 'Pixel 9 Pro', platform: 'android', os: 'Android 16', booted: false },
+		{ id: 'E', name: 'iPhone 17 Pro', platform: 'ios', os: 'iOS 26.5', booted: false },
+	];
+	const ids = (wanted: string) => matchDevices(devices, wanted).map((item) => item.id);
+	expect(ids('E')).toEqual(['E']);
+	expect(ids('iphone 17 pro')).toEqual(['A', 'E']);
+	expect(ids('iPhone')).toEqual(['B', 'A', 'E']);
+	expect(ids('iPad')).toEqual(['C']);
+	expect(ids('Android')).toEqual(['D']);
+	expect(ids('pixel')).toEqual(['D']);
+	expect(ids('Galaxy')).toEqual([]);
+	expect(ids('  ')).toEqual([]);
+});
+it('opens the gate under the cap without memory pressure; the person lifts only low memory (spec/browser-and-simulator#sim-cap)', () => {
+	expect(gateOpen({ running: 1, max: 2, lowMemory: false })).toBe(true);
+	expect(gateOpen({ running: 2, max: 2, lowMemory: false })).toBe(false);
+	expect(gateOpen({ running: 1, max: 2, lowMemory: true })).toBe(false);
+	expect(gateOpen({ running: 1, max: 2, lowMemory: true }, true)).toBe(true);
+	expect(gateOpen({ running: 2, max: 2, lowMemory: true }, true)).toBe(false);
+});
+it('takes `device` on every simulator tool and `anyway` only on boot (spec/browser-and-simulator#sim-tools)', () => {
+	for (const tool of ['state', 'open', 'ui', 'screenshot', 'logs', 'network'])
+		expect(isSimulatorAgentCommand({ tool, device: 'iPad' })).toBe(true);
+	expect(
+		isSimulatorAgentCommand({ tool: 'act', action: 'tap', x: 1, y: 2, device: 'Pixel 9' })
+	).toBe(true);
+	expect(isSimulatorAgentCommand({ tool: 'wait', text: 'Saved', device: 'iPhone' })).toBe(true);
+	expect(isSimulatorAgentCommand({ tool: 'ui', device: '' })).toBe(false);
+	expect(isSimulatorAgentCommand({ tool: 'ui', device: 'x'.repeat(129) })).toBe(false);
+	expect(isSimulatorCommand({ kind: 'boot', anyway: true })).toBe(true);
+	expect(isSimulatorCommand({ kind: 'boot', anyway: false })).toBe(false);
+	expect(isSimulatorCommand({ kind: 'boot' })).toBe(true);
+});
+it('journals the device row as its own event kind; only main sends it (spec/browser-and-simulator#sim-chat-row)', () => {
+	expect(
+		isSessionEvent({
+			kind: 'simulator.device',
+			device: 'iPhone Air',
+			metroPort: null,
+			lowMemory: true,
+		})
+	).toBe(true);
+	expect(
+		isSessionEvent({
+			kind: 'simulator.device',
+			device: 'iPhone Air',
+			metroPort: 8083,
+			lowMemory: false,
+		})
+	).toBe(true);
+	expect(
+		isSessionEvent({ kind: 'simulator.device', device: '', metroPort: null, lowMemory: false })
+	).toBe(false);
+	expect(
+		isSessionEvent({ kind: 'simulator.device', device: 'iPhone', metroPort: 0, lowMemory: false })
+	).toBe(false);
+	expect(
+		isSessionCommand({ kind: 'recordDevice', device: 'iPhone', metroPort: null, lowMemory: false })
+	).toBe(true);
+	expect(isSessionCommand({ kind: 'recordDevice', device: 'iPhone', metroPort: null })).toBe(false);
+});
+it('lets a window send a task key with its simulator commands, never the device row (spec/browser-and-simulator#sim-lease)', () => {
+	const key = { projectId: 'project', id: 'task' };
+	expect(ipcTable.simulatorCommand.validate([key, { kind: 'state' }])).toBe(true);
+	expect(ipcTable.simulatorCommand.validate(['project', { kind: 'state' }])).toBe(false);
+	expect(
+		ipcTable.sendCommand.validate([
+			key,
+			{ kind: 'recordDevice', device: 'iPhone', metroPort: null, lowMemory: false },
+		])
+	).toBe(false);
 });

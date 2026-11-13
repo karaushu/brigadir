@@ -112,6 +112,11 @@ const checks: Record<string, Check> = {
 		scopeId: (v) => typeof v === 'string' && /^[a-f0-9]{16}$/.test(v),
 		pr: isPRRef,
 	}),
+	'simulator.device': object({
+		device: (v) => typeof v === 'string' && v.length > 0 && v.length <= 200,
+		metroPort: nil((v) => Number.isSafeInteger(v) && Number(v) > 0 && Number(v) <= 65_535),
+		lowMemory: bool,
+	}),
 	'scopes.changed': object({}),
 	'scope.violation': object({
 		scopeId: (v) => typeof v === 'string' && /^[a-f0-9]{16}$/.test(v),

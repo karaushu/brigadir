@@ -13,7 +13,9 @@ function words(items: readonly (string | false | undefined)[], last: 'and' | 'or
 		: (kept[0] ?? '');
 }
 const sharedSimulator =
-	'The device is shared with your crew: while another agent uses it, your call waits up to 60 seconds; if it is still busy, do other work and retry later.';
+	'You get a device of your own when one can start, and your own Metro port (RCT_METRO_PORT, in your session and terminals): start Metro in your worktree on it. When no device can start (the device cap, low memory), you share one with your crew: while another agent uses it, your call waits up to 60 seconds; if it is still busy, do other work and retry later.';
+const deviceKinds =
+	'Pass device to any simulator tool to use another kind (iPhone, iPad, Android, a model such as iPhone 17 Pro); simulator_state lists the devices and who holds each.';
 /** spec/agents-and-providers#tools-awareness: the `instructions` of `initialize`; the console line stays when every module is off (spec/terminal-and-cli-agents#agent-console-tools). */
 export function toolsInstructions(role: CrewProcessRole | null, tools: WorkspaceTools): string {
 	const lines: string[] = [];
@@ -23,7 +25,7 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: Workspace
 		);
 	if (tools.simulator)
 		lines.push(
-			`- The project simulator, an iOS Simulator or Android Emulator device (simulator_*). For a React Native or other mobile app, check your change on the device${role === 'developer' ? ' when your task prompt asks for it' : ''}: simulator_open, simulator_ui, simulator_act, simulator_wait, simulator_screenshot, simulator_logs. simulator_act already waits for the screen to settle and lists what changed: do not sleep or take a screenshot to check a tap, and use simulator_wait for what comes later.${simulatorQueued(role) ? ` ${sharedSimulator}` : ''}`
+			`- The project simulator, an iOS Simulator or Android Emulator device (simulator_*). For a React Native or other mobile app, check your change on the device${role === 'developer' ? ' when your task prompt asks for it' : ''}: simulator_open, simulator_ui, simulator_act, simulator_wait, simulator_screenshot, simulator_logs. simulator_act already waits for the screen to settle and lists what changed: do not sleep or take a screenshot to check a tap, and use simulator_wait for what comes later. ${deviceKinds}${simulatorQueued(role) ? ` ${sharedSimulator}` : ''}`
 		);
 	if (tools.commands)
 		lines.push(
@@ -64,7 +66,8 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: Workspace
 export function toolsBrief(role: CrewProcessRole | null, tools: WorkspaceTools): string {
 	const named = [
 		tools.browser && 'a real browser (browser_open, browser_ui, browser_screenshot, browser_act)',
-		tools.simulator && 'the project simulator for a React Native or mobile app (simulator_*)',
+		tools.simulator &&
+			'the project simulator for a React Native or mobile app (simulator_*, with device for another kind: iPhone, iPad, Android)',
 		tools.commands && "the project's saved commands (commands_*)",
 		'the console of this task (console_list, console_read)',
 	];
@@ -75,7 +78,7 @@ export function toolsBrief(role: CrewProcessRole | null, tools: WorkspaceTools):
 			: '';
 	const queue =
 		tools.simulator && simulatorQueued(role)
-			? ' The simulator is shared with your crew: a call may wait for it, and if it stays busy, retry later.'
+			? ' You get a simulator device and a Metro port of your own when one can start; otherwise a call may wait for the shared device, and if it stays busy, retry later.'
 			: '';
 	return `This app gives you ${list}.${check}${queue}`;
 }

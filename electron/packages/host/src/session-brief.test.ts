@@ -124,8 +124,9 @@ it('names the tools in the brief of Codex and the CLI only, built from the modul
 	expect(toolsBrief(null, none)).toBe(
 		'This app gives you the console of this task (console_list, console_read).'
 	);
-	expect(toolsBrief('developer', allOn)).toContain('shared with your crew');
-	expect(toolsBrief(null, allOn)).not.toContain('shared with your crew');
+	expect(toolsBrief('developer', allOn)).toContain('a Metro port of your own');
+	expect(toolsBrief(null, allOn)).not.toContain('a Metro port of your own');
+	expect(toolsBrief(null, allOn)).toContain('device for another kind');
 });
 
 // spec/agents-and-providers#tools-awareness: the whole first-prompt brief of a solo agent, a foreman and a worker, with every module on, as goldens.

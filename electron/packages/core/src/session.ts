@@ -182,11 +182,15 @@ export type SessionEvent =
 	| { kind: 'scope.violation'; scopeId: string; name: string; paths: string[]; checkpoint: number }
 	| { kind: 'checkpoint.created'; checkpoint: number }
 	| { kind: 'snapshot.failed'; message: string }
+	/** spec/browser-and-simulator#sim-chat-row: the task's lease moved to `device` (its name), or the person started it past low memory. */
+	| { kind: 'simulator.device'; device: string; metroPort: number | null; lowMemory: boolean }
 	| { kind: 'host.stopped'; reason: string };
 export type EventRecord = { schemaVersion: 1; seq: number; at: string; event: SessionEvent };
 export type SessionCommand =
 	| AgentCommand
 	| { kind: 'recordPullRequest'; scopeId: string; pr: PRRef }
+	/** spec/browser-and-simulator#sim-chat-row: main journals the task's device row; never sent by a window. */
+	| { kind: 'recordDevice'; device: string; metroPort: number | null; lowMemory: boolean }
 	| { kind: 'setScope'; update: ScopeUpdate }
 	/** spec/projects-and-board#folders-mid-task: a folder from outside the root joins the task chosen, also while its agent runs. */
 	| { kind: 'addScope'; choice: ScopeChoice }
@@ -396,6 +400,18 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 	switch (v.kind) {
 		case 'recordPullRequest':
 			return typeof v.scopeId === 'string' && /^[a-f0-9]{16}$/.test(v.scopeId) && isPRRef(v.pr);
+		case 'recordDevice':
+			return (
+				Object.keys(v).length === 4 &&
+				typeof v.device === 'string' &&
+				v.device.length > 0 &&
+				v.device.length <= 200 &&
+				(v.metroPort === null ||
+					(Number.isSafeInteger(v.metroPort) &&
+						Number(v.metroPort) > 0 &&
+						Number(v.metroPort) <= 65_535)) &&
+				typeof v.lowMemory === 'boolean'
+			);
 		case 'setScope':
 			return isScopeUpdate(v.update);
 		case 'addScope':

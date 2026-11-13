@@ -1843,6 +1843,16 @@ export async function startHost(config: HostConfig) {
 		if (c.kind !== 'recordPullRequest') touchIdle();
 		await settleCompletedTurn();
 		if (stopping) throw new Error('Host is stopping');
+		// spec/browser-and-simulator#sim-chat-row: main's device row, journaled like any event of the task.
+		if (c.kind === 'recordDevice') {
+			await emit({
+				kind: 'simulator.device',
+				device: c.device,
+				metroPort: c.metroPort,
+				lowMemory: c.lowMemory,
+			});
+			return;
+		}
 		if (c.kind === 'recordPullRequest') {
 			await saveFinished;
 			if (!snapshots?.current.scopes.some((scope) => scope.id === c.scopeId))

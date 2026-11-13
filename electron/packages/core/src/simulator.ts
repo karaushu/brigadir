@@ -1,12 +1,111 @@
 import { isRecord } from './workspace';
+import type { TaskKey } from './session';
 /**
- * spec/browser-and-simulator#simulator: the simulator column. A device belongs to the project, not the task: every task of the project shows the same
- * device and the same frames. `id` is the simctl UDID (iOS) or the AVD name (Android).
+ * spec/browser-and-simulator#simulator: the simulator column. A task shows the device it holds a lease on, else the project's device
+ * (spec/browser-and-simulator#sim-lease). `id` is the simctl UDID (iOS) or the AVD name (Android).
  */
 export const simulatorPlatforms = ['ios', 'android'] as const;
 export type SimulatorPlatform = (typeof simulatorPlatforms)[number];
-/** project.json `simulator`: the device the project chose last. */
+/** project.json `simulator`: the project's default device (spec/browser-and-simulator#sim-device). */
 export type ProjectSimulator = { platform: SimulatorPlatform; device: string };
+/**
+ * spec/browser-and-simulator#sim-lease: one task's record in `projects/<id>/simulator-devices.json`: its lease (`platform`, `device`). `own` — a copy made for this task
+ * (spec/browser-and-simulator#sim-own-device), `reinstalled` once its apps run from its own folders; `metroPort` — spec/browser-and-simulator#metro-port.
+ */
+export type SimulatorLease = {
+	platform?: SimulatorPlatform;
+	device?: string;
+	own?: { source: string; reinstalled: boolean };
+	metroPort?: number;
+};
+export type SimulatorLeases = Record<string, SimulatorLease>;
+const deviceId = (value: unknown) =>
+	typeof value === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(value);
+export const metroPortRange = { min: 1024, max: 65_535 } as const;
+export function isSimulatorLease(value: unknown): value is SimulatorLease {
+	if (!isRecord(value)) return false;
+	const keys = Object.keys(value);
+	return (
+		keys.every((key) => ['platform', 'device', 'own', 'metroPort'].includes(key)) &&
+		// A record of a task that has a Metro port but no device yet has neither.
+		((value.platform === undefined && value.device === undefined && value.own === undefined) ||
+			(simulatorPlatforms.includes(value.platform as SimulatorPlatform) &&
+				deviceId(value.device))) &&
+		(value.own === undefined ||
+			(isRecord(value.own) &&
+				Object.keys(value.own).length === 2 &&
+				deviceId(value.own.source) &&
+				typeof value.own.reinstalled === 'boolean')) &&
+		(value.metroPort === undefined ||
+			(Number.isSafeInteger(value.metroPort) &&
+				Number(value.metroPort) >= metroPortRange.min &&
+				Number(value.metroPort) <= metroPortRange.max))
+	);
+}
+/** Leases of a document read from disk; an entry that does not validate is dropped, the others stay. */
+export function simulatorLeases(value: unknown): SimulatorLeases {
+	const leases: SimulatorLeases = {};
+	if (!isRecord(value)) return leases;
+	for (const [taskId, lease] of Object.entries(value))
+		if (/^[A-Za-z0-9_-]{1,128}$/.test(taskId) && isSimulatorLease(lease)) leases[taskId] = lease;
+	return leases;
+}
+/**
+ * spec/browser-and-simulator#sim-tab: who holds a device, seen from one task. `mine` — the task's own device; `queued` — its own device while
+ * another task holds the lane; `task` — another task holds, owns or alone leases it; `tasks` — several other leases, none using it now.
+ * A device missing from `uses` is free.
+ */
+export type SimulatorUse =
+	| { kind: 'mine' }
+	| { kind: 'queued'; holder: TaskKey }
+	| { kind: 'task'; task: TaskKey }
+	| { kind: 'tasks'; count: number };
+/** spec/browser-and-simulator#sim-cap: booted devices against the cap, and whether the system reports memory pressure. */
+export type SimulatorGate = { running: number; max: number; lowMemory: boolean };
+/** The fewest and most local devices the setting allows (spec/browser-and-simulator#sim-cap). */
+export const simulatorDeviceLimits = { min: 1, max: 8, default: 2 } as const;
+export function isSimulatorDeviceLimit(value: unknown): value is number {
+	return (
+		Number.isSafeInteger(value) &&
+		Number(value) >= simulatorDeviceLimits.min &&
+		Number(value) <= simulatorDeviceLimits.max
+	);
+}
+/** Whether a device that is off may start now: under the cap, and memory not low unless the person lifted that block. */
+export function gateOpen(gate: SimulatorGate, anyway = false) {
+	return gate.running < gate.max && (!gate.lowMemory || anyway);
+}
+/**
+ * spec/browser-and-simulator#sim-lease: the devices a `device` argument names, best first. Exact id, then exact name, then a kind (`iPhone`,
+ * `iPad`, `Android`) or a part of the name, ignoring case; among equals a running device and a newer OS come first.
+ */
+export function matchDevices(
+	devices: readonly SimulatorDevice[],
+	wanted: string
+): SimulatorDevice[] {
+	const text = wanted.trim().toLocaleLowerCase();
+	if (!text) return [];
+	const exact = devices.filter((device) => device.id === wanted.trim());
+	if (exact.length) return exact;
+	const order = (list: SimulatorDevice[]) =>
+		[...list].sort(
+			(a, b) =>
+				Number(b.booted) - Number(a.booted) ||
+				osNumber(b.os) - osNumber(a.os) ||
+				a.name.localeCompare(b.name)
+		);
+	const named = devices.filter((device) => device.name.toLocaleLowerCase() === text);
+	if (named.length) return order(named);
+	const kind = devices.filter((device) =>
+		text === 'android'
+			? device.platform === 'android'
+			: text === 'ios'
+				? device.platform === 'ios'
+				: device.name.toLocaleLowerCase().includes(text)
+	);
+	return order(kind);
+}
+const osNumber = (os: string) => Number(/(\d+(?:\.\d+)?)/.exec(os)?.[1] ?? 0);
 export type SimulatorDevice = {
 	id: string;
 	name: string;
@@ -60,8 +159,11 @@ export function devicePoint(orientation: SimulatorOrientation, x: number, y: num
 			return { x, y };
 	}
 }
-/** `metro` — the Metro of the project the client attached to, for the column's chip. */
-/** `screen` is the device in its portrait points; `orientation` turns it; `metros` — every Metro of the project found. */
+/**
+ * One task's view of the simulator. `device` — the task's lease, else the project's device; `screen` is the device in its portrait points;
+ * `orientation` turns it; `metro` — the Metro the task's client attached to, for the column's chip; `uses` — who holds each device
+ * (spec/browser-and-simulator#sim-tab); `gate` — spec/browser-and-simulator#sim-cap; `metroPort` — the task's own port (spec/browser-and-simulator#metro-port).
+ */
 export type SimulatorState = {
 	toolchain: SimulatorToolchain;
 	devices: SimulatorDevice[];
@@ -71,6 +173,9 @@ export type SimulatorState = {
 	screen: { width: number; height: number } | null;
 	orientation: SimulatorOrientation;
 	metro: { port: number; appId: string; root: string } | null;
+	uses: Record<string, SimulatorUse>;
+	gate: SimulatorGate;
+	metroPort: number | null;
 };
 /** WebCodecs `VideoDecoder.configure` input: AVCC H.264, `description` is the avcC record in base64. */
 export type SimulatorVideoConfig = {
@@ -80,21 +185,26 @@ export type SimulatorVideoConfig = {
 	description: string;
 };
 export type SimulatorFrame = { key: boolean; timestamp: number; data: Uint8Array };
-/** `tap` marks an agent's touch for ~600 ms; `show` opens the column in the agent's task. */
+/**
+ * `state` — one task's view; `config` and `tap` belong to a device (every tab showing it takes them); `tap` marks an agent's touch for
+ * ~600 ms; `show` opens the column in the agent's task.
+ */
 export type SimulatorEvent =
-	| { projectId: string; state: SimulatorState }
-	| { projectId: string; config: SimulatorVideoConfig }
-	| { projectId: string; tap: { x: number; y: number; label: string } }
-	| { projectId: string; show: { projectId: string; id: string } }
-	/** spec/agents-and-providers#tools-awareness: the tasks of the project whose agent waits for the device, in queue order. */
+	| { key: TaskKey; state: SimulatorState }
+	| { device: string; config: SimulatorVideoConfig }
+	| { device: string; tap: { x: number; y: number; label: string } }
+	| { show: TaskKey }
+	/** spec/agents-and-providers#tools-awareness: the tasks of the project whose agent waits for a device, in queue order. */
 	| { projectId: string; waiting: string[] };
 /** `back` is Android's; iOS has no hardware Back. */
 export type SimulatorButton = 'home' | 'lock' | 'back';
 export type SimulatorCommand =
 	| { kind: 'state' }
 	| { kind: 'refresh' }
+	/** spec/browser-and-simulator#sim-lease: the task's lease moves to this device (the person's pick also sets the project's). */
 	| { kind: 'select'; device: string }
-	| { kind: 'boot' }
+	/** spec/browser-and-simulator#sim-cap: `anyway` — the person lifted the low-memory block for this start. */
+	| { kind: 'boot'; anyway?: true }
 	/** spec/task-window-workspace#tool-tab-look.1: `device` shuts that running device down from the picker; without it, the project's device. */
 	| { kind: 'shutdown'; device?: string }
 	/** The column is on screen: frames flow while at least one column of the project watches. */
@@ -140,6 +250,10 @@ export function isSimulatorCommand(value: unknown): value is SimulatorCommand {
 					/^[A-Za-z0-9._-]{1,128}$/.test(value.device))
 			);
 		case 'boot':
+			return (
+				Object.keys(value).length === 1 ||
+				(Object.keys(value).length === 2 && value.anyway === true)
+			);
 		case 'paste':
 			return (
 				Object.keys(value).length === 1 ||

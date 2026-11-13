@@ -1176,6 +1176,15 @@ const uk = {
 	'{device} is off': '{device} вимкнений',
 	'{device} is starting…': '{device} стартує…',
 	'Shut down {device}': 'Вимкнути {device}',
+	queued: 'у черзі',
+	'{device} · waits for {task}': '{device} · чекає на {task}',
+	'Memory is low. New devices are off.': 'Мало памʼяті. Нові пристрої не запускаються.',
+	'Memory is low.': 'Мало памʼяті.',
+	'Start anyway': 'Усе одно запустити',
+	'Local devices': 'Локальні пристрої',
+	'How many simulators run at once.': 'Скільки симуляторів працює одночасно.',
+	'Simulator settings': 'Налаштування симулятора',
+	'started with low memory': 'запущено попри брак памʼяті',
 	'Hide simulator': 'Сховати симулятор',
 	Rotate: 'Повернути',
 	'No simulators': 'Немає симуляторів',
@@ -4857,6 +4866,16 @@ export function noteLineCount(locale: Locale, count: number): string {
 			? { one: 'рядок', few: 'рядки', many: 'рядків', other: 'рядка' }
 			: { one: 'line', few: 'lines', many: 'lines', other: 'lines' };
 	return `${new Intl.NumberFormat(locale).format(count)} ${forms[form as keyof typeof forms] ?? forms.other}`;
+}
+/** spec/browser-and-simulator#sim-cap: «2 of 2 devices run.» — the list footer at the cap; four forms for uk (rule 9). */
+export function devicesRunning(locale: Locale, running: number, max: number): string {
+	const form = new Intl.PluralRules(locale).select(max) as 'one' | 'few' | 'many' | 'other';
+	const number = new Intl.NumberFormat(locale);
+	if (locale === 'uk') {
+		const forms = { one: 'пристрою', few: 'пристроїв', many: 'пристроїв', other: 'пристрою' };
+		return `Працює ${number.format(running)} з ${number.format(max)} ${forms[form]}.`;
+	}
+	return `${number.format(running)} of ${number.format(max)} ${max === 1 ? 'device runs' : 'devices run'}.`;
 }
 export function taskCount(locale: Locale, count: number): string {
 	const form = new Intl.PluralRules(locale).select(count);

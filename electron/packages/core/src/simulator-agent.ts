@@ -34,11 +34,23 @@ export type SimulatorActRequest = {
 	key?: string;
 	button?: 'home' | 'lock' | 'back';
 };
+/** spec/browser-and-simulator#sim-wait: exactly one of `text`, `id`, `label`; `gone` waits for it to disappear. */
+export type SimulatorWaitRequest = {
+	text?: string;
+	id?: string;
+	label?: string;
+	gone?: boolean;
+	timeoutMs?: number;
+};
+/** spec/browser-and-simulator#sim-wait: the longest and the default wait. */
+export const simulatorWaitMaxMs = 30_000;
+export const simulatorWaitDefaultMs = 10_000;
 export type SimulatorAgentCommand =
 	| { tool: 'state' }
 	| { tool: 'open'; device?: string; app?: string; url?: string }
 	| { tool: 'ui'; grid?: boolean; offset?: number }
 	| ({ tool: 'act' } & SimulatorActRequest)
+	| ({ tool: 'wait' } & SimulatorWaitRequest)
 	| { tool: 'screenshot' }
 	| {
 			tool: 'logs';
@@ -82,6 +94,16 @@ export function isSimulatorAgentCommand(value: unknown): value is SimulatorAgent
 				(value.key === undefined || text(value.key, 32)) &&
 				(value.button === undefined || ['home', 'lock', 'back'].includes(value.button as string))
 			);
+		case 'wait':
+			return (
+				['text', 'id', 'label'].filter((key) => value[key] !== undefined).length === 1 &&
+				['text', 'id', 'label'].every((key) => value[key] === undefined || text(value[key], 500)) &&
+				(value.gone === undefined || typeof value.gone === 'boolean') &&
+				(value.timeoutMs === undefined ||
+					(Number.isSafeInteger(value.timeoutMs) &&
+						Number(value.timeoutMs) >= 0 &&
+						Number(value.timeoutMs) <= simulatorWaitMaxMs))
+			);
 		case 'logs':
 			return (
 				(value.source === undefined || value.source === 'js' || value.source === 'native') &&
@@ -100,23 +122,30 @@ export function isSimulatorAgentCommand(value: unknown): value is SimulatorAgent
 			return false;
 	}
 }
-/** One element a line: `Button "Take order" #take-order 12,622 378×48`, in points; 150 lines and 32 KiB at most (spec/architecture-and-platform#perf-agent-responses). */
-export function formatUi(ui: SimulatorUi, offset = 0) {
+/** `Button "Take order" = "value" #take-order 12,622 378×48`, in points. */
+export function formatElement(element: SimulatorElement) {
+	const [x, y, w, h] = element.frame.map(Math.round) as [number, number, number, number];
+	return `${element.role || 'Element'}${element.label ? ` ${JSON.stringify(element.label)}` : ''}${element.value ? ` = ${JSON.stringify(element.value)}` : ''}${element.id ? ` #${element.id}` : ''} ${x},${y} ${w}×${h}`;
+}
+/**
+ * One element a line, `limit` lines and 32 KiB at most (spec/architecture-and-platform#perf-agent-responses); `again` names the call that
+ * pages on.
+ */
+export function formatUi(ui: SimulatorUi, offset = 0, limit = 150, again = 'call again') {
 	const lines: string[] = [
 		`Screen ${Math.round(ui.width)}×${Math.round(ui.height)} pt · ${ui.elements.length} elements`,
 	];
 	let size = lines[0]!.length,
 		shown = 0;
-	for (const element of ui.elements.slice(offset, offset + 150)) {
-		const [x, y, w, h] = element.frame.map(Math.round) as [number, number, number, number];
-		const line = `${element.role || 'Element'}${element.label ? ` ${JSON.stringify(element.label)}` : ''}${element.value ? ` = ${JSON.stringify(element.value)}` : ''}${element.id ? ` #${element.id}` : ''} ${x},${y} ${w}×${h}`;
+	for (const element of ui.elements.slice(offset, offset + limit)) {
+		const line = formatElement(element);
 		if (size + line.length + 1 > 32 * 1024) break;
 		lines.push(line);
 		size += line.length + 1;
 		shown++;
 	}
 	const rest = ui.elements.length - offset - shown;
-	if (rest > 0) lines.push(`… ${rest} more: call again with offset ${offset + shown}`);
+	if (rest > 0) lines.push(`… ${rest} more: ${again} with offset ${offset + shown}`);
 	return lines.join('\n');
 }
 /** `testID` first (it becomes the accessibility identifier), then the exact label, then a label that contains the text. */

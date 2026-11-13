@@ -11,9 +11,10 @@ const fs=require('node:fs');const log={write:line=>fs.appendFileSync(process.env
 out(1,{event:'ready',width:1206,height:2622,pointWidth:402,pointHeight:874});
 out(2,{codec:'avc1.640028',width:1206,height:2622,description:'AQID'});
 const frame=Buffer.alloc(12);frame[0]=1;frame.writeBigUInt64BE(1000n,1);frame.set([7,8,9],9);out(3,frame);
-let buffer='';process.stdin.on('data',chunk=>{buffer+=chunk;let index;while((index=buffer.indexOf('\\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);log.write(line+'\\n');const message=JSON.parse(line);
+let buffer='',taken=false;process.stdin.on('data',chunk=>{buffer+=chunk;let index;while((index=buffer.indexOf('\\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);log.write(line+'\\n');const message=JSON.parse(line);
   if(message.cmd==='keyframe')out(3,frame);
-  if(typeof message.id==='number')out(1,message.cmd==='text'&&/[^\\x20-\\x7e]/.test(message.text)?{event:'reply',id:message.id,error:'Only ASCII text can be typed; paste the rest.'}:{event:'reply',id:message.id,result:message.cmd==='screenshot'?{jpeg:'/9j/',width:10,height:20}:message.cmd==='ui'?{width:402,height:874,elements:[...(fs.existsSync(process.env.HELPER_LOG+'.turned')?[{role:'Application',label:'App',frame:[0,0,874,402]}]:[]),{role:'Button',label:'Take order',id:'take-order',frame:[12,622,378,48]}]}:null});}});
+  if(message.cmd==='tap'){taken=true;out(3,frame);}
+  if(typeof message.id==='number')out(1,message.cmd==='text'&&/[^\\x20-\\x7e]/.test(message.text)?{event:'reply',id:message.id,error:'Only ASCII text can be typed; paste the rest.'}:{event:'reply',id:message.id,result:message.cmd==='screenshot'?{jpeg:'/9j/',width:10,height:20}:message.cmd==='ui'?{width:402,height:874,elements:[...(fs.existsSync(process.env.HELPER_LOG+'.turned')?[{role:'Application',label:'App',frame:[0,0,874,402]}]:[]),...(taken?[{role:'Text',label:'Order taken',id:'status',frame:[12,560,378,40]}]:[]),{role:'Button',label:'Take order',id:'take-order',frame:[12,622,378,48]}]}:null});}});
 process.stdin.on('end',()=>process.exit(0));
 `;
 const simctl = JSON.stringify({
@@ -166,8 +167,21 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		expect(await simulators.agent(key, { tool: 'ui' })).toBe(
 			'Screen 402×874 pt · 1 elements\nButton "Take order" #take-order 12,622 378×48'
 		);
-		expect(await simulators.agent(key, { tool: 'act', action: 'tap', id: 'take-order' })).toBe(
-			'Tapped #take-order.'
+		// spec/browser-and-simulator#sim-act-settle: the answer waits for a still screen and lists what changed.
+		expect(await simulators.agent(key, { tool: 'act', action: 'tap', id: 'take-order' })).toMatch(
+			/^Tapped #take-order\. Screen settled in 0\.\d s\.\nChanges: 1 appeared, 0 disappeared, 0 changed\.\n\+ Text "Order taken" #status 12,560 378×40$/
+		);
+		expect(await simulators.agent(key, { tool: 'act', action: 'key', key: 'Enter' })).toMatch(
+			/^Pressed Enter\. Screen settled in 0\.\d s\.\nNo changes in the accessibility tree\.$/
+		);
+		// spec/browser-and-simulator#sim-wait: found at once, or a timeout with the screen as last read.
+		expect(await simulators.agent(key, { tool: 'wait', text: 'order taken' })).toMatch(
+			/^Found Text "Order taken" #status 12,560 378×40 after 0(\.\d)? s\.$/
+		);
+		expect(
+			await simulators.agent(key, { tool: 'wait', id: 'take-order', gone: true, timeoutMs: 300 })
+		).toBe(
+			'Timed out after 0.3 s: #take-order is still on the screen.\nScreen 402×874 pt · 2 elements\nText "Order taken" #status 12,560 378×40\nButton "Take order" #take-order 12,622 378×48'
 		);
 		expect(events).toContainEqual({
 			projectId: 'project',
@@ -462,7 +476,9 @@ it('lists AVDs, starts the emulator without a window, runs the Android helper wi
 				{ projectId: 'project', id: 'task' },
 				{ tool: 'act', action: 'button', button: 'back' }
 			)
-		).toBe('Pressed back.');
+		).toMatch(
+			/^Pressed back\. Screen settled in 0\.\d s\.\nNo tree diff on Android: reading the tree takes seconds\. Call simulator_ui when you need it\.$/
+		);
 		simulators.close();
 		expect(calls).toContainEqual([
 			'detach',

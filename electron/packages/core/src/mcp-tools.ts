@@ -133,6 +133,11 @@ const verbs = {
 	],
 	simulator_ui: ['Reading the screen', 'Read the screen', 'Could not read the screen'],
 	simulator_act: ['Tapping', 'Tapped', 'Could not act on the simulator'],
+	simulator_wait: [
+		'Waiting for the screen',
+		'Waited for the screen',
+		'Could not wait for the screen',
+	],
 	simulator_screenshot: [
 		'Taking a simulator screenshot',
 		'Took a simulator screenshot',
@@ -795,6 +800,9 @@ export function mcpRow(
 					str(a.button) ??
 					(num(a.x) !== null ? `${a.x},${a.y}` : null)
 			);
+			break;
+		case 'simulator_wait':
+			detail = code(str(a.id) ? `#${a.id}` : (str(a.label) ?? str(a.text)));
 			break;
 		case 'simulator_logs':
 			detail = join(plain(str(a.source)), plain(str(a.level)), code(str(a.grep)));

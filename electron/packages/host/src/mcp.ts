@@ -66,6 +66,7 @@ const readOnlyTools = new Set([
 	'browser_ui',
 	'simulator_state',
 	'simulator_ui',
+	'simulator_wait',
 	'simulator_screenshot',
 	'simulator_logs',
 	'simulator_network',
@@ -132,10 +133,14 @@ const whenToUse: Record<string, string> = {
 		'Call it to read an error or a log the person sees in the console, and again after a change to see the new lines.',
 	simulator_state: 'Call it before simulator_open to see the selected device and whether it runs.',
 	simulator_open: 'Call it before you check a React Native or mobile change on the device.',
-	simulator_ui: 'Call it to find what to tap, and again after an action to check the result.',
+	simulator_ui:
+		'Call it to find what to tap. After simulator_act you do not need it: the answer already lists what changed.',
 	simulator_act:
-		'Use it to go through the flow you changed on the device yourself, instead of asking the person to tap through it.',
-	simulator_screenshot: 'Use it to check how the screen looks after a UI change.',
+		'Use it to go through the flow you changed on the device yourself, instead of asking the person to tap through it. It already waits for the screen and reports what changed: do not sleep, take a screenshot or read the tree after it to check that a tap worked.',
+	simulator_wait:
+		'Use it instead of sleep when something comes later than the action: a network response, a toast, a spinner going away.',
+	simulator_screenshot:
+		'Use it to look at pixels after a UI change (layout, colors, images), not to check that a tap worked.',
 	simulator_logs: 'Call it after an action or a reload to catch JS errors and warnings.',
 	simulator_network:
 		'Call it when the app shows wrong or missing data, to see which request failed.',
@@ -469,7 +474,8 @@ const humanTools: Tool[] = [
 		run: async (args, call, signal) => text(await call('pr_state', args, signal)),
 	},
 ];
-// spec/browser-and-simulator#simulator: seven simulator tools — five see and drive the screen (points, not pixels), two read the app through Metro.
+// spec/browser-and-simulator#sim-tools: eight simulator tools — six see and drive the screen (points, not pixels), two read the app through Metro.
+// The device is not an argument yet: every tool works on the project device.
 const point = z.number().min(0).max(10_000);
 const simulatorTools: Tool[] = (
 	[
@@ -504,7 +510,7 @@ const simulatorTools: Tool[] = (
 		],
 		[
 			'act',
-			'One action on the device: tap, longpress or swipe at x,y (points) or at an element by id (testID) or label; swipe ends at x2,y2; type text into the focused field; key presses a KeyboardEvent code (Enter, Backspace, ArrowDown); button presses home, lock or (Android) back; rotate turns the device right (simulator_ui then gives the turned screen). The human sees each touch marked on the screen.',
+			'One action on the device: tap, longpress or swipe at x,y (points) or at an element by id (testID) or label; swipe ends at x2,y2; type text into the focused field; key presses a KeyboardEvent code (Enter, Backspace, ArrowDown); button presses home, lock or (Android) back; rotate turns the device right. Answers once the screen has been still for 0.4 s (5 s at most, and it says so when the screen was still moving), with what changed in the accessibility tree: elements that appeared (+), disappeared (-) or changed label or value (~); on Android it gives no tree changes. The human sees each touch marked on the screen.',
 			{
 				action: z.enum(['tap', 'longpress', 'swipe', 'type', 'key', 'button', 'rotate']),
 				x: point.optional(),
@@ -519,8 +525,19 @@ const simulatorTools: Tool[] = (
 			},
 		],
 		[
+			'wait',
+			'Waits on the device until an element appears, or with gone: true disappears: text (in a label or value, ignoring case), id (testID) or label, exactly one. Reads the accessibility tree each time the screen changes, up to timeoutMs (default 10000, at most 30000). Answers with the element found, or a timeout and the screen as it was last read.',
+			{
+				text: z.string().min(1).max(500).optional(),
+				id: z.string().min(1).max(500).optional(),
+				label: z.string().min(1).max(500).optional(),
+				gone: z.boolean().optional(),
+				timeoutMs: z.number().int().min(0).max(30_000).optional(),
+			},
+		],
+		[
 			'screenshot',
-			'A JPEG of the device screen as the human sees it, the longer side up to 1000 px. Prefer simulator_ui for finding elements.',
+			'A JPEG of the device screen as the human sees it, the longer side up to 1000 px: for looking at pixels. Prefer simulator_ui for finding elements; simulator_act already says whether an action worked.',
 			{},
 		],
 		[

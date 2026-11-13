@@ -58,6 +58,8 @@ it('checks the agent commands main accepts', () => {
 		{ tool: 'act', action: 'tap', id: 'take-order' },
 		{ tool: 'act', action: 'swipe', x: 10, y: 600, x2: 10, y2: 100 },
 		{ tool: 'screenshot' },
+		{ tool: 'wait', text: 'Saved' },
+		{ tool: 'wait', id: 'spinner', gone: true, timeoutMs: 30_000 },
 	])
 		expect(isSimulatorAgentCommand(command), JSON.stringify(command)).toBe(true);
 	for (const command of [
@@ -67,6 +69,10 @@ it('checks the agent commands main accepts', () => {
 		{ tool: 'act', action: 'drag' },
 		{ tool: 'act', action: 'tap', x: -1, y: 0 },
 		{ tool: 'ui', offset: -1 },
+		{ tool: 'wait' },
+		{ tool: 'wait', text: 'Saved', id: 'status' },
+		{ tool: 'wait', label: 'Save', timeoutMs: 30_001 },
+		{ tool: 'wait', text: '' },
 	])
 		expect(isSimulatorAgentCommand(command), JSON.stringify(command)).toBe(false);
 });

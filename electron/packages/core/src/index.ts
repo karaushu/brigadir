@@ -55,6 +55,7 @@ export * from './modules';
 export * from './context-state';
 export * from './simulator';
 export * from './simulator-agent';
+export * from './simulator-diff';
 
 export * from './typography';
 

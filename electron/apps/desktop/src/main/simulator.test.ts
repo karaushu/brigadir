@@ -907,9 +907,13 @@ it('puts tasks wanting the same device in its lane, the person and solo agents a
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		const foreman = simulators.agent(task('foreman'), { tool: 'ui' });
 		await new Promise((resolve) => setTimeout(resolve, 20));
-		const view = (await simulators.command(task('w2'), { kind: 'state' })) as SimulatorState;
-		expect(view.uses.PHONE).toEqual({ kind: 'queued', holder: task('w1') });
-		expect(world.waiting.at(-1)).toEqual(['foreman', 'w2']);
+		await expect
+			.poll(
+				async () =>
+					((await simulators.command(task('w2'), { kind: 'state' })) as SimulatorState).uses.PHONE
+			)
+			.toEqual({ kind: 'queued', holder: task('w1') });
+		await expect.poll(() => world.waiting.at(-1)).toEqual(['foreman', 'w2']);
 		simulators.release(task('w1'));
 		await foreman;
 		simulators.release(task('foreman'));

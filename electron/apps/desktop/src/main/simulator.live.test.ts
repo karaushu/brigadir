@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { SimulatorFrame, SimulatorState, SimulatorVideoConfig } from '@brigadir/core';
 import { Simulators } from './simulator';
+import { lowMemory } from './simulator-gate';
 // Live check of spec/browser-and-simulator#simulator on this Mac: the built sim-helper, a real iOS device booted without a window.
 // Opt in with BRIGADIR_LIVE_SIMULATOR=<UDID>; BRIGADIR_RECORD_FRAME=1 also writes tests/fixtures/sim-frame.json.
 const udid = process.env.BRIGADIR_LIVE_SIMULATOR;
@@ -220,6 +221,14 @@ it.skipIf(!pair || !process.env.BRIGADIR_LIVE_APP)(
 			})
 		);
 		const ended = new Set<string>();
+		// The system's own signal decides until `realGate` is turned off for the copies (the report says what it said).
+		let realGate = true;
+		const pressure = () =>
+			lowMemory({
+				platform: 'darwin',
+				run: async (file, args) => execFileSync(file, args, { encoding: 'utf8' }),
+				read: async () => '',
+			});
 		const simulators = new Simulators(
 			data,
 			resolve('apps/desktop/out/services/sim-helper'),
@@ -227,6 +236,7 @@ it.skipIf(!pair || !process.env.BRIGADIR_LIVE_APP)(
 			() => {},
 			{
 				cap: () => 4,
+				lowMemory: async () => (realGate ? pressure() : false),
 				taskEnded: async (key) => ended.has(key.id),
 				taskTitle: async (key) => key.id,
 			}
@@ -265,15 +275,23 @@ it.skipIf(!pair || !process.env.BRIGADIR_LIVE_APP)(
 			report(`A: ${String(a).split('\n')[0]}\nB: ${String(b).split('\n')[0]}`);
 			expect(a).toMatch(/^Pressed home\./);
 			expect(b).toMatch(/^Pressed home\./);
+			// Their turns end: the lanes are free.
+			simulators.release(task('solo'));
+			simulators.release(task('second'));
+			report(`memory pressure with A and B running: ${(await pressure()) ? 'low' : 'normal'}`);
+			const gated = String(await simulators.agent(task('probe'), { tool: 'state' }));
+			report(gated.split('\n').find((line) => line.startsWith('Local devices')) ?? '');
+			realGate = false;
 			// A worker while A runs: a new device of A's model, the app installed before use.
 			const made = (await timed('worker 1: own copy (A runs: create + boot + install)', () =>
-				simulators.agent(task('worker1'), { tool: 'open' }, true)
+				simulators.agent(task('worker1'), { tool: 'open', device: first! }, true)
 			)) as string;
 			report(made);
 			const copy = (
 				(await simulators.command(task('worker1'), { kind: 'state' })) as SimulatorState
 			).device!;
 			expect(copy.id).not.toBe(first);
+			expect(copy.id).not.toBe(second);
 			const apps = execFileSync('/usr/bin/xcrun', ['simctl', 'listapps', copy.id], {
 				encoding: 'utf8',
 			});
@@ -284,12 +302,13 @@ it.skipIf(!pair || !process.env.BRIGADIR_LIVE_APP)(
 			// A is off: the next worker's copy is a clone of it, then the app is installed on the clone.
 			await simulators.command(task('solo'), { kind: 'shutdown', device: first! });
 			const cloned = (await timed('worker 2: clone of A (A off: clone + boot + install)', () =>
-				simulators.agent(task('worker2'), { tool: 'open' }, true)
+				simulators.agent(task('worker2'), { tool: 'open', device: first! }, true)
 			)) as string;
 			report(cloned);
 			const clone = (
 				(await simulators.command(task('worker2'), { kind: 'state' })) as SimulatorState
 			).device!;
+			expect([first, second, copy.id]).not.toContain(clone.id);
 			const cloneApps = execFileSync('/usr/bin/xcrun', ['simctl', 'listapps', clone.id], {
 				encoding: 'utf8',
 			});

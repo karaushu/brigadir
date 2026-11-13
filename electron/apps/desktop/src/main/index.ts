@@ -750,7 +750,8 @@ const simulators: Simulators = new Simulators(
 					},
 					android: async () => null,
 					detach: () => {},
-					lowMemory: async () => false,
+					// The e2e fixture's memory pressure: low only when the test asks for it.
+					lowMemory: async () => process.env.BRIGADIR_TEST_LOW_MEMORY === '1',
 				}
 			: {}),
 	}

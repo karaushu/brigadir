@@ -467,6 +467,9 @@ export class Simulators {
 			await this.setLease(key, matches[0]!, true);
 			return { device: matches[0]! };
 		}
+		// A worker that had to share tries again for a device of its own: the gate may have opened since.
+		if (leased && queued && !current?.own && this.heldByOther(leased.id, key))
+			return this.workerDevice(key, leased);
 		if (leased) return { device: leased };
 		// spec/browser-and-simulator#sim-device: without a choice only a running device is the project's; it becomes the choice.
 		const device = await this.device(key.projectId),

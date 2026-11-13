@@ -1,5 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { diffLines, unifiedDiff } from '@brigadir/diff';
 import {
+	authorFindings,
+	openPlanFindings,
+	parsePlanVerdict,
+	planFindingsText,
+	planFindingState,
+	planReadLimit,
+	planReviewItemLimit,
 	emptyTaskReviewDocument,
 	readTaskReviewDocument,
 	reviewLoop,
@@ -21,6 +29,7 @@ import {
 	type TaskReviewDocument,
 	type TaskReviewStarter,
 	type TaskReviewTree,
+	type PlanFinding,
 } from '@brigadir/core';
 import { readSnapshots } from '@brigadir/git';
 import { atomicJson, readDocument, safePath, type SessionStore } from '@brigadir/persistence';
@@ -33,6 +42,19 @@ import {
 	openFindings,
 	reviewFindings,
 } from './review-findings';
+import { readSourcesForReview } from './task-sources';
+
+/** spec/reviews#plan-review: a plan presented for approval — a solo task's plan for approval or the root foreman's split. */
+export type PresentedPlan = {
+	kind: 'approval' | 'split';
+	id: string;
+	revision: number;
+	text: string;
+};
+const cut = (value: string) =>
+	value.length > planReadLimit
+		? `${value.slice(0, planReadLimit - 80)}\n\n[The plan is cut here at ${planReadLimit} characters.]`
+		: value;
 
 export type StartReview = Extract<SessionCommand, { kind: 'startReview' }>;
 /** spec/reviews#points: the roles whose task has reviews of its own — a solo task, a foreman, a crew developer (its part is a task). */
@@ -64,8 +86,17 @@ export type TaskReviewDeps = {
 	settled(): boolean;
 	/** A batch of findings as the task's own review batch (the `submitReview` command). */
 	submitReview(text: string, review: ReviewBatch, round: number): Promise<void>;
-	/** spec/reviews#who: the reviewer of a start the host or the agent makes — asked of the app, else a fresh session of the task's own provider. */
-	resolve(point: ReviewPoint): Promise<StartReview | { failure: string }>;
+	/** spec/reviews#who: the reviewer of a start the host or the agent makes — asked of the app, else a fresh session of the task's own provider.
+	 *  `auto`: the host starts a plan review by itself; `{off: true}` — `Plan review` is `Off`. */
+	resolve(
+		point: ReviewPoint,
+		auto?: boolean
+	): Promise<StartReview | { failure: string } | { off: true }>;
+	/** spec/reviews#plan-review: the plan that waits for the person now, if any. */
+	planWaiting(): PresentedPlan | null;
+	/** spec/reviews#plan-loop: findings to the plan's author — the waiting plan is answered (its reject option, or `propose_plan` returns
+	 *  them), then the batch runs. The same batch twice only answers the waiting plan again. */
+	planFeedback(text: string, batch: ReviewBatch, round: number): Promise<void>;
 	/** The task's changed files from its start. */
 	changes(): Promise<number>;
 	/** A snapshot of the task's files now: a review the agent asks for reads its state at the call. */
@@ -167,6 +198,10 @@ export class TaskReviewLife {
 	private async begin(command: StartReview) {
 		if (taskReviewLive(this.doc.review))
 			throw new Error('A review of this task is already running.');
+		// spec/reviews#plan-start: a plan review reads the plan that waits for the person.
+		const presented = command.point === 'plan' ? this.deps.planWaiting() : null;
+		if (command.point === 'plan' && !presented && !command.failure)
+			throw new Error('No plan waits for approval.');
 		const point = command.point ?? 'pre-pr',
 			startedBy = command.startedBy ?? 'person',
 			id = randomUUID(),
@@ -193,6 +228,19 @@ export class TaskReviewLife {
 			reviewers: command.reviewers.map((agent) => agent.name),
 			trees: [],
 			...(base ? { base } : {}),
+			...(presented
+				? {
+						plan: {
+							kind: presented.kind,
+							id: presented.id,
+							revision: presented.revision,
+							text: cut(presented.text),
+							read: presented.revision,
+							seen: presented.revision,
+						},
+						findings: [],
+					}
+				: {}),
 		};
 		if (command.failure || !command.reviewers.length) {
 			// spec/reviews#who: nobody can review; the strip says `Review did not start`.
@@ -218,8 +266,9 @@ export class TaskReviewLife {
 		this.doc = withNextReview(this.doc, review);
 		await this.save();
 		await this.emitStarted(review);
-		// spec/reviews#start: the agent's review reads at once (`request` took a checkpoint); the others wait for a running turn to end.
-		if (startedBy === 'agent' || !this.deps.busy()) await this.read();
+		// spec/reviews#start: the agent's review reads at once (`request` took a checkpoint); the others wait for a running turn to end. A plan
+		// review reads at once: the agent's turn waits for the plan's answer.
+		if (point === 'plan' || startedBy === 'agent' || !this.deps.busy()) await this.read();
 		return review;
 	}
 	private emitStarted(review: TaskReview) {
@@ -245,6 +294,7 @@ export class TaskReviewLife {
 			if (!(await this.deps.changes()) || !(await this.changedSinceLast()))
 				return { started: false, reason: 'Nothing changed since the last review.' };
 			const resolved = await this.deps.resolve(input.point);
+			if ('off' in resolved) return { started: false, reason: 'Reviews are off.' };
 			const command: StartReview =
 				'failure' in resolved
 					? {
@@ -296,6 +346,22 @@ export class TaskReviewLife {
 		return this.serial(async () => {
 			const review = this.doc.review;
 			if (!review || !this.host) throw new Error('This task has no review.');
+			if (review.point === 'plan') {
+				// spec/reviews#plan-loop: the author objects to a plan finding; the closure check reads the objection.
+				const own = authorFindings(review.findings);
+				if (!own.some((item) => item.id === commentId))
+					throw new Error(
+						`No finding ${commentId} in the plan review. Findings: ${own.map((item) => item.id).join(', ') || 'none'}`
+					);
+				if (!text.trim() || text.length > 10_000) throw new Error('A reply needs text');
+				await this.update({
+					findings: (review.findings ?? []).map((item) =>
+						item.id === commentId ? { ...item, answer: text.trim() } : item
+					),
+				});
+				await this.deps.emit({ kind: 'review.replied', commentId });
+				return { replied: true };
+			}
 			await this.host.replySelf(commentId, text, Math.max(1, review.round));
 			await this.deps.emit({ kind: 'review.replied', commentId });
 			return { replied: true };
@@ -314,6 +380,7 @@ export class TaskReviewLife {
 		return this.serial(async () => {
 			const review = this.doc.review;
 			if (!review || review.state !== 'yours') throw new Error('No review waits for your call.');
+			if (review.point === 'plan') return this.decidePlan(review, decision);
 			const open = openFindings(await reviewFindings(this.deps.store, this.deps.key, review.id));
 			await this.deps.emit({
 				kind: 'task-review.decided',
@@ -360,6 +427,12 @@ export class TaskReviewLife {
 			if (!review) return;
 			if (review.state === 'waiting') return this.read();
 			if (!this.host) return;
+			if (review.point === 'plan') {
+				// spec/reviews#plan-loop: the author's turn ended without presenting the plan again — the closure check reads the plan as it was.
+				if (review.state === 'fixing' && this.planAnswered(review) && !this.deps.planWaiting())
+					await this.planClosure();
+				return;
+			}
 			if (
 				(review.state === 'passed' || review.state === 'accepted') &&
 				review.point === 'pre-pr' &&
@@ -396,11 +469,27 @@ export class TaskReviewLife {
 		if (await this.step({ kind: 'begin' })) await this.round();
 	}
 	private async round() {
+		// spec/reviews#plan-loop: the round reads the plan presented last; a closure check's diff starts from what the previous round read.
+		const review = this.doc.review;
+		if (review?.plan) {
+			const plan = review.plan;
+			await this.update({
+				plan: {
+					...plan,
+					...(review.round >= 1 ? { base: plan.seen, baseText: plan.seenText ?? plan.text } : {}),
+					seen: plan.revision,
+					seenText: plan.text,
+				},
+			});
+		}
 		const task = await this.deps.store.task(this.deps.key);
 		const seq = this.deps.records().at(-1)?.seq ?? 0;
 		await this.host!.checkSelf(seq, task.title);
 	}
-	private async finished(state: 'passed' | 'accepted' | 'stopped' | 'outdated') {
+	private async finished(
+		state: 'passed' | 'accepted' | 'stopped' | 'outdated',
+		approval?: { open: number }
+	) {
 		const review = this.doc.review;
 		if (!review) return;
 		await this.deps.emit({
@@ -408,7 +497,326 @@ export class TaskReviewLife {
 			id: review.id,
 			point: review.point,
 			state,
+			...(approval ? { approval: true, open: approval.open } : {}),
 		});
+	}
+	// ── the plan review (spec/reviews#plan-review) ─────────────────────────────
+
+	/** The last plan review of the task: the current review, else the newest earlier one. */
+	private lastPlanReview(): TaskReview | null {
+		if (this.doc.review?.point === 'plan') return this.doc.review;
+		return this.doc.past.findLast((review) => review.point === 'plan') ?? null;
+	}
+	/**
+	 * spec/reviews#plan-start: a plan was presented — a new plan gets one full read when `Plan review` is on and no other review lives; a revision
+	 * of a plan under review is the author's answer (closure check) or, while the person decides, a revision whose open findings get checked.
+	 */
+	planPresented(presented: PresentedPlan) {
+		return this.serial(async () => {
+			const review = this.doc.review;
+			if (review?.point === 'plan' && taskReviewLive(review) && review.plan) {
+				await this.update({
+					plan: {
+						...review.plan,
+						kind: presented.kind,
+						id: presented.id,
+						revision: presented.revision,
+						text: cut(presented.text),
+					},
+				});
+				if (review.state === 'fixing') {
+					// The batch still waits behind this plan (it was presented before the author's turn took the findings): answer it again.
+					if (!this.planAnswered(review, true)) return this.redeliver();
+					return this.planClosure();
+				}
+				if (review.state === 'yours' && (await this.step({ kind: 'revised' }))) {
+					await this.deps.emit({
+						kind: 'task-review.answered',
+						id: review.id,
+						point: review.point,
+						fixed: openPlanFindings(review.findings).length,
+						answered: 0,
+					});
+					await this.round();
+				}
+				return;
+			}
+			if (taskReviewLive(review)) return;
+			const last = this.lastPlanReview();
+			if (last && !last.plan?.approved) return;
+			const resolved = await this.deps.resolve('plan', true);
+			if ('off' in resolved) return;
+			await this.begin(
+				'failure' in resolved
+					? {
+							kind: 'startReview',
+							reviewers: [],
+							who: { kind: 'agent' },
+							instructions: '',
+							guidance: '',
+							point: 'plan',
+							startedBy: 'host',
+							failure: resolved.failure,
+						}
+					: { ...resolved, point: 'plan', startedBy: 'host' }
+			);
+		});
+	}
+	/**
+	 * spec/reviews#plan-loop: the person answered the plan. An approval ends a live plan review — the open round is cancelled and the findings
+	 * still open are recorded as accepted — and marks the plan approved, so the next presentation is a new plan. A rejection changes nothing.
+	 */
+	planDecided(approved: boolean) {
+		return this.serial(async () => {
+			if (!approved) return;
+			const review = this.doc.review;
+			if (review?.point === 'plan' && taskReviewLive(review)) {
+				const open = authorFindings(review.findings).filter((item) =>
+					['sent', 'open', 'new'].includes(planFindingState(item))
+				);
+				await this.host?.stopSelf().catch(() => {});
+				const state = open.length ? 'accepted' : 'stopped';
+				await this.update({
+					state,
+					finishedAt: new Date().toISOString(),
+					findings: (review.findings ?? []).map((item) =>
+						open.includes(item) ? { ...item, accepted: true } : item
+					),
+					...(review.plan ? { plan: { ...review.plan, approved: true } } : {}),
+				});
+				await this.finished(state, { open: open.length });
+				return;
+			}
+			const last = this.lastPlanReview();
+			if (!last?.plan || last.plan.approved) return;
+			const mark = (item: TaskReview) =>
+				item === last ? { ...item, plan: { ...item.plan!, approved: true } } : item;
+			this.doc = {
+				...this.doc,
+				review: this.doc.review && mark(this.doc.review),
+				past: this.doc.past.map(mark),
+			};
+			await this.save();
+		});
+	}
+	/** The author has taken the last batch: a solo task's batch turn started; a foreman got it as its `propose_plan` result. `presenting`: a
+	 *  plan is being presented now, which for a foreman is its answer. */
+	private planAnswered(review: TaskReview, presenting = false) {
+		if (review.plan?.kind === 'split') {
+			const sent = review.plan.sentAt;
+			if (sent === undefined) return false;
+			return (
+				presenting ||
+				this.deps
+					.records()
+					.some((record) => record.seq > sent && record.event.kind === 'turn.completed')
+			);
+		}
+		return this.taken(review.batch);
+	}
+	/** spec/reviews#plan-loop: the author answered — the closure check reads the revision against the one the reviewer read. */
+	private async planClosure() {
+		const review = this.doc.review;
+		if (!review) return;
+		const sent =
+			review.passes > 1 ? openPlanFindings(review.findings) : authorFindings(review.findings);
+		const answered = sent.filter((item) => item.answer).length;
+		await this.deps.emit({
+			kind: 'task-review.answered',
+			id: review.id,
+			point: review.point,
+			fixed: sent.length - answered,
+			answered,
+		});
+		if (await this.step({ kind: 'answered' })) await this.round();
+	}
+	/** The batch of one author pass: the first pass takes every finding for the author, a `Fix {n}` pass the ones still open. */
+	private planBatch(review: TaskReview, pass: number, person: boolean) {
+		const list = pass > 1 ? openPlanFindings(review.findings) : authorFindings(review.findings),
+			ids = list.map((item) => ({ id: item.id, version: 1 })),
+			names = [...new Set(list.map((item) => item.reviewer))].join(', '),
+			n = list.length,
+			findings = `${n} ${n === 1 ? 'finding' : 'findings'}`,
+			again =
+				review.plan?.kind === 'split'
+					? 'then call propose_plan again with the revised split'
+					: 'then present the plan for approval again with ExitPlanMode',
+			checks = `${names} then ${names.includes(',') ? 'check' : 'checks'} only whether each finding is closed.`;
+		const text = person
+			? `The person asks you to fix ${findings} of the plan review that ${n === 1 ? 'is' : 'are'} still open. Revise the plan: fix each one in the plan, or object to it with review_reply(commentId, reason) where commentId is the finding's id; ${again}. ${checks}\n\n${planFindingsText(list, true)}`
+			: `${names} left ${findings} in the plan review. Revise the plan once: fix each finding in the plan, or object to it with review_reply(commentId, reason) where commentId is the finding's id; ${again}. ${checks}\n\n${planFindingsText(list)}`;
+		return {
+			text,
+			batch: {
+				id: createHash('sha256')
+					.update(`${review.id}/${pass}\0${JSON.stringify(ids)}`)
+					.digest('hex'),
+				comments: ids,
+			},
+		};
+	}
+	private async deliverPlan(person: boolean) {
+		const review = this.doc.review;
+		if (!review?.plan) return;
+		const pass = review.passes + 1,
+			{ text, batch } = this.planBatch(review, pass, person);
+		await this.update({
+			passes: pass,
+			batch: batch.id,
+			plan: { ...review.plan, sentAt: this.deps.records().at(-1)?.seq ?? 0 },
+		});
+		await this.deps.planFeedback(text, batch, Math.max(1, review.round));
+	}
+	/** The batch waits behind a plan presented before the author took it: answer that plan so the batch runs. */
+	private async redeliver() {
+		const review = this.doc.review;
+		if (!review?.plan || !review.passes) return;
+		const { text, batch } = this.planBatch(review, review.passes, review.passes > 1);
+		await this.deps.planFeedback(text, batch, Math.max(1, review.round));
+	}
+	private async decidePlan(review: TaskReview, decision: 'fix' | 'accept') {
+		const open = openPlanFindings(review.findings);
+		await this.deps.emit({
+			kind: 'task-review.decided',
+			id: review.id,
+			point: review.point,
+			decision,
+			findings: open.length,
+		});
+		if (decision === 'accept') {
+			await this.update({
+				findings: (review.findings ?? []).map((item) =>
+					open.includes(item) ? { ...item, accepted: true } : item
+				),
+			});
+			await this.step({ kind: 'decided', decision });
+			await this.finished('accepted');
+			return;
+		}
+		await this.step({ kind: 'decided', decision });
+		await this.deliverPlan(true);
+	}
+	/** spec/reviews#plan-inputs: `read_plan` — the revision the round reads, and in a closure check the diff from the previous round's. */
+	private async planRead(round: number) {
+		const plan = this.doc.review?.plan;
+		if (!plan) throw new Error('This review has no plan.');
+		const text = plan.seenText ?? plan.text;
+		const closure =
+			round > 1 && plan.base !== undefined
+				? {
+						read: plan.read,
+						previous: plan.base,
+						diff:
+							plan.base === plan.seen && (plan.baseText ?? '') === text
+								? 'The plan did not change since your last read.'
+								: unifiedDiff(diffLines(plan.baseText ?? '', text).lines, 3, planReadLimit).text,
+					}
+				: {};
+		return {
+			kind: plan.kind === 'split' ? 'the foreman’s split' : 'plan for approval',
+			revision: plan.seen,
+			text,
+			...closure,
+		};
+	}
+	/**
+	 * spec/reviews#plan-loop, spec/reviews#plan-split: the reviewer's prompt (English, rule 12) — the first read with the verdict's shape and, for a
+	 * foreman's split, the split checks; a closure check with this reviewer's findings and the author's objections.
+	 */
+	private async planPrompt(taskId: string, reviewId: string, round: number, reviewer: string) {
+		const review = this.doc.review,
+			plan = review?.plan,
+			brief = await this.deps.brief().catch(() => ''),
+			guidance = review?.guidance ?? '',
+			what = plan?.kind === 'split' ? "the foreman's split of task" : 'the plan of task';
+		if (round <= 1)
+			return `Check ${what} ${taskId} (reviewId ${reviewId}, plan review, first read).${brief}\nThe plan waits for the person's approval; nothing is built yet. Read it with read_plan(taskId, reviewId) and the sources its author saved (the ticket, a spec, an API contract) with read_sources(taskId, reviewId). The files of your tree are the repo as the task has it now: read the code the plan relies on. Read once and in full: this is the only read, nothing new can be raised later.\nAnswer with one call submit_plan_review(taskId, reviewId, findings, gaps), at most ${planReviewItemLimit} items in all, the most severe first:\n- findings of the plan against the ticket: kind missed (a requirement the plan misses), contradicts (the plan contradicts the ticket or the contract), out-of-scope (the plan does what the ticket does not ask);\n- findings of the plan against the repo and the contract: kind assumption (a wrong assumption about existing code), left-open (a decision left open that will produce defects: concurrency, failures and retries, data loss, empty and error states), unverifiable (a check that cannot be verified as written);${plan?.kind === 'split' ? '\n- findings of the split itself, kind split: parts that are not independent, a part that depends on files of another part while both run in parallel, an executor that does not fit its part (its role, provider or model);' : ''}\n- gaps: what the ticket itself leaves open — questions for the person, not for the author.\nEach finding is {kind, text, where?} and each gap {text, where?}; where names the place in the ticket, the contract or the plan (for example "CRM-412 · Notes", "api-contract.yaml:88", "plan.md:41"). Leave only real findings you can show from the plan, the sources and the code. When the plan needs no change and the ticket has no gaps, call approve(taskId, reviewId). Do not change files.${guidance}`;
+		const own = authorFindings(review?.findings).filter(
+			(item) => item.reviewer === reviewer && !item.accepted && item.round < round
+		);
+		const list = own
+			.map(
+				(item) =>
+					`- id ${item.id} [${item.kind}]${item.where ? ` (${item.where})` : ''}: ${item.text}${item.answer ? `\n  Author's objection: ${item.answer}` : ''}${item.reason ? `\n  Your reason last time: ${item.reason}` : ''}`
+			)
+			.join('\n');
+		return `Check ${what} ${taskId} (reviewId ${reviewId}, closure check).${brief}\nThis is the closure check of the plan review. The author revised the plan or objected to your findings. read_plan(taskId, reviewId) returns the revision and its diff from the one you read. For each of your findings below decide only whether it is closed — an objection you accept counts as closed:\n${list || '- (none)'}\nWhen every finding is closed and the revision brought in no problem, call approve(taskId, reviewId). Otherwise call submit_plan_review(taskId, reviewId, findings) with one item {replyTo: <finding id>, text: why it is still open} per open finding and, only for a problem the revision itself brought in, an item {kind, text, where?, introduced: true}. Raise nothing else, and do not ask about gaps again. Do not change files.${guidance}`;
+	}
+	/** spec/reviews#plan-verdict: `submit_plan_review` — checked, then stored as the review's findings with the closure marks. Returns the items. */
+	private async planVerdict(reviewer: string, round: number, input: Record<string, unknown>) {
+		const review = this.doc.review;
+		if (!review?.plan || !['reading', 'verifying'].includes(review.state))
+			throw new Error('No plan review waits for your verdict.');
+		const closure = round > 1,
+			own = authorFindings(review.findings).filter(
+				(item) => item.reviewer === reviewer && !item.accepted
+			),
+			{ items, replies } = parsePlanVerdict(input, closure, own),
+			findings = review.findings ?? [];
+		let next = findings.length;
+		const added: PlanFinding[] = items.map((item) => ({
+			...item,
+			id: `p${++next}`,
+			reviewer,
+			round,
+			...(closure ? { introduced: round } : {}),
+		}));
+		const marked = closure
+			? findings.map((item) => {
+					if (!own.includes(item) || item.round >= round) return item;
+					const reply = replies.find((entry) => entry.id === item.id);
+					return reply ? { ...item, open: round, reason: reply.text } : { ...item, closed: round };
+				})
+			: findings;
+		await this.update({ findings: [...marked, ...added] });
+		return added.length + replies.length;
+	}
+	/** spec/reviews#plan-loop: an approval of a closure check closes every finding of this reviewer. */
+	private async planApprove(reviewer: string, round: number) {
+		const review = this.doc.review;
+		if (!review?.plan || round <= 1) return;
+		await this.update({
+			findings: (review.findings ?? []).map((item) =>
+				item.reviewer === reviewer && item.kind !== 'gap' && !item.accepted && item.round < round
+					? { ...item, closed: round }
+					: item
+			),
+		});
+	}
+	private async onPlanRound(run: ReviewRun, state: 'comments' | 'approved' | 'disputed') {
+		const review = this.doc.review!,
+			reviewers = run.verdicts.map((item) => item.reviewer),
+			findings = review.findings ?? [];
+		if (review.state === 'reading') {
+			const own = state === 'approved' ? 0 : authorFindings(findings).length,
+				gaps = findings.filter((item) => item.kind === 'gap').length;
+			await this.deps.emit({
+				kind: 'task-review.findings',
+				id: review.id,
+				point: review.point,
+				findings: own,
+				reviewers,
+				...(gaps ? { gaps } : {}),
+			});
+			const next = await this.step({ kind: 'read', findings: own });
+			if (next?.state === 'passed') await this.finished('passed');
+			else if (next?.state === 'fixing') await this.deliverPlan(false);
+			return;
+		}
+		if (review.state !== 'verifying') return;
+		const closed = findings.filter((item) => item.closed === run.round).length,
+			introduced = findings.filter((item) => item.introduced === run.round).length,
+			open = state === 'approved' ? 0 : openPlanFindings(findings).length;
+		await this.deps.emit({
+			kind: 'task-review.verified',
+			id: review.id,
+			point: review.point,
+			closed,
+			open: state === 'approved' ? 0 : open - introduced,
+			introduced: state === 'approved' ? 0 : introduced,
+		});
+		const next = await this.step({ kind: 'verified', open });
+		if (next?.state === 'passed') await this.finished('passed');
 	}
 	/** What the crew host calls back on each round of the task's review. */
 	hooks(): SelfReviewHooks {
@@ -419,6 +827,12 @@ export class TaskReviewLife {
 			guidance: () => this.doc.review?.guidance ?? '',
 			rounds: () => this.doc.review?.round ?? 0,
 			brief: () => this.deps.brief(),
+			planRead: (round) => this.planRead(round),
+			planVerdict: (reviewer, round, input) => this.planVerdict(reviewer, round, input),
+			planApprove: (reviewer, round) => this.planApprove(reviewer, round),
+			planPrompt: (taskId, reviewId, round, reviewer) =>
+				this.planPrompt(taskId, reviewId, round, reviewer),
+			sources: (sourceId) => readSourcesForReview(this.deps.store, this.deps.key, sourceId),
 			submitReview: async (text, batch) => {
 				await this.update({ batch: batch.id, passes: (this.doc.review?.passes ?? 0) + 1 });
 				await this.deps.submitReview(text, batch, Math.max(1, this.doc.review?.round ?? 1));
@@ -433,6 +847,7 @@ export class TaskReviewLife {
 		const trees = run.scopeSnapshots.map((item) => ({ scopeId: item.scopeId, tree: item.result }));
 		await this.update({ round: run.round, trees });
 		if (state === 'reviewing') return;
+		if (review.point === 'plan') return this.onPlanRound(run, state);
 		const list = await reviewFindings(this.deps.store, this.deps.key, review.id),
 			reviewers = run.verdicts.map((item) => item.reviewer);
 		if (review.state === 'reading') {

@@ -10,6 +10,9 @@ export type CrewToolName =
 	| 'read_diff'
 	| 'submit_review'
 	| 'approve'
+	| 'read_plan'
+	| 'read_sources'
+	| 'submit_plan_review'
 	| 'accept_task'
 	| 'ask_foreman'
 	| 'post_note'
@@ -33,6 +36,10 @@ export const reviewerTools: readonly CrewToolName[] = [
 	'read_diff',
 	'submit_review',
 	'approve',
+	// spec/reviews#plan-inputs: a plan review reads the plan and the sources through the host.
+	'read_plan',
+	'read_sources',
+	'submit_plan_review',
 	'ask_foreman',
 	'post_note',
 	'read_notes',

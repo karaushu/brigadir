@@ -2,6 +2,7 @@ import type { AgentProvider } from './agent';
 import { crewName, isCrewSpec, type CrewSpec, type CrewSpecAgent } from './crew';
 import type { AgentProviderId } from './settings';
 import { isRecord } from './workspace';
+import type { TaskSourceEntry } from './task-sources';
 
 /**
  * spec/reviews#points: a review the host runs on a task — the plan, mid-task or before the PR. The rounds are the crew's check edge
@@ -67,6 +68,9 @@ export type TaskReview = {
 	/** Why the review could not start. */
 	failure?: string;
 	finishedAt?: string;
+	/** spec/reviews#plan-review: the plan a plan review reads, and its findings (a code review keeps its findings in `review.json`). */
+	plan?: TaskReviewPlan;
+	findings?: PlanFinding[];
 };
 export type TaskReviewDocument = {
 	schemaVersion: 2;
@@ -152,7 +156,12 @@ export function isTaskReview(value: unknown): value is TaskReview {
 		(value.base === undefined || (Array.isArray(value.base) && value.base.every(isTree))) &&
 		(value.batch === undefined || text(value.batch, 200)) &&
 		(value.failure === undefined || text(value.failure, 2000)) &&
-		(value.finishedAt === undefined || text(value.finishedAt, 64))
+		(value.finishedAt === undefined || text(value.finishedAt, 64)) &&
+		(value.plan === undefined || isTaskReviewPlan(value.plan)) &&
+		(value.findings === undefined ||
+			(Array.isArray(value.findings) &&
+				value.findings.length <= planFindingStoreLimit &&
+				value.findings.every(isPlanFinding)))
 	);
 }
 export function isTaskReviewDocument(value: unknown): value is TaskReviewDocument {
@@ -274,7 +283,9 @@ export type ReviewLoopEvent =
 	| { kind: 'stop' }
 	| { kind: 'fail' }
 	/** The task's tree changed after the review ended. */
-	| { kind: 'changed' };
+	| { kind: 'changed' }
+	/** spec/reviews#plan-loop: the plan was presented again while the person decides — its open findings get a closure check. */
+	| { kind: 'revised' };
 /** What the host does next: open the first read, deliver a batch to the author, open a closure check, hand the list to the person, end. */
 export type ReviewLoopAction = 'read' | 'deliver' | 'verify' | 'person' | 'finish';
 /**
@@ -317,6 +328,8 @@ export function reviewLoop(
 			return state === 'passed' || state === 'accepted'
 				? { state: 'outdated', action: 'finish' }
 				: null;
+		case 'revised':
+			return state === 'yours' ? { state: 'verifying', action: 'verify' } : null;
 	}
 }
 /** The point's name in the prompts to agents (rule 12) and in the batch header. */
@@ -481,6 +494,9 @@ export type TaskReviewCommentRow = {
 	answer: string | null;
 	/** The reviewer's reason for an open finding: its last reply. */
 	reason: string | null;
+	/** spec/reviews#plan-surfaces: a plan finding — its kind and place; it has no thread in the diff (`path` empty). */
+	kind?: PlanFindingKind;
+	where?: string;
 };
 /** The step of a point on the strip's track (spec/reviews#strip). */
 export type TaskReviewStep = 'none' | 'live' | 'yours' | 'done' | 'ended';
@@ -503,6 +519,8 @@ export type TaskReviewView = TaskReviewDocument & {
 	sinceLast: number | null;
 	/** spec/reviews#before-pr: `Create PR` opens the dialog (`covered`), expands the running review (`running`) or starts one (`needed`). */
 	beforePR: 'covered' | 'running' | 'needed';
+	/** spec/reviews#save-source: the sources the task's agent saved. */
+	sources: TaskSourceEntry[];
 };
 export const emptyTaskReviewView: TaskReviewView = {
 	...emptyTaskReviewDocument,
@@ -512,6 +530,7 @@ export const emptyTaskReviewView: TaskReviewView = {
 	comments: [],
 	sinceLast: null,
 	beforePR: 'covered',
+	sources: [],
 };
 /** Counts the strip, the chat rows and the PR sheet say, for one review. */
 export function taskReviewCounts(view: Pick<TaskReviewView, 'comments'>, reviewId?: string) {
@@ -550,4 +569,272 @@ export function taskReviewCommentState(comment: {
 	if (comment.replies?.some((reply) => reply.agent)) return 'answered';
 	if (closed) return 'fixed';
 	return 'sent';
+}
+
+// ── the plan review (spec/reviews#plan-review) ───────────────────────────────
+
+/** spec/reviews#plan-verdict: the kinds of a plan finding; `gap` is the ticket's own, for the person. */
+export const planFindingKinds = [
+	'missed',
+	'contradicts',
+	'out-of-scope',
+	'assumption',
+	'left-open',
+	'unverifiable',
+	'split',
+	'gap',
+] as const;
+export type PlanFindingKind = (typeof planFindingKinds)[number];
+export type PlanFindingList = 'ticket' | 'code' | 'gap';
+export const isPlanFindingKind = (value: unknown): value is PlanFindingKind =>
+	planFindingKinds.includes(value as PlanFindingKind);
+/** spec/reviews#plan-verdict: Plan vs ticket, Plan vs code, Gaps in the ticket. */
+export function planFindingList(kind: PlanFindingKind): PlanFindingList {
+	if (kind === 'gap') return 'gap';
+	return kind === 'missed' || kind === 'contradicts' || kind === 'out-of-scope' ? 'ticket' : 'code';
+}
+export const planReviewItemLimit = 12,
+	planFindingTextLimit = 2000,
+	planFindingWhereLimit = 200,
+	/** What `read_plan` and `read_sources` return at most per call, and the plan text a review keeps. */
+	planReadLimit = 200_000,
+	/** A first read's items and the ones a closure check may add, with room for a `Fix {n}` round. */
+	planFindingStoreLimit = 48;
+export type PlanFinding = {
+	id: string;
+	kind: PlanFindingKind;
+	text: string;
+	/** The place in the ticket, the contract or the plan (`CRM-412 · Notes`, `api-contract.yaml:88`). */
+	where?: string;
+	reviewer: string;
+	/** The run that raised it: 1 is the first read, later ones are closure checks (`introduced`). */
+	round: number;
+	/** The marks of spec/reviews#findings: the closure check's round that found it open / closed, a problem the revision brought in. */
+	open?: number;
+	closed?: number;
+	introduced?: number;
+	accepted?: boolean;
+	/** The author's objection (`review_reply`). */
+	answer?: string;
+	/** The reviewer's reason it is still open. */
+	reason?: string;
+};
+export type TaskReviewPlan = {
+	/** A solo task's plan for approval, or the root foreman's split. */
+	kind: 'approval' | 'split';
+	/** The permission request or the crew plan presented last, its revision (spec/chat-turns-plans-and-questions#plan-revisions) and text. */
+	id: string;
+	revision: number;
+	text: string;
+	/** The revision of the first read. */
+	read: number;
+	/** The revision the current round reads, and its text when it differs from `text`. */
+	seen: number;
+	seenText?: string;
+	/** A closure check's diff base: the revision the previous round read, and its text. */
+	base?: number;
+	baseText?: string;
+	/** The journal seq after the last batch to the author: a turn that ends after it without a new plan opens the closure check. */
+	sentAt?: number;
+	/** The plan was approved: the next presentation is a new plan with a read of its own. */
+	approved?: boolean;
+};
+const mark = (value: unknown) => value === undefined || count(value);
+export function isTaskReviewPlan(value: unknown): value is TaskReviewPlan {
+	return (
+		isRecord(value) &&
+		(value.kind === 'approval' || value.kind === 'split') &&
+		text(value.id, 200) &&
+		count(value.revision) &&
+		count(value.read) &&
+		count(value.seen) &&
+		text(value.text, planReadLimit) &&
+		(value.seenText === undefined || text(value.seenText, planReadLimit)) &&
+		mark(value.base) &&
+		(value.baseText === undefined || text(value.baseText, planReadLimit)) &&
+		mark(value.sentAt) &&
+		(value.approved === undefined || typeof value.approved === 'boolean')
+	);
+}
+export function isPlanFinding(value: unknown): value is PlanFinding {
+	return (
+		isRecord(value) &&
+		text(value.id, 200) &&
+		isPlanFindingKind(value.kind) &&
+		text(value.text, planFindingTextLimit) &&
+		(value.where === undefined || text(value.where, planFindingWhereLimit)) &&
+		text(value.reviewer, 200) &&
+		count(value.round) &&
+		mark(value.open) &&
+		mark(value.closed) &&
+		mark(value.introduced) &&
+		(value.accepted === undefined || typeof value.accepted === 'boolean') &&
+		(value.answer === undefined || text(value.answer, 10_000)) &&
+		(value.reason === undefined || text(value.reason, 10_000))
+	);
+}
+/** spec/reviews#findings: a plan finding's state from its marks — the same states as a code finding's. */
+export function planFindingState(finding: PlanFinding): TaskReviewFindingState {
+	if (finding.accepted) return 'accepted';
+	const closed = finding.closed ?? 0;
+	if (finding.open !== undefined && finding.open > closed) return 'open';
+	if (finding.introduced !== undefined && finding.introduced > closed) return 'new';
+	if (closed) return finding.answer ? 'answered' : 'fixed';
+	return 'sent';
+}
+/** The findings that go to the author: everything but the gaps. */
+export const authorFindings = (findings: readonly PlanFinding[] = []) =>
+	findings.filter((finding) => finding.kind !== 'gap');
+/** The findings still open after a closure check (open or new, not accepted). */
+export const openPlanFindings = (findings: readonly PlanFinding[] = []) =>
+	authorFindings(findings).filter((finding) => {
+		const state = planFindingState(finding);
+		return state === 'open' || state === 'new';
+	});
+export type PlanVerdictItem = { kind: PlanFindingKind; text: string; where?: string };
+/**
+ * spec/reviews#plan-verdict, spec/reviews#plan-loop: a reviewer's `submit_plan_review`, checked. A first read takes findings and gaps (at most
+ * 12 in all, none empty); a closure check takes `{replyTo, text}` for its own findings still open and `{kind, text, where?, introduced: true}`.
+ * Errors are English for the agent (rule 12).
+ */
+export function parsePlanVerdict(
+	input: { findings?: unknown; gaps?: unknown },
+	closure: boolean,
+	/** This reviewer's findings of the review that a closure check may name. */
+	own: readonly PlanFinding[] = []
+): { items: PlanVerdictItem[]; replies: { id: string; text: string }[] } {
+	const findings = Array.isArray(input.findings) ? input.findings : [],
+		gaps = Array.isArray(input.gaps) ? input.gaps : [];
+	if (input.findings !== undefined && !Array.isArray(input.findings))
+		throw new Error('findings must be a list');
+	if (input.gaps !== undefined && !Array.isArray(input.gaps))
+		throw new Error('gaps must be a list');
+	const item = (value: unknown, kind?: 'gap'): PlanVerdictItem => {
+		if (!isRecord(value)) throw new Error('Each item is an object with kind and text');
+		const k = kind ?? value.kind;
+		if (!isPlanFindingKind(k) || (kind === undefined && k === 'gap'))
+			throw new Error(
+				`kind must be one of missed, contradicts, out-of-scope, assumption, left-open, unverifiable, split; a gap in the ticket goes into gaps`
+			);
+		if (typeof value.text !== 'string' || !value.text.trim())
+			throw new Error('Each item needs text');
+		if (value.text.length > planFindingTextLimit)
+			throw new Error(`An item's text is at most ${planFindingTextLimit} characters`);
+		if (
+			value.where !== undefined &&
+			(typeof value.where !== 'string' || value.where.length > planFindingWhereLimit)
+		)
+			throw new Error(`where is at most ${planFindingWhereLimit} characters`);
+		return {
+			kind: k,
+			text: value.text.trim(),
+			...(typeof value.where === 'string' && value.where.trim()
+				? { where: value.where.trim() }
+				: {}),
+		};
+	};
+	if (!closure) {
+		if (findings.some((value) => isRecord(value) && value.replyTo !== undefined))
+			throw new Error('replyTo is for a closure check; the first read lists new findings only.');
+		if (!findings.length && !gaps.length)
+			throw new Error('findings or gaps is required, or call approve');
+		if (findings.length + gaps.length > planReviewItemLimit)
+			throw new Error(
+				`At most ${planReviewItemLimit} items in all: keep the most severe findings and gaps.`
+			);
+		return {
+			items: [...findings.map((value) => item(value)), ...gaps.map((value) => item(value, 'gap'))],
+			replies: [],
+		};
+	}
+	if (gaps.length) throw new Error('Gaps are not asked again in a closure check.');
+	if (!findings.length) throw new Error('findings is required, or call approve');
+	const replies: { id: string; text: string }[] = [],
+		items: PlanVerdictItem[] = [];
+	for (const value of findings) {
+		if (isRecord(value) && typeof value.replyTo === 'string') {
+			if (!own.some((finding) => finding.id === value.replyTo))
+				throw new Error(
+					`replyTo ${value.replyTo} is not one of your findings in this review. Your findings: ${own.map((finding) => finding.id).join(', ') || 'none'}.`
+				);
+			if (typeof value.text !== 'string' || !value.text.trim() || value.text.length > 10_000)
+				throw new Error('A reply needs text');
+			replies.push({ id: value.replyTo, text: value.text.trim() });
+		} else if (isRecord(value) && value.introduced === true) items.push(item(value));
+		else
+			throw new Error(
+				'In a closure check only replyTo (a finding still open) or introduced: true (a problem the fix brought in) is accepted.'
+			);
+	}
+	if (items.length > planReviewItemLimit)
+		throw new Error(`At most ${planReviewItemLimit} new items.`);
+	return { items, replies };
+}
+/** spec/reviews#plan-loop: the findings as the author reads them, one per line with id, kind and place. */
+export function planFindingsText(findings: readonly PlanFinding[], withReasons = false) {
+	return findings
+		.map(
+			(finding) =>
+				`- id ${finding.id} [${finding.kind}]${finding.where ? ` (${finding.where})` : ''}: ${finding.text}${withReasons && finding.reason ? `\n  Still open: ${finding.reason}` : ''}`
+		)
+		.join('\n');
+}
+/**
+ * spec/reviews#plan-inputs: the foreman's split as the reviewer reads it — the summary, each part with its executor (role, provider, model),
+ * files, scopes and prompt, then the crew's roster. English for the agent (rule 12).
+ */
+export function splitPlanMarkdown(
+	plan: {
+		summary: string;
+		parts: readonly {
+			title: string;
+			agent: string;
+			prompt: string;
+			files: readonly string[];
+			scopes: readonly string[];
+		}[];
+		crew?: readonly CrewSpecAgent[];
+	},
+	roster: readonly CrewSpecAgent[]
+): string {
+	const agents = (plan.crew ?? roster).filter((agent) => agent.role !== 'reviewer'),
+		about = (agent: CrewSpecAgent | undefined) =>
+			agent
+				? [
+						agent.role,
+						agent.template ? `template ${agent.template}` : '',
+						agent.provider,
+						...Object.values(agent.choiceNames),
+					]
+						.filter(Boolean)
+						.join(', ')
+				: 'not in the crew';
+	const parts = plan.parts.map((part, index) => {
+		const agent = agents.find((item) => item.name === part.agent);
+		return [
+			`## Part ${index + 1}: ${part.title}`,
+			`Executor: ${part.agent} (${about(agent)})`,
+			`Files: ${part.files.length ? part.files.join(', ') : "the executor's whole zone"}`,
+			part.scopes.length ? `Scopes: ${part.scopes.join(', ')}` : '',
+			'',
+			part.prompt.trim(),
+		]
+			.filter((line, i) => line !== '' || i === 4)
+			.join('\n');
+	});
+	const crew = agents.map(
+		(agent) =>
+			`- ${agent.name}: ${about(agent)}${agent.zone.length ? `; zone ${agent.zone.join(', ')}` : ''}${agent.summary ? `; ${agent.summary}` : ''}`
+	);
+	return [
+		'# Split proposed by the foreman',
+		'',
+		plan.summary.trim(),
+		'',
+		'All parts start in parallel once the person approves.',
+		'',
+		...parts.flatMap((part) => [part, '']),
+		'## Crew',
+		...crew,
+	].join('\n');
 }

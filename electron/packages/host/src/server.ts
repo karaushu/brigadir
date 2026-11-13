@@ -61,8 +61,11 @@ import {
 	runningSubagents,
 	outputTail,
 	isPlanApproval,
+	planApprovalText,
 	planChatPrompt,
 	planRejectOption,
+	splitPlanMarkdown,
+	type CrewPlan,
 	recordModeId,
 	selectOption,
 	sessionModeName,
@@ -138,7 +141,8 @@ import {
 	partBrief,
 	type CrewContext,
 } from './crew';
-import { TaskReviewLife, ownReviewCrew, ownReviewTool } from './task-review';
+import { TaskReviewLife, ownReviewCrew, ownReviewTool, type PresentedPlan } from './task-review';
+import { saveTaskSource } from './task-sources';
 import {
 	assignmentBlock,
 	compactionDue,
@@ -217,6 +221,40 @@ export async function startHost(config: HostConfig) {
 	let crewHost: CrewHost | null = null;
 	/** spec/reviews#points: the task's review before the PR; a solo task gets a crew host of its reviewers when one starts. */
 	const foremanTask = !!crew && crew.role === 'foreman';
+	/** spec/reviews#plan-review: the root foreman's split that waits for the person (a lead's plan is approved by the host). */
+	let waitingSplit: CrewPlan | null = null;
+	/** spec/reviews#plan-start: the plan that waits for the person now — a solo task's plan for approval or the root foreman's split. */
+	const planWaiting = (): PresentedPlan | null => {
+		if (foremanTask) {
+			if (!waitingSplit) return null;
+			const requests = records.filter((record) => record.event.kind === 'crew.plan.requested');
+			return {
+				kind: 'split',
+				id: waitingSplit.id,
+				revision: Math.max(1, requests.length),
+				text: splitPlanMarkdown(waitingSplit, crew?.spec.root.agents ?? []),
+			};
+		}
+		const pending = [...permissions.values()].find((item) => isPlanApproval(item.request));
+		if (!pending) return null;
+		const presented = records.filter(
+			(record) =>
+				record.event.kind === 'permission.requested' && isPlanApproval(record.event.request)
+		);
+		const at = presented.findLast(
+			(record) =>
+				record.event.kind === 'permission.requested' &&
+				record.event.request.id === pending.request.id
+		);
+		const text = planApprovalText(pending.request, records, at?.seq ?? Number.MAX_SAFE_INTEGER);
+		if (!text) return null;
+		return {
+			kind: 'approval',
+			id: pending.request.id,
+			revision: Math.max(1, at ? presented.indexOf(at) + 1 : presented.length),
+			text,
+		};
+	};
 	const taskReview: TaskReviewLife = new TaskReviewLife({
 		store,
 		key: config.key,
@@ -234,9 +272,12 @@ export async function startHost(config: HostConfig) {
 				crew: { kind: 'review-comments', round, comments: review.comments.length },
 			}),
 		// spec/reviews#who: the app resolves the reviewer from the settings, sign-ins and catalogs; without a window, a fresh session of the task's own provider.
-		resolve: async (point) => {
+		resolve: async (point, auto) => {
 			if (ui) {
-				const answer = await ui.request('review_reviewer', { point }).catch(() => null);
+				const answer = await ui
+					.request('review_reviewer', { point, ...(auto ? { auto: true } : {}) })
+					.catch(() => null);
+				if (isRecord(answer) && answer.off === true) return { off: true };
 				if (isRecord(answer) && typeof answer.failure === 'string')
 					return { failure: answer.failure };
 				if (isSessionCommand(answer) && answer.kind === 'startReview') return answer;
@@ -263,6 +304,22 @@ export async function startHost(config: HostConfig) {
 				.then((value) => value.files.length)
 				.catch(() => 0),
 		checkpoint: () => checkpoint('tools'),
+		planWaiting,
+		// spec/reviews#plan-loop: the findings answer the waiting plan — its reject option (else it is cancelled), or the foreman's propose_plan — and run after the turn.
+		planFeedback: async (text, review, round) => {
+			if (foremanTask) {
+				await crewHost?.rejectPlanForReview(text);
+				return;
+			}
+			const pending = [...permissions.values()].find((item) => isPlanApproval(item.request));
+			if (pending) await pending.finish(planRejectOption(pending.request)?.id ?? null);
+			await command({
+				kind: 'submitReview',
+				text,
+				review,
+				crew: { kind: 'review-comments', round, comments: review.comments.length },
+			});
+		},
 		prompt: (text) => command({ kind: 'prompt', text, crew: { kind: 'review-continue' } }),
 		// spec/reviews#reviewer-sessions: the task's first prompt, and a crew worker's part with its acceptance criteria.
 		brief: async () => {
@@ -1320,6 +1377,8 @@ export async function startHost(config: HostConfig) {
 					}
 				}
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
+			// spec/reviews#plan-start: a presented plan starts its review or answers one; an approval ends it.
+			if (!stopping) planEvent(event);
 			if (crewWorker && event.kind === 'turn.completed' && !stopping)
 				void (async () => {
 					if (!crewHost || (await crewHost.branchReady()))
@@ -1334,6 +1393,40 @@ export async function startHost(config: HostConfig) {
 				});
 		});
 		return result;
+	}
+	/** spec/reviews#plan-start, spec/reviews#plan-loop: a plan presented, answered or approved — the plan review hears it. */
+	function planEvent(event: SessionEvent) {
+		if (event.kind === 'permission.requested' && isPlanApproval(event.request)) {
+			const plan = planWaiting();
+			if (plan?.id === event.request.id) void taskReview.planPresented(plan).catch(() => {});
+			return;
+		}
+		if (event.kind === 'permission.resolved') {
+			const asked = records.findLast(
+				(record) =>
+					record.event.kind === 'permission.requested' && record.event.request.id === event.id
+			);
+			if (asked?.event.kind !== 'permission.requested' || !isPlanApproval(asked.event.request))
+				return;
+			const allowed =
+				event.optionId !== null &&
+				asked.event.request.options
+					.find((option) => option.id === event.optionId)
+					?.kind.startsWith('allow') === true;
+			void taskReview.planDecided(allowed).catch(() => {});
+			return;
+		}
+		// A lead's plan is approved by the host at once: only the root foreman's split waits for the person.
+		if (!foremanTask || crew?.parentKey) return;
+		if (event.kind === 'crew.plan.requested') {
+			waitingSplit = event.plan;
+			const plan = planWaiting();
+			if (plan) void taskReview.planPresented(plan).catch(() => {});
+		}
+		if (event.kind === 'crew.plan.resolved' && waitingSplit?.id === event.id) {
+			waitingSplit = null;
+			void taskReview.planDecided(event.approved).catch(() => {});
+		}
 	}
 	async function permission(
 		request: PermissionRequest,
@@ -2489,6 +2582,9 @@ export async function startHost(config: HostConfig) {
 				throw new Error(hiddenToolMessages.create_task);
 			return proposeTask(params, signal);
 		}
+		// spec/reviews#save-source: the plan's author saves a ticket or contract next to the plans.
+		if (method === 'save_source')
+			return saveTaskSource(store, config.key, isRecord(params) ? params : {}, emit);
 		if (method === 'review_reply') {
 			if (
 				!isRecord(params) ||
@@ -3237,6 +3333,20 @@ export async function startHost(config: HostConfig) {
 			if (spec) crewHost = await crewHostFor(selfContext(spec));
 		}
 		await taskReview.load();
+		// spec/reviews#plan-review: a root foreman's split that still waits after a restart.
+		if (foremanTask && !crew?.parentKey) {
+			const requested = records.findLast((record) => record.event.kind === 'crew.plan.requested');
+			if (
+				requested?.event.kind === 'crew.plan.requested' &&
+				!records.some(
+					(record) =>
+						record.seq > requested.seq &&
+						record.event.kind === 'crew.plan.resolved' &&
+						record.event.id === (requested.event as { plan: CrewPlan }).plan.id
+				)
+			)
+				waitingSplit = requested.event.plan;
+		}
 		await crewWorker?.start();
 		ready = true;
 		if (!config.consoleOnly) await ensureAgent();

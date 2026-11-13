@@ -208,6 +208,8 @@ export type AppSettings = {
 	actionAgents: ActionAgents;
 	/** spec/pull-requests-and-ci#review-crew: `Remember for …` on the Crew segment — a review action runs by a library crew; excludes its `actionAgents` entry. */
 	actionCrews: ActionCrews;
+	/** spec/reviews#who: `Off` in the menu of `Plan review` — no plan review starts by itself. */
+	planReviewOff: boolean;
 	modules: AppModules;
 	projects: ProjectDefaults;
 	keymap: KeymapSettings;
@@ -244,6 +246,7 @@ export const defaultAppSettings: AppSettings = {
 	helperAgent: null,
 	actionAgents: {},
 	actionCrews: {},
+	planReviewOff: false,
 	modules: { ...defaultModules },
 	projects: { defaultView: 'board' },
 	keymap: defaultKeymap,
@@ -339,7 +342,8 @@ export function isAgentDefaults(value: unknown): value is AgentDefaults {
 export function isAppSettings(value: unknown): value is AppSettings {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 23 &&
+		Object.keys(value).length === 24 &&
+		typeof value.planReviewOff === 'boolean' &&
 		isSlackSettings(value.slack) &&
 		isUpdateSettings(value.updates) &&
 		isTaskColumns(value.taskColumns) &&

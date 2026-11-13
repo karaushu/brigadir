@@ -51,10 +51,16 @@ export function taskActivityText(locale: Locale, task: AgentTask): string {
 							]
 								.filter(Boolean)
 								.join(' · ')
-						: t(
-								locale,
-								task.blockedBy?.length ? 'Waiting for the lock' : statusLabels[task.status]
-							);
+						: // spec/sidebar#activity-line: the budget question waits — `{Provider} budget reached`.
+							task.tokenHold?.state === 'asked'
+							? t(locale, '{provider} budget reached').replace(
+									'{provider}',
+									t(locale, task.tokenHold.provider === 'claude' ? 'Claude' : 'Codex')
+								)
+							: t(
+									locale,
+									task.blockedBy?.length ? 'Waiting for the lock' : statusLabels[task.status]
+								);
 }
 /**
  * spec/tasks#worktree-preparation: in the sidebar, a «Preparing…» or «Queued» card shows the

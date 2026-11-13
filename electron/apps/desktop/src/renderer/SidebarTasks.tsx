@@ -6,6 +6,7 @@ import {
 	crewNeedsYou,
 	crewWorkerRows,
 	defaultArchiveAfterDays,
+	hasTokens,
 	specProviders,
 	t,
 	type AgentTask,
@@ -22,6 +23,7 @@ import { useBrowserLive } from './browser-live';
 import { useWorkspace } from './store';
 import { useTaskReview } from './TaskReview';
 import { Glyph } from './ui/Glyph';
+import { CardTokens, MemberTokens } from './TaskUsage';
 import { StatusIcon } from './ui/Controls';
 import { ChangeCounts } from './ui/ChangeCounts';
 import { Popover, useHoverPopover } from './ui/Popover';
@@ -263,12 +265,17 @@ function WorkerRow({
 						title={t(locale, 'Unread')}
 					/>
 				)}
-				{row.provider && (
-					<span
-						className={styles.workerProvider}
-						title={t(locale, row.provider === 'claude' ? 'Claude' : 'Codex')}>
-						<Glyph name={row.provider === 'claude' ? 'claude' : 'openai'} size={11} />
-					</span>
+				{/* spec/sidebar#crew-card: the member's own tokens in place of the provider glyph once it has any. */}
+				{worker.tokens && hasTokens(worker.tokens) ? (
+					<MemberTokens task={worker} locale={locale} />
+				) : (
+					row.provider && (
+						<span
+							className={styles.workerProvider}
+							title={t(locale, row.provider === 'claude' ? 'Claude' : 'Codex')}>
+							<Glyph name={row.provider === 'claude' ? 'claude' : 'openai'} size={11} />
+						</span>
+					)
 				)}
 			</button>
 			<Popover
@@ -543,6 +550,8 @@ export const TaskRow = memo(function TaskRow({
 								data-task-counts
 							/>
 						)}
+						{/* spec/sidebar#card-tokens */}
+						<CardTokens task={task} locale={locale} />
 						{pr && (
 							<span
 								className={styles.taskPR}

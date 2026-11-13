@@ -22,11 +22,13 @@ export function ComposerEnvironment({
 	locale,
 	contended = [],
 	notices,
+	usage,
 }: {
 	task: AgentTask;
 	locale: Locale;
 	/** spec/notifications-slack-notes-and-schedules#repo-contention: the chip stands right of the footer button, its own target. */ contended?: readonly ScopeLockView[];
 	/** spec/notifications-slack-notes-and-schedules#notice-chips: the other class S chips, after it. */ notices?: ReactNode;
+	/** spec/composer#task-usage: the token counter, at the footer's right end. */ usage?: ReactNode;
 }) {
 	const [open, setOpen] = useState(false),
 		[repos, setRepos] = useState<Repo[] | null>(null),
@@ -57,9 +59,10 @@ export function ComposerEnvironment({
 	// A task without a tree yet still shows its ongoing states (spec/notifications-slack-notes-and-schedules#notice-chips): the footer holds the chips alone.
 	const tree = task.taskTree;
 	if (!tree)
-		return notices ? (
+		return notices || usage ? (
 			<div className={styles.root} data-composer-environment data-notices-only>
 				{notices}
+				{usage}
 			</div>
 		) : null;
 	// spec/tasks#agent-worktrees: a checkout of the root's repo from outside stands for the root; the task itself stays without isolation.
@@ -124,6 +127,7 @@ export function ComposerEnvironment({
 				<ContentionChip task={task} locale={locale} placement="composer" scopes={contended} />
 			)}
 			{notices}
+			{usage}
 			<Popover
 				id={id}
 				open={open}

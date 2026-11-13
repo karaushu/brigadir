@@ -80,8 +80,19 @@ async function launch(store: SessionStore, key: TaskKey) {
 	return { client, kill };
 }
 const records = async (client: HostClient) => (await client.snapshot()).records;
-const find = (client: HostClient, test: (record: EventRecord) => boolean, timeout?: number) =>
-	until(async () => (await records(client)).find(test), timeout);
+function find<R extends EventRecord>(
+	client: HostClient,
+	test: (record: EventRecord) => record is R,
+	timeout?: number
+): Promise<R>;
+function find(
+	client: HostClient,
+	test: (record: EventRecord) => boolean,
+	timeout?: number
+): Promise<EventRecord>;
+function find(client: HostClient, test: (record: EventRecord) => boolean, timeout?: number) {
+	return until(async () => (await records(client)).find(test), timeout);
+}
 const kind =
 	<K extends EventRecord['event']['kind']>(name: K) =>
 	(

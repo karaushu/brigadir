@@ -2875,7 +2875,12 @@ export async function startHost(config: HostConfig) {
 			busy,
 			starting: startingAgent !== null,
 			saving,
-			inputs: permissions.size + questions.size + proposals.size,
+			// spec/agents-and-providers#budget-reached: a waiting budget question keeps the host, like any question.
+			inputs:
+				permissions.size +
+				questions.size +
+				proposals.size +
+				(budget?.currentHold()?.state === 'asked' ? 1 : 0),
 			queued: queue.prompts.length,
 			quota: quotaBlocked(),
 			consoles: terminals.consolesAlive(),

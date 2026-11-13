@@ -87,7 +87,8 @@ export class TaskReviewLife {
 	}
 	async load() {
 		try {
-			const value = await readDocument(await this.file());
+			// spec/reviews#data: version 1 reads as a review before the PR; it is written back as version 2.
+			const value = await readDocument(await this.file(), undefined, [1, 2]);
 			this.doc = readTaskReviewDocument(value, this.deps.key.id) ?? emptyTaskReviewDocument;
 		} catch (error) {
 			if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== 'ENOENT')

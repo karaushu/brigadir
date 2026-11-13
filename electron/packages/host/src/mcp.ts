@@ -712,18 +712,25 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 	},
 	submit_review: {
 		description:
-			'Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments.',
+			"Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. In a closure check of a task's own review, an item is either {replyTo: <finding id>, text} for a finding still open, or {path, start, text, introduced: true} for a problem the fix brought in.",
 		shape: {
 			taskId,
 			reviewId: z.string().max(128).optional(),
+			// spec/reviews#loop: a closure check names an open finding by `replyTo` (no path) or flags a problem the fix introduced.
 			comments: z
 				.array(
-					z.object({
-						path: z.string().min(1).max(1024),
-						start: z.number().int().min(1).optional(),
-						end: z.number().int().min(1).optional(),
-						text: z.string().min(1).max(10_000),
-					})
+					z
+						.object({
+							path: z.string().min(1).max(1024).optional(),
+							start: z.number().int().min(1).optional(),
+							end: z.number().int().min(1).optional(),
+							text: z.string().min(1).max(10_000),
+							replyTo: z.string().min(1).max(100).optional(),
+							introduced: z.boolean().optional(),
+						})
+						.refine((item) => item.path !== undefined || item.replyTo !== undefined, {
+							message: 'Each comment needs a path, or replyTo for a finding still open',
+						})
 				)
 				.min(1)
 				.max(200),

@@ -416,7 +416,7 @@
     },
     {
      "name": "propose_review",
-     "description": "Offer the person a review of this task's changes by other agents before the pull request. The person sees a card and starts the review or dismisses it; the call does not wait. When the person starts it, reviewer agents read your changes and their comments come back to you as a review batch: fix what is right, and where you disagree say why in your answer, since the reviewers read it in the next round. summary: one or two sentences on what was done and what the reviewers should look at. Returns proposed: true, or the reason it was refused. Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.",
+     "description": "Offer the person a review of this task's changes by another agent before the pull request. The person sees a card and starts the review or dismisses it; the call does not wait. When the person starts it, the reviewer reads your changes once and its findings come back to you as a review batch: fix each one once, or object to it with review_reply; the reviewer then checks only whether each finding is closed. summary: one or two sentences on what was done and what the reviewer should look at. Returns proposed: true, or the reason it was refused. Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -433,8 +433,29 @@
      }
     },
     {
+     "name": "request_review",
+     "description": "Ask Brigadir for a mid-task review of this task's changes by another agent. Brigadir decides: it refuses while a review of the task runs, when nothing changed since the last review, or when no reviewer is available. A started review reads the task's state now, so keep working; its findings arrive later as a review batch: fix each one once, or object to it with review_reply. reason: what you just finished, e.g. 'the data layer'. Returns started: true with the reviewer, or started: false with the reason. Call it after you finish a layer that other work builds on, such as the data layer, a shared API, a schema or a migration, before you build on top of it. Do not call it after small steps or at the end of the task: the review before the pull request covers that.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "reason": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       }
+      },
+      "required": [
+       "reason"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "review_reply",
-     "description": "Answer a reviewer's comment from a review batch of this task's own review: the reply joins the comment's thread, and the reviewers read it in the next round. Use it for a comment you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a comment of a review batch of this task, when you do not fix it as asked.",
+     "description": "Object to a reviewer's finding from a review batch of this task's own review: the reply joins the finding's thread, and the reviewer reads it in its closure check. Use it for a finding you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a finding of a review batch of this task, when you do not fix it as asked.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -1584,7 +1605,7 @@
     },
     {
      "name": "propose_review",
-     "description": "Offer the person a review of this task's changes by other agents before the pull request. The person sees a card and starts the review or dismisses it; the call does not wait. When the person starts it, reviewer agents read your changes and their comments come back to you as a review batch: fix what is right, and where you disagree say why in your answer, since the reviewers read it in the next round. summary: one or two sentences on what was done and what the reviewers should look at. Returns proposed: true, or the reason it was refused. Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.",
+     "description": "Offer the person a review of this task's changes by another agent before the pull request. The person sees a card and starts the review or dismisses it; the call does not wait. When the person starts it, the reviewer reads your changes once and its findings come back to you as a review batch: fix each one once, or object to it with review_reply; the reviewer then checks only whether each finding is closed. summary: one or two sentences on what was done and what the reviewer should look at. Returns proposed: true, or the reason it was refused. Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -1601,8 +1622,29 @@
      }
     },
     {
+     "name": "request_review",
+     "description": "Ask Brigadir for a mid-task review of this task's changes by another agent. Brigadir decides: it refuses while a review of the task runs, when nothing changed since the last review, or when no reviewer is available. A started review reads the task's state now, so keep working; its findings arrive later as a review batch: fix each one once, or object to it with review_reply. reason: what you just finished, e.g. 'the data layer'. Returns started: true with the reviewer, or started: false with the reason. Call it after you finish a layer that other work builds on, such as the data layer, a shared API, a schema or a migration, before you build on top of it. Do not call it after small steps or at the end of the task: the review before the pull request covers that.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "reason": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       }
+      },
+      "required": [
+       "reason"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "review_reply",
-     "description": "Answer a reviewer's comment from a review batch of this task's own review: the reply joins the comment's thread, and the reviewers read it in the next round. Use it for a comment you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a comment of a review batch of this task, when you do not fix it as asked.",
+     "description": "Object to a reviewer's finding from a review batch of this task's own review: the reply joins the finding's thread, and the reviewer reads it in its closure check. Use it for a finding you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a finding of a review batch of this task, when you do not fix it as asked.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -2515,7 +2557,7 @@
     },
     {
      "name": "submit_review",
-     "description": "Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. Use it when the work needs changes before it is accepted.",
+     "description": "Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. In a closure check of a task's own review, an item is either {replyTo: <finding id>, text} for a finding still open, or {path, start, text, introduced: true} for a problem the fix brought in. Use it when the work needs changes before it is accepted.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -2555,10 +2597,17 @@
            "type": "string",
            "minLength": 1,
            "maxLength": 10000
+          },
+          "replyTo": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 100
+          },
+          "introduced": {
+           "type": "boolean"
           }
          },
          "required": [
-          "path",
           "text"
          ]
         }
@@ -3643,7 +3692,7 @@
     },
     {
      "name": "submit_review",
-     "description": "Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. Use it when the work needs changes before it is accepted.",
+     "description": "Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. In a closure check of a task's own review, an item is either {replyTo: <finding id>, text} for a finding still open, or {path, start, text, introduced: true} for a problem the fix brought in. Use it when the work needs changes before it is accepted.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3683,10 +3732,17 @@
            "type": "string",
            "minLength": 1,
            "maxLength": 10000
+          },
+          "replyTo": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 100
+          },
+          "introduced": {
+           "type": "boolean"
           }
          },
          "required": [
-          "path",
           "text"
          ]
         }
@@ -3976,6 +4032,54 @@
   },
   "toolsList": {
    "tools": [
+    {
+     "name": "request_review",
+     "description": "Ask Brigadir for a mid-task review of this task's changes by another agent. Brigadir decides: it refuses while a review of the task runs, when nothing changed since the last review, or when no reviewer is available. A started review reads the task's state now, so keep working; its findings arrive later as a review batch: fix each one once, or object to it with review_reply. reason: what you just finished, e.g. 'the data layer'. Returns started: true with the reviewer, or started: false with the reason. Call it after you finish a layer that other work builds on, such as the data layer, a shared API, a schema or a migration, before you build on top of it. Do not call it after small steps or at the end of the task: the review before the pull request covers that.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "reason": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+       }
+      },
+      "required": [
+       "reason"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "review_reply",
+     "description": "Object to a reviewer's finding from a review batch of this task's own review: the reply joins the finding's thread, and the reviewer reads it in its closure check. Use it for a finding you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a finding of a review batch of this task, when you do not fix it as asked.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "commentId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 10000
+       }
+      },
+      "required": [
+       "commentId",
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
     {
      "name": "browser_open",
      "description": "Open a page in your own browser tab of this task, on screen or not: the first call makes the tab and later calls navigate it; tab \"new\" makes another one. The human sees the tab in the work area when they open the task. External navigation requires domain permission. Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.",
@@ -5281,7 +5385,7 @@
     },
     {
      "name": "submit_review",
-     "description": "Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. Use it when the work needs changes before it is accepted.",
+     "description": "Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. In a closure check of a task's own review, an item is either {replyTo: <finding id>, text} for a finding still open, or {path, start, text, introduced: true} for a problem the fix brought in. Use it when the work needs changes before it is accepted.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -5321,10 +5425,17 @@
            "type": "string",
            "minLength": 1,
            "maxLength": 10000
+          },
+          "replyTo": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 100
+          },
+          "introduced": {
+           "type": "boolean"
           }
          },
          "required": [
-          "path",
           "text"
          ]
         }

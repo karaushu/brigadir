@@ -1,6 +1,6 @@
 import type { AgentProvider } from './agent';
 import { crewName, isCrewSpec, type CrewSpec, type CrewSpecAgent } from './crew';
-import { agentProviders, type AgentProviderId } from './settings';
+import type { AgentProviderId } from './settings';
 import { isRecord } from './workspace';
 
 /**
@@ -116,7 +116,7 @@ export function isTaskReviewWho(value: unknown): value is TaskReviewWho {
 export function isReviewerChoice(value: unknown): value is ReviewerChoice {
 	return (
 		isRecord(value) &&
-		agentProviders.includes(value.provider as AgentProviderId) &&
+		(value.provider === 'claude' || value.provider === 'codex') &&
 		(value.model === null || text(value.model, 200)) &&
 		(value.effort === null || text(value.effort, 200)) &&
 		['setting', 'other', 'same', 'person'].includes(String(value.source))
@@ -330,6 +330,8 @@ export const reviewPointPrompt: Record<ReviewPoint, string> = {
  * fresh session of the task's own provider, else nobody. Reads only settings, sign-in state and catalogs — no knowledge of agents (rule 7).
  */
 export function resolveReviewer(input: {
+	/** The app's providers in its own order. */
+	providers: readonly AgentProviderId[];
 	author: AgentProviderId;
 	enabled: Record<AgentProviderId, boolean>;
 	/** Installed and signed in; absent — not known. */
@@ -346,7 +348,7 @@ export function resolveReviewer(input: {
 	});
 	if (input.override && input.enabled[input.override.provider])
 		return { ...input.override, source: 'setting' };
-	const other = agentProviders.find(
+	const other = input.providers.find(
 		(provider) =>
 			provider !== input.author && input.enabled[provider] && input.ready[provider] === true
 	);

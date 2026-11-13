@@ -103,7 +103,7 @@ const reviewer = resolveCrewAgent(
 	false
 );
 
-it('reviews a task inside it: the agent proposes, reviewers comment, the agent answers and round 2 approves (spec/reviews#points)', async () => {
+it('reviews a task inside it: one read, the agent fixes once, the closure check passes, a later change outdates it (spec/reviews#loop)', async () => {
 	const { repo, store, task } = await setup('Write the output');
 	const client = await launch(store, task);
 	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
@@ -126,8 +126,12 @@ it('reviews a task inside it: the agent proposes, reviewers comment, the agent a
 		instructions: 'Look at the output.',
 		guidance: '\n\nInstructions from the person for this review:\nLook at the output.',
 	});
-	const started = await find(client, (r) => r.event.kind === 'review.started');
-	expect(started.event).toMatchObject({ reviewers: ['Reviewer'], who: { kind: 'agent' } });
+	const started = await find(client, (r) => r.event.kind === 'task-review.started');
+	expect(started.event).toMatchObject({
+		point: 'pre-pr',
+		startedBy: 'person',
+		reviewers: ['Reviewer'],
+	});
 	// The reviewer is a read-only worker of the task: no setup, its own worktree, the task as its crew.
 	const created = await find(
 		client,
@@ -144,41 +148,47 @@ it('reviews a task inside it: the agent proposes, reviewers comment, the agent a
 		title: 'reviews the changes',
 	});
 	expect(reviewerTask.launch).toMatchObject({ isolation: 'worktree', setupCommand: '' });
-	// Round 1: the comment goes to the task's own agent as a review batch, and is a thread of its review.
-	const round1 = await find(
-		client,
-		(r) => r.event.kind === 'crew.review' && r.event.state === 'comments'
-	);
-	expect(round1.event).toMatchObject({ taskId: task.id, round: 1, comments: 1 });
+	// The first read: the finding goes to the task's own agent as one batch, and is a thread of its review.
+	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(read.event).toMatchObject({ findings: 1, reviewers: ['Reviewer'] });
 	const batch = await find(
 		client,
-		(r) => r.seq > round1.seq - 5 && r.event.kind === 'turn.started' && !!r.event.review
+		(r) => r.event.kind === 'turn.started' && !!r.event.review && r.seq > started.seq
 	);
 	expect(batch.event.kind === 'turn.started' && batch.event.text).toContain(
-		'Reviewers Reviewer left 1 comment (round 1 of 2)'
+		'Reviewer left 1 finding in the review before the pull request. Fix each one once, or object to it with review_reply'
 	);
 	const review = JSON.parse(await readFile(join(await store.taskDir(task), 'review.json'), 'utf8'));
 	expect(review.comments[0]).toMatchObject({
 		author: 'Reviewer · checks Task agent',
 		text: 'Round 1: say hello instead',
 		anchor: { path: 'out/result.txt' },
+		review: { round: 1, reviewer: 'Reviewer' },
 	});
 	// The reviewer's files were the round's snapshot: the task's uncommitted file is in its worktree.
 	const reviewerPath = (await store.projectForTask(reviewerTask)).path;
 	expect(await readFile(join(reviewerPath, 'out/result.txt'), 'utf8')).toBe('done\n');
-	// The agent's answer ends its turn; round 2 starts by itself and the reviewer approves.
-	const finished = await find(client, (r) => r.event.kind === 'review.finished', 90_000);
-	expect(finished.event).toMatchObject({ state: 'approved' });
+	// The agent's answer ends its turn; the closure check runs by itself and the reviewer closes the finding.
+	await find(client, (r) => r.event.kind === 'task-review.answered', 90_000);
+	const finished = await find(client, (r) => r.event.kind === 'task-review.finished', 90_000);
+	expect(finished.event).toMatchObject({ state: 'passed', point: 'pre-pr' });
 	const doc = JSON.parse(
 		await readFile(join(await store.taskDir(task), 'task-review.json'), 'utf8')
 	);
-	expect(doc.review).toMatchObject({ state: 'approved', round: 2, reviewers: ['Reviewer'] });
-	expect(doc.proposal).toBeNull();
-	// A later change makes the approval outdated.
+	expect(doc).toMatchObject({ schemaVersion: 2, proposal: null });
+	expect(doc.review).toMatchObject({
+		state: 'passed',
+		round: 2,
+		passes: 1,
+		reviewers: ['Reviewer'],
+	});
+	const closed = JSON.parse(await readFile(join(await store.taskDir(task), 'review.json'), 'utf8'));
+	expect(closed.comments[0].review).toMatchObject({ closed: 2 });
+	// A later change makes the pass before the PR outdated.
 	await client.command({ kind: 'prompt', text: '@write out/other.txt more' });
 	const outdated = await find(
 		client,
-		(r) => r.event.kind === 'review.finished' && r.event.state === 'outdated'
+		(r) => r.event.kind === 'task-review.finished' && r.event.state === 'outdated'
 	);
 	expect(outdated.seq).toBeGreaterThan(finished.seq);
 	expect((await git(repo, 'status', '--porcelain')).stdout).toContain('out/');
@@ -196,9 +206,9 @@ it('stops a review: the open round ends, nothing more reaches the agent (spec/re
 		instructions: '',
 		guidance: '',
 	});
-	await find(client, (r) => r.event.kind === 'review.started');
+	await find(client, (r) => r.event.kind === 'task-review.started');
 	await client.command({ kind: 'stopReview' });
-	const stopped = await find(client, (r) => r.event.kind === 'review.finished');
+	const stopped = await find(client, (r) => r.event.kind === 'task-review.finished');
 	expect(stopped.event).toMatchObject({ state: 'stopped' });
 	const doc = JSON.parse(
 		await readFile(join(await store.taskDir(task), 'task-review.json'), 'utf8')
@@ -213,13 +223,14 @@ it('stops a review: the open round ends, nothing more reaches the agent (spec/re
 		guidance: '',
 	});
 	await until(async () =>
-		(await client.snapshot()).records.filter((r) => r.event.kind === 'review.started').length === 2
+		(await client.snapshot()).records.filter((r) => r.event.kind === 'task-review.started')
+			.length === 2
 			? true
 			: undefined
 	);
 }, 120_000);
 
-it('a dispute after round 2 goes to the person; the agent answers a comment in its thread (spec/reviews#loop)', async () => {
+it('a finding the closure check keeps open goes to the person, who accepts it (spec/reviews#loop)', async () => {
 	const { store, task } = await setup('dispute the output');
 	const client = await launch(store, task);
 	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
@@ -231,36 +242,43 @@ it('a dispute after round 2 goes to the person; the agent answers a comment in i
 		instructions: '',
 		guidance: '',
 	});
-	const disputed = await find(
-		client,
-		(r) => r.event.kind === 'review.finished' && r.event.state === 'disputed',
-		90_000
-	);
-	expect(disputed.event).toMatchObject({ state: 'disputed' });
+	const verified = await find(client, (r) => r.event.kind === 'task-review.verified', 120_000);
+	expect(verified.event).toMatchObject({ open: 1, introduced: 0, closed: 0 });
 	await until(async () => ((await store.task(task)).status === 'needs-you' ? true : undefined));
 	const path = join(await store.taskDir(task), 'review.json');
 	const comments = JSON.parse(await readFile(path, 'utf8')).comments as {
 		id: string;
-		review?: { round: number; disputed?: boolean; reviewer: string };
+		review?: { round: number; open?: number };
+		replies?: { author: string; text: string }[];
 	}[];
-	expect(
-		comments.map((comment) => [comment.review?.round, comment.review?.disputed ?? false])
-	).toEqual([
-		[1, false],
-		[2, true],
-	]);
-	// The agent's answer joins the thread of the comment it names.
-	const first = comments[0]!.id;
+	expect(comments).toHaveLength(1);
+	expect(comments[0]!.review).toMatchObject({ round: 1, open: 2 });
+	expect(comments[0]!.replies?.at(-1)).toMatchObject({
+		author: 'Reviewer',
+		text: 'Still says done.',
+	});
+	await client.command({ kind: 'decideReview', decision: 'accept' });
+	const finished = await find(client, (r) => r.event.kind === 'task-review.finished', 30_000);
+	expect(finished.event).toMatchObject({ state: 'accepted' });
+	const accepted = JSON.parse(await readFile(path, 'utf8')).comments[0];
+	expect(accepted.review).toMatchObject({ accepted: true });
+}, 240_000);
+
+it('the agent asks for a mid-task review; without the app the task’s own provider reviews (spec/reviews#request-tool)', async () => {
+	const { store, task } = await setup('Write the output');
+	const client = await launch(store, task);
+	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(client, (r) => r.event.kind === 'turn.completed');
 	await client.command({
 		kind: 'prompt',
-		text: `@call review_reply {"commentId":"${first}","text":"The list is deliberate."}`,
+		text: '@call request_review {"reason":"the data layer"}',
 	});
-	await find(client, (r) => r.event.kind === 'review.replied');
-	const threads = JSON.parse(await readFile(path, 'utf8')).comments as {
-		id: string;
-		replies?: { author: string; text: string; agent: boolean }[];
-	}[];
-	expect(threads.find((comment) => comment.id === first)!.replies).toEqual([
-		expect.objectContaining({ author: 'Task agent', text: 'The list is deliberate.', agent: true }),
-	]);
+	const started = await find(client, (r) => r.event.kind === 'task-review.started');
+	expect(started.event).toMatchObject({
+		point: 'mid',
+		startedBy: 'agent',
+		reason: 'the data layer',
+		reviewers: ['Claude'],
+	});
+	await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
 }, 240_000);

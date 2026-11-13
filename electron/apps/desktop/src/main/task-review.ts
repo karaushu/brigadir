@@ -32,9 +32,13 @@ import {
 import { changedFiles, readChanges, readSnapshots } from '@brigadir/git';
 import { readDocument, safePath, type SessionStore } from '@brigadir/persistence';
 
-async function json(store: SessionStore, key: TaskKey, name: string) {
+async function json(store: SessionStore, key: TaskKey, name: string, versions = [1]) {
 	try {
-		return await readDocument(await safePath(await store.taskDir(key), name), 16 * 1024 * 1024);
+		return await readDocument(
+			await safePath(await store.taskDir(key), name),
+			16 * 1024 * 1024,
+			versions
+		);
 	} catch {
 		return null;
 	}
@@ -93,6 +97,7 @@ export function reviewerFor(input: {
 		defaults[provider] = { model: model?.value ?? null, effort: effort?.value ?? null };
 	}
 	return resolveReviewer({
+		providers: agentProviders,
 		author: input.author,
 		enabled: input.enabled,
 		ready,
@@ -114,7 +119,7 @@ export async function readTaskReview(
 		additions: files.reduce((sum, file) => sum + file.additions, 0),
 		deletions: files.reduce((sum, file) => sum + file.deletions, 0),
 	};
-	const doc = readTaskReviewDocument(await json(store, key, 'task-review.json'), key.id);
+	const doc = readTaskReviewDocument(await json(store, key, 'task-review.json', [1, 2]), key.id);
 	const snapshots = await readSnapshots(store, key).catch(() => null),
 		now = snapshots?.checkpoints.at(-1)?.trees ?? [];
 	const gate = (pre: TaskReview | null): TaskReviewView['beforePR'] =>

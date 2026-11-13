@@ -17,7 +17,9 @@ let quotaRejected=false;let autoAccept=false;
 const signedOut=()=>Boolean(process.env.BRIGADIR_TEST_AUTH_FILE)&&!existsSync(process.env.BRIGADIR_TEST_AUTH_FILE);if(process.env.BRIGADIR_TEST_AUTH_FILE)record('process',{pid:process.pid});
 // spec/composer-steering-queue-and-ghost#steering steering: `steering` injects into a running `steer-wait`; `steering-late` answers promptRequired as if the turn just
 // ended; `steering-codex` ends the running turn and starts its own, reported by codex-shaped `threadStatus`.
-const steering=scenario==='steering'||scenario==='steering-late'||scenario==='steering-codex';let steerWaiter;
+// spec/crew#assignment-after-compaction `crew-compaction`: steering as `steering`, and compactions a crew member's host answers (see the prompt handler).
+const crewCompaction=scenario==='crew-compaction';
+const steering=scenario==='steering'||scenario==='steering-late'||scenario==='steering-codex'||crewCompaction;let steerWaiter;
 const threadStatus=(client,type)=>update(client,{sessionUpdate:'session_info_update',_meta:{codex:{threadStatus:{type,...(type==='active'?{activeFlags:[]}:{})}}}});
 // spec/chat-turns-plans-and-questions#agent-started-turns `agent-turn`: Claude Code begins a turn on its own after a background task — the wire of a live
 // run (claude-agent-turn.jsonl). `agent-turn-codex`: the same shape told by codex `threadStatus`.
@@ -93,7 +95,7 @@ connection = agent({name:'fixture'})
   // codex-acp with no running turn starts its own; Claude answers promptRequired.
   if(scenario==='steering-late'||!steerWaiter&&scenario!=='steering-codex')return {outcome:'promptRequired',reason:'noRunningTurn'};
   const waiter=steerWaiter;steerWaiter=undefined;
-  if(scenario==='steering')return waiter(text),{outcome:'injected'};
+  if(scenario==='steering'||crewCompaction)return waiter(text),{outcome:'injected'};
   // The old turn's flags change once more before it ends: its active and idle must not close the adopted turn.
   if(waiter){await threadStatus(client,'active');waiter(null);await new Promise(resolve=>setTimeout(resolve,50));}
   const silent=process.env.BRIGADIR_FIXTURE_ADOPTED_SILENT==='1';
@@ -118,6 +120,21 @@ connection = agent({name:'fixture'})
   if(agentTurns&&text==='background')return backgroundTurn(client);
   // spec/agents-and-providers#compaction-signal: `compact` — a compaction with its sizes around it (the completed update twice, as claude-agent-acp sends it);
   // `compact-end` — the turn ends right after it, before any other update; `compact-error` — the request fails right after it; `compact-failed` — a failed one.
+  // spec/crew#assignment-after-compaction: `compact-step` — a Claude-shaped compaction mid-turn, then a finished top-level tool (the step boundary), then
+  // the turn waits up to 3 s for a steer and ends; `compact-late` — a Codex-shaped one (no size after) that the turn's end journals.
+  if(crewCompaction&&text.startsWith('compact-')){
+   const id=`c${Date.now()}${Math.random()}`,size=1000000;
+   await update(client,{sessionUpdate:'usage_update',used:180000,size});
+   await update(client,{sessionUpdate:'compaction_update',compactionId:id,status:'in_progress'});
+   await update(client,{sessionUpdate:'compaction_update',compactionId:id,status:'completed'});
+   if(text.startsWith('compact-late'))return {stopReason:'end_turn'};
+   await update(client,{sessionUpdate:'usage_update',used:30000,size});
+   await update(client,{sessionUpdate:'tool_call',toolCallId:`t-${id}`,title:'Run tests',kind:'execute',status:'in_progress'});
+   await update(client,{sessionUpdate:'tool_call_update',toolCallId:`t-${id}`,status:'completed'});
+   const heard=await new Promise(resolve=>{steerWaiter=resolve;setTimeout(()=>resolve(null),3000);});steerWaiter=undefined;
+   await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:heard===null?'not steered':'steered'}});
+   return {stopReason:'end_turn'};
+  }
   if(scenario==='compaction'&&text.startsWith('compact')){
    const id=text,size=1000000;
    await update(client,{sessionUpdate:'usage_update',used:text==='compact'?940000:300000,size});

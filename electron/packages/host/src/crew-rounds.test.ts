@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { SessionStore, readDocument } from '@brigadir/persistence';
+import { SessionStore, atomicJson, readDocument } from '@brigadir/persistence';
 import {
 	builtinAgentTemplates,
 	resolveCrew,
@@ -377,4 +377,159 @@ it('hides create_task from the root foreman while its plan waits or was approved
 	expect([...crewHiddenTools(foreman, rejected)]).toEqual([]);
 	expect([...crewHiddenTools(null, [requested])]).toEqual([]);
 	expect([...crewHiddenTools({ role: 'lead' } as CrewContext, [requested])]).toEqual([]);
+});
+
+it("builds a member's current assignment after a compaction: the open part with its open comments, the reviewer's open check, nothing once closed (spec/crew#assignment-after-compaction)", async () => {
+	const { store, host, key, sent, developer, reviewer, report, runs, verdict } = await crew();
+	const prompt = 'Build the client details screen in out/. Prove it with pnpm test out.';
+	const part = (await host.memberAssignment(developer()))!;
+	expect(part.kind).toBe('part');
+	expect(part.marker).toBe(prompt);
+	expect(part.text).toBe(
+		`Part 1: Client details\n<part_prompt>\n${prompt}\n</part_prompt>\nAcceptance criteria:\n<acceptance>\nThe screen shows the name, phone and notes; pnpm test out passes.\n</acceptance>`
+	);
+	// Open comments: by the part's reviewer or the parent and not resolved; a person's draft (no author) and a resolved one stay out.
+	const anchor = (path: string, start: number) => ({
+		scopeId: 's',
+		path,
+		side: 'new',
+		blob: 'b',
+		start,
+		end: start + 1,
+		quote: [],
+		before: [],
+		after: [],
+		contextHash: 'h',
+		symbolPath: null,
+	});
+	await atomicJson(join(await store.taskDir(key), 'review.json'), {
+		schemaVersion: 1,
+		notes: [],
+		comments: [
+			{
+				id: 'c2',
+				version: 1,
+				author: 'Foreman',
+				text: 'Use the shared field.',
+				at: '2030-01-02T00:00:00.000Z',
+				anchor: anchor('out/b.ts', 3),
+			},
+			{
+				id: 'c1',
+				version: 1,
+				author: 'Reviewer · checks Developer',
+				text: 'The phone is not validated.',
+				at: '2030-01-01T00:00:00.000Z',
+				anchor: anchor('out/a.ts', 10),
+			},
+			{
+				id: 'c3',
+				version: 1,
+				resolvedVersion: 1,
+				author: 'Reviewer · checks Developer',
+				text: 'Resolved.',
+				at: '2030-01-01T00:00:00.000Z',
+				anchor: anchor('out/a.ts', 1),
+			},
+			{
+				id: 'c4',
+				version: 1,
+				text: 'A draft of the person.',
+				at: '2030-01-01T00:00:00.000Z',
+				anchor: anchor('out/a.ts', 2),
+			},
+		],
+	});
+	expect((await host.memberAssignment(developer()))!.text).toContain(
+		'Open review comments on this part:\n1. Reviewer · checks Developer, out/a.ts lines 10-11: The phone is not validated.\n2. Foreman, out/b.ts lines 3-4: Use the shared field.'
+	);
+	// A reviewer has nothing open until a check is sent to it.
+	expect(await host.memberAssignment(reviewer())).toBeNull();
+	await store.setStatus({ projectId: key.projectId, id: reviewer().taskId }, 'done');
+	await report();
+	await host['dispatchReviews']();
+	const run = runs()[0]!,
+		check = (await host.memberAssignment(reviewer()))!;
+	expect(check.kind).toBe('check');
+	expect(check.text).toMatch(
+		new RegExp(
+			`^Check task ${developer().taskId} of \`Developer\` \\(reviewId ${run.reviewId}, round 1 of 2\\)\\.\\nRead the report with read_report`
+		)
+	);
+	expect(check.text).toContain(`<part_prompt>\n${prompt}\n</part_prompt>`);
+	expect(check.text).toContain('<acceptance>');
+	// The check prompt itself carries the check: a prompt with the marker gets no block.
+	expect(sent.find((item) => item.taskId === reviewer().taskId)!.text).toContain(check.marker!);
+	await verdict(false);
+	expect(await host.memberAssignment(reviewer())).toBeNull();
+	developer().acceptedAt = new Date().toISOString();
+	expect(await host.memberAssignment(developer())).toBeNull();
+});
+
+it("builds the foreman's plan digest from its approved plan, the members, open checks and questions; nothing once every part is accepted (spec/crew#assignment-after-compaction)", async () => {
+	const { store, host, key, events, developer, report } = await crew();
+	expect(await host.planAssignment()).toBeNull();
+	const parts = [
+		{
+			id: 'p1',
+			title: 'Client details',
+			agent: 'Developer',
+			prompt: 'Build it.',
+			files: [],
+			scopes: [],
+		},
+		{
+			id: 'p2',
+			title: 'Client list',
+			agent: 'Tester',
+			prompt: 'List them.',
+			files: [],
+			scopes: [],
+		},
+	];
+	events.push(
+		{
+			kind: 'crew.plan.requested',
+			plan: { id: 'p', summary: 'Two screens of the client card.', parts },
+		},
+		{ kind: 'crew.plan.resolved', id: 'p', approved: true, parts: null }
+	);
+	host['questions'].push({
+		id: 'q1',
+		workerTaskId: developer().taskId,
+		parentTaskId: 'x',
+		callId: 'c',
+		agent: 'Developer',
+		question: 'Which phone format?',
+		options: [],
+		createdAt: '',
+		escalateAt: '',
+		state: 'pending',
+	});
+	await store.setStatus(key, 'working');
+	let digest = (await host.planAssignment())!;
+	expect(digest.kind).toBe('plan');
+	expect(digest.marker).toBeUndefined();
+	expect(digest.text).toBe(
+		[
+			'Your approved plan and where each part stands:',
+			'<plan_summary>',
+			'Two screens of the client card.',
+			'</plan_summary>',
+			`1. Client details — Developer: working, task ${developer().taskId}`,
+			'   Open question q1: Which phone format?',
+			'2. Client list — Tester: not started',
+			'Read a part in detail with task_status and read_report.',
+		].join('\n')
+	);
+	await report();
+	digest = (await host.planAssignment())!;
+	expect(digest.text).toContain(
+		`1. Client details — Developer: in review, round 1 of 2, task ${developer().taskId}`
+	);
+	// Every part accepted: no digest. A part with no member yet keeps the plan open.
+	developer().acceptedAt = new Date().toISOString();
+	expect((await host.planAssignment())!.text).toContain('Developer: accepted');
+	events.push({ kind: 'crew.plan.resolved', id: 'p', approved: true, parts: [parts[0]!] });
+	expect(await host.planAssignment()).toBeNull();
 });

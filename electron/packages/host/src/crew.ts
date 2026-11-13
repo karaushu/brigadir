@@ -64,9 +64,16 @@ import {
 	type TaskKey,
 	type ChangedFile,
 	type Scope,
+	type CrewAssignment,
+	isCrewAssignment,
 } from '@brigadir/core';
 import {
 	buildReport,
+	checkAssignment,
+	partAssignment,
+	planDigest,
+	type AssignmentComment,
+	type DigestPart,
 	crewProcessRole,
 	humanToolsAllowed,
 	foremanBrief,
@@ -1738,6 +1745,8 @@ export class CrewHost {
 			method === 'approve'
 		)
 			return this.reviewerTool(worker, method, input);
+		// spec/crew#assignment-after-compaction: outside `serial` — the member asks while its prompt from this host may still be in flight.
+		if (method === 'assignment') return this.memberAssignment(worker);
 		if (method === 'ask_foreman') return this.askForeman(worker, input, signal);
 		if (method === 'post_note')
 			return this.postNote(
@@ -1829,6 +1838,160 @@ export class CrewHost {
 			at !== undefined &&
 			crewReportDone(at, ended?.event.kind === 'turn.completed' ? ended.event.reason : null)
 		);
+	}
+	// ── the assignment after a compaction (spec/crew#assignment-after-compaction) ──
+	/**
+	 * A member's current assignment as this host gave it: a reviewer's open check, else a member's open part; null when nothing is open. Read from
+	 * memory and the members' files, never through `serial`.
+	 */
+	async memberAssignment(worker: CrewWorkerRecord): Promise<CrewAssignment | null> {
+		const run = this.reviews.find(
+			(item) =>
+				item.state === 'reviewing' &&
+				item.dispatched.includes(worker.nodeId) &&
+				!item.verdicts.some((verdict) => verdict.reviewerNodeId === worker.nodeId)
+		);
+		if (run) {
+			const target =
+				this.workers.find((item) => item.taskId === run.taskId) ??
+				(this.isSelf(run) ? this.selfRecord() : undefined);
+			if (target)
+				return {
+					kind: 'check',
+					text: checkAssignment({
+						taskId: run.taskId,
+						name: target.name,
+						reviewId: run.reviewId,
+						round: run.round,
+						rounds: crewReviewRounds,
+						part: this.isSelf(target)
+							? ''
+							: partBrief(target.name, await this.readPartBrief(target)),
+					}),
+					marker: `reviewId ${run.reviewId}, round ${run.round} `,
+				};
+		}
+		if (worker.acceptedAt) return null;
+		const brief = await this.readPartBrief(worker);
+		if (!brief) return null;
+		const marker = brief.prompt.trim().slice(0, 2000);
+		return {
+			kind: 'part',
+			text: partAssignment({
+				part: worker.part ?? 1,
+				title: worker.title,
+				prompt: brief.prompt,
+				...(brief.clipped ? { clipped: true } : {}),
+				...(brief.acceptance ? { acceptance: brief.acceptance } : {}),
+				comments: await this.openComments(worker),
+			}),
+			...(marker ? { marker } : {}),
+		};
+	}
+	/** The comments the parent or the part's reviewers left on the member's part that are not resolved, oldest first. */
+	private async openComments(worker: CrewWorkerRecord): Promise<AssignmentComment[]> {
+		const started = this.deps
+				.records()
+				.findLast(
+					(record) =>
+						(record.event.kind === 'crew.part.started' ||
+							record.event.kind === 'crew.worker.created') &&
+						record.event.taskId === worker.taskId
+				),
+			since = started ? Date.parse(started.at) : Number.NaN;
+		const doc = await readDocument(
+			await safePath(await this.deps.store.taskDir(this.workerKey(worker)), 'review.json'),
+			16 * 1024 * 1024
+		).catch(() => ({}) as Record<string, unknown>);
+		return ((Array.isArray(doc.comments) ? doc.comments : []) as ReviewComment[])
+			.filter(
+				(comment) =>
+					isRecord(comment) &&
+					typeof comment.author === 'string' &&
+					isRecord(comment.anchor) &&
+					(comment.resolvedVersion === undefined || comment.resolvedVersion < comment.version) &&
+					(Number.isNaN(since) || !(Date.parse(comment.at) < since))
+			)
+			.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+			.map((comment) => ({
+				author: comment.author!,
+				path: comment.anchor.path,
+				start: comment.anchor.start,
+				end: comment.anchor.end,
+				text: comment.text,
+			}));
+	}
+	/**
+	 * The digest of this host's own approved plan: each part's state, executor and open question, from the plan, the member records, the open
+	 * checks and the questions. Null without an approved plan or once every part's member was accepted with no next part waiting.
+	 */
+	async planAssignment(): Promise<CrewAssignment | null> {
+		const records = this.deps.records(),
+			resolved = records.findLast(
+				(record) => record.event.kind === 'crew.plan.resolved' && record.event.approved
+			);
+		if (resolved?.event.kind !== 'crew.plan.resolved') return null;
+		const id = resolved.event.id,
+			requested = records.findLast(
+				(record) => record.event.kind === 'crew.plan.requested' && record.event.plan.id === id
+			),
+			plan = requested?.event.kind === 'crew.plan.requested' ? requested.event.plan : null,
+			parts = resolved.event.parts ?? plan?.parts ?? [];
+		if (!parts.length) return null;
+		const members = parts.map(
+			(part) =>
+				this.workers.find((worker) => worker.planPartId === part.id) ??
+				this.workers.find((worker) => worker.name === crewName(part.agent))
+		);
+		if (members.every((worker) => worker?.acceptedAt && !worker.next)) return null;
+		const lines: DigestPart[] = [];
+		for (const [index, part] of parts.entries()) {
+			const worker = members[index],
+				question = worker
+					? this.questions.find(
+							(item) =>
+								item.workerTaskId === worker.taskId &&
+								(item.state === 'pending' || item.state === 'escalated')
+						)
+					: undefined;
+			lines.push({
+				title: part.title,
+				agent: part.agent,
+				state: await this.memberState(worker),
+				...(worker ? { taskId: worker.taskId } : {}),
+				...(worker && (worker.title !== part.title || (worker.part ?? 1) > 1)
+					? { memberPart: { number: worker.part ?? 1, title: worker.title } }
+					: {}),
+				...(question ? { question: { id: question.id, text: question.question } } : {}),
+			});
+		}
+		return { kind: 'plan', text: planDigest({ summary: plan?.summary ?? '', parts: lines }) };
+	}
+	private async memberState(worker: CrewWorkerRecord | undefined): Promise<string> {
+		if (!worker) return 'not started';
+		if (worker.next) return worker.next.state === 'merging' ? 'waiting for a merge' : 'queued';
+		if (worker.acceptedAt) return 'accepted';
+		const run = this.reviews.findLast(
+			(item) => item.taskId === worker.taskId && item.state === 'reviewing'
+		);
+		if (run) return `in review, round ${run.round} of ${crewReviewRounds}`;
+		const status = (await this.deps.store.task(this.workerKey(worker)).catch(() => null))?.status;
+		switch (status) {
+			case undefined:
+				return 'unknown';
+			case 'queued':
+			case 'preparing':
+				return 'queued';
+			case 'done':
+				return 'reported';
+			case 'needs-you':
+				return 'needs you';
+			case 'interrupted':
+			case 'rate-limited':
+				return 'stopped';
+			default:
+				return status;
+		}
 	}
 	/** spec/crew#workers: the part's prompt and acceptance for its reviewers, in the member's own task directory (`crew-part.json`). */
 	private async savePartBrief(worker: CrewWorkerRecord, prompt: string, acceptance: string) {
@@ -3393,6 +3556,28 @@ export class CrewWorker {
 		const callId =
 			isRecord(params) && typeof params.callId === 'string' ? params.callId : randomUUID();
 		return peer.request(tool, { ...(isRecord(params) ? params : {}), callId });
+	}
+	/**
+	 * spec/crew#assignment-after-compaction: this member's current assignment from the host that gave it; null — nothing is open. Throws when the
+	 * parent is not connected or does not answer in 10 s: the block then waits for a later moment.
+	 */
+	async assignment(): Promise<CrewAssignment | null> {
+		const peer = this.parentPeer;
+		if (!peer) throw new Error('The parent is not connected');
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const reply = await Promise.race([
+				peer.request('assignment', {}),
+				new Promise<never>((_, reject) => {
+					timer = setTimeout(() => reject(new Error('The parent did not answer')), 10_000);
+				}),
+			]);
+			if (reply === null) return null;
+			if (!isCrewAssignment(reply)) throw new Error('Invalid assignment');
+			return reply;
+		} finally {
+			clearTimeout(timer);
+		}
 	}
 	/**
 	 * Reports push up when a turn ends; a missing parent keeps them in the outbox (spec/crew#task-type: push, not polling). `status` is the task's

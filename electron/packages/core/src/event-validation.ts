@@ -13,6 +13,7 @@ import {
 	isCrewQuestion,
 	isCrewReportSummary,
 	isCrewTurnMarker,
+	isCrewAssignmentKind,
 } from './crew-runtime';
 import { isCrewSpecAgent } from './crew';
 import { isId } from './workspace';
@@ -236,6 +237,10 @@ const checks: Record<string, Check> = {
 		name: text,
 		title: text,
 		part: number,
+	}),
+	'crew.assignment.restored': object({
+		compactedSeq: number,
+		assignment: (v) => Array.isArray(v) && v.length <= 3 && v.every(isCrewAssignmentKind),
 	}),
 	'crew.report': object({ report: isCrewReportSummary }),
 	'crew.note': object({ note: isCrewNote }),

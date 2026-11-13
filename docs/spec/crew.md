@@ -74,7 +74,7 @@ Every agent session gets the app's MCP server `brigadir` in `session/new` (stdio
 <a id="brief"></a>
 ## Role briefs
 
-Briefs are English (rule 12), built by code (`packages/orchestrator/src/brief.ts`) and delivered as the [session brief](agents-and-providers.md#session-brief): the appended system prompt where the agent takes one, else a `.context` block of the session's first prompt. The agent reads it, the transcript never shows it, it is not journaled, and a restarted host re-briefs its new session itself.
+Briefs are English (rule 12), built by code (`packages/orchestrator/src/brief.ts`) and delivered as the [session brief](agents-and-providers.md#session-brief): the appended system prompt where the agent takes one, else a `.context` block of the session's first prompt. The agent reads it, the transcript never shows it, it is not journaled, and a restarted host re-briefs its new session itself. The brief holds the role, not the work: the work comes as prompts, and after a compaction the host gives it back ([The assignment after a compaction](#assignment-after-compaction)).
 
 <a id="foreman-brief"></a>
 ### Foreman and lead brief (`foremanBrief`)
@@ -109,6 +109,32 @@ One paragraph of the brief (`modelLadder`), the same in the roster and in the co
 Template instructions, the node's addition, then its place in the tree **without models**: name, who it works for, its zone ("change only files inside it"), who checks it, whom it checks, its other siblings ("do not touch their files"), and "ask with `ask_foreman`, share with `post_note`, `read_notes` before touching a shared type". A reviewer also gets the check procedure (read with the `reviewId`, then `submit_review` or `approve`; two rounds, then the dispute goes to the parent). Other branches of the tree do not exist for a worker. **Why no models:** a neighbour's model is not information for the work and invites speculation instead of reading the diff.
 
 A worker inherits the repo's `CLAUDE.md` by working in a copy of the tree; the foreman writes each part's prompt. Workers are not told to "report"; reports are mechanical.
+
+<a id="assignment-after-compaction"></a>
+### The assignment after a compaction
+
+The role brief survives a [compaction](agents-and-providers.md#context-compacted) word for word in the system prompt. A crew member's current assignment came as prompts, and after a compaction the agent keeps only what the summary says of it. So when a crew member's host journals `context.compacted`, the host gives the assignment back as text. **Why:** an agent does not reliably follow an instruction to re-read its assignment from a file after a compaction.
+
+**What the assignment is** (`crewAssignment`). Code builds it from the crew's own documents, never a model. The host that gave the assignment builds it: a member asks its parent's host on the crew link (`assignment`), and the root foreman's host builds its own.
+
+- **A developer with an open part** (its record has no `acceptedAt`): `Part N: <title>`, then the part's prompt as `crew-part.json` keeps it (≤ 100 000 chars, clipped with a note), then the acceptance criteria, then the open review comments. A comment is open when the parent or one of the part's reviewers left it in the member's `review.json` after the part started, and it is not resolved. Each comment gives its author, file and lines, with the text clipped to 2 000 chars.
+- **A reviewer with an open check** (a `reviewing` run sent to it that has no verdict from it): the check line `Check task … of <name> (reviewId …, round n of 2)`, a pointer to `read_report` and `read_diff` with that `reviewId`, then the part prompt and the acceptance criteria as the [check prompt](#reviewer) gives them.
+- **The root foreman with an approved plan that is not done:** a digest of the plan, built from the approved plan (the `crew.plan.*` records that `crew-plan.json` mirrors), the worker records, the open checks and the questions. It gives the plan's summary (≤ 4 000 chars), then one line per part: title, agent and state. The state is one of `not started`, `queued`, `working`, `in review, round n of 2`, `reported`, `needs you`, `failed`, `stopped`, `waiting for a merge` or `accepted`. Each line also gives the executor (task id, and the member's part number and title when they differ from the plan's) and the member's open `ask_foreman` question (≤ 1 000 chars). The digest ends with a pointer to `task_status` and `read_report`. A plan is done when every part's member was accepted and none waits for a next part.
+- **A lead:** its own part from its parent, then the digest of its own plan.
+- Anything else (no open part, no open check, no approved plan, or every part accepted) has no assignment, and nothing is given.
+
+**How it reaches the agent.** It goes as one hidden `.context` block, `Brigadir assignment`, the way the brief's [`.context` fallback](agents-and-providers.md#session-brief) goes. The block is in English (rule 12). Its first line is `Your context was compacted. This is your current assignment as it was given to you; where your summary differs, this text is right.` The transcript, the journal and the crew link never carry its text.
+
+- While a turn runs, the block goes at the next step boundary (a top-level tool call that finishes) through the [steering](composer-steering-queue-and-ghost.md#steering) request, as a prompt with no text of its own. No `prompt.steered` is journaled, no row shows, and the turn stays the same turn, with one report at its end. When the turn has just ended and the agent starts a new turn for the block instead (codex-acp), that turn has no person's row, like a turn [the agent began on its own](chat-turns-plans-and-questions.md#agent-started-turns).
+- When the agent declines the steer, or has no steering, the block waits for the next prompt. When the session is idle, the block rides on the member's next prompt, whoever sends it. A prompt that is itself the assignment (the next part's prompt, a new check) gets no block.
+- A parent that does not answer within 10 s (its host is down) leaves the block for the next step boundary or prompt.
+- If the prompt that carried the block fails to reach the agent, the block goes with the next prompt.
+
+**Once per compaction.** When the block goes out, the host journals `crew.assignment.restored`. Its `compactedSeq` is the seq of the newest `context.compacted` it answers. Its `assignment` lists what the block held (`part`, `check`, `plan`). The list is empty when nothing was open or the prompt itself carried the assignment. A compaction is answered when a `crew.assignment.restored` with its seq or a later one follows it. On start, a host reads that from the journal, so a host that restarted between a compaction and the block gives the block with the next prompt. Each compaction gets its own block, so a second compaction in the same part gives the assignment again. Two compactions before one delivery get one block. Nothing displays the record.
+
+**Size.** The whole block is at most 128 000 chars. The part prompt and the criteria go whole. Open comments fill what is left, in the order they were written, and the comments that do not fit are counted (`N more open comments are left out.`). A digest that would pass the bound ends with `[The rest of the digest is left out.]`.
+
+**Codex.** codex-acp completes a compaction when its `contextCompaction` item ends, and reports the context size only after its next request. The `context.compacted` then comes with the next update of the turn, or with the turn's end. The block follows at the next step boundary of that turn, or with the next prompt.
 
 <a id="plan"></a>
 ## The plan and its approval
@@ -180,7 +206,7 @@ A crew node has one task, one session, one worktree and one branch for the crew'
 - The part prompt starts with an English header: part number and title, the previous part was accepted, the crew tree was merged in, so re-read files before changing them.
 - The task title is the current part's title; the card row stays `<agent> · <part title>` and the `Workers` counter counts members, not parts. `part` lives in `crew-workers.json`, `task_status` returns it, and reports say `part N` from the second part on.
 - Zones and files are checked per part; locks and worktree belong to the task; nothing is cleaned up after acceptance (cleanup happens with the task, see [Tasks](tasks.md#delete-task)).
-- Context growth: a member's session compacts at the [compaction window](agents-and-providers.md#compaction-window) (200k by default), and its role brief rides in the appended system prompt, so it survives every compaction; the part prompt survives only as the compaction summary quotes it. The chat shows each compaction as a [service row](chat.md#context-compacted).
+- Context growth: a member's session compacts at the [compaction window](agents-and-providers.md#compaction-window) (200k by default), and its role brief rides in the appended system prompt, so it survives every compaction. After each compaction the host gives the open part back: its prompt, its acceptance criteria and its open review comments ([The assignment after a compaction](#assignment-after-compaction)). The chat shows each compaction as a [service row](chat.md#context-compacted).
 - Compatibility: a record without `part` is part 1; without `acceptedTips` the sync base is the worker branch `HEAD`; crews with several tasks per node continue in the newest.
 
 <a id="reports"></a>
@@ -201,6 +227,8 @@ When a worker's turn ends, the worker host pushes a report to the parent with th
 - the question the worker ended with;
 - the worker's last message (≤ 4000 chars);
 - a footer naming `read_diff`, `prompt_task`, `accept_task`.
+
+A turn that got its [assignment back after a compaction](#assignment-after-compaction) reports once at its end, like any turn: the block opens no turn and no report of its own.
 
 `read_transcript(taskId, limit ≤ 200, default 40)` exists only for "where did it get stuck". `read_diff` lists changed files (≤ 200) or, with `path`, one unified diff; `full: true` returns before/after text (≤ 64 KiB each). **Why:** the foreman's context is the main constraint; transcripts of several workers would burn it.
 
@@ -365,6 +393,7 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | Question escalation | 5 min |
 | Review rounds per part (checks the host opens) | 2 |
 | Part acceptance criteria / part prompt in a reviewer's prompt | 20 000 / 100 000 chars |
+| Assignment block after a compaction / one open comment in it / plan summary in a digest | 128 000 / 2 000 / 4 000 chars |
 | Report file list / outside list | 200 / 20 |
 | Concurrent worker launches | 2 (plus the global agent limit) |
 | Waiting MCP call client timeout | 7 days; progress heartbeat 60 s |

@@ -552,6 +552,10 @@ leads a crew.
 | Site notifications | Сповіщення сайту | `Ask` · `Allow` · `Block` for the page domain. | |
 | Mute tab / Unmute tab | Вимкнути звук вкладки / Увімкнути звук вкладки | | |
 | Simulator | Симулятор | iOS Simulator and Android Emulator. | «емулятор» |
+| device (in the simulator tab and its settings) | пристрій | One simulator of the picker. Elsewhere `Device` is a paired computer or phone. | |
+| Local devices | Локальні пристрої | The setting: how many simulators run at once. | «ліміт емуляторів» |
+| this task / queued | ця задача / у черзі | Who holds a device, in the picker. | |
+| Start anyway | Усе одно запустити | Starts a device although memory is low. | |
 
 ### Modules and remote access
 

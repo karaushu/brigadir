@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { seedOwnCrew } from './fixtures/own-crew';
+import { defaultAppSettings } from '../packages/core/src/settings';
+/** The app's agent defaults with what the test picks: Codex in the terminal. Every other key keeps its default. */
+const chosenAgents = { ...defaultAppSettings.agents, provider: 'codex', transport: 'terminal' };
 const desktop = resolve('apps/desktop'),
 	executablePath = createRequire(join(desktop, 'package.json'))('electron') as string;
 const env = Object.fromEntries(
@@ -85,12 +88,13 @@ test('agent defaults persist, load before launch choices and never rewrite exist
 		await expect(dialog.getByRole('tab', { name: 'Agents', exact: true })).toBeFocused();
 		await expect(dialog.getByRole('radio', { name: 'Claude', exact: true })).toBeChecked();
 		await expect(dialog.getByRole('radio', { name: 'GUI', exact: true })).toBeChecked();
+		// spec/settings-modules-and-onboarding: one window size for every tab, so switching tabs never resizes it.
 		await expect
 			.poll(() => dialog.evaluate((node) => node.getBoundingClientRect().height))
-			.toBe(500);
+			.toBe(720);
 		expect(
 			await page.evaluate(() =>
-				(window as any).settingsHeights.some((height: number) => height > 471 && height < 720)
+				(window as any).settingsHeights.every((height: number) => height === 720)
 			)
 		).toBe(true);
 		// Sample the actual shared segment transition, including an interrupted reversal.
@@ -121,22 +125,7 @@ test('agent defaults persist, load before launch choices and never rewrite exist
 		await dialog.getByRole('radio', { name: 'Terminal', exact: true }).click();
 		await expect
 			.poll(async () => JSON.parse(await readFile(settingsFile, 'utf8')).settings.agents)
-			.toEqual({
-				enabled: { claude: true, codex: true },
-				isolation: 'in-place',
-				provider: 'codex',
-				transport: 'terminal',
-				maxConcurrent: null,
-				reviewWhere: 'quick',
-				updateClis: true,
-				keepAwake: true,
-				keepDisplayOn: false,
-				copyEnvFiles: true,
-				archiveAfterDays: 3,
-				browserActAnywhere: false,
-				claudeSubagentModel: null,
-				prSummary: true,
-			});
+			.toEqual(chosenAgents);
 		for (const theme of ['light', 'dark'] as const) {
 			await app.evaluate(({ nativeTheme }, theme) => (nativeTheme.themeSource = theme), theme);
 			await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
@@ -208,22 +197,7 @@ test('agent defaults persist, load before launch choices and never rewrite exist
 			title: 'Cart flow rework',
 			prompt: 'Per-task override',
 		});
-		expect(JSON.parse(await readFile(settingsFile, 'utf8')).settings.agents).toEqual({
-			enabled: { claude: true, codex: true },
-			isolation: 'in-place',
-			provider: 'codex',
-			transport: 'terminal',
-			maxConcurrent: null,
-			reviewWhere: 'quick',
-			updateClis: true,
-			keepAwake: true,
-			keepDisplayOn: false,
-			copyEnvFiles: true,
-			archiveAfterDays: 3,
-			browserActAnywhere: false,
-			claudeSubagentModel: null,
-			prSummary: true,
-		});
+		expect(JSON.parse(await readFile(settingsFile, 'utf8')).settings.agents).toEqual(chosenAgents);
 		expect(await readFile(join(dir, 'task.json'), 'utf8')).toBe(existing);
 		await form.getByRole('button', { name: 'Cancel', exact: true }).click();
 		const saved = await readFile(settingsFile, 'utf8');

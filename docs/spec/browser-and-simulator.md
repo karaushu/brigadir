@@ -334,14 +334,33 @@ These are served by the same `brigadir` server (`mcp__brigadir__simulator_*`). T
 | `simulator_state` | The chosen device, platform, OS, running state, the app on screen, screen size in points, the Metro link (every Metro found, with its root and an «attached» mark), and the available devices |
 | `simulator_open` | Boots the chosen or given `device` and waits until it runs. Optionally launches `app` (bundle id or package) or opens `url` (deep link). |
 | `simulator_ui` | Accessibility tree, one element per line: role, label, `#testID`, frame in points. Paged with `offset`. `grid: true` adds a 32 pt hit-test sweep that finds children hidden by containers (iOS, slower). |
-| `simulator_act` | One action: `tap`, `longpress`, `swipe` (to `x2,y2`) at `x,y` points or at an element by `id` (testID) or `label`; `type`; `key` (a KeyboardEvent code); `button` (`home`, `lock`, `back` on Android); `rotate` |
+| `simulator_act` | One action: `tap`, `longpress`, `swipe` (to `x2,y2`) at `x,y` points or at an element by `id` (testID) or `label`; `type`; `key` (a KeyboardEvent code); `button` (`home`, `lock`, `back` on Android); `rotate`. Answers once the screen has settled, with what changed in the tree ([settle and changes](#sim-act-settle)). |
+| `simulator_wait` | Waits in main until an element appears, or with `gone: true` disappears: `text` (in a label or value), `id` (testID) or `label` (as `simulator_act` finds it). `timeoutMs` up to 30 000, default 10 000 ([waiting](#sim-wait)). |
 | `simulator_screenshot` | The latest frame of the stream the person sees, longer side ≤ 1000 px, returned as an `image` block (JPEG on iOS, PNG on Android) |
 | `simulator_logs` | `source: js` (default): `console.*` and JS errors with stacks through Metro. `source: native`: the app process. Filtered by lowest `level` and `grep`. |
 | `simulator_network` | App requests through Metro CDP `Network.*`: id, method, status, time, size, URL. `filter` by URL text. With `requestId`: headers and body. |
 
 - Replies are bounded like the browser's: the newest 100 entries within 32 KiB, bodies ≤ 16 KiB of text, and binary bodies and images described by type and size.
-- The tree is the first way to look at the screen, and a screenshot is only taken on request. The tree costs fewer tokens and gives exact `testID` targets.
+- The tree is the first way to look at the screen, and a screenshot is only taken on request. The tree costs fewer tokens and gives exact `testID` targets. A screenshot is for looking at pixels (layout, colors, images); whether a tap worked is in the answer of `simulator_act`, and something that comes later is waited for with `simulator_wait`, not with a sleep and another look.
 - **No permission card**: the simulator is a developer sandbox running a debug build, and every action is visible in the tab. This is the difference from browser actions on non-local domains.
+
+<a id="sim-act-settle"></a>
+#### `simulator_act`: settle and changes
+
+- **Settle**: after the action main watches the frames of the device's helper and answers once the screen has been still for 400 ms, or after 5 s at most. The frames reach main whether or not a tab watches.
+  - iOS: `sim-helper` encodes a frame only when SimulatorKit reports a changed surface, so any frame is a change.
+  - Android: scrcpy-server repeats the previous frame on a still screen (`repeat-previous-frame-after` 100 ms), and those repeats are under 200 bytes. A chunk over 200 bytes is a change.
+  - The answer says how long it waited: `Screen settled in 0.6 s.` When the 5 s cap is reached it says `The screen was still changing after 5 s (an animation, a video or a spinner).` and gives the changes as of then.
+- **Changes (iOS)**: the tree is read before and after the action and the answer lists the difference under `Changes: N appeared, N disappeared, N changed.`, one element a line in the `simulator_ui` format: `+` appeared, `-` disappeared, `~` changed label, value or role (`(was …)`). A tree read through the iOS accessibility service takes about a second, so a read stays true while the screen sends no changing frame, for 10 s at most: the tree after one action is the tree before the next one, and `simulator_ui` on a still screen answers from it. Elements are matched by `testID`, else by role and label; an element with neither label, value nor `testID` is left out. Two elements without `testID` with the same role and frame, one gone and one new, are one element whose label changed; a different `testID` in the same place is a removal and an addition. Elements that only moved are counted in one line (`12 elements moved`). With no difference the answer says `No changes in the accessibility tree.`. The list stops at 32 KiB of UTF-8, the marker included, with `… truncated: N more changes. Call simulator_ui for the whole screen.`. When a tree can't be read, the answer says so and why instead of a list. After `rotate` the first line also says whether the app turned with the device or stays in portrait, from the tree read after the turn; without that tree it says `whether the app turned is unknown (no tree after the turn)`.
+- **Android**: the answer gives the settle line and `No tree diff on Android: reading the tree takes seconds. Call simulator_ui when you need it.`. `uiautomator dump` waits for an idle screen, takes seconds and sometimes comes back empty (two attempts of up to 30 s each), so two reads per action would make each action slow.
+
+<a id="sim-wait"></a>
+#### `simulator_wait`
+
+- Exactly one of `text`, `id` or `label`. `text` matches an element whose label or value contains it, ignoring case; `label` matches as `simulator_act` does (exact, then contained); `id` is the exact `testID`.
+- Main reads the tree afresh (never the kept one) at once, then again each time the screen changes (the same frame rule as settle), and at least once a second (a read starts at most a second after the previous one started), with 250 ms between reads at least. The agent makes one call instead of sleeping and looking again.
+- Found: `Found Button "Saved" #status 12,622 378×48 after 1.4 s.` Gone: `#spinner is gone after 2.1 s.`
+- Timeout: `Timed out after 10 s: no element with text "Saved" appeared.` (or `… is still on the screen.`), followed by the last tree read in the `simulator_ui` format, its first 60 elements. A tree that could not be read during the wait does not end it; when none was read, the timeout says why.
 
 <a id="metro"></a>
 ### Metro and React Native data
@@ -360,6 +379,7 @@ These are served by the same `brigadir` server (`mcp__brigadir__simulator_*`). T
 ## Later
 
 - Creating simulator devices from the app (`simctl create`, `avdmanager`).
+- The tree diff of `simulator_act` on Android, once a tree source faster than `uiautomator dump` exists (a resident accessibility service on the device).
 - Physical Android devices in the picker.
 - EventSource, WebSocket and stream pages shown in the person's Network drawer.
 - Page-notification request strip on a remote device (the request stays `default` until answered on the working machine).
@@ -373,6 +393,7 @@ These are served by the same `brigadir` server (`mcp__brigadir__simulator_*`). T
 - Driving the person's own Chrome or Safari, or a separate headless browser for agents. Either way the person couldn't see what the agent sees.
 - A homemade inspector (Elements, Sources, breakpoints, profiler). Chromium DevTools and React Native DevTools already cover this.
 - Saving screenshots to disk: they go into the prompt and the task transcript.
+- Waiting on pixels (image matching) in `simulator_wait`: it waits on the accessibility tree.
 - An agent filling passwords, one-time codes or payment cards, or uploading files.
 - Web Push for pages in the task browser.
 - Muting a tab from the agent, or muting a domain permanently.

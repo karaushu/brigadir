@@ -16,6 +16,10 @@ import {
 	type SimulatorOrientation,
 	type ProjectSimulator,
 	type SimulatorAgentCommand,
+	type SimulatorActRequest,
+	type SimulatorUi,
+	diffUi,
+	formatUiDiff,
 	type TaskKey,
 	type SimulatorCommand,
 	type SimulatorDevice,
@@ -34,6 +38,9 @@ import {
 	formatRequests,
 	type MetroDeps,
 } from './metro';
+import { isChange, ScreenWatch, settleLine, waitForElement } from './simulator-settle';
+/** How long a tree read stays true on a screen that sends no frames (spec/browser-and-simulator#sim-act-settle). */
+const treeKeepMs = 10_000;
 const run = promisify(execFile);
 const metroMissing =
 	'Metro is not attached: start Metro in this task (a project command or the console), then open the app.';
@@ -58,6 +65,11 @@ type Runtime = {
 	bootedByUs: boolean;
 	replies: Map<number, { resolve(value: unknown): void; reject(error: Error): void }>;
 	nextId: number;
+	/** spec/browser-and-simulator#sim-act-settle: the agent's calls that wait for the screen. */
+	watches: Set<ScreenWatch>;
+	/** Changing frames so far (`isChange`), and the last tree with the count it was read at. */
+	changes: number;
+	tree: { ui: SimulatorUi; changes: number; at: number } | null;
 };
 type Tools = {
 	run: (file: string, args: string[]) => Promise<string>;
@@ -72,6 +84,8 @@ type Tools = {
 	metro?: MetroDeps;
 	/** iOS needs macOS (spec/architecture-and-platform#linux-package); elsewhere `xcrun` is never run. */
 	platform: NodeJS.Platform;
+	/** The clock of the kept tree (spec/browser-and-simulator#sim-act-settle). */
+	now: () => number;
 };
 export class Simulators {
 	private toolchain: SimulatorToolchain | null = null;
@@ -103,6 +117,7 @@ export class Simulators {
 			detach: (file, args) => spawn(file, args, { detached: true, stdio: 'ignore' }).unref(),
 			stream: lineStream,
 			platform: process.platform,
+			now: Date.now,
 			...tools,
 		};
 	}
@@ -290,20 +305,72 @@ export class Simulators {
 		if (command.tool === 'screenshot') return this.screenshot(runtime);
 		if (command.tool === 'ui')
 			return formatUi(await this.ui(runtime, command.grid === true), command.offset ?? 0);
+		if (command.tool === 'wait')
+			return this.withWatch(runtime, (watch) =>
+				waitForElement(command, () => this.ui(runtime, false, true), watch)
+			);
+		return this.withWatch(runtime, (watch) => this.act(projectId, runtime, command, watch));
+	}
+	/**
+	 * spec/browser-and-simulator#sim-act-settle: one action, then the wait for a still screen and, on iOS, what changed in the tree. Android
+	 * gives no diff: `uiautomator dump` takes seconds and sometimes comes back empty.
+	 */
+	private async act(
+		projectId: string,
+		runtime: Runtime,
+		command: SimulatorActRequest,
+		watch: ScreenWatch
+	) {
+		// iOS: the tree before the action, which also tells taps by points the interface the app draws (`turned`).
+		const before = runtime.serial
+			? null
+			: await this.ui(runtime, false).then(
+					(ui) => ({ ui }),
+					(error: unknown) => ({ error: reason(error) })
+				);
+		const done = await this.perform(
+			projectId,
+			runtime,
+			command,
+			before && 'ui' in before ? before.ui : null
+		);
+		const settled = await watch.settle();
+		const lines = [`${done} ${settleLine(settled)}`];
+		let read = false;
+		if (!before)
+			lines.push(
+				'No tree diff on Android: reading the tree takes seconds. Call simulator_ui when you need it.'
+			);
+		else if ('error' in before)
+			lines.push(`No tree diff: the tree before the action could not be read (${before.error}).`);
+		else
+			lines.push(
+				await this.ui(runtime, false).then(
+					(after) => {
+						read = true;
+						return formatUiDiff(diffUi(before.ui, after));
+					},
+					(error: unknown) =>
+						`No tree diff: the tree after the action could not be read (${reason(error)}).`
+				)
+			);
+		// Only a tree read after the turn tells whether the app turned with the device.
+		if (command.action === 'rotate' && !runtime.serial)
+			lines[0] = `Rotated to ${runtime.orientation}; ${read ? `the app ${runtime.turned ? 'turned with the device' : 'stays in portrait'}` : 'whether the app turned is unknown (no tree after the turn)'}. ${settleLine(settled)}`;
+		return lines.join('\n');
+	}
+	/** The action itself; `ui` is the tree just read (iOS), so a target by id or label is not read twice. */
+	private async perform(
+		projectId: string,
+		runtime: Runtime,
+		command: SimulatorActRequest,
+		ui: SimulatorUi | null
+	): Promise<string> {
 		if (command.action === 'rotate') {
 			await this.rotate(runtime);
 			await this.publish(projectId);
 			return `Rotated to ${runtime.orientation}. Call simulator_ui: it tells whether the app turned with the device.`;
 		}
-		// Taps by points use the interface the last tree saw; with the device turned, read it first.
-		if (
-			!runtime.serial &&
-			isLandscape(runtime.orientation) &&
-			command.x !== undefined &&
-			!command.id &&
-			!command.label
-		)
-			await this.ui(runtime, false).catch(() => {});
 		// Agent points are interface points; the marker is drawn upright, the touch lands in the device frame.
 		const screen = this.interface(runtime);
 		const clamp = (value: number) => Math.min(1, Math.max(0, value));
@@ -315,7 +382,7 @@ export class Simulators {
 			runtime.turned ? devicePoint(runtime.orientation, point.x, point.y) : point;
 		const target = async () => {
 			if (command.id || command.label) {
-				const element = findElement(await this.ui(runtime, false), command);
+				const element = findElement(ui ?? (await this.ui(runtime, false)), command);
 				if (!element)
 					throw new Error(
 						`No element ${command.id ? `#${command.id}` : JSON.stringify(command.label)} on the screen. Call simulator_ui.`
@@ -385,6 +452,16 @@ export class Simulators {
 				await this.request(runtime, { cmd: 'button', name: command.button });
 				return `Pressed ${command.button}.`;
 			}
+		}
+	}
+	/** A watch on the screen's frames for the length of one agent call. */
+	private async withWatch<T>(runtime: Runtime, run: (watch: ScreenWatch) => Promise<T>) {
+		const watch = new ScreenWatch(runtime.device.platform);
+		runtime.watches.add(watch);
+		try {
+			return await run(watch);
+		} finally {
+			runtime.watches.delete(watch);
 		}
 	}
 	private metro(projectId: string) {
@@ -562,9 +639,25 @@ export class Simulators {
 			: 'portrait';
 	}
 	/** The helper waits up to 25 s for the device's accessibility service after a boot (it answers «no app» meanwhile). */
-	private async ui(runtime: Runtime, grid: boolean) {
-		const ui = simulatorUi(await this.request(runtime, { cmd: 'ui', grid }, 40_000));
-		if (!ui) throw new Error('The device sent no accessibility tree.');
+	private async ui(runtime: Runtime, grid: boolean, fresh = false) {
+		// spec/browser-and-simulator#sim-act-settle: a tree stays true while the screen sends no changing frame, for 10 s at most.
+		const kept = runtime.tree;
+		let ui: SimulatorUi | null;
+		if (
+			!grid &&
+			!fresh &&
+			kept &&
+			kept.changes === runtime.changes &&
+			this.tools.now() - kept.at < treeKeepMs
+		)
+			ui = kept.ui;
+		else {
+			const changes = runtime.changes,
+				at = this.tools.now();
+			ui = simulatorUi(await this.request(runtime, { cmd: 'ui', grid }, 40_000));
+			if (!ui) throw new Error('The device sent no accessibility tree.');
+			if (!grid) runtime.tree = { ui, changes, at };
+		}
 		const app = ui.elements.find((element) => element.role === 'Application');
 		runtime.turned =
 			!runtime.serial && isLandscape(runtime.orientation) && !!app && app.frame[2] > app.frame[3];
@@ -813,6 +906,9 @@ export class Simulators {
 			bootedByUs: false,
 			replies: new Map(),
 			nextId: 1,
+			watches: new Set(),
+			changes: 0,
+			tree: null,
 		};
 		runtime.status = 'booting';
 		runtime.error = null;
@@ -952,6 +1048,7 @@ export class Simulators {
 					stdio: ['pipe', 'pipe', 'pipe'],
 				});
 		runtime.helper = helper;
+		runtime.tree = null;
 		let buffer: Buffer = Buffer.alloc(0);
 		helper.stdout!.on('data', (chunk: Buffer) => {
 			buffer = buffer.length ? Buffer.concat([buffer, chunk]) : chunk;
@@ -1001,6 +1098,8 @@ export class Simulators {
 				data: new Uint8Array(payload.subarray(9)),
 			};
 			for (const projectId of this.watching(runtime.device.id)) this.frame(projectId, frame);
+			if (isChange(runtime.device.platform, frame)) runtime.changes++;
+			for (const watch of runtime.watches) watch.frame(frame);
 			return;
 		}
 		let message: unknown;
@@ -1116,6 +1215,8 @@ const androidVersions: Record<number, string> = {
 	30: '11',
 	29: '10',
 };
+const reason = (error: unknown) =>
+	error instanceof Error ? error.message.replace(/\.$/, '') : String(error);
 /** The newest 100 lines within 32 KiB (spec/architecture-and-platform#perf-agent-responses). */
 function keep(lines: string[], empty: string) {
 	let size = 0;

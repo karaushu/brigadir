@@ -494,6 +494,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'simulator_open',
 			'simulator_ui',
 			'simulator_act',
+			'simulator_wait',
 			'simulator_screenshot',
 			'simulator_logs',
 			'simulator_network',

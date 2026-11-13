@@ -11,9 +11,10 @@ const fs=require('node:fs');const log={write:line=>fs.appendFileSync(process.env
 out(1,{event:'ready',width:1206,height:2622,pointWidth:402,pointHeight:874});
 out(2,{codec:'avc1.640028',width:1206,height:2622,description:'AQID'});
 const frame=Buffer.alloc(12);frame[0]=1;frame.writeBigUInt64BE(1000n,1);frame.set([7,8,9],9);out(3,frame);
-let buffer='';process.stdin.on('data',chunk=>{buffer+=chunk;let index;while((index=buffer.indexOf('\\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);log.write(line+'\\n');const message=JSON.parse(line);
+let buffer='',taken=false;process.stdin.on('data',chunk=>{buffer+=chunk;let index;while((index=buffer.indexOf('\\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);log.write(line+'\\n');const message=JSON.parse(line);
   if(message.cmd==='keyframe')out(3,frame);
-  if(typeof message.id==='number')out(1,message.cmd==='text'&&/[^\\x20-\\x7e]/.test(message.text)?{event:'reply',id:message.id,error:'Only ASCII text can be typed; paste the rest.'}:{event:'reply',id:message.id,result:message.cmd==='screenshot'?{jpeg:'/9j/',width:10,height:20}:message.cmd==='ui'?{width:402,height:874,elements:[...(fs.existsSync(process.env.HELPER_LOG+'.turned')?[{role:'Application',label:'App',frame:[0,0,874,402]}]:[]),{role:'Button',label:'Take order',id:'take-order',frame:[12,622,378,48]}]}:null});}});
+  if(message.cmd==='tap'){taken=true;out(3,frame);}
+  if(typeof message.id==='number')out(1,message.cmd==='ui'&&fs.existsSync(process.env.HELPER_LOG+'.noui')?{event:'reply',id:message.id,error:'The device did not describe its screen.'}:message.cmd==='text'&&/[^\\x20-\\x7e]/.test(message.text)?{event:'reply',id:message.id,error:'Only ASCII text can be typed; paste the rest.'}:{event:'reply',id:message.id,result:message.cmd==='screenshot'?{jpeg:'/9j/',width:10,height:20}:message.cmd==='ui'?{width:402,height:874,elements:[...(fs.existsSync(process.env.HELPER_LOG+'.turned')?[{role:'Application',label:'App',frame:[0,0,874,402]}]:[]),...(taken?[{role:'Text',label:'Order taken',id:'status',frame:[12,560,378,40]}]:[]),...(fs.existsSync(process.env.HELPER_LOG+'.extra')?[{role:'Text',label:'Extra',id:'extra',frame:[12,500,378,40]}]:[]),{role:'Button',label:'Take order',id:'take-order',frame:[12,622,378,48]}]}:null});}});
 process.stdin.on('end',()=>process.exit(0));
 `;
 const simctl = JSON.stringify({
@@ -51,7 +52,8 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		events: SimulatorEvent[] = [],
 		frames: [string, SimulatorFrame][] = [];
 	let orientation = 'portrait',
-		streamed: ((line: string) => void) | null = null;
+		streamed: ((line: string) => void) | null = null,
+		skew = 0;
 	const simulators = new Simulators(
 		data,
 		helper,
@@ -100,6 +102,7 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 				now: () => Date.now(),
 			},
 			platform: 'darwin',
+			now: () => Date.now() + skew,
 			run: async (file, args) => {
 				calls.push([file, ...args]);
 				if (args[0] === 'xcodebuild') return 'Xcode 27.0\nBuild version 27A266a\n';
@@ -166,8 +169,25 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		expect(await simulators.agent(key, { tool: 'ui' })).toBe(
 			'Screen 402×874 pt · 1 elements\nButton "Take order" #take-order 12,622 378×48'
 		);
-		expect(await simulators.agent(key, { tool: 'act', action: 'tap', id: 'take-order' })).toBe(
-			'Tapped #take-order.'
+		// spec/browser-and-simulator#sim-act-settle: the answer waits for a still screen and lists what changed.
+		expect(await simulators.agent(key, { tool: 'act', action: 'tap', id: 'take-order' })).toMatch(
+			/^Tapped #take-order\. Screen settled in 0\.\d s\.\nChanges: 1 appeared, 0 disappeared, 0 changed\.\n\+ Text "Order taken" #status 12,560 378×40$/
+		);
+		// A still screen keeps the last tree: no frame since the tap, so the key reads none (spec/browser-and-simulator#sim-act-settle).
+		const reads = async () => (await readFile(log, 'utf8')).split('"cmd":"ui"').length;
+		const readsBefore = await reads();
+		expect(await simulators.agent(key, { tool: 'act', action: 'key', key: 'Enter' })).toMatch(
+			/^Pressed Enter\. Screen settled in 0\.\d s\.\nNo changes in the accessibility tree\.$/
+		);
+		expect(await reads()).toBe(readsBefore);
+		// spec/browser-and-simulator#sim-wait: found at once, or a timeout with the screen as last read.
+		expect(await simulators.agent(key, { tool: 'wait', text: 'order taken' })).toMatch(
+			/^Found Text "Order taken" #status 12,560 378×40 after 0(\.\d)? s\.$/
+		);
+		expect(
+			await simulators.agent(key, { tool: 'wait', id: 'take-order', gone: true, timeoutMs: 300 })
+		).toBe(
+			'Timed out after 0.3 s: #take-order is still on the screen.\nScreen 402×874 pt · 2 elements\nText "Order taken" #status 12,560 378×40\nButton "Take order" #take-order 12,622 378×48'
 		);
 		expect(events).toContainEqual({
 			projectId: 'project',
@@ -190,6 +210,32 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		expect(sent[0]).toEqual({ argv: ['--udid', 'AAAA-1'] });
 		expect(sent).toContainEqual({ cmd: 'touch', phase: 'down', x: 0.5, y: 0.25 });
 		expect(sent.find((entry) => entry.cmd === 'tap')).toMatchObject({ x: 201 / 402, y: 646 / 874 });
+		// spec/browser-and-simulator#sim-act-settle: a tree that changed without a frame shows only once the kept one is 10 s old;
+		// simulator_wait reads afresh at once.
+		await writeFile(log + '.extra', '');
+		expect(await simulators.agent(key, { tool: 'ui' })).not.toContain('Extra');
+		skew += 10_000;
+		expect(await simulators.agent(key, { tool: 'ui' })).toContain('Text "Extra" #extra');
+		await rm(log + '.extra');
+		expect(await simulators.agent(key, { tool: 'ui' })).toContain('Text "Extra" #extra');
+		expect(
+			await simulators.agent(key, { tool: 'wait', id: 'extra', gone: true, timeoutMs: 2000 })
+		).toMatch(/^#extra is gone after 0(\.\d)? s\.$/);
+		await writeFile(log + '.extra', '');
+		expect(await simulators.agent(key, { tool: 'wait', text: 'extra', timeoutMs: 2000 })).toMatch(
+			/^Found Text "Extra" #extra 12,500 378×40 after 0(\.\d)? s\.$/
+		);
+		await rm(log + '.extra');
+		// A turn says whether the app turned only from a tree read after it.
+		await writeFile(log + '.noui', '');
+		skew += 10_000;
+		expect(await simulators.agent(key, { tool: 'act', action: 'rotate' })).toMatch(
+			/^Rotated to landscapeLeft; whether the app turned is unknown \(no tree after the turn\)\. Screen settled in 0\.\d s\.\nNo tree diff: the tree before the action could not be read \(The device did not describe its screen\)\.$/
+		);
+		await rm(log + '.noui');
+		expect(await simulators.agent(key, { tool: 'act', action: 'rotate' })).toMatch(
+			/^Rotated to landscapeLeft; the app stays in portrait\. Screen settled in 0\.\d s\.\n/
+		);
 		// Rotate: devicectl turns the device; the tree speaks interface points, the touch lands in the device frame.
 		await simulators.command('project', { kind: 'rotate' });
 		expect(calls).toContainEqual([
@@ -208,6 +254,10 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		// The fake app does not turn first (portrait tree): points pass as they are; then it turns with the device.
 		expect(await simulators.agent(key, { tool: 'ui' })).toMatch(/^Screen 402×874 pt/);
 		await writeFile(log + '.turned', '');
+		// The app turning draws: a frame ends the tree read before it.
+		const drawn = frames.length;
+		await simulators.command('project', { kind: 'keyframe' });
+		await expect.poll(() => frames.length).toBeGreaterThan(drawn);
 		expect(await simulators.agent(key, { tool: 'ui' })).toMatch(/^Screen 874×402 pt/);
 		await simulators.agent(key, { tool: 'act', action: 'tap', x: 150, y: 32 });
 		expect(
@@ -462,7 +512,9 @@ it('lists AVDs, starts the emulator without a window, runs the Android helper wi
 				{ projectId: 'project', id: 'task' },
 				{ tool: 'act', action: 'button', button: 'back' }
 			)
-		).toBe('Pressed back.');
+		).toMatch(
+			/^Pressed back\. Screen settled in 0\.\d s\.\nNo tree diff on Android: reading the tree takes seconds\. Call simulator_ui when you need it\.$/
+		);
 		simulators.close();
 		expect(calls).toContainEqual([
 			'detach',

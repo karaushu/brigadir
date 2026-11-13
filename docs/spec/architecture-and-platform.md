@@ -482,6 +482,7 @@ A tool that lags is not used, so these rules are contracts, not tuning. Each one
 | Tool | Bound |
 | --- | --- |
 | `browser_console`, `browser_network` | newest 100 entries within 32 KiB of text; a cached but unmounted page view publishes no state, `mount` sends the full state |
+| `simulator_act`, `simulator_wait` | the tree diff ≤ 32 KiB (`… truncated: N more changes`); a timed-out wait shows the first 60 elements of the last tree |
 | `propose_plan` | full `parts` only when the person edited them, otherwise `{edited: false, parts: [{title, agent}]}` |
 | `read_notes` | ≤ 64 KiB per page |
 | `read_transcript` | lines ≤ 2000 chars, page ≤ 64 KiB, `omitted` field |

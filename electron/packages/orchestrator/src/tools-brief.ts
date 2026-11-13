@@ -57,7 +57,11 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: Workspace
 			? [
 					'Your agents have the same tools: a part proves itself with the command its prompt names, and one agent checks the running app once, on the integrated work.',
 				]
-			: []),
+			: role === 'auto'
+				? [
+						'Workers you hire have the same tools: a part proves itself with the command its prompt names; you check the running app once, on the integrated work.',
+					]
+				: []),
 	].join('\n');
 }
 /** spec/agents-and-providers#tools-awareness: the same in one paragraph of the first-prompt brief; it names the console in any case (spec/terminal-and-cli-agents#agent-console-tools). */

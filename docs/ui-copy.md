@@ -105,6 +105,8 @@ two similar actions. Do not add a description when the name is enough.
 - Numbers go through `Intl.NumberFormat` for the UI locale; dates and times through the `Intl` formatters.
 - Count helpers live next to the catalog in `messages.ts` (`taskCount`, `draftCount`, `newCommitCount`,
   `riskyCount`, …). A new countable phrase gets its own helper with all four Ukrainian forms.
+- Token counts are short and the same in both languages, by `formatTokenCount`: `400k`, `1.2m` (a part budget is
+  `40 min · 400k` / `40 хв · 400k`).
 
 ## Platforms and names in code
 
@@ -120,6 +122,9 @@ two similar actions. Do not add a description when the name is enough.
   The code names `agents.keepAwake`, `KeepAwakeStatus`, `KeepAwakeRow` and `keep-awake` already describe the
   behaviour and stay as they are.
 - Do not promise that the computer stays awake with the lid closed, or the same sleep policy on every OS.
+- The default task is **Auto / Авто**: one agent that writes the code and may hire workers. It names what the task
+  does, not who decides; the person picks a named crew instead when they know the shape up front. A worker is named
+  by its role and part (`Developer · API endpoints`), never «профіль».
 
 ## Localization
 

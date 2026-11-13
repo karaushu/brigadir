@@ -243,7 +243,7 @@ Each time the agent presents the plan again, the card shows what changed since t
 <a id="crew-plan-card"></a>
 ### Foreman plan card
 
-The Foreman's proposed split appears as a card in its chat at the place of `crew.plan.requested`, at the width of the conversation column. It is not a modal, so `Esc` only cancels a prompt edit. The orchestration flow (`propose_plan`, the Foreman composing the crew, attention) is described in [Crew](crew.md).
+The Foreman's proposed split appears as a card in its chat at the place of `crew.plan.requested`, at the width of the conversation column. It is not a modal, so `Esc` only cancels a prompt edit. The orchestration flow (`propose_plan`, a crew snapshot with a palette, attention) is described in [Crew](crew.md).
 
 - **Header.** The helmet glyph, `The foreman proposes a split`, provider glyphs of the crew and `crew <name> · N agents` (four Ukrainian plural forms). Below the header comes the Foreman's full summary, 13 pt in the primary colour.
 - **Part = brief section.** A 20 pt numbered circle, a title that is always a field (`ui/TextInput`, row size S, max 80 characters), `assigned to` and the agent chip with a popover of the node's children. Below that are the files in monospace and the scope tags, then the worker **prompt** (12 pt / 1.55, secondary colour) folded to two lines, with `Whole prompt` / `Collapse prompt`.
@@ -251,6 +251,28 @@ The Foreman's proposed split appears as a card in its chat at the place of `crew
 - **Differences next to their part.** Each difference with a `partId` shows in amber under its part with a warning glyph; the part number and the agent chip border turn amber too. The app builds the text from the difference's code and fields (`agent`, `part`, `zone`, `outside`) in the UI language; the English `message` is for the agent. Differences with no part (`idle_agent`, `empty`) go to the footer.
 - **Footer.** It shows `N parts for M agents` and, with reviewers, `· <names> checks each`. When something blocks, it shows `Part {n}: differences with the crew. Start waits for a fix.` in amber. On the right are `Reject` and `Start workers`. `Start workers` is disabled while a blocking difference, an empty title or an empty prompt remains (`Every part needs a title and a prompt.`).
 - **After the decision** the card becomes a framed row: helmet, `Plan approved` or `Plan rejected`, `N parts`, then the agents with glyphs (approved) or `the foreman will make a new plan` (rejected), and the time and a chevron on the right. The chevron expands a read-only list of parts (number, title, agent). The source is `crew.plan.resolved`: its `parts`, or the request's parts when the person did not edit anything.
+
+<a id="hire-card"></a>
+### Hire card
+
+An [Auto](crew.md#auto-hire) task's request to hire appears as a card in its chat at the place of `crew.hire.requested`, at the width of the conversation column. It is the plan card's look (the same card, sections and chips, `ui/` components shared with it), not a modal: `Esc` only cancels an edit. The card comes from the journal, so it is there after a restart until the person decides.
+
+- **Header.** `{agent} wants to hire {n} workers` (four Ukrainian plural forms), `edited` after an edit, and on the right the sum of the hireable parts' budgets: `1h 50m · 1.1m tokens` (tokens by `formatTokenCount`). Below it the agent's summary, 13 pt in the primary colour.
+- **Part = section.** The numbered circle, the title field, `assigned to` and the **role chip** (a popup of the task's roles: name, provider glyph, model · effort; the chosen one ticked), and the **budget chip** `40 min · 400k` (a popover with minutes and tokens steppers within the limits). Under them the zone as path chips (monospace) and the scope tags, then the part's prompt in the primary colour, folded to two lines, with `Whole prompt` / `Collapse prompt` and in-place editing as on the plan card. A chip the person changed takes the accent, and the header's sum follows.
+- **Refused part.** Its reason in amber under the part, worded from the gate's code in the interface language: `Not independent: part {n} writes {path} too.`, `Not independent: {worker} already writes {path}.`, `Too small for a worker: about {n} lines in one file.`; the part's number turns amber. The footer says `Part {a} stays with {agent}.` / `Parts {a} and {b} stay with {agent}.`
+- **Footer.** `{n} parts for {n} workers`, then `Do it yourself` and the primary `Hire` (`Hire {n}` when some parts are refused; disabled while no part can be hired or a title or prompt is empty). `⌘↩` hires.
+- **After the decision** the card becomes a framed row: `Hired {n} workers` with the roles' chips and the time, followed by the hire's worker service rows; or `Not hired · {n} parts · {agent} does it itself`. Its source is `crew.hire.resolved`.
+- On the phone a waiting hire shows the task as `needs-you`; the card is answered on the computer.
+
+<a id="model-card"></a>
+### Model question card
+
+An [Auto](crew.md#auto-model) agent's `request_model` shows the question card family (`ui/SessionInputs`) at the place of `crew.model.requested`.
+
+- **Header strip.** `{agent} asks for another model`, the part's name chip, `waiting <age>`.
+- **Body.** The agent's reason; then one list of the catalog models of the enabled providers, grouped by provider with its glyph. The task's own model and the base role's model carry `the model of this task` / `the model of role {role}`. Rows hover whole; the chosen row is `--accent-soft`. `Effort` segments for the chosen model's levels. `Save as role` (a checkbox that reveals a name field) also saves the role to the library.
+- **Footer.** `⌘↩ to answer`, `Keep {role}` and the primary `Use this model`. While a catalog loads: `Loading models…`, and the answer waits. With no other models: `No other models.`, `Settings…` and `Keep {role}` only.
+- **After the answer** the card folds to `Model · Resolved` and the choice: `GPT-6 Astra · High · saved as role “Vision developer”`, or `Keep Developer`. A choice the agent made itself with `Any catalog model` is one service row: `model GPT-6 Astra · High · {part} · chosen by {agent}`.
 
 <a id="questions"></a>
 ## Questions

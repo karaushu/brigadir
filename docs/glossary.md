@@ -293,13 +293,21 @@ Names" category of STE.
 
 ## Crew
 
-The crew is a foreman and its workers. `Brigadir` is the product; `Foreman` / `Бригадир` is the agent that
-leads a crew.
+The crew is a foreman and its workers, or an Auto agent and the workers it hired. `Brigadir` is the product;
+`Foreman` / `Бригадир` is the agent that leads a named crew.
 
 | English | Ukrainian | Meaning | Avoid |
 |---|---|---|---|
 | Crew | Бригада | A foreman and its workers as one team. | «команда», «ростер» |
-| Crews | Бригади | | |
+| Crews | Бригади | The label over the library's crews in the `Crew` popup. | |
+| Auto | Авто | The `Crew` popup's first item and the default task: one agent writes the code and may hire workers. | «Агент вирішить», «Бригадир збере» |
+| Hire · Hire {n} | Найняти · Найняти {n} | The hire card's primary action: start workers for the parts. | «Запустити воркерів» |
+| Do it yourself | Роби сам | The hire card's refusal: the agent does the parts itself. | «Відхилити» |
+| hire / dismiss | наймати / відпускати | What an Auto agent does with workers. Dismissed: «відпущено». | «звільнити», «вигнати» |
+| Part budget | Бюджет частини | Working minutes and tokens a hired part may spend; `40 min · 400k` / `40 хв · 400k` (tokens by `formatTokenCount` in both languages). | «ліміт» |
+| over budget | понад бюджет | A hired worker that went over its budget and waits for the person. | |
+| Any catalog model | Будь-яка модель каталогу | The Settings ▸ Auto switch: the agent picks a model outside its roles without asking. | |
+| Save as role | Зберегти як роль | On the model question card: the chosen model becomes a role in the library. | «профіль» |
 | Foreman | Бригадир | The agent that splits work, assigns parts, and accepts them. | |
 | Worker / Workers | Воркер / Воркери | A task that does one part under the foreman. | |
 | Developer / Reviewer | Розробник / Ревʼюер | Built-in agent templates. | |
@@ -310,7 +318,6 @@ leads a crew.
 | Security reviewer | Ревʼюер безпеки | Built-in agent template: checks changes for security defects. | «безпечник» |
 | Crew with tests | Бригада з тестами | Crew name the app translates: a person's crew of a developer, a tester and a reviewer may carry it. | |
 | Crew members | Склад | The plan card section with the members the foreman proposes. | «ростер», «слот» |
-| Foreman composes | Бригадир збере | The crew popup item: the foreman proposes the members. | «Авто» |
 | crew from the foreman | склад від бригадира | | |
 | Edit crew… | Редагувати склад… | | |
 | Templates | Шаблони | The settings tab with agent and crew templates. | |
@@ -323,7 +330,7 @@ leads a crew.
 | New agent / New crew | Новий агент / Нова бригада | | |
 | Instructions | Інструкції | The role text of an agent template, in English. | «промпт» |
 | Specialty | Спеціалізація | One sentence for the foreman: what the agent is good at. | «Опис» |
-| Role / No role | Роль / Без ролі | The agent template a task without a crew gives its agent, on the New task sheet. | «шаблон» |
+| Role / No role | Роль / Без ролі | The agent template a task without a crew gives its agent, on the New task sheet; also what an Auto task hires a part with: a worker row is `{role} · {part}`. | «шаблон», «профіль» |
 | Zone | Зона | The files an agent owns. | |
 | Subordinates | Підлеглі | The agents under a lead in the crew tree. | «сабагенти» |
 | Checker | Перевіряльник | An agent that reviews others and writes no code. | |
@@ -445,7 +452,7 @@ leads a crew.
 | Your call | Вирішуєш ти | The strip when open findings wait for the person. | |
 | Fix {n} · Accept | Виправити {n} · Прийняти | The person's two answers to open findings. | «Fix more», «Accept as is» |
 | Code reviews | Ревʼю коду | Customize per action: who reviews mid-task and before the PR. | |
-| Auto | Авто | Who reviews by default: another signed-in agent, else a fresh session of the task's own. | |
+| Auto (reviewer) | Авто | Who reviews by default: another signed-in agent, else a fresh session of the task's own. | |
 
 ## Pull requests and CI
 

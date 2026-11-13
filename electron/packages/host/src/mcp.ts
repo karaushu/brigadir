@@ -161,6 +161,10 @@ const whenToUse: Record<string, string> = {
 	ask_foreman: 'Use it when the task or a shared decision is unclear, not for permissions.',
 	post_note: 'Call it when you change something other agents rely on.',
 	read_notes: 'Call it before you touch a shared type or config.',
+	hire_workers:
+		'Call it only for two or more independent parts that are each large enough for a session of their own; do a small task yourself.',
+	dismiss_worker: 'Call it when a worker’s part is not needed any more.',
+	request_model: 'Call it only when no role fits a part.',
 };
 const humanTools: Tool[] = [
 	{
@@ -766,6 +770,48 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 		description:
 			'Read crew notes after the given sequence number (exclusive). Returns up to 100 notes, nextCursor and hasMore.',
 		shape: { since: z.number().int().min(0).default(0) },
+	},
+	// spec/crew#auto-tools: the Auto agent's hire; the card waits for the person like a plan.
+	hire_workers: {
+		description:
+			'Hire workers for independent parts of this task: each part becomes a worker task in its own worktree, started from a commit of your edits so far. Per part: title, role (one of your roles), zone (the paths or globs it writes; zones of parts never overlap, and you no longer write inside them), lines and files (your estimate of what it changes), the full prompt for the worker (it sees nothing of this conversation: the goal, the expected behaviour, what stays untouched, the command that proves it), optionally acceptance, scopes, minutes and tokens (its budget; the default applies otherwise). summary says on the card what each part is and why the parts are independent. The person approves, edits or declines; wait for the result even if this call runs asynchronously. A part that overlaps another or is too small for a worker stays with you, and the rest are hired. Declined means you do the parts yourself.',
+		shape: {
+			summary: z.string().max(20_000).default(''),
+			parts: z
+				.array(
+					z.object({
+						title: z.string().min(1).max(80),
+						role: z.string().min(1).max(80),
+						zone: z.array(z.string().min(1).max(1024)).min(1).max(256),
+						lines: z.number().int().min(0).max(10_000_000),
+						files: z.number().int().min(1).max(100_000).optional(),
+						prompt: z.string().min(1).max(100_000),
+						acceptance: z.string().max(20_000).optional(),
+						scopes: z.array(z.string().max(4096)).max(512).default([]),
+						minutes: z.number().int().min(1).max(600).optional(),
+						tokens: z.number().int().min(1).max(20_000_000).optional(),
+					})
+				)
+				.min(1)
+				.max(16),
+		},
+	},
+	dismiss_worker: {
+		description:
+			'Dismiss a hired worker without accepting its part: its session stops, its task keeps its diff, nothing of it is merged, and the part is yours again. accept_task dismisses a worker by itself.',
+		shape: { taskId },
+	},
+	request_model: {
+		description:
+			'Ask for a model outside your roles when no role fits a part. reason says why; role is the base role the part keeps if the person declines (Developer by default); provider, model and effort are what you would like. The person chooses on a card (or, when the settings allow, the names you pass are checked against the catalog at once). The result names the role to hire the part with.',
+		shape: {
+			reason: z.string().min(1).max(2000),
+			role: z.string().max(80).optional(),
+			part: z.string().max(80).optional(),
+			provider: z.string().max(40).optional(),
+			model: z.string().max(200).optional(),
+			effort: z.string().max(200).optional(),
+		},
 	},
 };
 /** The request id doubles as the idempotency key of crew calls (`post_note` after a retry), as it did through the SDK. */

@@ -105,8 +105,10 @@ export const foremanTemplateId = 'foreman-default',
 export const unshippedCrewTemplateIds: readonly string[] = ['default', 'tests'];
 /** spec/pull-requests-and-ci#review-crew: the built-in crew of a PR review — the foreman merges what two reviewers of different providers found. */
 export const reviewCrewTemplateId = 'review';
-/** spec/crew#compose: the launch sheet's «the foreman composes» choice, remembered per project like a template id. */
+/** spec/crew#compose: the template id of a crew snapshot that carries a palette, and of a stored launch that runs as `Auto`. */
 export const composeCrewId = 'compose';
+/** spec/tasks#sheet-rail: the `Crew` popup's first item, `Auto` (spec/crew#auto); a launch names it like a crew id. */
+export const autoCrewId = 'auto';
 
 const developerInstructions =
 	'You implement your part of the work. You own the listed files and directories: change only them, other files belong to other agents. Read anything you need across the project. Keep changes small and coherent; do not refactor outside your zone. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the check your task prompt names (a test, a typecheck, a build) and say what it showed. If it fails for a reason outside your files, say so instead of working around it. Do not commit; the host snapshots your tree.';
@@ -256,25 +258,32 @@ export const builtinCrewTemplates: readonly CrewTemplate[] = [
 		},
 	},
 ];
-/** spec/crew-templates-and-editor#unshipped-crew-ids: a schedule's crew id the app no longer ships, and that no own crew took over, runs as «Foreman composes». */
+/**
+ * spec/crew-templates-and-editor#unshipped-crew-ids: what a stored launch runs as. A crew id the app no longer ships, that no own crew took
+ * over, and a launch that asked the foreman to compose its crew both run as `Auto`.
+ */
 export function unshippedCrewLaunch(
 	launch: CrewLaunch,
 	crews: readonly { id: string }[]
 ): CrewLaunch {
+	if ('compose' in launch) return { auto: true };
 	return 'templateId' in launch &&
-		unshippedCrewTemplateIds.includes(launch.templateId) &&
-		!crews.some((item) => item.id === launch.templateId)
-		? { compose: true }
+		(launch.templateId === composeCrewId ||
+			launch.templateId === autoCrewId ||
+			(unshippedCrewTemplateIds.includes(launch.templateId) &&
+				!crews.some((item) => item.id === launch.templateId)))
+		? { auto: true }
 		: launch;
 }
-/** spec/crew-templates-and-editor#unshipped-crew-ids, spec/pull-requests-and-ci#review-crew: the sheet's crew for a remembered id; a crew that left the
- *  library (deleted, hidden, or one the app no longer ships) gives way to «Foreman composes». */
+/** spec/tasks#sheet-rail, spec/pull-requests-and-ci#review-crew: the sheet's crew for a task's own crew id (an edit or a duplicate); a crew that left the
+ *  library (deleted, hidden, or one the app no longer ships) gives way to `Auto`. */
 export function rememberedCrewId(id: string | undefined, crews: readonly { id: string }[]): string {
-	return id && (id === composeCrewId || crews.some((item) => item.id === id)) ? id : composeCrewId;
+	return id && id !== composeCrewId && crews.some((item) => item.id === id) ? id : autoCrewId;
 }
 export function isBuiltinTemplateId(id: string) {
 	return (
 		id === composeCrewId ||
+		id === autoCrewId ||
 		builtinAgentTemplates.some((item) => item.id === id) ||
 		builtinCrewTemplates.some((item) => item.id === id)
 	);
@@ -1012,16 +1021,21 @@ export type CrewLibrary = {
 	/** spec/pull-requests-and-ci#review-crew: built-in crews hidden from the library; non-empty offers `Restore default crews`. */
 	hiddenCrews: string[];
 };
-/** What the launch sheet sends for a Brigadir task: a library template by id, or a one-off crew edited in place (spec/tasks#sheet-rail). */
+/**
+ * What the launch sheet sends for a task (spec/tasks#sheet-rail): `Auto` (spec/crew#auto), a library crew by id, or a one-off crew edited in
+ * place. `compose` is what schedules saved before `Auto` hold; it runs as `Auto` (`unshippedCrewLaunch`).
+ */
 export type CrewLaunch =
+	| { auto: true }
 	| { templateId: string }
 	| { template: CrewTemplate }
 	| {
 			compose: true;
-			/** The foreman alone, set up in the editor (spec/crew#compose). */ template?: CrewTemplate;
+			template?: CrewTemplate;
 	  };
 export function isCrewLaunch(value: unknown): value is CrewLaunch {
 	if (!isRecord(value)) return false;
+	if (value.auto === true) return Object.keys(value).length === 1;
 	if (value.compose === true)
 		return (
 			Object.keys(value).every((key) => key === 'compose' || key === 'template') &&

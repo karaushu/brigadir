@@ -339,13 +339,13 @@ Completed tasks come last in their group as quiet rows, not cards, under a fold 
   archive button is a sibling raised over the row button, so it never opens the task.
 - Selected (task open): `--sel`, text `--fg`; the row does not grow.
 - Click opens; right click opens the task menu; a swipe archives (see [Archive](tasks.md)).
-- A completed foreman is the same row; its workers are not listed.
+- A completed foreman or Auto task is the same row; its workers are not listed.
 - Filters and search show completed tasks as these rows too.
 
 <a id="crew-card"></a>
 ## Crew card
 
-A foreman task is a soft card inside its group: `--hover` fill (white 3 % in dark), radius 10, margin `2px 8px 6px`,
+A foreman task, and an Auto task from its first hire on, is a soft card inside its group: `--hover` fill (white 3 % in dark), radius 10, margin `2px 8px 6px`,
 6 px under the last worker. The fill means «container» and
 is the same in every state, except that a foreman in `needs-you` (e.g. its plan awaits approval) tints the whole card
 `--amber-soft`. A worker waiting for the person colours only its own glyph and lifts the attention flash onto the header.
@@ -359,6 +359,7 @@ See [Crew](crew.md) for what a crew is.
 | Workers | straight under the header, no plate: indented 26 px inside the card so their glyphs stand under the title |
 | Worker row | 30 px, 12.5 px text `{Agent} · {part}` (agent name in `--fg2`), 13 px state glyph in a 14 px slot, gap 9, 11 px to the card's right edge; tail: unread dot, provider glyph. Hover `--tint`, selected `--sel`. Lead depth indents 14 px per level; a nested foreman shows its helmet before its glyph |
 | Worker extra line | `Waiting for the simulator` while it waits for the project's one device |
+| Auto worker | `{role} · {part}`: the role the part was hired with, not its unique node name. Over its budget: `{role} · over budget`, the text and the glyph in amber (`needs-you`), the unread dot; the card's fill does not change. Dismissed: a quiet row in its place, the tick glyph, text `--fg3`, and the worker's `+N −M` instead of the provider glyph; a click opens the worker and its diff. The context menu of a worker that is not dismissed has `Dismiss` ([Auto](crew.md#auto-dismiss)) |
 | Branch of a worker | not shown; it derives from the crew worktree |
 
 - **Selection.** A selected expanded crew is selected whole: `--sel` over the card (header and the area around the workers);
@@ -366,6 +367,9 @@ See [Crew](crew.md) for what a crew is.
   their own hover. A selected worker highlights only its row.
 - **Collapsed.** Folded, the card is the header alone in the same tone (`--amber-soft` for needs-you, `--sel` when
   selected), 6 px to the next row.
+- **Auto.** An Auto task with no workers is an ordinary task row. Its first hire turns it into this card, with the
+  helmet, the count and the tray, in the moment the hire is approved. Dismissed workers keep their quiet rows until the task
+  ends; the count counts them too. When all are dismissed the tray stays, folding with the chevron.
 
 <a id="crew-collapse"></a>
 ### Collapse persists

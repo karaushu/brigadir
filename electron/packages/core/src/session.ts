@@ -5,6 +5,19 @@ import { isReviewBatch, type ReviewBatch } from './review';
 import type { AgentCommand, AgentEvent, PermissionRequest } from './agent';
 import { isId, isRecord } from './workspace';
 import {
+	isAutoBudget,
+	isAutoHireDecision,
+	isAutoModelAnswer,
+	type AutoBudget,
+	type AutoHire,
+	type AutoHireDecision,
+	type AutoHired,
+	type AutoHirePart,
+	type AutoModelAnswer,
+	type AutoModelRequest,
+} from './auto';
+import type { CrewDismissReason } from './crew-runtime';
+import {
 	isCrewPlan,
 	isCrewPlanDecision,
 	isCrewTurnMarker,
@@ -162,6 +175,52 @@ export type SessionEvent =
 	  }
 	| { kind: 'crew.accepted'; taskId: string; nodeId: string; name: string; conflicts: string[] }
 	| { kind: 'crew.worker.stopped'; taskId: string; nodeId: string; name: string; reason: string }
+	/** spec/crew#auto-hire: the Auto agent asked to hire; the card waits for the person (`needs-you`) and survives a restart. */
+	| { kind: 'crew.hire.requested'; hire: AutoHire }
+	/** `parts`: the person's edit, null — as proposed; `hired`: the worker tasks that started. */
+	| {
+			kind: 'crew.hire.resolved';
+			id: string;
+			approved: boolean;
+			parts: AutoHirePart[] | null;
+			hired: AutoHired[];
+	  }
+	/** spec/crew#auto-dismiss */
+	| {
+			kind: 'crew.worker.dismissed';
+			taskId: string;
+			nodeId: string;
+			name: string;
+			title: string;
+			reason: CrewDismissReason;
+	  }
+	/** spec/crew#auto-commit: the Auto agent's own edits committed to its branch before a hire or an accept. */
+	| {
+			kind: 'crew.lead.committed';
+			reason: 'hire' | 'accept';
+			commits: { scope: string; sha: string }[];
+	  }
+	/** spec/crew#auto-budget: in the Auto agent's journal and in the worker's own, where it sets `needs-you`. */
+	| {
+			kind: 'crew.budget.exceeded';
+			taskId: string;
+			name: string;
+			title: string;
+			budget: AutoBudget;
+			used: { minutes: number; tokens: number };
+	  }
+	/** spec/crew#auto-guard: the Auto agent changed files inside a zone it hired out. */
+	| { kind: 'crew.zone.touched'; taskId: string; name: string; title: string; paths: string[] }
+	/** spec/crew#auto-model: the question card; `resolved` by the person, or by the agent itself with `Any catalog model`. */
+	| { kind: 'crew.model.requested'; request: AutoModelRequest }
+	| {
+			kind: 'crew.model.resolved';
+			id: string;
+			answer: AutoModelAnswer | null;
+			by: 'person' | 'agent';
+			role: string;
+			part?: string;
+	  }
 	/** `returnMode`: `Погодити` on a plan asked the host to bring this mode back once the agent leaves the plan (spec/chat-turns-plans-and-questions#plan-approval). */
 	| { kind: 'permission.resolved'; id: string; optionId: string | null; returnMode?: string }
 	| { kind: 'question.requested'; question: UserQuestion }
@@ -196,6 +255,19 @@ export type SessionCommand =
 	/** spec/tasks#agent-created-tasks: main after it created the proposed task, or the card's `Відхилити` with `null`. */
 	| { kind: 'resolveTaskProposal'; id: string; task: TaskProposalResult }
 	| { kind: 'decidePlan'; decision: CrewPlanDecision }
+	/** spec/crew#auto-hire: the hire card's `Hire {n}` or `Do it yourself`. */
+	| { kind: 'decideHire'; decision: AutoHireDecision }
+	/** spec/crew#auto-model: `Use this model`, or null — keep the base role. */
+	| { kind: 'answerModel'; id: string; answer: AutoModelAnswer | null }
+	/** spec/crew#auto-dismiss: the person dismisses a worker of an Auto task from its row. */
+	| { kind: 'dismissWorker'; taskId: string }
+	/** spec/crew#auto-budget: the Auto agent's host tells a worker's host its part went over budget. */
+	| {
+			kind: 'overBudget';
+			title: string;
+			budget: AutoBudget;
+			used: { minutes: number; tokens: number };
+	  }
 	| { kind: 'answerCrewQuestion'; id: string; answer: string }
 	/** spec/reviews#start: main resolved the reviewers and the guidance; the host runs the rounds. */
 	| {
@@ -477,6 +549,21 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 			return text(v.id) && v.id.length <= 64 && isTaskProposalResult(v.task);
 		case 'decidePlan':
 			return isCrewPlanDecision(v.decision);
+		case 'decideHire':
+			return isAutoHireDecision(v.decision);
+		case 'answerModel':
+			return isId(v.id) && (v.answer === null || isAutoModelAnswer(v.answer));
+		case 'dismissWorker':
+			return isId(v.taskId);
+		case 'overBudget':
+			return (
+				text(v.title) &&
+				v.title.length <= 200 &&
+				isAutoBudget(v.budget) &&
+				isRecord(v.used) &&
+				Number.isFinite(v.used.minutes) &&
+				Number.isFinite(v.used.tokens)
+			);
 		case 'startReview':
 			return (
 				Array.isArray(v.reviewers) &&
@@ -514,14 +601,24 @@ export type PendingInputs = {
 	crewPlan: CrewPlan | null;
 	crewQuestions: CrewQuestion[];
 	proposals: TaskProposal[];
+	/** spec/crew#auto-hire: the hire card waiting for the person; it survives a restart. */
+	crewHire: AutoHire | null;
+	/** spec/crew#auto-model: model questions waiting for the person. */
+	crewModels: AutoModelRequest[];
 };
 export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 	const permissions = new Map<string, PermissionRequest>();
 	const questions = new Map<string, UserQuestion>();
 	const crewQuestions = new Map<string, CrewQuestion>();
 	const proposals = new Map<string, TaskProposal>();
-	let crewPlan: CrewPlan | null = null;
+	let crewPlan: CrewPlan | null = null,
+		crewHire: AutoHire | null = null;
+	const crewModels = new Map<string, AutoModelRequest>();
 	for (const { event: e } of records) {
+		if (e.kind === 'crew.hire.requested') crewHire = e.hire;
+		if (e.kind === 'crew.hire.resolved' && crewHire?.id === e.id) crewHire = null;
+		if (e.kind === 'crew.model.requested') crewModels.set(e.request.id, e.request);
+		if (e.kind === 'crew.model.resolved') crewModels.delete(e.id);
 		if (e.kind === 'crew.plan.requested') crewPlan = e.plan;
 		if (e.kind === 'crew.plan.resolved' && crewPlan?.id === e.id) crewPlan = null;
 		if (e.kind === 'crew.question.requested') crewQuestions.set(e.question.id, e.question);
@@ -541,6 +638,7 @@ export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 			permissions.clear();
 			questions.clear();
 			proposals.clear();
+			crewModels.clear();
 		}
 	}
 	return {
@@ -549,6 +647,8 @@ export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 		crewPlan,
 		crewQuestions: [...crewQuestions.values()],
 		proposals: [...proposals.values()],
+		crewHire,
+		crewModels: [...crewModels.values()],
 	};
 }
 import { isScopeUpdate, type ScopeUpdate } from './scope-controls';
@@ -573,6 +673,8 @@ export function waitsForPerson(inputs: PendingInputs) {
 		inputs.questions.length > 0 ||
 		inputs.permissions.length > 0 ||
 		inputs.proposals.length > 0 ||
-		inputs.crewPlan !== null
+		inputs.crewPlan !== null ||
+		inputs.crewHire !== null ||
+		inputs.crewModels.length > 0
 	);
 }

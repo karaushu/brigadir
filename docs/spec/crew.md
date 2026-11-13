@@ -1,31 +1,142 @@
 # Crew: orchestrator tasks and agent communication
 
-A **Foreman** task runs an orchestrator agent that writes no code: it proposes a split of the work, the person approves it, and then the foreman hands parts to named crew agents (workers), reads their code-built reports and diffs, returns work through the review loop and accepts it into its own branch. Everything runs over one app-owned MCP server (`brigadir`) inside ordinary ACP sessions; the foreman's host, not the app window, executes the orchestration. Agents talk only along the crew tree: questions up (`ask_foreman`), facts on a shared notes log, and host-routed review edges between siblings.
+Two kinds of task orchestrate other agents:
+
+- An **Auto** task ([Auto](#auto)) runs one agent that writes the code itself and may hire workers for independent parts at any moment of the task. The person approves each hire on a card. This is the default task.
+- A **Foreman** task runs a named crew chosen at launch: an orchestrator agent that writes no code proposes a split of the work, the person approves it, and the foreman hands parts to the crew's named agents (workers), reads their code-built reports and diffs, returns work through the review loop and accepts it into its own branch.
+
+Everything runs over one app-owned MCP server (`brigadir`) inside ordinary ACP sessions; the orchestrating task's host, not the app window, executes the orchestration. Agents talk only along the crew tree: questions up (`ask_foreman`), facts on a shared notes log, and host-routed review edges between siblings.
 
 Crew templates, the tree data contract and the crew editor are in [Agent and crew templates, crew editor](crew-templates-and-editor.md). Choosing a crew on the launch sheet is in [Tasks](tasks.md#launch-sheet). The sidebar crew card is in [Sidebar](sidebar.md#crew-card). The plan card UI is in [Turns, plans and questions in chat](chat-turns-plans-and-questions.md).
 
 <a id="task-type"></a>
-## The Foreman task type
+## Task kinds
 
 | Kind | Glyph | Meaning |
 | --- | --- | --- |
-| Foreman | helmet (`task-brigadir`) | splits, delegates, reviews and accepts work |
+| Auto | none until its first hire, then the helmet | one agent writes the code and may hire workers ([Auto](#auto)); every GUI task without a named crew |
+| Foreman | helmet (`task-brigadir`) | runs a named crew: splits, delegates, reviews and accepts work |
 | Worker | none | does the work like an ordinary agent; the crew container says it is a worker |
-| Ordinary task | none | one agent works alone (the default) |
+| CLI task | none | one agent in the terminal; it never hires ([Terminal and CLI agents](terminal-and-cli-agents.md)) |
 
 - The type glyph sits in the trailing part of the card with the isolation glyph, muted; the state icon stays the only leading icon and owns colour.
-- Workers appear only in the sidebar, inside their foreman's card; the project board shows only human tasks (see [Projects and board](projects-and-board.md)). A worker whose foreman is gone is shown as an ordinary task.
-- The foreman task is isolated in a worktree by default. Its branch is the **integration branch**; the crew's result ships through the normal PR flow from it.
+- Workers appear only in the sidebar, inside the card of the task that started them; the project board shows only human tasks (see [Projects and board](projects-and-board.md)). A worker whose orchestrating task is gone is shown as an ordinary task.
+- An orchestrating task with workers runs in a worktree. Its branch is the **integration branch**; the result ships through the normal PR flow from it.
 - **Why:** the mechanics (tasks, worktrees, snapshot diffs, review loop, queue, locks) already exist; the crew is a wrapper that exposes them to an agent, not a new engine.
 
 <a id="launch"></a>
 ## Choosing the crew at launch
 
-The `Crew` popup on the launch sheet (when the type is `Foreman`) lists `Foreman composes` first (generation glyph), then a divider and `Crew templates`.
+The `Crew` popup is the first group of the launch sheet's rail ([Tasks](tasks.md#sheet-rail)). It lists `Auto` first, then under the label `Crews` the library's crews: the built-in `Review crew` and the person's own crews.
 
-- `Foreman composes` is the default for a project where no crew was chosen yet and for the fast path (`⌘N`). The last choice is remembered per project (`launchDefaults.crewTemplateId`; `"compose"` = `composeCrewId`).
-- With `Foreman composes`, the crew row shows only the foreman chip with its model. `Set up…` opens the crew editor with the foreman alone: its model and effort change there; adding agents turns it into a one-off crew.
-- A template or one-off crew is snapshotted into the task (`task.crew`); the task never reads the library again.
+- `Auto` is where every sheet starts, the fast path (`⌘N`) included. The choice is not remembered per project. Edit and Duplicate open on the task's own crew; when that crew left the library they open on `Auto`, with one line under the popup: `Crew “{name}” was deleted.`, which goes away with the next choice.
+- A named crew or a one-off crew is snapshotted into the task (`task.crew`); the task never reads the library again.
+- `CrewLaunch` is `{ auto: true }`, `{ templateId }` or `{ template }` (a one-off crew). Stored launches that predate `Auto` still load: `{ compose: true }`, a `templateId` of `compose` and an id the app no longer ships run as `Auto` (`unshippedCrewLaunch`, [Unshipped crew ids](crew-templates-and-editor.md#unshipped-crew-ids)).
+- A task in the terminal (`CLI`) is always one agent: the popup is disabled on `Auto` with the hint `A CLI task runs one agent.`, and the task gets no `auto`.
+- The PR review dialog has its own `Who` control and lists only reviewer crews ([Pull requests and CI](pull-requests-and-ci.md#review-crew)).
+
+<a id="auto"></a>
+## Auto
+
+An Auto task is one agent that reads the task and the repo and writes the code itself. It may hire workers for parts of the task at any moment, not only at its start, and dismiss them. A small task, or one chain of dependent steps, runs with no plan card and no questions: the agent does it.
+
+<a id="auto-root"></a>
+### The task and its crew
+
+- `task.auto` marks an Auto task: `{ roles, budget }` ([Roles](#auto-roles), [Budget](#auto-budget)). Main sets it at creation for a GUI task launched with `Auto`, unless the sheet's role is a checker (that task writes no code and stays a solo checker).
+- The agent is the root of its own crew from its first session: its host runs with `BRIGADIR_ROLE=auto`. Until the first hire the crew is that root alone (named after the provider, `Claude` or `Codex`, with the task's own provider and choices), plus the reviewers of the task's own review when one ran ([Reviews](reviews.md)). `task.crew` is written at the first approved hire; the sidebar card turns into the card with the tray at that moment ([Sidebar](sidebar.md#crew-card)).
+- Reviews of [Reviews](reviews.md) apply to an Auto task and to each hired part as they are. A hired part gets no reviewer of its own unless the person adds one.
+
+<a id="auto-tools"></a>
+### Tools
+
+The Auto agent has its whole tool set from its first session, so the list never changes in the middle of a session (Codex does not read it again): the person's tools, `hire_workers`, `dismiss_worker`, `request_model`, and the foreman's tools for working with workers (`prompt_task`, `task_status`, `read_report`, `read_transcript`, `read_diff`, `submit_review`, `accept_task`, `post_note`, `read_notes`). It has no `propose_plan` and no `create_worker_task`: a hire is the card and starts the workers itself. The host refuses a hire until its gates pass ([Gates](#auto-gates)).
+
+<a id="auto-brief"></a>
+### The brief (`autoBrief`)
+
+The opposite of a foreman's: you do this task yourself and write the code. Hire only when the task has two or more parts that are independent (each writes its own files, none needs another's result to start) and each is large enough to pay for a session of its own; say on the card what each part is and why the parts are independent. A small task, or one chain of dependent steps, is done from start to end without a plan card and without questions. Then: how to hire (title, role, zone, the estimate of files and lines, the budget when the default does not fit, a prompt that stands on its own and names the command that proves the part); that a refused part stays with the agent; that its edits are committed before a hire and an accept, and that it no longer writes inside a zone it hired out; how reports, returns, `accept_task` and `dismiss_worker` work; the roles it hires from with provider, model and effort, the [model ladder](#model-ladder), and that a model outside the roles needs `request_model`. A Claude session also gets the plan sentence of a solo session ([Plan approval](chat-turns-plans-and-questions.md#plan-approval)), so a person who asks for a plan first gets one. A task without a worktree is told it cannot hire here ([Isolation](#auto-isolation)).
+
+A named crew's foreman keeps its own brief and still writes no code ([Foreman brief](#foreman-brief)).
+
+<a id="auto-hire"></a>
+### Hiring
+
+`hire_workers(summary, parts[1–16])`. A part: `title` (≤ 80), `role` (a role's name), `zone` (1–256 project-relative paths or globs it writes), `lines` and `files` (the agent's estimate of what it changes), `prompt` (≤ 100 000), optional `acceptance` (≤ 20 000), `scopes`, `minutes` and `tokens` (its budget).
+
+1. The host checks the parts ([Gates](#auto-gates)). When no part passes, the call returns the refusals and no card shows.
+2. Otherwise it writes `crew-hire.json` `{hire, decision: null}` and journals `crew.hire.requested`; the task goes `needs-you`. The [hire card](chat-turns-plans-and-questions.md#hire-card) waits for the person, with no host-side timeout. The card survives a restart: it comes from the journal, and the decision is kept in `crew-hire.json`.
+3. The person may edit each part's title, role, budget and prompt, then approve (`Hire {n}`) or reject (`Do it yourself`). Zones, scopes and estimates are what the gates read and stay as proposed. The gates run again on the decision, against the workers running at that moment.
+4. On approval the host commits the agent's edits ([Commit](#auto-commit)), adds one node per hireable part under the root (the role's resolved node, named after the role, `Developer`, then `Developer 2`, …, with the part's zone), writes `task.crew`, and starts one worker task per part ([Workers are tasks](#workers)) with the part's prompt, acceptance criteria, budget, zone and the commit it starts from in its record. `crew.hire.resolved` lists the edited parts (null — as proposed) and the started workers.
+5. The tool returns `approved`, the started workers (task id, name, role, title, budget) and the parts that stay with the agent. Declined returns `approved: false`: the agent does the parts itself and goes on alone. When the call is gone (the turn ended, or the host restarted), the decision goes to the agent as a prompt marked `hire-decision`.
+6. Only one hire waits at a time.
+
+**Each hire is a new worker task.** One task per crew member, continuing across parts, is how a named crew works ([Next parts](#parts)); an Auto worker does one part and is dismissed.
+
+<a id="auto-gates"></a>
+### Gates
+
+The host decides per part, in order (`autoHireGates`):
+
+- **Too small:** the estimate is under 50 changed lines (`autoPartMinLines`). Reason `Too small for a worker: about {n} lines in one file.`
+- **Not independent:** the zone overlaps an earlier hireable part of the same hire (`Not independent: part {n} writes {path} too.`) or a running worker (`Not independent: {worker} already writes {path}.`). Zones overlap when the static prefix of one entry lies inside the other's (a glob counts as its directory); exact glob disjointness is not decided.
+
+A refused part stays with the agent and does not block the rest: the card shows its reason and `Hire {n}` counts the others.
+
+<a id="auto-isolation"></a>
+### Isolation
+
+Hiring needs the task in a worktree: workers start from the task's branch. An Auto task on GUI starts in `Worktree` on the sheet ([Tasks](tasks.md#isolation)). An Auto task that runs in the project's checkout works alone: its brief says so, a `hire_workers` call is refused with `Hiring needs this task to run in a worktree…`, and the agent tells the person that the task needs a worktree for hiring. The host keeps that check in one place (`hireIsolation`), where moving a running task into a worktree will plug in.
+
+<a id="auto-commit"></a>
+### The agent's own commit
+
+Before every hire and before every `accept_task`, the agent's uncommitted edits are committed to the task's branch as one commit of its own (`commitPreview` over the task's repos, untracked files included; the message comes from the commit message generator of the commit strip, falling back to the task title). `crew.lead.committed` records the commit per repo and the reason (`hire`, `accept`).
+
+- Workers start from that commit, so they see the agent's work so far; `accept_task` squashes a part into a clean tree, so a conflict is a real conflict, not a dirty file in the way.
+- The snapshot engine diffs trees, not commits ([Diff and review](diff-and-review.md#snapshot-engine)): the task's `+N −M`, its Changes panel at `Task start` and its review are the same after the commit. With the diff base `Last commit` the agent's committed edits leave that view, as any commit does ([Diff base](diff-and-review.md#diff-base)).
+- A commit that fails stops the hire or the accept with the git error; nothing is started or squashed.
+
+<a id="auto-guard"></a>
+### Writes in a hired zone
+
+After a hire the agent no longer writes inside the zones of its running workers.
+
+- A write through the app's file layer (ACP `fs/write_text_file`) inside such a zone is refused: `This file belongs to «{part}», the part you hired out to {worker}…`.
+- Claude (claude-agent-acp) and Codex (codex-acp) write files themselves and do not call `fs/write_text_file`, so that refusal rarely fires. After each turn of the agent, the host compares the task's tree in each repo with the commit the hire started from (`git diff --name-only` and untracked files) and names the files the agent changed inside a running worker's zone: `crew.zone.touched` in the journal and a prompt marked `zone-touched` that asks the agent to put them back or hand the change to the worker. Each file is named once. Accepting the part would otherwise conflict, which the merge strip shows.
+- A zone is free again when its worker is dismissed.
+
+<a id="auto-dismiss"></a>
+### Dismissing a worker
+
+A worker is dismissed when its part is accepted (`accept_task`), when the agent discards it (`dismiss_worker`), or when the person picks `Dismiss` on its row in the sidebar. The host stops its session, sets its task `completed`, records `dismissedAt` and `dismissReason` (`accepted`, `discarded`, `person`) and journals `crew.worker.dismissed`. A dismissed worker keeps its task, its worktree and its diff; a discarded part merges nothing. `prompt_task` to a dismissed worker is refused. Nothing of a dismissed worker waits on the host ([host lifecycle](architecture-and-platform.md#host-lifecycle)).
+
+<a id="auto-budget"></a>
+### Budget per part
+
+Each hired part has a budget: working minutes and tokens. Defaults come from Settings ▸ Auto ▸ `Part budget` (40 min, 400k), copied into `task.auto.budget` at creation; the agent may set a part's own, and the person may edit it on the card. Limits: 5–600 minutes, 50k–20m tokens.
+
+- **Working minutes** are minutes inside the worker's turns (from `turn.started` to its end; a running turn counts until now), not the time it waits for a review. **Tokens** are input, cache writes and output of its `turn.usage` records; cache reads do not count. Usage arrives at a turn's end, so a part can pass its token budget by up to one turn.
+- The agent's host checks every 30 s. A part over either budget goes to the person instead of running on: the host records `exceededAt`, journals `crew.budget.exceeded` in its own journal, and tells the worker's host, which stops the running turn, journals the same event and sets its task `needs-you` with `overBudget`. The sidebar row says `over budget`.
+- The person continues the worker with a message (its next turn clears `overBudget`; the budget is not checked again) or dismisses it. Until then `prompt_task` from the agent to that worker is refused.
+
+<a id="auto-roles"></a>
+### Roles to hire from
+
+- `task.auto.roles` is the role library at the task's start: every agent template that is not a foreman, resolved as nodes the way a crew resolves them, for the enabled providers; an own template with a built-in's name stands in for it (`crewPalette`). Library edits after launch do not reach the task.
+- When no role fits a part, the agent hires it with a base role (`Developer`, or `Reviewer` for a check) and writes what the part needs into its prompt.
+- The agent cannot use a model or provider outside the roles. `hire_workers` takes only role names.
+
+<a id="auto-model"></a>
+### Another model
+
+`request_model(reason, role?, part?, provider?, model?, effort?)` asks for a model outside the roles; `role` is the base role the part keeps when the person declines (`Developer` by default).
+
+- By default the [model question card](chat-turns-plans-and-questions.md#model-card) waits for the person (`crew.model.requested`, `needs-you`): the catalog models of the enabled providers, effort, and `Save as role`. `Use this model` adds a role to `task.auto.roles`: the base role's instructions on the chosen provider and options, named after the base role and the model, or the name given in `Save as role`, which also saves it to the library as an agent template. `Keep {role}` adds nothing. `crew.model.resolved` closes the card; the tool returns the role's name to hire with.
+- With Settings ▸ Auto ▸ `Any catalog model` on, the app checks the provider, model and effort names against the provider's catalog at once (`auto_model`), the role is added without a card, and the chat shows the agent's choice as a service row. Without a model name, or with the setting off, the card shows.
+- A model question does not survive a restart: the agent's call is gone with its session, and the card closes.
+
+
 
 <a id="mcp-server"></a>
 ## Mechanism: one MCP server, roles and guards
@@ -39,24 +150,25 @@ Every agent session gets the app's MCP server `brigadir` in `session/new` (stdio
 <a id="roles"></a>
 ### Process roles and their tools
 
-`BRIGADIR_ROLE` is one of `foreman` (root), `lead` (a foreman node below the root), `developer`, `reviewer` (`crewProcessRole`, `crewTools` in `packages/orchestrator/src/tools.ts`).
+`BRIGADIR_ROLE` is one of `auto` (the agent of an [Auto](#auto) task), `foreman` (root of a named crew), `lead` (a foreman node below the root), `developer`, `reviewer` (`crewProcessRole`, `crewTools` in `packages/orchestrator/src/tools.ts`).
 
-| Tool | foreman | lead | developer | reviewer |
-| --- | --- | --- | --- | --- |
-| `propose_plan` | ✓ | ✓ | | |
-| `create_worker_task` | ✓ | ✓ | | |
-| `prompt_task` | ✓ | ✓ | | |
-| `task_status` | ✓ | ✓ | | |
-| `read_report` | ✓ | ✓ | | ✓ |
-| `read_transcript` | ✓ | ✓ | | |
-| `read_diff` | ✓ | ✓ | | ✓ |
-| `submit_review` | ✓ | ✓ | | ✓ |
-| `approve` | | | | ✓ |
-| `accept_task` | ✓ | ✓ | | |
-| `ask_foreman` | | ✓ | ✓ | ✓ |
-| `post_note`, `read_notes` | ✓ | ✓ | ✓ | ✓ |
+| Tool | auto | foreman | lead | developer | reviewer |
+| --- | --- | --- | --- | --- | --- |
+| `hire_workers`, `dismiss_worker`, `request_model` | ✓ | | | | |
+| `propose_plan` | | ✓ | ✓ | | |
+| `create_worker_task` | | ✓ | ✓ | | |
+| `prompt_task` | ✓ | ✓ | ✓ | | |
+| `task_status` | ✓ | ✓ | ✓ | | |
+| `read_report` | ✓ | ✓ | ✓ | | ✓ |
+| `read_transcript` | ✓ | ✓ | ✓ | | |
+| `read_diff` | ✓ | ✓ | ✓ | | ✓ |
+| `submit_review` | ✓ | ✓ | ✓ | | ✓ |
+| `approve` | | | | | ✓ |
+| `accept_task` | ✓ | ✓ | ✓ | | |
+| `ask_foreman` | | | ✓ | ✓ | ✓ |
+| `post_note`, `read_notes` | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-- The person's tools (`ask_user`, `create_task`, editor context, PR review drafting) exist only in the root foreman's session (`humanToolsAllowed`). Workers ask up the tree instead.
+- The person's tools (`ask_user`, `create_task`, editor context, PR review drafting) exist only in the root's session, Auto or foreman (`humanToolsAllowed`). Workers ask up the tree instead.
 - **No separate task for the plan.** While a crew plan exists (it waits for the person or was approved; `crewPlanExists`), the root foreman's `tools/list` leaves out `create_task` and the server announces the change with `notifications/tools/list_changed`; a call from a stale list and the host itself answer `create_task is not available while your crew plan exists: run the plan in this task with create_worker_task.` A rejected plan brings the tool back. **Why:** the plan is executed by this task's crew; a separate task leaves the crew, its review loop and its integration branch behind.
 - Workspace tools stay with every role: `browser_*`, `simulator_*`, `commands_*` (when their modules are on) and `console_*`. The simulator is one device per project: crew members queue for it, the foreman and solo agents go first.
 - **Two guards.** Structure: `tools/list` shows only the role's tools. Check: the host refuses a tool outside the role (`Tool X is not available to this agent`) and a reviewer call on a task outside its check edges. There is no `decide_permission` tool for any role.
@@ -176,9 +288,11 @@ Workers never start before the person approves the root foreman's plan.
 - **No client timeout on a waiting call:** for Claude over ACP the host sets `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` to 7 days unless the person set it; Codex gets `tool_timeout_sec = 604800` for the `brigadir` server; a CLI task's `cli-mcp.json` sets `timeout` 7 days. The server also sends `notifications/progress` every 60 s (`progressBeatMs`) while a call that sent a `progressToken` waits.
 
 <a id="compose"></a>
-### Composing the crew (`Foreman composes`)
+### A crew snapshot with a palette (`compose`)
 
-- `CrewLaunch` has a third kind `{compose: true, template?}`. Main stores in `task.crew.compose` a palette snapshot: every library agent template except the foreman, expanded as nodes (provider, model, effort, specialty, instructions), plus each enabled provider's catalog models and each model's effort levels. Template edits after launch do not affect the task.
+A task whose crew snapshot carries a palette (`task.crew.compose`, `templateId: "compose"`) has a foreman that proposes its crew with its plan. New tasks are not created this way (the sheet launches `Auto`); a task that has such a snapshot runs as follows.
+
+- The palette snapshot holds every library agent template except the foreman, expanded as nodes (provider, model, effort, specialty, instructions), plus each enabled provider's catalog models and each model's effort levels. Template edits after launch do not affect the task.
 - While `compose` is set and the root has no agents, the brief carries the palette instead of a roster (`composeBrief`): read the task and code first, then call `propose_plan` with `crew` and `parts` together; **the fewest agents the task's independent parts need**, non-overlapping zones; one developer and no reviewer is a whole crew for a single chain of dependent steps (a split pays only when parts can run side by side); a reviewer only where a part needs a second reader, named in that developer's `checkedBy` (one reviewer may check several); models by the [model ladder](#model-ladder); reviewers take no code; no leads (one level under the foreman). The palette lists every non-foreman template of the library by name, with its role, specialty and default model; an own template with the name of a built-in stands in for that built-in, so a name always means one template.
 - `crew[]` entries: `name` (≤ 80, short, unique, names its area), `template` (palette template name), optional `summary` (≤ 240), `zone`, `provider`, `model`, `effort` (palette names), `checkedBy` (reviewer names). The host builds nodes (a different provider drops the template's choices), checks the editor's rules (unique names, a reviewer checks only developers, zones) and then the parts against this crew. Unknown template or model → tool error listing what is available.
 - A composed crew needs at least one developer; reviewers are optional, and a reviewer nobody names in `checkedBy` checks nothing.
@@ -189,13 +303,13 @@ Workers never start before the person approves the root foreman's plan.
 <a id="workers"></a>
 ## Workers are tasks
 
-`create_worker_task(agent?, title, prompt, files, scopes, acceptance?)` — after plan approval only (`Call propose_plan first; …`), except in a PR review by a crew (see [Pull requests and CI](pull-requests-and-ci.md)).
+`create_worker_task(agent?, title, prompt, files, scopes, acceptance?)` — a foreman's, after plan approval only (`Call propose_plan first; …`), except in a PR review by a crew (see [Pull requests and CI](pull-requests-and-ci.md)). An Auto task's workers start from an approved hire ([Hiring](#auto-hire)) the same way from here on: the task, its branch and worktree, the part file, the slots.
 
 - `agent` names one of the caller's children; it may be omitted only when there is exactly one non-reviewer child. Unknown name → error with the list. A reviewer cannot be given a part: the host starts reviewers itself.
 - `files` outside the agent's zone → error. Title ≤ 80, prompt ≤ 200 000, `acceptance` ≤ 20 000.
 - The part's prompt (clipped to 100 000 chars, marked `clipped`) and `acceptance` (what must hold for the part to count as done) are kept for its reviewers in `crew-part.json` in the member's own task directory, with the part number (see [Reviewer agents](#reviewer)); the next part replaces it. A file of its own keeps `crew-workers.json` small, whatever the prompts weigh.
 - The worker task: `isolation: 'worktree'`, `baseRef` = the foreman's branch (or `HEAD` when the foreman is not isolated), the foreman's setup command and `.env` copying, `crewTaskId` (root crew), `crewNodeId`, `parentTaskId`, launch options from the node's requested choices (model, effort, mode). Unavailable options are recorded in `unavailableOptions`.
-- **Branch name:** `<foreman branch>-<agent slug>` (dash, because `a/b` cannot coexist with ref `a`), then `-2`, `-3` only when taken in some repo of the project.
+- **Branch name:** `<foreman branch>-<agent slug>` (dash, because `a/b` cannot coexist with ref `a`), then `-2`, `-3` only when taken in some repo of the project. An Auto worker's agent is its node, so `<branch>-developer`, `<branch>-developer-2`.
 - **Scopes:** a worker's worktree contains all enabled repos so the workspace builds; `scopes` narrows which are selected. Multi-root bases resolve per repo (`origin/HEAD`, then `origin/main`/`origin/master`, then `HEAD`).
 - **Read everything, write your own.** Reading covers all project repos. Writing is limited by the worktree (writes cannot leak into other tasks) and checked afterwards: the report lists **changes outside the assigned files** — visibility, not a ban.
 - Workers count against the concurrent agent limit (`agents.maxConcurrent`); beyond it they wait `queued` and start when a slot frees, at most two launching at a time.
@@ -213,7 +327,7 @@ Workers never start before the person approves the root foreman's plan.
 <a id="parts"></a>
 ### One task per crew member; next parts
 
-A crew node has one task, one session, one worktree and one branch for the crew's whole life.
+A named crew's node has one task, one session, one worktree and one branch for the crew's whole life. An [Auto](#auto) task hires a new worker task per part instead.
 
 - The first `create_worker_task` for a node creates the task (part 1). After `accept_task`, the next `create_worker_task` for that node **continues the same task**: part `N+1`, same `taskId`, reply `part`, `continued: true`.
 - Errors: current part not accepted yet → use `prompt_task` for it; next part waiting on a merge → waits for the human; the worker is busy in a person's turn → wait for the turn end; `scopes` naming a repo the task lacks → error listing its repos (ACP roots are fixed at session start). If the person deleted the worker task, a new task is created and the node record replaced.
@@ -359,6 +473,7 @@ A node with `agents` is a **lead**: its host runs with `BRIGADIR_ROLE=lead`, the
   - board and list: the foreman card takes the `needs-you` amber border and `--amber-soft` fill and sorts with waiting tasks;
   - sidebar: the foreman card's header takes the `needs-you` fill, expanded or collapsed; worker rows have no fill, the amber stays in their icon.
   - It clears by itself when no worker waits.
+- **Auto:** a waiting hire card or model question sets the Auto task `needs-you`; a worker over its budget is `needs-you` itself and draws the attention onto the card like any waiting worker.
 - **Foreman status:** `needs-you` on a waiting plan; a foreman turn that ends with a worker's question unanswered ends `needs-you` instead of `done` (it relayed the question to the person); answering it outside a turn clears it if nothing else waits. During a turn the question is the foreman's, not the person's. A conflicted `accept_task` also sets `needs-you`.
 - **Notification** `A worker is waiting for your answer.` with sound and Dock badge at the end of such a turn or on escalation (once), closed by the answer.
 - **Repeated flash:** a sidebar row (task, foreman or worker) in `needs-you` repeats the attention flash every 30 s until the person has seen it (task selected in a focused window); after a restart repeats run for tasks already waiting, without the first flash. Notifications are not repeated.
@@ -376,6 +491,8 @@ The foreman's activity shows crew events as service rows (shared chat row engine
 
 Tool rows use verbs such as `Assigning a part` / `Assigned a part`, `Accepting the part`, `Asking the foreman`, `Answered the worker`, `Reading the crew log`.
 
+An Auto task's activity adds: the [hire card](chat-turns-plans-and-questions.md#hire-card) and its folded row (`crew.hire.requested` / `resolved`), the worker rows of the hire, `crew.worker.dismissed`, `crew.lead.committed`, `crew.budget.exceeded`, `crew.zone.touched`, the [model question card](chat-turns-plans-and-questions.md#model-card) and its row (`crew.model.*`). Turn markers: `hire-decision`, `zone-touched`.
+
 Visual specifics of the crew surfaces:
 - the plan card is a chat card (no border, `--lift` shadow, radius 12, `--hair` lines between header, crew, parts and footer); the foreman's brief inside it is chat Markdown one step smaller (12.5/19);
 - the part's agent chip is a shared `Popup chip`: `--tint` pill, size S 24, width from the value, no chevron; list marks the agent with ✓ (`PopupMarks`); an amber ring marks a difference;
@@ -390,7 +507,8 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | File | Task | Content |
 | --- | --- | --- |
 | `crew-plan.json` | foreman/lead | `{plan, decision}`; `decision: null` while pending |
-| `crew-workers.json` | foreman/lead | `CrewWorkerRecord[]`: `taskId`, `nodeId`, `name`, `title`, `createdAt`, `planPartId`, `acceptedAt?`, `effectiveChoices?`, `unavailableOptions?`, `part?`, `acceptedTips?`, `next?` (`queued \| merging`, `previous`, `heads?`), and for the current part `rounds?`, `limitTold?` |
+| `crew-hire.json` | Auto | `{hire, decision}` of the newest hire; `decision: null` while the card waits |
+| `crew-workers.json` | foreman/lead/Auto | `CrewWorkerRecord[]`: `taskId`, `nodeId`, `name`, `title`, `createdAt`, `planPartId`, `acceptedAt?`, `effectiveChoices?`, `unavailableOptions?`, `part?`, `acceptedTips?`, `next?` (`queued \| merging`, `previous`, `heads?`), and for the current part `rounds?`, `limitTold?`; an Auto worker also `hireId`, `budget`, `exceededAt?`, `zone`, `hiredFrom` (repo path → the commit it started from), `dismissedAt?`, `dismissReason?` |
 | `crew-questions.json` | parent | `CrewQuestion[]` (`id`, `workerTaskId`, `parentTaskId`, `callId`, `agent`, `question`, `options`, `createdAt`, `escalateAt`, `state`, `answer?`, `answeredBy?`) |
 | `crew-reviews.json` | parent | `ReviewRun[]` |
 | `crew-notes.jsonl` | root foreman | `CrewNote` per line |
@@ -415,6 +533,10 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | Report file list / outside list | 200 / 20 |
 | Concurrent worker launches | 2 (plus the global agent limit) |
 | Waiting MCP call client timeout | 7 days; progress heartbeat 60 s |
+| Parts per hire (Auto) | 16 |
+| A part too small for a worker | under 50 estimated lines |
+| Part budget (Auto) | 5–600 working minutes, 50k–20m tokens; default 40 min, 400k; checked every 30 s |
+| Model question reason | 2 000 chars |
 
 <a id="later"></a>
 ## Later
@@ -422,7 +544,9 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 - Per-project additions to the foreman's role brief (global template instructions already add to it).
 - Check edges between different branches of the tree.
 - A reviewer that also owns a part of the code.
-- Automatic choice of the number of agents beyond `Foreman composes`.
+- Moving a running Auto task into a worktree, with its changes, when it hires from the project's checkout.
+- Task classes (small, medium, large) stated by the agent, and the host's threshold that starts a mid-task review on its own.
+- A token counter per task with a pause at a threshold.
 - Asking on `Stop` of a foreman whether to stop its workers too (default yes).
 - Foreman indicators (tokens, worst context, quota) aggregated over its workers; tokens per accepted part on the plan card.
 - Raising a worker's effort automatically after a disputed check.
@@ -432,7 +556,8 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 <a id="non-goals"></a>
 ## Non-goals
 
-- Starting workers without the person's plan approval.
+- Starting workers without the person's approval of the plan or the hire.
+- An Auto agent using a model or provider outside its roles without the person's answer or the `Any catalog model` setting.
 - The foreman (or a reviewer, or `ask_foreman`) deciding worker permissions.
 - Automatic resolution of merge conflicts without the person asking.
 - Polling worker state from the foreman.

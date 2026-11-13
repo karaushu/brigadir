@@ -150,6 +150,8 @@ export class Settings {
 						...(!('updates' in value)
 							? { updates: structuredClone(defaultAppSettings.updates) }
 							: {}),
+						// spec/settings-modules-and-onboarding#settings-keys: a file from before Settings ▸ Auto reads as its defaults.
+						...(!('auto' in value) ? { auto: structuredClone(defaultAppSettings.auto) } : {}),
 						...(!('onboarding' in value)
 							? { onboarding: { completedVersion: onboardingVersion } }
 							: {}),

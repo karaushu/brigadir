@@ -67,40 +67,43 @@ One sheet (`NewTask.tsx`) serves New task, Edit task… (backlog), Duplicate tas
 ### Layout
 
 - Two columns, 780 px wide (narrower windows reflow; 600 px is a supported width). Left: task name and prompt. Right: a 248 px parameter rail on `--tint`, separated by `--sep`, grouped with 14 px gaps, 14 px top and bottom padding.
-- Header: the task name field in place of a heading (borderless text, placeholder `Task name (optional)`), the project name, the `Task type` segment `Agent` | `Brigadir`, and `Esc`. The dialog is named for screen readers through `aria-label`.
-- Prompt: the shared CodeMirror prompt editor, borderless, 13.5 / 21 like the composer, at least 84 px. Placeholder `Write a message… (optional)`. Markdown is rendered in place; markers hide except on the caret line. `@` inserts mentions (files of selected repos and folders, crew nodes for a Brigadir task, agents `Claude` / `Codex`), shown as pills; mentions go to the agent as paths or English template names ([Composer](composer.md)). The hint row `+ · @ · ⌘V` sits right under the text; clicking the empty rest of the column puts the caret in the text.
+- Header: the task name field in place of a heading (borderless text, placeholder `Task name (optional)`), the project name and `Esc`. The dialog is named for screen readers through `aria-label`. What kind of task it is comes from the rail's `Crew` group ([Parameter rail](#sheet-rail)).
+- Prompt: the shared CodeMirror prompt editor, borderless, 13.5 / 21 like the composer, at least 84 px. Placeholder `Write a message… (optional)`. Markdown is rendered in place; markers hide except on the caret line. `@` inserts mentions (files of selected repos and folders, crew nodes when a named crew is chosen, agents `Claude` / `Codex`), shown as pills; mentions go to the agent as paths or English template names ([Composer](composer.md)). The hint row `+ · @ · ⌘V` sits right under the text; clicking the empty rest of the column puts the caret in the text.
 - A task can be created with only a name (backlog) or only a prompt.
 - Focus opens in the prompt.
 
 <a id="sheet-rail"></a>
 ### Parameter rail
 
-Groups for type `Agent`:
+The first group (after `When`) is `Crew`: a popup with `Auto` first, then under the label `Crews` the library's crews (the built-in `Review crew` and the person's own, own ones with the edit glyph and their size tail), ticked with `PopupMarks`. Hover covers the whole popup button. The choice is not remembered ([Choosing the crew](crew.md#launch)).
+
+Groups under `Auto`:
 
 | Group | Controls |
 | --- | --- |
+| `Crew` | `Auto` ([Auto](crew.md#auto)). Disabled on `Auto` while `Transport` is `CLI`, with the hint `A CLI task runs one agent.` |
 | `Role` | Role popup: `No role` first, then the agent templates ([Role](#sheet-role)). |
 | `Agent` | Provider popup, model popup (same control family), effort and mode, Fast mode; the subscription limits button sits right of the group label. |
 | `Transport` | `GUI` \| `CLI`. |
 | `Isolation` | Segment `No isolation` \| `Worktree` (data value `in-place` / `worktree`). Worktree only: `Branch name` (empty = auto, placeholder `brigadir/auto`), `from` + `Base ref`, `Copy .env`, `Setup command`. No isolation only: a `Branch` group per git repo (current branch, switchable before start; pull and dirty-tree handling, see [Git](git.md)). |
 | `Repos and folders` | Chip row (see [Repos](#sheet-repos)). |
 
-Type `Brigadir` replaces `Agent` with `Crew` (template popup with `Foreman composes` first, `Set up…`, the crew tree with provider marks and models) and drops `Transport` (a crew always runs in the GUI). Choosing `Brigadir` switches isolation to `Worktree`. Details: [Crew templates](crew-templates-and-editor.md).
+A named crew replaces `Role`, `Agent` and `Transport` with the crew under the popup (`Set up…`, the crew tree with provider marks and models); a crew always runs in the GUI. Choosing a crew switches isolation to `Worktree`. Details: [Crew templates](crew-templates-and-editor.md).
 
 - Worktree fields expand and collapse with the shared disclosure motion; values persist while the sheet is open.
-- Starting isolation comes from `agents.isolation` (Settings ▸ Agents), not from the last choice in the project.
-- Repos, isolation, base ref, setup command and `.env` copying are remembered per project (`workspace.json`); the caption `Saves launch settings for this project.` says so. The branch is generated per task and never becomes a default. Crew template choice is remembered as `crewTemplateId`.
+- Starting isolation: `Worktree` for `Auto` on GUI and for a named crew (hiring and crews need a worktree, [Isolation](#isolation)); for `CLI` it comes from `agents.isolation` (Settings ▸ Agents). It is never the last choice in the project.
+- Repos, isolation, base ref, setup command and `.env` copying are remembered per project (`workspace.json`); the caption `Saves launch settings for this project.` says so. The branch is generated per task and never becomes a default. The crew is not remembered; a `crewTemplateId` that older data keeps in `launchDefaults` is ignored and dropped on the next save.
 - Rail labels: 11 px `--fg2` on a 16 px line, 6 px above the control; git refs (branch, setup command, base ref) are mono 11.5. Controls use the shared `ui/` sizes; rail popups open `align="end"` and show `PopupMarks` (✓).
 - A project with no git repo shows `A Git repository is required for worktree isolation.` in red under the fields.
 
 <a id="sheet-role"></a>
 ### Role
 
-A task of type `Agent` can give its agent a **role**: an agent template from the library, so a task that is only documents, only tests or only a look at a screen goes to a specialist without a crew.
+An `Auto` task can give its agent a **role**: an agent template from the library, so a task that is only documents, only tests or only a look at a screen goes to a specialist without a crew.
 
 - The popup lists `No role` (the default: an agent with no role text), then every template of the library that is not a foreman, built-in ones first, in the library's order. Each item carries the template's glyph: code for one that writes, review for a checker.
 - Picking a template that has a provider sets the sheet's provider, model and effort to the template's; the person can change them after. A template without a provider, or with a provider turned off in Settings ▸ Agents, leaves the sheet's agent as it is. `No role` changes nothing.
-- A checker (a template with reviewer rights) writes no code: the task gets `readOnlyAgent`, takes no repo lock and runs in the GUI, so `Transport` is not offered. It reports what it found to the person.
+- A checker (a template with reviewer rights) writes no code: the task gets `readOnlyAgent`, takes no repo lock and runs in the GUI, so `Transport` is not offered. It hires nobody (it gets no `auto`) and reports what it found to the person.
 - The role is a snapshot (`agentRole`): the task never reads the library again. It is not remembered for the project: the next sheet opens with `No role`. Edit task… and Duplicate task… open with the task's role. In the edit sheet a role whose template is gone stays chosen by its name; a duplicate of such a task opens with `No role`.
 - Schedules and Continue in a new task have no role control.
 - The role text goes to the agent in the session brief ([What the agent is told](#agent-context)).
@@ -145,7 +148,7 @@ Storage: for a task that does not exist yet, files go to `drafts/<projectId>/<dr
 <a id="fast-start"></a>
 ## Fast start
 
-`⌘N` (File ▸ New task) or `+` on a project opens the sheet with focus in the prompt; typing and `↩` starts with the project's defaults and type `Agent`. Nothing on the sheet lengthens this path: every rail value is pre-filled. A Brigadir task on the fast path takes the project's remembered crew, else **Foreman composes**. Prompt templates are not a feature: `/command` text is passed to the agent, which runs its own custom commands.
+`⌘N` (File ▸ New task) or `+` on a project opens the sheet with focus in the prompt; typing and `↩` starts an `Auto` task with the project's defaults. Nothing on the sheet lengthens this path: every rail value is pre-filled. Prompt templates are not a feature: `/command` text is passed to the agent, which runs its own custom commands.
 
 <a id="branch-names"></a>
 ## Branch names
@@ -164,6 +167,8 @@ Storage: for a task that does not exist yet, files go to `drafts/<projectId>/<dr
 | `Worktree` | `~/.brigadir/worktrees/<projectId>/<taskId>`: one worktree tree for all roots, outside every repo. | Takes no source locks. |
 
 A worktree task's root is used by the host, files, editor, terminals and snapshots. Managed nested copies keep the source scope's kind; other nested worktrees are not discovered as scopes.
+
+- An `Auto` task on GUI starts in `Worktree` on the sheet: hiring workers needs one, since workers start from the task's branch ([Auto](crew.md#auto-isolation)). The person may pick `No isolation` for a task that will not hire; such a task works alone, and its agent says so when the task would need workers. A CLI task starts from Settings ▸ Agents ▸ `Isolation`.
 
 <a id="worktree-preparation"></a>
 ### Worktree preparation

@@ -5,6 +5,7 @@ import { isTaskKey, type TaskKey } from './session';
 import { isAgentOption, type AgentOption } from './agent';
 import { isTaskLaunch, isTaskPreparation, type TaskLaunch, type TaskPreparation } from './launch';
 import { isCrewSpec, type CrewSpec } from './crew';
+import { isAutoTask, type AutoTask } from './auto';
 import { isProjectCommands, type ProjectCommand } from './project-commands';
 import { isProjectSimulator, type ProjectSimulator } from './simulator';
 import {
@@ -129,6 +130,8 @@ export type AgentTask = {
 	/** spec/tasks#archive: when the person marked it completed. */ completedAt?: string;
 	prReview?: TaskPRReview;
 	crew?: CrewSpec;
+	/** spec/crew#auto: an `Auto` task — the roles it may hire from and its part budget. Its crew (`crew`) is written at the first hire. */ auto?: AutoTask;
+	/** spec/crew#auto-budget: a hired worker went over its budget and waits for the person; its next turn clears it. */ overBudget?: boolean;
 	/** spec/reviews#reviewer-sessions: the reviewers of the task's own changes, as a crew whose root is the task's agent. */ reviewCrew?: CrewSpec;
 	crewTaskId?: string;
 	crewNodeId?: string;
@@ -311,6 +314,8 @@ export function isAgentTask(value: unknown): value is AgentTask {
 				(value.taskTree.branch === null || typeof value.taskTree.branch === 'string') &&
 				(value.taskTree.scopeId === undefined || typeof value.taskTree.scopeId === 'string'))) &&
 		(value.crew === undefined || isCrewSpec(value.crew)) &&
+		(value.auto === undefined || isAutoTask(value.auto)) &&
+		(value.overBudget === undefined || typeof value.overBudget === 'boolean') &&
 		(value.reviewCrew === undefined || isCrewSpec(value.reviewCrew)) &&
 		(value.crewTaskId === undefined || isId(value.crewTaskId)) &&
 		(value.crewNodeId === undefined || isId(value.crewNodeId)) &&

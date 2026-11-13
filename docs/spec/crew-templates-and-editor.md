@@ -6,9 +6,9 @@ A crew is a named tree of agents, each with its own provider, model, effort, zon
 ## Model
 
 - A crew is a **tree of named agents**. The root is the foreman. Under it are N agents, each a separate node. Any non-reviewer node can get subordinates: it then becomes the foreman of its branch (a *lead*). A lead delegates, accepts and writes no code itself.
-- **No counts, no `auto`, no ceiling.** Three developers are three nodes with three names, zones, models and additions. Provider limits are the only cap.
+- **No counts, no automatic size, no ceiling in a template.** Three developers are three nodes with three names, zones, models and additions. Provider limits are the only cap.
 - A crew can mix providers and models. The foreman is an agent template too, so it has its own provider and model.
-- A crew reaches a task in one of three ways: a library crew template, a one-off crew edited on the launch sheet, or **Foreman composes**, where the foreman proposes the crew in its plan (see [Crew](crew.md)). Composed crews also have no count or ceiling.
+- A crew reaches a task in one of three ways: a library crew template, a one-off crew edited on the launch sheet, or the hires of an [Auto](crew.md#auto) task, where the agent adds one node per hired part from its roles. Hired crews also have no count or ceiling.
 
 <a id="entities"></a>
 ### Entities
@@ -108,7 +108,7 @@ The product works without any user template. There is one built-in **agent** tem
 | --- | --- | --- |
 | `review` | Review crew | Foreman → `Astra` (reviewer, Codex `gpt-6-astra`, high) and `Opus` (reviewer, Claude `opus`, high). This is the PR review crew; see [Pull requests and CI](pull-requests-and-ci.md). |
 
-The app ships no crew of developers. A tree of developers and reviewers chosen before the task is read fits the person's guess, not the task; **Foreman composes** reads the task first and proposes the fewest agents it needs ([Crew](crew.md#compose)). A person who knows the shape up front keeps their own crews.
+The app ships no crew of developers. A tree of developers and reviewers chosen before the task is read fits the person's guess, not the task; an `Auto` task reads the task first, writes the code itself and hires only for independent parts ([Crew](crew.md#auto)). A person who knows the shape up front keeps their own crews.
 
 The **starter tree** (`starterCrewTemplate`) is not a library crew: Foreman → `Developer 1`, `Developer 2`, `Reviewer`, the Reviewer checking both. **New crew** starts from it, and the intro draws it ([Settings, modules and onboarding](settings-modules-and-onboarding.md)).
 
@@ -128,21 +128,21 @@ Data on disk may still name the ids `default` and `tests`, which the app does no
 | A person's edit, `templates/builtin/<id>.json`, of a crew that is not hidden | The next library read moves it to `templates/crews/<id>.json` as an own crew (`builtin: false`) with the same id, name and tree; the copy is created only where nothing is (a hard link of a written temp file, so a reader that lost a race, in this process or another, never replaces the moved crew or a later edit of it), moves run one at a time per data folder in the process, and the source file is removed only after the copy is written. Everything below that names the id then opens this crew. A copy that fails `crewIssues` is listed as an issue like any own crew, not dropped. |
 | The same edit of a crew listed in `hidden-crews.json` | Stays where it is, untouched. The id counts in `hiddenCrews`, so **Restore default crews** is offered; restoring empties the list, and the next read moves the edit as above. |
 | A file there that is not a valid crew document or is a symlink, or a target in `templates/crews/` that already exists | Stays where it is; an invalid or unsafe file is listed as an issue and the rest of the library reads as usual. A symlink holds no edit, so a hidden id with one offers nothing to restore. |
-| The launch sheet's remembered crew (`launchDefaults.crewTemplateId`) | The id is not in the library, so the sheet starts with **Foreman composes**, the same as for any crew that left the library. |
-| A schedule's crew `{ templateId }` | A run whose id is not in the library and is one of these ids runs as **Foreman composes** (`unshippedCrewLaunch`); any other missing id still fails the run with `The crew template is unavailable`. |
+| A `crewTemplateId` older data keeps in `launchDefaults` | Ignored: the sheet always starts on `Auto` ([Choosing the crew](crew.md#launch)). |
+| A schedule's crew `{ templateId }` | A run whose id is not in the library and is one of these ids runs as `Auto` (`unshippedCrewLaunch`), and so does a schedule saved with `{ compose: true }` or the id `compose`; any other missing id still fails the run with `The crew template is unavailable`. |
 | `hidden-crews.json` without an edit on disk | Ignored. |
 | A review's remembered crew (`actionCrews`) | The same as for any crew that left the library. |
-| A task's `crew` snapshot (`templateId: "default"`) | Nothing: a snapshot is never read back ([Crew in the task](#snapshot)). Duplicating or editing that task opens the sheet with **Foreman composes**. |
+| A task's `crew` snapshot (`templateId: "default"`) | Nothing: a snapshot is never read back ([Crew in the task](#snapshot)). Duplicating or editing that task opens the sheet on `Auto`, with the line that the crew was deleted. |
 - Built-in names are stored in English and shown in the interface language (`crewLabel`, `builtinCrewNames`).
-- These ids are reserved, and an own template cannot use them: `compose` plus every built-in agent id and built-in crew id.
+- These ids are reserved, and an own template cannot use them: `auto`, `compose`, every built-in agent id and every built-in crew id.
 
 <a id="snapshot"></a>
 ## Crew in the task: a snapshot, not a reference
 
-When a task is created, its crew is resolved into a `CrewSpec` and stored whole in `task.json`. This includes backlog tasks. After that the task **never reads the template library again**.
+When a task is created, its crew is resolved into a `CrewSpec` and stored whole in `task.json`. This includes backlog tasks. After that the task **never reads the template library again**. An Auto task stores its roles the same way (`task.auto.roles`) and writes its crew at its first hire, from those roles.
 
 - **Why.** A template is something a person keeps editing; a task is a record of one launch. If a second-wave worker re-read the template, two reviewers in one task could follow different rules. A backlog task starts with what was chosen when it was created, even if the template has since been deleted.
-- `AgentTask.crew` is present on a foreman task and absent on a single-agent task. The task's `provider` is `crew.root.provider`.
+- `AgentTask.crew` is present on a foreman task and on an Auto task that hired, and absent on a single-agent task. The task's `provider` is `crew.root.provider`.
 - A worker task stores `crewTaskId` (the root foreman task), `crewNodeId` and `parentTaskId` (its direct foreman or lead).
 - The tree defines the crew size. Plan parts belong to developers and leads only, never to reviewers.
 - Each worker is a separate host process with its own provider. One process still hosts exactly one agent session, so providers never mix inside one ACP session.
@@ -209,10 +209,10 @@ JSON is validated at the persistence boundary and on import. A TypeScript type a
 | Field | Meaning |
 | --- | --- |
 | `schemaVersion` | `1` |
-| `templateId` | `string \| null`. Records origin only; it is never read back. `compose` for a composed crew. |
+| `templateId` | `string \| null`. Records origin only; it is never read back. `auto` for the crew of an Auto task, `compose` for a crew snapshot with a palette. |
 | `name`, `resolvedAt` | Crew name; ISO time of resolution |
 | `root` | `CrewSpecAgent`: `id`, `name`, `template?` (origin, so the editor can reopen a resolved crew), `role`, `provider`, `requestedChoices`, `choiceNames`, `summary?`, `instructions`, `extraInstructions`, effective `zone`, `checkedBy`, `agents` |
-| `compose?` | Present only for **Foreman composes**: a palette snapshot of templates and provider models (see [Crew](crew.md)) |
+| `compose?` | A palette snapshot of templates and provider models the foreman composes its crew from ([Crew](crew.md#compose)) |
 
 `isCrewSpec` also checks these invariants: the root is a `foreman`; ids and names are unique; a node has children if and only if it is a `foreman` (the root is the exception, since it may have none); every edge goes to a sibling `reviewer`; only developers are checked; the root has no checkers.
 
@@ -230,7 +230,7 @@ The foreman's brief is composed in `packages/orchestrator/src/brief.ts` (`forema
 
 1. The code core: role, how to split, the loop, the rules.
 2. For a lead, its place in the larger tree.
-3. The **roster** of its direct children, or the composing palette for **Foreman composes**.
+3. The **roster** of its direct children, or the palette of a snapshot that carries one ([Crew](crew.md#compose)).
 4. The crew tools brief.
 5. The template's `instructions`.
 6. The node's `extraInstructions`.
@@ -379,14 +379,14 @@ Every agent template in the list is a `ui/OptionCard` card without the radio mar
 
 The launch sheet's crew row and roster are described in [Tasks](tasks.md). The parts that belong to this contract:
 
-- `CrewLaunch` sent with `task:create` is one of `{ templateId }`, `{ template }` (a one-off crew) or `{ compose: true, template? }`. In the last form the template, if given, is a foreman alone. Main reads the library, checks `crewIssues`, resolves the crew and remembers the crew choice per project.
-- The crew popup lists **Foreman composes**, the built-in crews and the own crews in one column of names; the selected crew has a ✓. **Set up…** opens the editor as a one-off crew. Adding agents in the editor while **Foreman composes** is selected turns the selection into a one-off crew.
+- `CrewLaunch` sent with `task:create` is one of `{ auto: true }`, `{ templateId }` or `{ template }` (a one-off crew). For `{ auto: true }` on GUI, main stores `task.auto` (the roles snapshot and the part budget, [Auto](crew.md#auto-roles)) and no crew. For a crew it reads the library, checks `crewIssues` and resolves the crew. The choice is not remembered.
+- The crew popup lists `Auto`, then under `Crews` the built-in crews and the own crews in one column of names; the selected item has a ✓. Under a crew, **Set up…** opens the editor as a one-off crew.
 - The roster on the sheet shows the foreman, then each child by name with its provider glyph and `(+N)` on a lead; the model is in the tooltip. Unavailable models are shown in amber (see [Choices at launch](#launch-check)).
 
 <a id="after-launch"></a>
 ## Where the role shows after launch
 
-- **Sidebar and board**: a worker row in the foreman card shows `<agent> · <part>` with the provider glyph. A lead's subordinates are indented by depth under its row. See [Sidebar](sidebar.md).
+- **Sidebar and board**: a worker row in the foreman card shows `<agent> · <part>` with the provider glyph; a worker of an Auto task shows `<role> · <part>`. A lead's subordinates are indented by depth under its row. See [Sidebar](sidebar.md).
 - **Plan card**: each part has an `Agent` column, chosen by the foreman from its own children and editable before confirmation. A mismatch between plan and crew (two parts for one agent, a part outside the agent's zone, a reviewer given code) is shown, and it blocks starting the workers. See [Turns, plans and questions in chat](chat-turns-plans-and-questions.md).
 
 <a id="later"></a>
@@ -400,7 +400,7 @@ The launch sheet's crew row and roster are described in [Tasks](tasks.md). The p
 ## Non-goals
 
 - An app-owned table of provider models. Models come only from the provider catalog.
-- Role counts (`×N`), `auto` crew size or a node ceiling in templates.
+- Role counts (`×N`), an automatic crew size or a node ceiling in templates.
 - Templates in the cloud or synced. They are JSON files in `~/.brigadir`, exported as files.
 - Swapping the role of a live worker. A session cannot be switched; a new role means a new worker.
 - A free-form graph editor. There are only two edge kinds, and both have host semantics.

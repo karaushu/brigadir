@@ -128,7 +128,9 @@ export type CrewTurnMarker =
 	| { kind: 'branch-report'; report: CrewReportSummary }
 	| { kind: 'part-dropped'; taskId: string; agent: string; part: number }
 	/** spec/reviews#loop: the reviewers' comments of a round go to the task's own agent. */
-	| { kind: 'review-comments'; round: number; comments: number };
+	| { kind: 'review-comments'; round: number; comments: number }
+	/** spec/reviews#loop: a mid-task review ended while the agent waited; it goes on with the task. */
+	| { kind: 'review-continue' };
 export const crewPlanPartLimit = 64,
 	crewPlanPromptLimit = 100_000,
 	crewNoteLimit = 8 * 1024,
@@ -302,6 +304,8 @@ export function isCrewTurnMarker(value: unknown): value is CrewTurnMarker {
 				Number.isSafeInteger(value.comments) &&
 				Number(value.comments) >= 0
 			);
+		case 'review-continue':
+			return Object.keys(value).length === 1;
 		case 'part-dropped':
 			return (
 				isId(value.taskId) &&

@@ -329,6 +329,7 @@
 .reviewFoot[data-tag='fixed'] > small {
 	color: var(--green);
 }
-.reviewFoot[data-tag='disputed'] > small {
+.reviewFoot[data-tag='open'] > small,
+.reviewFoot[data-tag='new'] > small {
 	color: var(--amber);
 }

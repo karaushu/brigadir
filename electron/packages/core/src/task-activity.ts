@@ -31,9 +31,14 @@ function next(state: State, event: SessionEvent, names: Names): State {
 			'permission.resolved',
 			'question.resolved',
 			'task.proposal.resolved',
+			'task-review.decided',
+			'task-review.finished',
 		].includes(event.kind)
 	)
 		return { activity: null, toolId: null };
+	// spec/reviews#surfaces: the review's open findings wait for the person — `Review · N findings open`.
+	if (event.kind === 'task-review.verified' && event.open > 0)
+		return { activity: { kind: 'review', title: '', path: null, count: event.open }, toolId: null };
 	if (event.kind === 'task.proposal.requested')
 		return {
 			activity: {

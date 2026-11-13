@@ -13,12 +13,20 @@ export type Anchor = {
 	symbolPath: string | null;
 };
 /** `author` names an agent reviewer (`<agent> · checks <agent>`, spec/crew#reviewer); human comments have none. */
-/** spec/reviews#loop: a reviewer's comment of a task's review before the PR — its round, and whether a reviewer insisted in round 2. */
+/**
+ * spec/reviews#findings: a reviewer's finding of a task's review — the round that raised it and the marks of the closure checks: `open` and
+ * `closed` are the rounds that last said so, `introduced` the round that flagged a problem the fix brought in, `accepted` the person's
+ * `Accept`. `disputed` is an older file's insistence in round 2; it reads as open.
+ */
 export type ReviewCommentRound = {
 	reviewId: string;
 	round: number;
 	reviewer: string;
 	disputed?: boolean;
+	open?: number;
+	closed?: number;
+	introduced?: number;
+	accepted?: boolean;
 };
 /** The thread under a reviewer's comment: the task agent's answer (`review_reply`) or a reviewer insisting in round 2. */
 export type ReviewReply = {
@@ -117,7 +125,11 @@ function isReviewCommentRound(value: unknown): value is ReviewCommentRound {
 		typeof value.reviewer === 'string' &&
 		value.reviewer.length > 0 &&
 		value.reviewer.length <= 200 &&
-		(value.disputed === undefined || typeof value.disputed === 'boolean')
+		(value.disputed === undefined || typeof value.disputed === 'boolean') &&
+		[value.open, value.closed, value.introduced].every(
+			(round) => round === undefined || (Number.isSafeInteger(round) && Number(round) >= 1)
+		) &&
+		(value.accepted === undefined || value.accepted === true)
 	);
 }
 export function isReviewReply(value: unknown): value is ReviewReply {

@@ -96,6 +96,7 @@ const verbs = {
 	task_send: ['Writing to a task', 'Wrote to a task', 'Could not write to the task'],
 	propose_review: ['Offering a review', 'Offered a review', 'Could not offer a review'],
 	review_reply: ['Answering a reviewer', 'Answered a reviewer', 'Could not answer the reviewer'],
+	request_review: ['Asking for a review', 'Asked for a review', 'Could not ask for a review'],
 	browser_open: ['Opening the page', 'Opened the page', 'Could not open the page'],
 	browser_state: ['Checking the browser', 'Checked the browser', 'Could not check the browser'],
 	browser_read: ['Reading the page', 'Read the page', 'Could not read the page'],
@@ -221,6 +222,7 @@ export function mcpModule(tool: string): McpModule {
 		tool === 'tasks_list' ||
 		tool === 'task_send' ||
 		tool === 'propose_review' ||
+		tool === 'request_review' ||
 		tool === 'review_reply'
 	)
 		return 'human';
@@ -723,6 +725,12 @@ export function mcpRow(
 		}
 		case 'review_reply': {
 			text = str(a.text);
+			break;
+		}
+		// spec/reviews#request-tool: what the agent finished, and the host's answer.
+		case 'request_review': {
+			detail = plain(r.started === false ? str(r.reason) : str(r.reviewer));
+			text = str(a.reason);
 			break;
 		}
 		case 'ask_user': {

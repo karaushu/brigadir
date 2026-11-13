@@ -26,6 +26,11 @@ import {
 	actionCrewId,
 	type CrewSpecAgent,
 	type TaskReviewChoice,
+	type AgentProviderId,
+	type ReviewPoint,
+	type ReviewerChoice,
+	type SessionCommand,
+	isReviewPoint,
 	type TaskReviewWho,
 	type AgentAction,
 	type ActionCrew,
@@ -73,7 +78,7 @@ import { NoticeLog } from './notice-log';
 import { QuitGuard, type PendingWrite } from './quit-guard';
 import { Boards } from './boards';
 import { resolveReviewCrew, reviewCrewPrompt, reviewGuidance } from './review-crew';
-import { readTaskReview, reviewerAgent } from './task-review';
+import { readTaskReview, reviewerAgent, reviewerFor } from './task-review';
 import { ProjectViews } from './views';
 import { personTasks } from '@brigadir/core';
 import {
@@ -920,6 +925,16 @@ const sessions = new Sessions(
 		}
 		if (method.startsWith('browser') && !appliedSettings.modules.browser)
 			throw new Error(moduleOffMessages.browser);
+		// spec/reviews#who: the host asks who reviews a start of its own (the agent's `request_review`).
+		if (method === 'review_reviewer' && isRecord(params) && isReviewPoint(params.point))
+			return reviewStart(key, {
+				agent: null,
+				crew: null,
+				notes: '',
+				since: 'start',
+				point: params.point,
+				startedBy: 'agent',
+			});
 		if (method === 'simulator') {
 			if (!appliedSettings.modules.simulator) throw new Error(moduleOffMessages.simulator);
 			if (!isSimulatorAgentCommand(params)) throw new Error('Invalid simulator operation');
@@ -1088,6 +1103,72 @@ const knownCatalogs = () =>
 			return catalog ? [[provider, catalog]] : [];
 		})
 	) as Partial<Record<'claude' | 'codex', ProviderCatalog>>;
+/** spec/reviews#who: who would review a task of `author` at `point` now. */
+async function reviewerNow(author: AgentProviderId, point: ReviewPoint) {
+	const check = await environment.check().catch(() => null);
+	return reviewerFor({
+		author,
+		point,
+		enabled: appliedSettings.agents.enabled,
+		actionAgents: appliedSettings.actionAgents,
+		agents: check?.agents ?? [],
+		catalogs: knownCatalogs(),
+	});
+}
+/**
+ * spec/reviews#start: the host command of a review — the launch dialog's crew or agent, else the resolved reviewer (spec/reviews#who) with
+ * launch options only when the setting or the person chose a model; the project's review notes and the person's instructions as guidance.
+ */
+async function reviewStart(
+	key: TaskKey,
+	choice: TaskReviewChoice
+): Promise<Extract<SessionCommand, { kind: 'startReview' }> | { failure: string }> {
+	const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
+		project = await store.project(key.projectId),
+		task = await store.task(key),
+		library = await (await TemplateStore.at(process.env.BRIGADIR_DATA_DIR)).read(),
+		point = choice.point ?? 'pre-pr';
+	const base = {
+		kind: 'startReview' as const,
+		instructions: choice.notes,
+		guidance: reviewGuidance(project.reviewNotes, choice.notes, '.', 'HEAD'),
+		since: choice.since,
+		point,
+		startedBy: choice.startedBy ?? 'person',
+	};
+	const crewId =
+		point === 'plan'
+			? null
+			: actionCrewId('taskReview', choice.agent, choice.crew, appliedSettings.actionCrews);
+	if (crewId) {
+		const crew = resolveReviewCrew(library, crewId, appliedSettings.agents.provider);
+		return {
+			...base,
+			reviewers: crew.root.agents,
+			who: { kind: 'crew', id: crewId, name: crew.name },
+		};
+	}
+	const reviewer: ReviewerChoice | { failure: string } = choice.agent
+		? { ...choice.agent, source: 'person' }
+		: await reviewerNow(task.provider ?? appliedSettings.agents.provider, point);
+	if ('failure' in reviewer) return reviewer;
+	const chosen = reviewer.source === 'setting' || reviewer.source === 'person';
+	const catalog =
+		chosen && reviewer.model ? await providerCatalogs(reviewer.provider).catch(() => null) : null;
+	const launchOptions =
+		chosen && reviewer.model
+			? taskLaunchOptions(
+					{ provider: reviewer.provider, model: reviewer.model, effort: reviewer.effort },
+					catalog
+				)
+			: [];
+	return {
+		...base,
+		reviewers: [reviewerAgent(reviewer.provider, launchOptions, library.agents)],
+		who: { kind: 'agent' },
+		reviewer,
+	};
+}
 /** spec/appearance#evolution-redesign: a one-off text of the Helper agent (commit message, PR text, PR summary, review word, verdict).
  *  spec/appearance#evolution-redesign: the capsule's one-time choice → the action's own agent → the Helper agent. */
 async function helperText(
@@ -5014,43 +5095,36 @@ void app.whenReady().then(async () => {
 	);
 	handle('task-review:start', async (key, choice: TaskReviewChoice) => {
 		try {
-			const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
-				project = await store.project(key.projectId),
-				library = await (await TemplateStore.at(process.env.BRIGADIR_DATA_DIR)).read();
-			const crewId = actionCrewId(
-				'taskReview',
-				choice.agent,
-				choice.crew,
-				appliedSettings.actionCrews
-			);
-			let reviewers: CrewSpecAgent[], who: TaskReviewWho;
-			if (crewId) {
-				const crew = resolveReviewCrew(library, crewId, appliedSettings.agents.provider);
-				reviewers = crew.root.agents;
-				who = { kind: 'crew', id: crewId, name: crew.name };
-			} else {
-				const { provider, launchOptions } = await taskAgent('taskReview', choice.agent);
-				reviewers = [reviewerAgent(provider, launchOptions, library.agents)];
-				who = { kind: 'agent' };
+			const command = await reviewStart(key, choice);
+			if ('failure' in command) {
+				// spec/reviews#before-pr: the gate's review that cannot start is recorded, so the strip says `Review did not start`.
+				if (choice.startedBy === 'host')
+					await sessions.command(key, {
+						kind: 'startReview',
+						reviewers: [],
+						who: { kind: 'agent' },
+						instructions: '',
+						guidance: '',
+						point: choice.point ?? 'pre-pr',
+						startedBy: 'host',
+						failure: command.failure,
+					});
+				return command.failure;
 			}
-			await sessions.command(key, {
-				kind: 'startReview',
-				reviewers,
-				who,
-				instructions: choice.notes,
-				guidance: reviewGuidance(project.reviewNotes, choice.notes, '.', 'HEAD'),
-				since: choice.since,
-			});
+			await sessions.command(key, command);
 			return null;
 		} catch (error) {
 			return error instanceof Error ? error.message : String(error);
 		}
 	});
 	handle('task-review:stop', (key) => sessions.command(key, { kind: 'stopReview' }));
-	handle('task-review:send-comment', async (key, id: string) =>
-		sessions.command(key, await reviews.sendBack(key, id))
+	handle('task-review:decide', (key, decision: 'fix' | 'accept') =>
+		sessions.command(key, { kind: 'decideReview', decision })
 	);
-	handle('task-review:resolve-comment', (key, id: string) => reviews.resolve(key, id, true));
+	handle('task-review:reviewer', async (key, point: ReviewPoint) => {
+		const task = await (await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).task(key);
+		return reviewerNow(task.provider ?? appliedSettings.agents.provider, point);
+	});
 	handle('task-review:dismiss', (key) => sessions.command(key, { kind: 'dismissReviewProposal' }));
 	handle('review:note', (key, text) => reviews.addNote(key, text));
 	handle('review:add', (key, input) => reviews.add(key, input));

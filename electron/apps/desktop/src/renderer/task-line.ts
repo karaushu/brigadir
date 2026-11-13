@@ -3,6 +3,7 @@
  * a plan — or the state. One text for the computer's sidebar and the phone's cards (spec/remote-access-and-mobile#phone-app).
  */
 import {
+	findingCount,
 	browserShowCard,
 	mcpActivityTitle,
 	t,
@@ -27,27 +28,33 @@ export function taskActivityText(locale: Locale, task: AgentTask): string {
 	const activity = task.activity;
 	return activity?.kind === 'permission' && activity.title === browserShowCard.title
 		? `${t(locale, 'Permission')} · ${t(locale, browserShowCard.title)}`
-		: activity?.kind === 'plan'
-			? t(locale, 'Plan for approval')
-			: activity?.subagent
-				? `${t(locale, 'Subagent')} · ${activity.title}`
-				: activity
-					? [
-							activity.kind === 'tool'
-								? (mcpActivityTitle(locale, activity.title) ?? activity.title)
-								: t(
-										locale,
-										activity.kind === 'question'
-											? 'Question'
-											: activity.kind === 'proposal'
-												? 'New task'
-												: 'Permission'
-									),
-							activity.kind === 'tool' ? activity.path?.split(/[\\/]/).at(-1) : activity.title,
-						]
-							.filter(Boolean)
-							.join(' · ')
-					: t(locale, task.blockedBy?.length ? 'Waiting for the lock' : statusLabels[task.status]);
+		: activity?.kind === 'review'
+			? // spec/reviews#surfaces: the review's open findings wait for the person.
+				`${t(locale, 'Review')} · ${t(locale, '{count} open').replace('{count}', findingCount(locale, activity.count ?? 0))}`
+			: activity?.kind === 'plan'
+				? t(locale, 'Plan for approval')
+				: activity?.subagent
+					? `${t(locale, 'Subagent')} · ${activity.title}`
+					: activity
+						? [
+								activity.kind === 'tool'
+									? (mcpActivityTitle(locale, activity.title) ?? activity.title)
+									: t(
+											locale,
+											activity.kind === 'question'
+												? 'Question'
+												: activity.kind === 'proposal'
+													? 'New task'
+													: 'Permission'
+										),
+								activity.kind === 'tool' ? activity.path?.split(/[\\/]/).at(-1) : activity.title,
+							]
+								.filter(Boolean)
+								.join(' · ')
+						: t(
+								locale,
+								task.blockedBy?.length ? 'Waiting for the lock' : statusLabels[task.status]
+							);
 }
 /**
  * spec/tasks#worktree-preparation: in the sidebar, a «Preparing…» or «Queued» card shows the

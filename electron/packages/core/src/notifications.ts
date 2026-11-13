@@ -89,6 +89,9 @@ export function noticeKind(event: SessionEvent): NoticeKind | null {
 		case 'task.proposal.requested':
 		case 'crew.plan.requested':
 			return 'needs-you';
+		// spec/reviews#surfaces: the review hands its open findings to the person.
+		case 'task-review.verified':
+			return event.open > 0 ? 'needs-you' : null;
 		case 'session.failed':
 			return 'failed';
 		// spec/chat-turns-plans-and-questions#background-commands: a background command that failed notifies as a failure; one that finished notifies in main, only when the agent does not go on.

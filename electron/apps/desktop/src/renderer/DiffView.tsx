@@ -1,4 +1,5 @@
 import { shortcutHint } from './ui/shortcut-hint';
+import { openReviewStrip } from './TaskReview';
 import { fontFamily, useSurfaceFont } from './typography';
 import { holdDiffSelection, registerDiffView } from './context-sources';
 import { AttributionContent } from './ui/AttributionContent';
@@ -774,12 +775,7 @@ export function DiffView({
 					}}
 					{...(comment.position ? { position: comment.position } : {})}
 					agent={task.provider ? providerName(task.provider) : ''}
-					onSendBack={() => {
-						void act(
-							() => window.brigadir.sendTaskReviewComment(task, comment.id),
-							'Could not send the comment to the agent.'
-						);
-					}}
+					onOpenReview={() => openReviewStrip(task)}
 					onEdit={() => {
 						clearSelection();
 						setTask({

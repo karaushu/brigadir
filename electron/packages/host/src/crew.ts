@@ -41,6 +41,8 @@ import {
 	type CrewQuestion,
 	type CrewReportSummary,
 	type ReviewRun,
+	type ReviewPoint,
+	reviewPointPrompt,
 	isReviewRun,
 	crewReviewRounds,
 	crewAcceptanceLimit,
@@ -110,6 +112,7 @@ import {
 	discoverScopes,
 	type CommitMessageSource,
 } from '@brigadir/git';
+import { findingBatch, findingsText } from './review-findings';
 import {
 	atomicJson,
 	readDocument,
@@ -285,12 +288,19 @@ export type CrewHostDeps = {
 export type SelfReviewHooks = {
 	/** The task review the round belongs to (`task-review.json`). */
 	id(): string;
-	/** spec/reviews#start: `Since the last review` — the trees a round starts from instead of the change base. */
+	/** spec/reviews#points: where in the task the review stands. */
+	point(): ReviewPoint;
+	/** spec/reviews#start: `Since the last review` — the trees the first read starts from instead of the change base. */
 	base(): readonly { scopeId: string; tree: string }[] | null;
 	/** What every reviewer's prompt ends with: the project's review notes and the person's instructions. */
 	guidance(): string;
-	/** The round's comments, as one batch to this task's own agent. */
+	/** spec/reviews#reviewer-sessions: the task's prompt and, for a crew worker, its part — what the reviewer checks the change against. */
+	brief(): Promise<string>;
+	/** Runs the review has opened so far: the next one is the first read (0) or a closure check. */
+	rounds(): number;
+	/** The first read's findings, as one batch to this task's own agent. */
 	submitReview(text: string, review: ReviewBatch): Promise<void>;
+	/** spec/reviews#loop: a run opened (`reviewing`), the first read listed findings (`comments`), a run approved, or a closure check left findings open (`disputed`). */
 	round(run: ReviewRun, state: 'reviewing' | 'comments' | 'approved' | 'disputed'): Promise<void>;
 };
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -2094,15 +2104,11 @@ export class CrewHost {
 		}));
 	}
 	private async openCheck(worker: CrewWorkerRecord, reviewers: CrewSpecAgent[], seq: number) {
-		const previous = this.reviews
-			.filter(
-				(run) => run.taskId === worker.taskId && ['reviewing', 'comments'].includes(run.state)
-			)
-			.at(-1);
 		// A new report cancels every earlier approval (spec/crew#reviewer). A crew member's rounds belong to its part and count the parent's returns
-		// (spec/crew#review-limit); the task's own review counts its runs (spec/reviews#loop).
+		// (spec/crew#review-limit); the task's own review counts its runs — the first read, then closure checks, with no limit of its own: the person
+		// decides after each closure check (spec/reviews#loop).
 		const self = this.isSelf(worker),
-			round = self ? (previous ? previous.round + 1 : 1) : (worker.rounds ?? 0) + 1;
+			round = self ? (this.deps.self?.rounds() ?? 0) + 1 : (worker.rounds ?? 0) + 1;
 		if (!self) {
 			worker.rounds = round;
 			await this.saveWorkers();
@@ -2111,15 +2117,6 @@ export class CrewHost {
 			if (run.taskId === worker.taskId && run.state === 'reviewing') {
 				run.state = 'superseded';
 			}
-		if (self && round > crewReviewRounds) {
-			await this.saveReviews();
-			await this.finishDisputed(
-				worker,
-				previous!,
-				'The developer changed the work again after the second round.'
-			);
-			return;
-		}
 		const key = this.workerKey(worker),
 			snapshots = await readSnapshots(this.deps.store, key);
 		// spec/crew#parts: the reviewer checks the part, from its change base.
@@ -2215,7 +2212,7 @@ export class CrewHost {
 				.request('command', {
 					kind: 'prompt',
 					text: self
-						? `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nThis is the review of the task's changes before its pull request. The files of your tree are the task's state for this round. Read with read_report and read_diff passing this reviewId. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). In round 2 the report ends with the agent's last message: read its reasons before you insist. Do not change files.${run.round > 1 ? await this.selfThreads(run.round) : ''}${this.deps.self?.guidance() ?? ''}`
+						? await this.selfPrompt(run, worker, reviewer, report.text)
 						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}${partBrief(worker.name, await this.readPartBrief(worker))}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId). Check the change against the part's prompt and acceptance criteria above; ask the foreman only what they leave open.`,
 					crew: { kind: 'report', report: report.summary },
 					assignment: checkId(run.reviewId),
@@ -2278,7 +2275,11 @@ export class CrewHost {
 		if (run.verdicts.some((verdict) => verdict.reviewerNodeId === reviewer.nodeId))
 			throw new Error('You already gave a verdict for this reviewId');
 		const target = this.worker(run.taskId);
+		const self = this.isSelf(target),
+			closure = self && run.round > 1;
 		if (method === 'approve') {
+			// spec/reviews#loop: an approval of a closure check closes every finding of this reviewer.
+			if (closure) await this.markClosure(reviewer.name, run.round, []);
 			run.verdicts.push({
 				reviewerNodeId: reviewer.nodeId,
 				reviewer: reviewer.name,
@@ -2287,7 +2288,7 @@ export class CrewHost {
 				at: new Date().toISOString(),
 			});
 			await this.saveReviews();
-			if (run.reviewerNodeIds.length > 1)
+			if (run.reviewerNodeIds.length > 1 && !self)
 				await this.deps.emit({
 					kind: 'crew.review',
 					reviewId: run.reviewId,
@@ -2304,10 +2305,35 @@ export class CrewHost {
 		}
 		const all = Array.isArray(input.comments) ? input.comments : [];
 		if (!all.length) throw new Error('comments is required, or call approve');
-		// spec/reviews#loop: in the task's own review a reviewer insists on an earlier comment by `replyTo`; it joins that thread.
-		const self = this.isSelf(target),
-			insist = self ? all.filter((item) => isRecord(item) && typeof item.replyTo === 'string') : [],
+		// spec/reviews#loop: a closure check of the task's own review takes only `replyTo` (a finding still open; it joins that thread) and
+		// `introduced: true` (a problem the fix brought in, in a file that changed since the last check); the first read takes new findings only.
+		const insist = closure
+				? all.filter((item) => isRecord(item) && typeof item.replyTo === 'string')
+				: [],
 			items = all.filter((item) => !insist.includes(item));
+		if (closure) {
+			if (items.some((item) => !isRecord(item) || item.introduced !== true))
+				throw new Error(
+					'In a closure check only replyTo (a finding still open) or introduced: true (a problem the fix brought in) is accepted.'
+				);
+			const own = await this.selfFindings(reviewer.name),
+				unknown = insist.find(
+					(item) => !own.some((comment) => comment.id === (item as Record<string, unknown>).replyTo)
+				);
+			if (unknown)
+				throw new Error(
+					`replyTo ${String((unknown as Record<string, unknown>).replyTo)} is not one of your findings in this review. Your findings: ${own.map((comment) => comment.id).join(', ') || 'none'}.`
+				);
+			const changed = await this.changedSinceLastCheck(run);
+			const stale = items.find(
+				(item) => !changed.has(String((item as Record<string, unknown>).path ?? ''))
+			);
+			if (stale)
+				throw new Error(
+					`${String((stale as Record<string, unknown>).path)} did not change since the last check; it cannot be a problem the fix introduced.`
+				);
+		} else if (self && all.some((item) => isRecord(item) && item.replyTo !== undefined))
+			throw new Error('replyTo is for a closure check; the first read lists new findings only.');
 		if (insist.length)
 			await this.replyOnComments(
 				target,
@@ -2316,6 +2342,12 @@ export class CrewHost {
 					return { id: String(value.replyTo), text: String(value.text ?? '') };
 				}),
 				{ author: reviewer.name, round: run.round, agent: false }
+			);
+		if (closure)
+			await this.markClosure(
+				reviewer.name,
+				run.round,
+				insist.map((item) => String((item as Record<string, unknown>).replyTo))
 			);
 		const comments = items.length
 			? await this.anchorComments(target, items, `${reviewer.name} · checks ${target.name}`, run)
@@ -2327,7 +2359,7 @@ export class CrewHost {
 					reviewId,
 					round: run.round,
 					reviewer: reviewer.name,
-					...(run.round >= crewReviewRounds ? { disputed: true } : {}),
+					...(closure ? { introduced: run.round } : {}),
 				};
 		}
 		await this.storeComments(target, comments);
@@ -2340,8 +2372,9 @@ export class CrewHost {
 		});
 		this.pendingBatches.set(`${run.reviewId}/${reviewer.nodeId}`, comments);
 		await this.saveReviews();
-		// One row per verdict only when several reviewers share a round; a single reviewer's verdict is the round's summary row.
-		if (run.reviewerNodeIds.length > 1)
+		// One row per verdict only when several reviewers share a round; a single reviewer's verdict is the round's summary row. A task's own
+		// review has its own rows (spec/reviews#strip).
+		if (run.reviewerNodeIds.length > 1 && !self)
 			await this.deps.emit({
 				kind: 'crew.review',
 				reviewId: run.reviewId,
@@ -2365,6 +2398,7 @@ export class CrewHost {
 			(id) => this.pendingBatches.get(`${run.reviewId}/${id}`) ?? []
 		);
 		for (const id of run.reviewerNodeIds) this.pendingBatches.delete(`${run.reviewId}/${id}`);
+		if (this.isSelf(worker)) return this.settleSelf(run, worker, comments);
 		if (run.verdicts.every((verdict) => verdict.approved)) {
 			// Re-check the trees: nothing may slip in after the last approval.
 			const snapshots = await readSnapshots(this.deps.store, this.workerKey(worker));
@@ -2379,22 +2413,6 @@ export class CrewHost {
 			}
 			run.state = 'approved';
 			await this.saveReviews();
-			if (this.isSelf(worker)) {
-				await this.deps.emit({
-					kind: 'crew.review',
-					reviewId: run.reviewId,
-					taskId: run.taskId,
-					name: worker.name,
-					reviewer: run.verdicts.map((item) => item.reviewer).join(', '),
-					round: run.round,
-					approved: true,
-					comments: 0,
-					state: 'approved',
-				});
-				await this.deps.self?.round(run, 'approved');
-				await this.dispatchReviews();
-				return;
-			}
 			const report = await this.buildWorkerReport(
 				worker,
 				'approved',
@@ -2423,26 +2441,6 @@ export class CrewHost {
 		if (run.round >= crewReviewRounds) {
 			run.state = 'disputed';
 			await this.saveReviews();
-			// spec/reviews#loop: the task's own review stops at the dispute; the person decides with the open threads.
-			if (this.isSelf(worker)) {
-				await this.deps.emit({
-					kind: 'crew.review',
-					reviewId: run.reviewId,
-					taskId: run.taskId,
-					name: worker.name,
-					reviewer: run.verdicts
-						.filter((item) => !item.approved)
-						.map((item) => item.reviewer)
-						.join(', '),
-					round: run.round,
-					approved: false,
-					comments: comments.length,
-					state: 'disputed',
-				});
-				await this.deps.self?.round(run, 'disputed');
-				await this.dispatchReviews();
-				return;
-			}
 			await this.finishDisputed(worker, run, 'The reviewer did not agree after two rounds.');
 			await this.dispatchReviews();
 			return;
@@ -2467,7 +2465,24 @@ export class CrewHost {
 			comments: comments.length,
 			state: 'comments',
 		});
-		if (this.isSelf(worker)) await this.deps.self?.round(run, 'comments');
+		await this.dispatchReviews();
+	}
+	/**
+	 * spec/reviews#loop: every verdict of a run of the task's own review is in. The first read with findings sends them to the agent as one
+	 * batch; a closure check with anything open goes to the person (no automatic next round); an approval passes. The approval covers the run's
+	 * trees: a later change outdates it on the task side, it does not supersede the run (a mid-task review reads while the agent works on).
+	 */
+	private async settleSelf(run: ReviewRun, worker: CrewWorkerRecord, comments: ReviewComment[]) {
+		const approved = run.verdicts.every((verdict) => verdict.approved);
+		run.state = approved ? 'approved' : run.round > 1 ? 'disputed' : 'comments';
+		await this.saveReviews();
+		if (approved) await this.deps.self?.round(run, 'approved');
+		else if (run.round > 1) await this.deps.self?.round(run, 'disputed');
+		else {
+			// The task side moves to `fixing` before the batch can start a turn whose end opens the closure check.
+			await this.deps.self?.round(run, 'comments');
+			if (comments.length) await this.deliverReview(worker, comments);
+		}
 		await this.dispatchReviews();
 	}
 	private async finishDisputed(worker: CrewWorkerRecord, run: ReviewRun, why: string) {
@@ -3134,25 +3149,94 @@ export class CrewHost {
 			notes: Array.isArray(doc.notes) ? doc.notes : [],
 		});
 	}
-	/** spec/reviews#loop: what round 2 reads — the earlier comments of this review with the agent's answers. */
-	private async selfThreads(round: number) {
+	/**
+	 * spec/reviews#loop: the reviewer's prompt of a task's own review — the first read, or a closure check that lists only this reviewer's
+	 * findings with the agent's answers and allows only `replyTo` (still open) and `introduced: true` (a problem the fix brought in).
+	 */
+	private async selfPrompt(
+		run: ReviewRun,
+		worker: CrewWorkerRecord,
+		reviewer: CrewWorkerRecord,
+		report: string
+	) {
+		const point = reviewPointPrompt[this.deps.self?.point() ?? 'pre-pr'],
+			brief = (await this.deps.self?.brief().catch(() => '')) ?? '',
+			guidance = this.deps.self?.guidance() ?? '';
+		if (run.round <= 1)
+			return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, first read).\n${report}${brief}\nThis is the ${point} of the task's changes. The files of your tree are the task's state now. Read with read_report and read_diff passing this reviewId, once and in full: this is the only read, and nothing new can be raised later. Check the change against the task above. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). Do not change files.${guidance}`;
 		const path = await safePath(await this.deps.store.taskDir(this.deps.key), 'review.json');
 		const doc = await readDocument(path, 16 * 1024 * 1024).catch(
 			() => ({}) as Record<string, unknown>
 		);
 		const reviewId = this.deps.self?.id();
-		const comments = ((Array.isArray(doc.comments) ? doc.comments : []) as ReviewComment[]).filter(
-			(item) => item.review && item.review.reviewId === reviewId && item.review.round < round
+		const own = ((Array.isArray(doc.comments) ? doc.comments : []) as ReviewComment[]).filter(
+			(item) =>
+				item.review?.reviewId === reviewId &&
+				item.review?.reviewer === reviewer.name &&
+				item.resolvedVersion !== item.version
 		);
-		if (!comments.length) return '';
-		return `\n\nComments of the earlier round and the agent's answers:\n${comments
+		const list = own
 			.map(
 				(item) =>
-					`- id ${item.id} (${item.anchor.path}:${item.anchor.start}) ${item.review!.reviewer}: ${item.text}${(item.replies ?? []).map((reply) => `\n  ${reply.agent ? 'Agent' : reply.author}: ${reply.text}`).join('')}`
+					`- id ${item.id} (${item.anchor.path}:${item.anchor.start}): ${item.text}${(item.replies ?? []).map((reply) => `\n  ${reply.agent ? 'Agent' : reply.author}: ${reply.text}`).join('')}`
 			)
-			.join(
-				'\n'
-			)}\nTo insist on one of these, put an item with replyTo: <its id> and your text in submit_review; a new problem is a new comment.`;
+			.join('\n');
+		return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, closure check).\n${report}${brief}\nThis is the closure check of the ${point}. The agent has fixed your findings or objected to them; the files of your tree are the task's state now. For each of your findings below decide only whether it is closed — an objection you accept counts as closed:\n${list || '- (none)'}\nWhen every finding is closed and the fix introduced no problem, call approve(taskId, reviewId). Otherwise call submit_review(taskId, reviewId, comments) with one item {replyTo: <finding id>, text: why it is still open} per open finding and, only for a problem the fix itself brought in on lines it changed, an item {path, line, text, introduced: true}. Raise nothing else: a problem you missed in the first read is not part of this review. Do not change files.${guidance}`;
+	}
+	/** spec/reviews#findings: this reviewer's findings of the task's current review, unresolved. */
+	private async selfFindings(reviewer: string) {
+		const path = await safePath(await this.deps.store.taskDir(this.deps.key), 'review.json');
+		const doc = await readDocument(path, 16 * 1024 * 1024).catch(
+			() => ({}) as Record<string, unknown>
+		);
+		const reviewId = this.deps.self?.id();
+		return ((Array.isArray(doc.comments) ? doc.comments : []) as ReviewComment[]).filter(
+			(item) =>
+				item.review?.reviewId === reviewId &&
+				item.review?.reviewer === reviewer &&
+				item.resolvedVersion !== item.version
+		);
+	}
+	/** spec/reviews#findings: a closure check's marks — the reopened findings are `open` at this round, the rest of this reviewer's are `closed`. */
+	private async markClosure(reviewer: string, round: number, reopened: readonly string[]) {
+		const path = await safePath(await this.deps.store.taskDir(this.deps.key), 'review.json');
+		const doc = await readDocument(path, 16 * 1024 * 1024).catch(() => null);
+		if (!doc) return;
+		const reviewId = this.deps.self?.id();
+		const comments = ((Array.isArray(doc.comments) ? doc.comments : []) as ReviewComment[]).map(
+			(item) =>
+				item.review &&
+				item.review.reviewId === reviewId &&
+				item.review.reviewer === reviewer &&
+				!item.review.accepted &&
+				item.review.round < round
+					? {
+							...item,
+							review: reopened.includes(item.id)
+								? { ...item.review, open: round }
+								: { ...item.review, closed: round },
+						}
+					: item
+		);
+		await atomicJson(path, { ...doc, comments });
+	}
+	/** The paths that changed between the previous run of the task's review and this one: where a fix could bring a problem in. */
+	private async changedSinceLastCheck(run: ReviewRun) {
+		const index = this.reviews.indexOf(run),
+			previous = this.reviews
+				.slice(0, index < 0 ? undefined : index)
+				.findLast((item) => this.isSelf(item) && item.round === run.round - 1);
+		const paths = new Set<string>();
+		if (!previous) return paths;
+		const snapshots = await readSnapshots(this.deps.store, this.deps.key).catch(() => null);
+		for (const item of run.scopeSnapshots) {
+			const scope = snapshots?.scopes.find((entry) => entry.id === item.scopeId),
+				before = previous.scopeSnapshots.find((entry) => entry.scopeId === item.scopeId)?.result;
+			if (!scope || !before || before === item.result) continue;
+			for (const file of await changedFiles(scope, before, item.result).catch(() => []))
+				paths.add(file.path);
+		}
+		return paths;
 	}
 	/**
 	 * spec/reviews#loop: the thread under a comment of the task's own review — the agent's `review_reply`, or a reviewer insisting
@@ -3191,7 +3275,6 @@ export class CrewHost {
 					agent: who.agent,
 				},
 			];
-			if (!who.agent && comment.review) comment.review = { ...comment.review, disputed: true };
 		}
 		await atomicJson(path, { ...doc, comments });
 	}
@@ -3200,31 +3283,33 @@ export class CrewHost {
 		worker: CrewWorkerRecord,
 		comments: ReviewComment[]
 	): Promise<string> {
+		const self = this.isSelf(worker);
+		if (self) {
+			// spec/reviews#loop: the task's agent fixes each finding once or objects to it; the reviewer then checks only whether each is closed.
+			const names = [...new Set(comments.map((comment) => comment.review?.reviewer ?? ''))].join(
+					', '
+				),
+				point = reviewPointPrompt[this.deps.self?.point() ?? 'pre-pr'],
+				n = comments.length,
+				batch = findingBatch(`${this.deps.self?.id() ?? ''}/1`, comments);
+			await this.deps.self?.submitReview(
+				`${names} left ${n} ${n === 1 ? 'finding' : 'findings'} in the ${point}. Fix each one once, or object to it with review_reply(commentId, reason); ${names} then ${names.includes(',') ? 'check' : 'checks'} only whether each finding is closed.${this.deps.self?.point() === 'mid' ? ' Then continue the task.' : ''}\n\n${findingsText(comments)}`,
+				batch
+			);
+			return batch.id;
+		}
 		const batch = {
 			id: sha(JSON.stringify(comments.map((comment) => ({ id: comment.id, version: 1 })))),
 			comments: comments.map((comment) => ({ id: comment.id, version: 1 })),
 		};
-		const self = this.isSelf(worker);
 		const text =
 			'Address the following review comments for this task. The quoted code belongs to the specified snapshot; verify its current location before editing.\n\n' +
 			comments
 				.map(
 					(comment, index) =>
-						`${index + 1}. ${self ? `Comment id ${comment.id} by ${comment.review?.reviewer ?? comment.author}. ` : ''}File ${JSON.stringify(comment.anchor.path)}, scope ${comment.anchor.scopeId}, new side, blob ${comment.anchor.blob}, lines ${comment.anchor.start}-${comment.anchor.end}.\nComment: ${comment.text}\nQuoted code: ${JSON.stringify(comment.anchor.quote.join('\n'))}`
+						`${index + 1}. File ${JSON.stringify(comment.anchor.path)}, scope ${comment.anchor.scopeId}, new side, blob ${comment.anchor.blob}, lines ${comment.anchor.start}-${comment.anchor.end}.\nComment: ${comment.text}\nQuoted code: ${JSON.stringify(comment.anchor.quote.join('\n'))}`
 				)
-				.join('\n\n') +
-			(self
-				? '\n\nFor a comment you do not fix as asked, call review_reply with its comment id and your reason; the reviewers read it in the next round.'
-				: '');
-		if (self) {
-			const names = [...new Set(comments.map((comment) => (comment.author ?? '').split(' · ')[0]))];
-			// spec/reviews#loop: the task's agent fixes or says why not; the next round reads its answer.
-			await this.deps.self?.submitReview(
-				`Reviewers ${names.join(', ')} left ${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} (round 1 of ${crewReviewRounds}). Fix what is right; where you disagree, say why in your answer — the reviewers read it in the next round.\n\n${text}`,
-				batch
-			);
-			return batch.id;
-		}
+				.join('\n\n');
 		const link = await this.spawn(this.workerKey(worker));
 		await link.peer.request('command', { kind: 'submitReview', text, review: batch });
 		return batch.id;

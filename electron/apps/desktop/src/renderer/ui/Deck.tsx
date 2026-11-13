@@ -32,18 +32,29 @@ export function DeckList({
 		</section>
 	);
 }
-/** `hover`: the whole row reacts as one target (rule 15); then the row's main control is a button that stretches over it. */
+/**
+ * `hover`: the whole row reacts as one target (rule 15); then the row's main control is a button that stretches over it. `tone`: the row is
+ * filled (a passed review green, one waiting for the person amber). A hovered or toned row fills the deck edge to edge
+ * (spec/composer-steering-queue-and-ghost#queue-deck).
+ */
 export function DeckRow({
 	label,
 	children,
 	actions,
 	hover = false,
+	tone,
 	...rest
-}: { label: ReactNode; children: ReactNode; actions?: ReactNode; hover?: boolean } & {
+}: {
+	label: ReactNode;
+	children: ReactNode;
+	actions?: ReactNode;
+	hover?: boolean;
+	tone?: 'green' | 'amber' | undefined;
+} & {
 	[key: `data-${string}`]: string | boolean | undefined;
 }) {
 	return (
-		<li {...rest} data-hover={hover || undefined}>
+		<li {...rest} data-hover={hover || undefined} data-tone={tone}>
 			<span className={s.label} aria-hidden="true">
 				{label}
 			</span>

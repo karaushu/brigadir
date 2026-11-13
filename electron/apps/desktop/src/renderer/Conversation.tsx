@@ -1364,6 +1364,7 @@ export function Conversation({
 			if (
 				e.kind === 'review.started' ||
 				e.kind === 'review.finished' ||
+				e.kind.startsWith('task-review.') ||
 				(e.kind === 'crew.review' && e.taskId === task.id)
 			)
 				return <ReviewEventRow task={task} record={row.record} locale={locale} />;

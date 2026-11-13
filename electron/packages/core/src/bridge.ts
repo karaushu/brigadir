@@ -1188,7 +1188,7 @@ export type DesktopBridge = {
 	readCodeSyntax(language: string, text: string): Promise<SyntaxSnapshot>;
 	readReviewPositions(key: TaskKey, commentId: string): Promise<ReviewPosition[]>;
 	readReview(key: TaskKey, fileId: string | null): Promise<ReviewSnapshot>;
-	/** spec/reviews#points: the task's review before the PR as the window shows it. */
+	/** spec/reviews#strip: the task's reviews as the window shows them. */
 	readTaskReview(key: TaskKey): Promise<import('./task-review').TaskReviewView>;
 	/** Starts it with the launch dialog's choice; resolves the reason when it could not start, else null. */
 	startTaskReview(
@@ -1198,9 +1198,13 @@ export type DesktopBridge = {
 	stopTaskReview(key: TaskKey): Promise<void>;
 	/** `Not now` on the agent's proposal. */
 	dismissTaskReview(key: TaskKey): Promise<void>;
-	/** A disputed comment: `Back to the agent` sends it as the person's own; `Keep as is` resolves it. */
-	sendTaskReviewComment(key: TaskKey, id: string): Promise<void>;
-	resolveTaskReviewComment(key: TaskKey, id: string): Promise<void>;
+	/** spec/reviews#loop: the person's `Fix {n}` or `Accept` on the open findings. */
+	decideTaskReview(key: TaskKey, decision: 'fix' | 'accept'): Promise<void>;
+	/** spec/reviews#who: who would review this task at `point` now — the launch dialog's `Auto` entry. */
+	readTaskReviewer(
+		key: TaskKey,
+		point: import('./task-review').ReviewPoint
+	): Promise<import('./task-review').ReviewerChoice | { failure: string }>;
 	addReviewNote(key: TaskKey, text: string): Promise<void>;
 	addComment(key: TaskKey, input: CommentInput): Promise<void>;
 	editComment(key: TaskKey, id: string, text: string): Promise<void>;

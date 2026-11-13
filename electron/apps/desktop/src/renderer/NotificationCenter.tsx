@@ -53,6 +53,7 @@ const ENTRY_GLYPH: Record<NoticeEntryKind, [GlyphName, string]> = {
 	plan: ['plan', 'var(--amber)'],
 	proposal: ['agent-question', 'var(--amber)'],
 	worker: ['agent-question', 'var(--amber)'],
+	review: ['review', 'var(--amber)'],
 	page: ['browser', 'var(--fg2)'],
 	error: ['toast-error', 'var(--red)'],
 	warning: ['toast-warning', 'var(--amber)'],

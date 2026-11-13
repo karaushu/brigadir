@@ -39,6 +39,11 @@ import {
 	taskReviewRootName,
 	specAgents,
 	type CrewSpec,
+	builtinAgentTemplates,
+	isCrewPartBrief,
+	providerName,
+	resolveCrewAgent,
+	templateLookup,
 } from '@brigadir/core';
 import { browserUrl, localBrowserUrl } from './browser-url';
 import { Terminals } from './terminals';
@@ -92,6 +97,7 @@ import {
 	Snapshots,
 	NewWorktrees,
 	worktreeOfRoot,
+	readChanges,
 } from '@brigadir/git';
 import {
 	Attachments,
@@ -129,6 +135,7 @@ import {
 	CrewWorker,
 	isCrewToolCall,
 	crewHiddenTools,
+	partBrief,
 	type CrewContext,
 } from './crew';
 import { TaskReviewLife } from './task-review';
@@ -225,8 +232,54 @@ export async function startHost(config: HostConfig) {
 				review,
 				crew: { kind: 'review-comments', round, comments: review.comments.length },
 			}),
+		// spec/reviews#who: the app resolves the reviewer from the settings, sign-ins and catalogs; without a window, a fresh session of the task's own provider.
+		resolve: async (point) => {
+			if (ui) {
+				const answer = await ui.request('review_reviewer', { point }).catch(() => null);
+				if (isRecord(answer) && typeof answer.failure === 'string')
+					return { failure: answer.failure };
+				if (isSessionCommand(answer) && answer.kind === 'startReview') return answer;
+			}
+			const provider = (await store.task(config.key)).provider ?? 'claude';
+			return {
+				kind: 'startReview',
+				reviewers: [
+					resolveCrewAgent(
+						{ id: 'reviewer', name: providerName(provider), template: 'reviewer', provider },
+						{ lookup: templateLookup([...builtinAgentTemplates]), defaultProvider: provider },
+						[],
+						false
+					),
+				],
+				who: { kind: 'agent' },
+				instructions: '',
+				guidance: '',
+				reviewer: { provider, model: null, effort: null, source: 'same' },
+			};
+		},
+		changes: () =>
+			readChanges(store, config.key)
+				.then((value) => value.files.length)
+				.catch(() => 0),
+		checkpoint: () => checkpoint('tools'),
+		prompt: (text) => command({ kind: 'prompt', text, crew: { kind: 'review-continue' } }),
+		// spec/reviews#reviewer-sessions: the task's first prompt, and a crew worker's part with its acceptance criteria.
+		brief: async () => {
+			const first = records.find(
+				(record) =>
+					record.event.kind === 'turn.started' && !record.event.crew && !record.event.review
+			);
+			const prompt = first?.event.kind === 'turn.started' ? first.event.text.trim() : '',
+				part = crewWorker ? await readPartBrief() : null;
+			return [
+				prompt && !part
+					? `\nThe task as the person gave it:\n<task_prompt>\n${prompt.slice(0, 20_000)}\n</task_prompt>`
+					: '',
+				part ? partBrief(crew?.node.name ?? 'the developer', part) : '',
+			].join('');
+		},
+		part: async () => (crewWorker ? ((await readPartBrief())?.part ?? null) : null),
 		crew: async (start): Promise<CrewHost> => {
-			if (crew && !foremanTask) throw new Error('A crew worker is reviewed by its crew.');
 			const current = await store.task(config.key),
 				existing = current.crew ?? current.reviewCrew,
 				reviewers = taskReviewers(
@@ -259,6 +312,17 @@ export async function startHost(config: HostConfig) {
 			return crewHost;
 		},
 	});
+	/** spec/crew#parts: a crew worker's current part as its crew host saved it. */
+	async function readPartBrief() {
+		try {
+			const doc = await readDocument(
+				await safePath(await store.taskDir(config.key), 'crew-part.json')
+			);
+			return isCrewPartBrief(doc) ? doc : null;
+		} catch {
+			return null;
+		}
+	}
 	const selfContext = (spec: CrewSpec): CrewContext => ({
 		role: 'foreman',
 		crewKey: config.key,
@@ -1108,7 +1172,8 @@ export async function startHost(config: HostConfig) {
 				status =
 					event.reason === 'cancelled'
 						? 'interrupted'
-						: pendingInputs([...records, record]).crewQuestions.length
+						: pendingInputs([...records, record]).crewQuestions.length ||
+							  taskReview.document().review?.state === 'yours'
 							? 'needs-you'
 							: 'done';
 			if (event.kind === 'crew.question.escalated' && !busy) status = 'needs-you';
@@ -1126,6 +1191,15 @@ export async function startHost(config: HostConfig) {
 			// spec/reviews#loop: the reviewers and the agent did not agree in two rounds; the person decides.
 			if (event.kind === 'review.finished' && event.state === 'disputed' && !busy)
 				status = 'needs-you';
+			// spec/reviews#surfaces: the closure check left findings open; the person decides with `Fix {n}` or `Accept`.
+			if (event.kind === 'task-review.verified' && event.open > 0 && !busy) status = 'needs-you';
+			if (
+				event.kind === 'task-review.decided' &&
+				event.decision === 'accept' &&
+				!busy &&
+				!waitsForPerson(pendingInputs(records))
+			)
+				status = 'done';
 			// The persisted expiry event is the boundary for both metadata and FIFO dispatch.
 			if (nextLimits.length && (status || quotaEvent)) status = 'rate-limited';
 			if (quotaEvent) {
@@ -1801,6 +1875,10 @@ export async function startHost(config: HostConfig) {
 			await taskReview.stop();
 			return;
 		}
+		if (c.kind === 'decideReview') {
+			await taskReview.decide(c.decision);
+			return;
+		}
 		if (c.kind === 'dismissReviewProposal') {
 			await taskReview.dismiss();
 			return;
@@ -2412,6 +2490,15 @@ export async function startHost(config: HostConfig) {
 			)
 				throw new Error('commentId and text are required');
 			return taskReview.reply(params.commentId, params.text);
+		}
+		// spec/reviews#request-tool: the host decides and runs a mid-task review; the agent works on.
+		if (method === 'request_review') {
+			if (task.readOnlyAgent === true) throw new Error('This task changes no code to review.');
+			return taskReview.request({
+				point: 'mid',
+				startedBy: 'agent',
+				reason: isRecord(params) && typeof params.reason === 'string' ? params.reason : '',
+			});
 		}
 		// spec/reviews#start: the proposal card; the call does not wait for the person.
 		if (method === 'propose_review') {

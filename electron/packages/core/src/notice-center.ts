@@ -22,6 +22,8 @@ export type NoticeEntryKind =
 	| 'plan'
 	| 'proposal'
 	| 'worker'
+	/** spec/reviews#surfaces: a review's open findings wait for the person. */
+	| 'review'
 	/** A page's notification in the task's browser (spec/browser-and-simulator#notifications). */
 	| 'page'
 	| 'error'
@@ -42,6 +44,7 @@ export const noticeEntryKinds: readonly NoticeEntryKind[] = [
 	'plan',
 	'proposal',
 	'worker',
+	'review',
 	'page',
 	'error',
 	'warning',

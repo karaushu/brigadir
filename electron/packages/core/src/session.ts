@@ -112,8 +112,54 @@ export type SessionEvent =
 	| { kind: 'review.dismissed' }
 	/** The task's agent answered a reviewer's comment (`review_reply`); the thread is in `review.json`. */
 	| { kind: 'review.replied'; commentId: string }
+	/** Older journals: a review's start and end before the loop of spec/reviews#loop; they replay as they were drawn. */
 	| { kind: 'review.started'; id: string; reviewers: string[]; who: TaskReviewWho }
 	| { kind: 'review.finished'; id: string; state: 'approved' | 'disputed' | 'outdated' | 'stopped' }
+	/** spec/reviews#data: a review at one point of the task — started, read, answered, closure-checked, decided by the person, ended. */
+	| {
+			kind: 'task-review.started';
+			id: string;
+			point: ReviewPoint;
+			startedBy: TaskReviewStarter;
+			reviewers: string[];
+			reason?: string;
+	  }
+	| {
+			kind: 'task-review.findings';
+			id: string;
+			point: ReviewPoint;
+			findings: number;
+			reviewers: string[];
+	  }
+	| {
+			kind: 'task-review.answered';
+			id: string;
+			point: ReviewPoint;
+			fixed: number;
+			answered: number;
+	  }
+	| {
+			kind: 'task-review.verified';
+			id: string;
+			point: ReviewPoint;
+			closed: number;
+			open: number;
+			introduced: number;
+	  }
+	| {
+			kind: 'task-review.decided';
+			id: string;
+			point: ReviewPoint;
+			decision: 'fix' | 'accept';
+			findings: number;
+	  }
+	| {
+			kind: 'task-review.finished';
+			id: string;
+			point: ReviewPoint;
+			state: 'passed' | 'accepted' | 'stopped' | 'failed' | 'outdated';
+			failure?: string;
+	  }
 	| { kind: 'crew.accepted'; taskId: string; nodeId: string; name: string; conflicts: string[] }
 	| { kind: 'crew.worker.stopped'; taskId: string; nodeId: string; name: string; reason: string }
 	/** `returnMode`: `Погодити` on a plan asked the host to bring this mode back once the agent leaves the plan (spec/chat-turns-plans-and-questions#plan-approval). */
@@ -160,8 +206,18 @@ export type SessionCommand =
 			guidance: string;
 			/** spec/reviews#start: `Since the last review`. */
 			since?: 'start' | 'last';
+			/** spec/reviews#points: absent — before the PR. */
+			point?: ReviewPoint;
+			startedBy?: TaskReviewStarter;
+			reviewer?: ReviewerChoice;
+			/** spec/reviews#request-tool: what the agent just finished. */
+			reason?: string;
+			/** spec/reviews#who: nobody can review (`reviewers` is empty); the review is recorded as `failed`. */
+			failure?: string;
 	  }
 	| { kind: 'stopReview' }
+	/** spec/reviews#loop: the person's `Fix {n}` or `Accept` on the open findings. */
+	| { kind: 'decideReview'; decision: 'fix' | 'accept' }
 	| { kind: 'dismissReviewProposal' }
 	/** `crew`: spec/reviews#loop — the reviewers' batch of the task's own review, a service row instead of the person's message. */
 	| { kind: 'submitReview'; text: string; review: ReviewBatch; crew?: CrewTurnMarker }
@@ -424,16 +480,23 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 		case 'startReview':
 			return (
 				Array.isArray(v.reviewers) &&
-				v.reviewers.length > 0 &&
+				(v.reviewers.length > 0 || (text(v.failure) && v.failure.length <= 2000)) &&
 				v.reviewers.length <= 8 &&
+				(v.failure === undefined || (text(v.failure) && v.failure.length <= 2000)) &&
+				(v.reason === undefined || (text(v.reason) && v.reason.length <= 500)) &&
 				v.reviewers.every(isCrewSpecAgent) &&
 				isTaskReviewWho(v.who) &&
 				text(v.instructions) &&
 				v.instructions.length <= taskReviewInstructionsLimit &&
 				text(v.guidance) &&
 				v.guidance.length <= taskReviewGuidanceLimit &&
-				(v.since === undefined || v.since === 'start' || v.since === 'last')
+				(v.since === undefined || v.since === 'start' || v.since === 'last') &&
+				(v.point === undefined || isReviewPoint(v.point)) &&
+				(v.startedBy === undefined || ['person', 'agent', 'host'].includes(String(v.startedBy))) &&
+				(v.reviewer === undefined || isReviewerChoice(v.reviewer))
 			);
+		case 'decideReview':
+			return v.decision === 'fix' || v.decision === 'accept';
 		case 'stopReview':
 		case 'dismissReviewProposal':
 			return true;
@@ -494,9 +557,14 @@ import { isTaskProposalResult, type TaskProposal, type TaskProposalResult } from
 import { isBackgroundId, isSubagentId } from './background';
 import { isCrewSpecAgent, type CrewSpecAgent } from './crew';
 import {
+	isReviewPoint,
+	isReviewerChoice,
 	isTaskReviewWho,
 	taskReviewGuidanceLimit,
 	taskReviewInstructionsLimit,
+	type ReviewPoint,
+	type ReviewerChoice,
+	type TaskReviewStarter,
 	type TaskReviewWho,
 } from './task-review';
 /** The card or row that waits for the person's answer keeps the task in `needs-you` (spec/tasks#agent-created-tasks adds the proposed task, spec/crew#workers the foreman's plan). */

@@ -18,7 +18,8 @@ import {
 import { isCrewSpecAgent } from './crew';
 import { isId } from './workspace';
 import { isTaskProposal, isTaskProposalResult } from './task-proposal';
-import { isTaskReviewWho } from './task-review';
+import { isReviewPoint, isTaskReviewWho } from './task-review';
+const starter = (v: unknown) => v === 'person' || v === 'agent' || v === 'host';
 import { isBackgroundId, isBackgroundPath } from './background';
 type Check = (v: unknown) => boolean;
 const text: Check = (v) => typeof v === 'string';
@@ -269,6 +270,43 @@ const checks: Record<string, Check> = {
 		id: isId,
 		state: (v) => ['approved', 'disputed', 'outdated', 'stopped'].includes(String(v)),
 	}),
+	'task-review.started': object(
+		{ id: isId, point: isReviewPoint, startedBy: starter, reviewers: array(text) },
+		{ reason: text }
+	),
+	'task-review.findings': object({
+		id: isId,
+		point: isReviewPoint,
+		findings: number,
+		reviewers: array(text),
+	}),
+	'task-review.answered': object({
+		id: isId,
+		point: isReviewPoint,
+		fixed: number,
+		answered: number,
+	}),
+	'task-review.verified': object({
+		id: isId,
+		point: isReviewPoint,
+		closed: number,
+		open: number,
+		introduced: number,
+	}),
+	'task-review.decided': object({
+		id: isId,
+		point: isReviewPoint,
+		decision: (v) => v === 'fix' || v === 'accept',
+		findings: number,
+	}),
+	'task-review.finished': object(
+		{
+			id: isId,
+			point: isReviewPoint,
+			state: (v) => ['passed', 'accepted', 'stopped', 'failed', 'outdated'].includes(String(v)),
+		},
+		{ failure: text }
+	),
 	'crew.accepted': object({ taskId: isId, nodeId: isId, name: text, conflicts: array(text) }),
 	'crew.worker.stopped': object({ taskId: isId, nodeId: isId, name: text, reason: text }),
 	'turn.completed': object({ reason: text }),

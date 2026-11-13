@@ -530,19 +530,21 @@ export class Notifications {
 						? t(locale, 'The agent proposes a new task.')
 						: eventKind === 'crew.plan.requested'
 							? t(locale, 'The foreman proposes a split')
-							: (eventKind === 'turn.completed' && kind === 'needs-you') ||
-								  eventKind === 'crew.question.escalated'
-								? t(locale, 'A worker is waiting for your answer.')
-								: kind === 'turn-ended'
-									? t(locale, 'The turn ended.')
-									: kind === 'rate-limited'
-										? [
-												t(locale, 'Subscription limit reached.'),
-												limitedReset(state.rateLimits, locale),
-											].join(' ')
-										: kind === 'scope-violation'
-											? t(locale, 'A read-only repo changed.')
-											: t(locale, 'The session failed.');
+							: eventKind === 'task-review.verified'
+								? t(locale, 'The review left findings open; your call.')
+								: (eventKind === 'turn.completed' && kind === 'needs-you') ||
+									  eventKind === 'crew.question.escalated'
+									? t(locale, 'A worker is waiting for your answer.')
+									: kind === 'turn-ended'
+										? t(locale, 'The turn ended.')
+										: kind === 'rate-limited'
+											? [
+													t(locale, 'Subscription limit reached.'),
+													limitedReset(state.rateLimits, locale),
+												].join(' ')
+											: kind === 'scope-violation'
+												? t(locale, 'A read-only repo changed.')
+												: t(locale, 'The session failed.');
 	}
 	/** spec/notifications-slack-notes-and-schedules#notification-center: the live requests of every task for the center's «Needs you», newest first. */
 	pendingNotices(): PendingNotice[] {
@@ -700,7 +702,9 @@ function entryKind(kind: NoticeKind, eventKind: string): NoticeEntryKind {
 					? 'proposal'
 					: eventKind === 'crew.plan.requested'
 						? 'plan'
-						: 'worker';
+						: eventKind === 'task-review.verified'
+							? 'review'
+							: 'worker';
 	if (kind === 'turn-ended' && eventKind === 'background.changed') return 'background';
 	return kind as NoticeEntryKind;
 }

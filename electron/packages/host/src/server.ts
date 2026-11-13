@@ -352,7 +352,7 @@ export async function startHost(config: HostConfig) {
 				command({ kind: 'prompt', text, ...(marker ? { crew: marker } : {}) }),
 			self: taskReview.hooks(),
 			// spec/crew#budget-pause: waiting hires stay waiting while the task is held at its budget.
-			held: () => budget?.held() ?? false,
+			held: () => budgetBlocks(),
 		});
 		await host.start();
 		return host;
@@ -622,7 +622,7 @@ export async function startHost(config: HostConfig) {
 			for (const item of due) {
 				if (!queue.held?.some((entry) => entry.id === item.id)) continue;
 				const inputs =
-					!queued && busy && transport?.steering && !quotaBlocked()
+					!queued && busy && transport?.steering && !quotaBlocked() && !budget?.held()
 						? (
 								await assets.resolve(
 									config.key,
@@ -2226,6 +2226,11 @@ export async function startHost(config: HostConfig) {
 		}
 		if (task.transport === 'terminal' || busy || saving)
 			throw new Error('The agent is not available');
+		// spec/agents-and-providers#budget-reached: a retry is a new turn; while the task is held at its budget it waits (after a sign-in it stays for later).
+		if (await budgetBlocks()) {
+			if (reason) return;
+			throw new Error('The task is paused at its token budget');
+		}
 		const turn = boundaries.at(-2)?.event;
 		if (transport) {
 			const old = transport;

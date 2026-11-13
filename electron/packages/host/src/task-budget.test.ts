@@ -13,6 +13,7 @@ import {
 	type TaskKey,
 } from '@brigadir/core';
 import { connectHost, readIdentity, type HostClient } from './index';
+import { TaskBudget } from './task-budget';
 
 /** spec/agents-and-providers#budget-reached on a real host with the fixture agent: `spend N` reports N new tokens at its turn end. */
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -39,7 +40,7 @@ async function setup(budget?: AgentTask['tokenBudget']) {
 	if (budget) await store.updateTask(task, { tokenBudget: budget });
 	return { store, task: await store.task(task) };
 }
-async function launch(store: SessionStore, key: TaskKey) {
+async function launch(store: SessionStore, key: TaskKey, scenario = 'normal') {
 	const config = join(await store.taskDir(key), 'config.json');
 	await atomicJson(config, {
 		schemaVersion: 1,
@@ -48,7 +49,7 @@ async function launch(store: SessionStore, key: TaskKey) {
 		mcpEntry: resolve('apps/desktop/out/services/mcp-relay'),
 		adapter: {
 			command: process.execPath,
-			args: [resolve('packages/transport/fixtures/agent.mjs'), 'normal'],
+			args: [resolve('packages/transport/fixtures/agent.mjs'), scenario],
 		},
 	});
 	const child = spawn(process.execPath, [resolve('apps/desktop/out/services/host.cjs'), config], {
@@ -317,3 +318,156 @@ it('a new task takes the default budget from the settings', async () => {
 	expect(next.tokenBudget).toEqual({ claude: 2_000_000 });
 	expect(task.tokenBudget).toBeUndefined();
 });
+
+// ── Review fixes ─────────────────────────────────────────────────────────
+
+const reviewMember = async (store: SessionStore, root: AgentTask, title: string) => {
+	const base = taskReviewSpec('claude', []),
+		reviewer: CrewSpecAgent = {
+			...base.root,
+			id: 'review-r1',
+			name: 'Reviewer',
+			role: 'reviewer',
+			checkedBy: [],
+			agents: [],
+		};
+	await store.updateTask(root, { reviewCrew: taskReviewSpec('claude', [reviewer]) });
+	const member = await store.createTask(root.projectId, title, 'claude');
+	await store.updateTask(member, {
+		crewTaskId: root.id,
+		crewNodeId: reviewer.id,
+		parentTaskId: root.id,
+	});
+	return member;
+};
+
+it('Retry of a failed turn waits while the task is held at its budget', async () => {
+	const { store, task } = await setup({ claude: 1000 });
+	const { client } = await launch(store, task);
+	await client.command({ kind: 'prompt', text: 'spend 1500 slow fail' });
+	await find(client, kind('budget.reached'));
+	await find(client, kind('session.failed'));
+	await expect(client.command({ kind: 'retryTurn' })).rejects.toThrow(/token budget/);
+	// The automatic retry after a sign-in leaves it for later without an error.
+	await client.command({ kind: 'retryTurn', reason: 'auth' });
+	await delay(400);
+	expect((await records(client)).filter(kind('turn.started'))).toHaveLength(1);
+}, 45_000);
+
+it('a message held for the running turn goes to the queue, not into the turn, once the budget is reached', async () => {
+	process.env.BRIGADIR_STEER_HOLD_MS = '1500';
+	const { store, task } = await setup({ claude: 2000 });
+	const { client } = await launch(store, task, 'steering');
+	await client.command({ kind: 'prompt', text: 'spend 1200 steer' });
+	await find(client, kind('turn.started'));
+	await client.command({ kind: 'prompt', text: 'more', steer: true });
+	await find(client, kind('prompt.held'));
+	await client.command({ kind: 'setTokenBudget', provider: 'claude', budget: 1000 });
+	await find(client, kind('budget.reached'));
+	await find(client, kind('turn.completed'));
+	const after = await records(client);
+	expect(after.some(kind('prompt.steered'))).toBe(false);
+	expect(
+		after.filter(kind('prompt.queued')).map((record) => record.event.prompt.command)
+	).toMatchObject([{ kind: 'prompt', text: 'more' }]);
+	await delay(400);
+	expect((await records(client)).filter(kind('turn.started'))).toHaveLength(1);
+}, 45_000);
+
+it('a turn whose exact usage passes the budget asks before the next queued message starts', async () => {
+	const { store, task } = await setup({ claude: 1000 });
+	const { client } = await launch(store, task);
+	// The estimate (600) stays under the budget; the turn's own usage (1200) passes it.
+	await client.command({ kind: 'prompt', text: 'spend 600 slow over' });
+	await find(client, kind('turn.started'));
+	await client.command({ kind: 'prompt', text: 'spend 1' });
+	await find(client, kind('prompt.queued'));
+	const reached = await find(client, kind('budget.reached'));
+	expect(reached.event).toMatchObject({ tokens: 1200, estimated: false });
+	await delay(1500);
+	expect((await records(client)).filter(kind('turn.started'))).toHaveLength(1);
+}, 45_000);
+
+it("an idle member reads its root's hold fresh before it starts or hires anything", async () => {
+	const { store, task: root } = await setup({ claude: 1000 });
+	const member = await reviewMember(store, root, 'Lead');
+	const budget = new TaskBudget(
+		{
+			store,
+			key: member,
+			records: () => [],
+			emit: async () => {},
+			busy: () => false,
+			cancel: async () => {},
+			stopMembers: async () => {},
+			resume: () => {},
+		},
+		await store.task(member)
+	);
+	expect(await budget.blocks()).toBe(false);
+	// The root pauses while the member is idle and never polled: the gate (and a lead's `watchSlots`) still sees it.
+	await store.updateTask(root, {
+		tokenHold: { id: 'b1', provider: 'claude', tokens: 1200, budget: 1000, state: 'asked' },
+	});
+	expect(budget.held()).toBe(false);
+	expect(await budget.blocks()).toBe(true);
+	budget.stop();
+});
+
+it('a budget set below the count while the question waits asks again, and Finish holds at the new budget', async () => {
+	const { store, task } = await setup({ claude: 2000 });
+	const { client } = await launch(store, task);
+	await client.command({ kind: 'prompt', text: 'spend 2100' });
+	const first = await find(client, kind('budget.reached'));
+	await client.command({ kind: 'setTokenBudget', provider: 'claude', budget: 1000 });
+	const second = await find(
+		client,
+		(record): record is typeof first =>
+			record.event.kind === 'budget.reached' && record.seq > first.seq
+	);
+	expect(second.event).toMatchObject({ budget: 1000, tokens: 2100 });
+	expect(pendingInputs(await records(client)).budget?.id).toBe(second.event.id);
+	await client.command({ kind: 'decideBudget', id: second.event.id, decision: 'finish' });
+	await until(async () =>
+		(await store.task(task)).tokenHold?.state === 'finish' ? true : undefined
+	);
+	await delay(3500);
+	expect((await records(client)).filter(kind('budget.reached'))).toHaveLength(2);
+	expect((await store.task(task)).tokenHold).toMatchObject({ state: 'finish', budget: 1000 });
+}, 45_000);
+
+it('a first turn cancelled without usage leaves no running estimate on disk', async () => {
+	const { store, task } = await setup();
+	const { client } = await launch(store, task);
+	await client.command({ kind: 'prompt', text: 'spend 500 hold' });
+	await until(async () => ((await store.task(task)).tokens?.estimate === 500 ? true : undefined));
+	await client.command({ kind: 'cancel' });
+	await find(client, kind('turn.completed'));
+	await until(async () => {
+		const tokens = (await store.task(task)).tokens;
+		return tokens && tokens.estimate === 0 && !tokens.running ? true : undefined;
+	});
+}, 45_000);
+
+it('Stop now cancels a running member turn, and the member keeps its queue held across a restart', async () => {
+	const { store, task: root } = await setup({ claude: 1000 });
+	const member = await reviewMember(store, root, 'Member');
+	const memberHost = await launch(store, member);
+	await memberHost.client.command({ kind: 'prompt', text: 'spend 10 hold' });
+	await find(memberHost.client, kind('turn.started'));
+	const rootHost = await launch(store, root);
+	await rootHost.client.command({ kind: 'prompt', text: 'spend 1200' });
+	const reached = await find(rootHost.client, kind('budget.reached'));
+	await rootHost.client.command({ kind: 'decideBudget', id: reached.event.id, decision: 'stop' });
+	// The member hears the root's `stop` within its 3 s poll and cancels its own turn; a nested worker reads the same root.
+	const done = await find(memberHost.client, kind('turn.completed'));
+	expect(done.event.reason).toBe('cancelled');
+	await memberHost.client.command({ kind: 'prompt', text: 'spend 1' });
+	await find(memberHost.client, kind('prompt.queued'));
+	memberHost.client.close();
+	await memberHost.kill();
+	const again = await launch(store, member);
+	await delay(3500);
+	expect((await records(again.client)).filter(kind('turn.started'))).toHaveLength(1);
+	expect((await store.task(root)).tokenHold).toMatchObject({ state: 'stop' });
+}, 60_000);

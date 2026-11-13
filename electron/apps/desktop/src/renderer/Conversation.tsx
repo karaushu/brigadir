@@ -2177,9 +2177,7 @@ export function Conversation({
 								locale={locale}
 								// spec/agents-and-providers#task-budget: without a host the budget is changed in task.json by main.
 								disabled={sending}
-								send={(c) => {
-									void send(c);
-								}}
+								send={send}
 							/>
 						}
 						notices={

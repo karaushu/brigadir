@@ -136,7 +136,7 @@ The task's [token count](agents-and-providers.md#task-tokens) at the right end o
 - **`Task usage` popover** (shared `ui/Popover`, 340 px, above the island from the counter's right edge, Esc closes and returns focus): header `Task usage` and the sum; then one group per provider that used tokens or has a budget: glyph and name, the count (`930k`, with `≈`), `of` and the budget popup (`No limit`, `500k`, `1m`, `2m`, `5m`, `10m`, plus the current value when it is not in the list), a `ui/ProgressBar` while a budget is set (accent, `--amber` near, `--red` reached), and the member rows of that provider: `Agent` for the task's own agent, `{agent} · {part}` for crew members and reviewers, each with its count. The foot holds the [account lines](agents-and-providers.md#task-quota-span).
 - The provider line's tooltip gives the parts: `New input {a} · written to cache {b} · output {c} · re-read from cache {d}, not counted`.
 - On a member task (a worker, a lead, a reviewer) the popover shows only its own group without the popup, with the note `Counted in the budget of {task}.`; the budget belongs to the root task.
-- The popup applies at once to this task (`setTokenBudget`); while the [budget question](chat-turns-plans-and-questions.md#budget-card) waits it can answer it ([reaching the budget](agents-and-providers.md#budget-reached)).
+- The popup applies at once to this task (`setTokenBudget`; without a host main writes it to `task.json`), and the workspace is read again after it, so the popup, the counter and the card show the new budget; while the [budget question](chat-turns-plans-and-questions.md#budget-card) waits it can answer it ([reaching the budget](agents-and-providers.md#budget-reached)).
 
 <a id="context-ring"></a>
 ## Context ring

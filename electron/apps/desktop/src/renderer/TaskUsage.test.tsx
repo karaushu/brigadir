@@ -200,3 +200,17 @@ it("a worker row shows the member's own count, ≈ while its turn runs", () => {
 	);
 	expect(html).toContain('≈245k');
 });
+
+it('a budget change reads the workspace again once the command went through, and not after a refusal', async () => {
+	const { changeBudget } = await import('./TaskUsage');
+	const sent: unknown[] = [];
+	let reloads = 0;
+	const reload = async () => {
+		reloads++;
+	};
+	await changeBudget(async (command) => (sent.push(command), true), 'claude', 2_000_000, reload);
+	expect(sent).toEqual([{ kind: 'setTokenBudget', provider: 'claude', budget: 2_000_000 }]);
+	expect(reloads).toBe(1);
+	await changeBudget(async () => false, 'codex', null, reload);
+	expect(reloads).toBe(1);
+});

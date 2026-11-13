@@ -309,7 +309,7 @@ The question of a task that [reached its token budget](agents-and-providers.md#b
 | Actions | `Stop now` (ghost), `Finish turns, then stop` (soft), `Raise to {n}` — the primary split button; its menu (`ui/MenuPopover` with `Esc`) lists `Raise to {n}` and the next two values, then `No limit for this task` |
 
 - **After the answer** the card folds into the plain line `{Provider} budget reached · Resolved` with the answer under it: `Raise to {n}`, `No limit for this task`, `Finish turns, then stop` or `Stop now`. `budget.decided` draws nothing of its own.
-- A card whose question was already answered elsewhere (the strip, the popover) folds at once.
+- A card whose question was already answered elsewhere (the strip, the popover) folds at once; one asked again with a new budget folds to `{Provider} budget reached · Resolved` without an answer line.
 
 <a id="budget-strip"></a>
 ### Budget strip above the composer

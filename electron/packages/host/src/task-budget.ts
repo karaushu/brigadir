@@ -85,6 +85,8 @@ export class TaskBudget {
 		this.provider = task.provider;
 		const records = deps.records();
 		this.tally = tokenTally(records);
+		// What task.json holds now: a figure left by an earlier host (a turn cancelled with no usage) is rewritten from the journal.
+		this.written = task.tokens ? JSON.stringify(task.tokens) : '';
 		this.journal = budgetJournal(records);
 		this.budget = this.root ? task.tokenBudget : undefined;
 		if (this.root) this.hold = tokenHold(this.journal, this.budget);
@@ -113,6 +115,13 @@ export class TaskBudget {
 	/** The gate before anything starts: a member reads its root's hold first, so it never starts on a stale one. */
 	async blocks(): Promise<boolean> {
 		if (!this.root) await this.serial(() => this.readRootHold());
+		else if (this.budget && !this.hold) {
+			// A turn's last usage may still wait for its check: check now, so the next turn never starts past the budget.
+			if (this.checkTimer) clearTimeout(this.checkTimer);
+			this.checkTimer = null;
+			await this.serial(() => this.check());
+			await this.tail;
+		}
 		return this.held();
 	}
 	currentHold() {
@@ -171,7 +180,8 @@ export class TaskBudget {
 	/** spec/agents-and-providers#task-tokens: `force` at turn boundaries; during a turn only when the short number changed. */
 	private async writeTokens(force: boolean) {
 		const own = ownTokens(this.tally);
-		if (!hasTokens(own)) return;
+		// Nothing counted and nothing on disk: no figure. Something on disk is replaced, even by zero (a cancelled first turn's estimate).
+		if (!hasTokens(own) && !this.written) return;
 		const text = JSON.stringify(own),
 			short = `${formatTokenCount(own.input + own.cacheWrite + own.output + own.estimate)}:${own.running}`;
 		if (text === this.written) return;
@@ -311,13 +321,25 @@ export class TaskBudget {
 			await this.saveBudget(budget);
 			const asked = this.journal.pending;
 			if (asked?.provider === provider) {
-				const answer = popoverAnswer(asked, budget, providerTokens(await this.sum(), provider));
+				const sum = await this.sum(),
+					tokens = providerTokens(sum, provider),
+					answer = popoverAnswer(asked, budget, tokens);
 				if (answer)
 					await this.deps.emit({
 						kind: 'budget.decided',
 						id: asked.id,
 						decision: answer.decision,
 						...(answer.budget !== undefined ? { budget: answer.budget } : {}),
+					});
+				// A new budget still at or below the count: the question is asked again with its figures, so `Finish` and `Stop` hold at the budget set.
+				else if (value !== null && value !== asked.budget)
+					await this.deps.emit({
+						kind: 'budget.reached',
+						id: randomUUID(),
+						provider,
+						tokens,
+						budget: value,
+						estimated: sum.providers.find((item) => item.provider === provider)?.estimated ?? false,
 					});
 			}
 			await this.settleHold();

@@ -268,6 +268,19 @@ export function UsageBreakdown({
 		</div>
 	);
 }
+/**
+ * spec/composer#task-usage: a budget change writes task.json without a journal record when it answers nothing (or without a host at all), so the
+ * workspace is read again once the command went through: the popup, the counter and the card show the new budget at once.
+ */
+export async function changeBudget(
+	send: (command: SessionCommand) => unknown,
+	provider: AgentProvider,
+	budget: number | null,
+	reload: () => Promise<unknown>
+) {
+	const sent = await send({ kind: 'setTokenBudget', provider, budget });
+	if (sent !== false) await reload();
+}
 /** spec/composer#task-usage: the counter at the right end of the environment footer and its `Task usage` popover. */
 export function TaskUsageCounter({
 	task,
@@ -293,7 +306,9 @@ export function TaskUsageCounterView({
 	view: TaskTokensView;
 	locale: Locale;
 	disabled: boolean;
-	send(command: SessionCommand): void;
+	/** Resolves once the host (or main, without one) took the command. */ send(
+		command: SessionCommand
+	): unknown;
 	open?: boolean;
 }) {
 	const [open, setOpen] = useState(initial),
@@ -344,7 +359,9 @@ export function TaskUsageCounterView({
 					view={view}
 					locale={locale}
 					disabled={disabled}
-					onBudget={(provider, budget) => send({ kind: 'setTokenBudget', provider, budget })}
+					onBudget={(provider, budget) => {
+						void changeBudget(send, provider, budget, () => useWorkspace.getState().load());
+					}}
 				/>
 			</Popover>
 		</>

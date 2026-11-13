@@ -1,4 +1,4 @@
-import { mkdir, readdir, unlink } from 'node:fs/promises';
+import { lstat, mkdir, readdir, unlink } from 'node:fs/promises';
 import {
 	isAgentTemplateDocument,
 	isCrewTemplateDocument,
@@ -9,6 +9,7 @@ import {
 	builtinAgentTemplates,
 	sameBuiltinChoices,
 	builtinCrewTemplates,
+	unshippedCrewTemplateIds,
 	withBuiltinCrew,
 	sameCrewTree,
 	crewIssues,
@@ -20,7 +21,7 @@ import {
 	type CrewTemplate,
 	type ReadIssue,
 } from '@brigadir/core';
-import { atomicJson, readDocument, safePath, SessionStore } from './session';
+import { atomicJson, newJson, readDocument, safePath, SessionStore } from './session';
 import { ReadFailure } from './index';
 export type TemplateLibrary = {
 	agents: AgentTemplate[];
@@ -30,6 +31,8 @@ export type TemplateLibrary = {
 	hiddenCrews: string[];
 };
 const hiddenCrewsPath = 'templates/builtin/hidden-crews.json';
+/** spec/crew-templates-and-editor#unshipped-crew-ids: the move of each data folder, process-wide. */
+const adoptions = new Map<string, Promise<void>>();
 const isBuiltinCrewId = (id: string) => builtinCrewTemplates.some((item) => item.id === id);
 /** spec/crew-templates-and-editor#template-library library: builtins come from code, own templates from `templates/agents|crews/<id>.json`. Builtins are never written;
  *  a person's provider, model and effort for a built-in role, and their edit of a built-in crew, live beside them in `templates/builtin/<id>.json`
@@ -110,9 +113,8 @@ export class TemplateStore {
 		}
 		return crews;
 	}
-	/** spec/pull-requests-and-ci#review-crew: a missing file hides nothing; a broken one is an issue and hides nothing either. Ids of crews the app
-	 *  no longer ships are dropped. */
-	private async hidden(issues?: ReadIssue[]): Promise<string[]> {
+	/** The ids `hidden-crews.json` lists, as written. A missing file hides nothing; a broken one is an issue and hides nothing either. */
+	private async hiddenIds(issues?: ReadIssue[]): Promise<string[]> {
 		try {
 			const doc = await readDocument(await safePath(this.root, hiddenCrewsPath));
 			if (
@@ -121,9 +123,7 @@ export class TemplateStore {
 				!doc.crews.every((id) => typeof id === 'string' && isId(id))
 			)
 				throw new ReadFailure('invalid_document');
-			return builtinCrewTemplates
-				.map((item) => item.id)
-				.filter((id) => (doc.crews as string[]).includes(id));
+			return doc.crews as string[];
 		} catch (error) {
 			if (isRecord(error) && error.code === 'ENOENT') return [];
 			issues?.push({
@@ -131,6 +131,65 @@ export class TemplateStore {
 				code: error instanceof ReadFailure ? error.code : 'unreadable',
 			});
 			return [];
+		}
+	}
+	/** spec/pull-requests-and-ci#review-crew: the hidden built-in crews. Ids the app does not ship are dropped, except one whose edit still waits in
+	 *  `templates/builtin/` (spec/crew-templates-and-editor#unshipped-crew-ids): it keeps `Restore default crews` offered. */
+	private async hidden(issues?: ReadIssue[]): Promise<string[]> {
+		const listed = await this.hiddenIds(issues),
+			kept: string[] = [];
+		for (const id of listed)
+			if (isBuiltinCrewId(id) || (unshippedCrewTemplateIds.includes(id) && (await this.edited(id))))
+				kept.push(id);
+		return kept;
+	}
+	/** Whether an edit waits in `templates/builtin/<id>.json`. A path that is not safe (a symlink) holds no edit. */
+	private async edited(id: string) {
+		try {
+			await lstat(await this.file('builtin', id));
+			return true;
+		} catch {
+			return false;
+		}
+	}
+	/** spec/crew-templates-and-editor#unshipped-crew-ids: one move at a time per data folder in this process, whichever store instance reads; the
+	 *  destination is created without overwriting, so a reader that lost the race (here or in another process) never replaces the moved crew or a
+	 *  person's later edit of it. Not on the write queue: a save reads the library inside that queue. */
+	private adoptUnshippedCrews(issues: ReadIssue[]) {
+		const run = (adoptions.get(this.root) ?? Promise.resolve()).then(() => this.adoptNow(issues)),
+			tail = run.catch(() => {});
+		adoptions.set(this.root, tail);
+		void tail.then(() => {
+			if (adoptions.get(this.root) === tail) adoptions.delete(this.root);
+		});
+		return run;
+	}
+	/** A person's edit of a crew the app does not ship becomes an own crew under the same id, so the launch default and schedules that name it
+	 *  keep it. An edit of a hidden crew waits for `Restore default crews`; an invalid or unsafe file stays and is an issue; an own crew already
+	 *  under that id is never overwritten. The source goes only after the copy is written. */
+	private async adoptNow(issues: ReadIssue[]) {
+		const hidden = await this.hiddenIds();
+		for (const id of unshippedCrewTemplateIds) {
+			if (hidden.includes(id)) continue;
+			const path = `templates/builtin/${id}.json`;
+			try {
+				const source = await this.file('builtin', id),
+					doc = await readDocument(source);
+				if (!isCrewTemplateDocument(doc) || doc.template.id !== id)
+					throw new ReadFailure('invalid_document');
+				await mkdir(await this.dir('crews'), { recursive: true, mode: 0o700 });
+				const moved = await newJson(await this.file('crews', id), {
+					schemaVersion: 1,
+					template: { ...doc.template, builtin: false },
+				});
+				if (moved)
+					await unlink(source).catch((error) => {
+						if (!(isRecord(error) && error.code === 'ENOENT')) throw error;
+					});
+			} catch (error) {
+				if (isRecord(error) && error.code === 'ENOENT') continue;
+				issues.push({ path, code: error instanceof ReadFailure ? error.code : 'unreadable' });
+			}
 		}
 	}
 	private async list(kind: 'agents' | 'crews', issues: ReadIssue[]) {
@@ -164,8 +223,9 @@ export class TemplateStore {
 		return documents;
 	}
 	async read(): Promise<TemplateLibrary> {
-		const issues: ReadIssue[] = [],
-			agents: AgentTemplate[] = [],
+		const issues: ReadIssue[] = [];
+		await this.adoptUnshippedCrews(issues);
+		const agents: AgentTemplate[] = [],
 			crews: CrewTemplate[] = [],
 			choices = await this.builtinChoices(issues),
 			hiddenCrews = await this.hidden(issues),

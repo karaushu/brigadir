@@ -1,10 +1,10 @@
 import { expect, it } from 'vitest';
-import { builtinCrewTemplates, resolveCrew, templateLookup, builtinAgentTemplates } from './crew';
+import { starterCrewTemplate, resolveCrew, templateLookup, builtinAgentTemplates } from './crew';
 import { planDifferences, planDifferenceText, type CrewPlanPart } from './crew-runtime';
 import { planPartCountLabel, planSplitLabel } from './messages';
 import { planSummary } from './activity';
 /** spec/chat-turns-plans-and-questions#crew-plan-card: differences in the interface language from their fields; four uk forms; plan row segments. */
-const spec = resolveCrew(builtinCrewTemplates[0]!, {
+const spec = resolveCrew(starterCrewTemplate, {
 	lookup: templateLookup(builtinAgentTemplates),
 	defaultProvider: 'claude',
 	now: '2026-09-28T10:00:00.000Z',

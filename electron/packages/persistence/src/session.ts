@@ -1,6 +1,7 @@
 import { promptDisplayText } from '@brigadir/core';
 import { constants } from 'node:fs';
 import {
+	link,
 	lstat,
 	mkdir,
 	open,
@@ -73,6 +74,33 @@ export function jsonText(value: unknown): string {
 }
 export async function atomicJson(path: string, value: unknown): Promise<void> {
 	await atomicText(path, jsonText(value));
+}
+/** Writes the document only when nothing is at `path` yet, in one step (a hard link of a synced temp file): false when something was there. A
+ *  concurrent writer, in this process or another, can never be overwritten. */
+export async function newJson(path: string, value: unknown): Promise<boolean> {
+	const temp = `${path}.${randomUUID()}.tmp`;
+	const file = await open(temp, 'wx', 0o600);
+	try {
+		await file.writeFile(jsonText(value));
+		await file.sync();
+	} finally {
+		await file.close();
+	}
+	try {
+		await link(temp, path);
+	} catch (error) {
+		if (isRecord(error) && error.code === 'EEXIST') return false;
+		throw error;
+	} finally {
+		await unlink(temp).catch(() => {});
+	}
+	const dir = await open(dirname(path), 'r');
+	try {
+		await dir.sync();
+	} finally {
+		await dir.close();
+	}
+	return true;
 }
 export async function atomicText(path: string, text: string | Uint8Array): Promise<void> {
 	const temp = `${path}.${randomUUID()}.tmp`;

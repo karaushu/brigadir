@@ -15,6 +15,7 @@ import {
 	testerTemplateId,
 	templateFit,
 	builtinCrewTemplates,
+	starterCrewTemplate,
 	builtinCrewCustomized,
 	crewSummaryLimit,
 	crewAgents,
@@ -269,7 +270,7 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 			return;
 		}
 		const item: CrewTemplate = {
-			...structuredClone(builtinCrewTemplates[0]!),
+			...structuredClone(starterCrewTemplate),
 			id,
 			name: t(locale, 'New crew'),
 			builtin: false,

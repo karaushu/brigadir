@@ -199,6 +199,7 @@ import {
 	crewIssues,
 	crewPalette,
 	composeCrewId,
+	unshippedCrewLaunch,
 	foremanTemplateId,
 	isAgentTemplateDocument,
 	isCrewTemplateDocument,
@@ -4516,25 +4517,27 @@ void app.whenReady().then(async () => {
 		if (crewInput) {
 			const library = await (await TemplateStore.at(process.env.BRIGADIR_DATA_DIR)).read(),
 				lookup = templateLookup(library.agents);
+			// spec/crew-templates-and-editor#unshipped-crew-ids: a schedule that names a crew the app no longer ships runs as «Foreman composes».
+			const crewChoice = unshippedCrewLaunch(crewInput, library.crews);
 			const template =
-				'compose' in crewInput
-					? (crewInput.template ?? {
+				'compose' in crewChoice
+					? (crewChoice.template ?? {
 							schemaVersion: 1 as const,
 							id: composeCrewId,
 							name: 'Crew',
 							builtin: true,
 							root: { id: 'root', name: 'Foreman', template: foremanTemplateId },
 						})
-					: 'templateId' in crewInput
-						? library.crews.find((item) => item.id === crewInput.templateId)
-						: crewInput.template;
+					: 'templateId' in crewChoice
+						? library.crews.find((item) => item.id === crewChoice.templateId)
+						: crewChoice.template;
 			if (!template) throw new Error('The crew template is unavailable');
 			const issues = crewIssues(template, lookup);
 			if (issues.length) throw new Error(issues[0]!.message);
 			const context = { lookup, defaultProvider: appliedSettings.agents.provider };
 			crew = resolveCrew(template, context);
 			// spec/crew#compose: the foreman composes from a snapshot of the library and of the enabled providers' models; the task never reads the library again.
-			if ('compose' in crewInput) {
+			if ('compose' in crewChoice) {
 				const enabled = (['claude', 'codex'] as const).filter(
 						(item) => appliedSettings.agents.enabled[item]
 					),

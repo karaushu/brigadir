@@ -19,11 +19,11 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: Workspace
 	const lines: string[] = [];
 	if (tools.browser)
 		lines.push(
-			'- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.'
+			`- A real browser in the window of this task (browser_*). ${role === 'developer' ? 'When your task prompt asks for a check of a page' : 'After you change anything a person sees in a web app'}, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.`
 		);
 	if (tools.simulator)
 		lines.push(
-			`- The project simulator, an iOS Simulator or Android Emulator device (simulator_*). For a React Native or other mobile app, check your change on the device: simulator_open, simulator_ui, simulator_act, simulator_wait, simulator_screenshot, simulator_logs. simulator_act already waits for the screen to settle and lists what changed: do not sleep or take a screenshot to check a tap, and use simulator_wait for what comes later.${simulatorQueued(role) ? ` ${sharedSimulator}` : ''}`
+			`- The project simulator, an iOS Simulator or Android Emulator device (simulator_*). For a React Native or other mobile app, check your change on the device${role === 'developer' ? ' when your task prompt asks for it' : ''}: simulator_open, simulator_ui, simulator_act, simulator_wait, simulator_screenshot, simulator_logs. simulator_act already waits for the screen to settle and lists what changed: do not sleep or take a screenshot to check a tap, and use simulator_wait for what comes later.${simulatorQueued(role) ? ` ${sharedSimulator}` : ''}`
 		);
 	if (tools.commands)
 		lines.push(
@@ -55,7 +55,7 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: Workspace
 		`Check yourself what these tools can check: do not ask the person to ${asks} for you.${seen ? ` The person sees ${seen}.` : ''}`,
 		...(role === 'foreman' || role === 'lead'
 			? [
-					'Your agents have the same tools: when a part changes what a person sees, its prompt says how the agent checks it.',
+					'Your agents have the same tools: a part proves itself with the command its prompt names, and one agent checks the running app once, on the integrated work.',
 				]
 			: []),
 	].join('\n');
@@ -71,7 +71,7 @@ export function toolsBrief(role: CrewProcessRole | null, tools: WorkspaceTools):
 	const list = words(named, 'and');
 	const check =
 		tools.browser || tools.simulator
-			? ` After a change a person can see, check it yourself: open the ${words([tools.browser && 'page', tools.simulator && 'app'], 'or')}, look at it and click through it. Do not ask the person to check what you can check; they see each of your actions.`
+			? ` ${role === 'developer' ? 'When your task prompt asks for a check in the running app, do it yourself' : 'After a change a person can see, check it yourself'}: open the ${words([tools.browser && 'page', tools.simulator && 'app'], 'or')}, look at it and click through it. Do not ask the person to check what you can check; they see each of your actions.`
 			: '';
 	const queue =
 		tools.simulator && simulatorQueued(role)
@@ -79,7 +79,7 @@ export function toolsBrief(role: CrewProcessRole | null, tools: WorkspaceTools):
 			: '';
 	return `This app gives you ${list}.${check}${queue}`;
 }
-/** spec/agents-and-providers#tools-awareness: the foreman plans the check into each part; empty when no module is on. */
+/** spec/agents-and-providers#tools-awareness, spec/crew#smoke: how the foreman's plan uses its crew's tools; empty when no module is on. */
 export function crewToolsBrief(tools: WorkspaceTools): string {
 	const named = [
 		tools.browser && 'a real browser (browser_*)',
@@ -88,16 +88,17 @@ export function crewToolsBrief(tools: WorkspaceTools): string {
 	];
 	const list = words(named, 'and');
 	if (!list) return '';
-	const checks = [
-		tools.browser &&
-			'a part that changes a web page says that the agent opens the page in the browser and checks it',
-		tools.simulator &&
-			'a part that changes the mobile app says that the agent checks it on the simulator after implementing',
-		tools.commands &&
-			'a part that needs a dev server, a build or the tests says that the agent runs them as project commands',
-	].filter(Boolean);
+	const places = words([tools.browser && 'browser', tools.simulator && 'simulator'], 'or');
 	return [
-		`Your agents have ${list}, as you do. Put the check into the plan: ${checks.join('; ')}.`,
+		`Your agents have ${list}, as you do.`,
+		...(tools.commands
+			? [
+					'A part that needs a dev server, a build or the tests says that the agent runs them as project commands.',
+				]
+			: []),
+		...(places
+			? [`A check in the ${places} is the one smoke described above, not a step of every part.`]
+			: []),
 		...(tools.simulator ? ['The simulator is one device: your agents take it in turns.'] : []),
 	].join(' ');
 }

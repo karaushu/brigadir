@@ -9,6 +9,9 @@ import {
 } from '@brigadir/core';
 import { crewToolsBrief } from './tools-brief';
 import type { WorkspaceTools } from './tools';
+/** spec/crew#smoke: how a crew checks its work in the running app. One paragraph of the core, so every foreman and lead gets it. */
+export const verification =
+	"Verification: a worker proves its part with the command its prompt names; do not ask every worker to drive the simulator or the browser. A check in the running app is a smoke of the flows the change touches: give it as one part to one agent, once, on the integrated work after you accepted the parts it covers, and state its time box in the part prompt (10 minutes unless the task needs another). It is not a test matrix: no list of checks with a screenshot each, no repeats to be sure, and no run per device or configuration unless the task is about that device. Nobody reviews the smoke report: you read it and decide, and a defect it finds is a part to fix, not a reason for another round of checks. Design fidelity is the designer's check, not the smoke's: a part a designer checks names its design source in its prompt (a Figma node or frame, a mock-up file, a reference screen).";
 /** English by rule 12. The brief is a `.context` block of the first prompt; the transcript never shows it (spec/crew#task-type, spec/crew-templates-and-editor#snapshot). */
 const foremanCore = `You are the foreman of this task. You do not write code yourself. You split the work, delegate it to your named agents, read their reports and diffs, review, and accept.
 
@@ -18,6 +21,8 @@ Loop:
 3. Reports arrive by themselves when a worker finishes a turn; do not poll task_status in a loop. Read the report, then read_diff one file at a time. When a reviewer approved the part, read only where the report raises a question; when nobody checks the part, read the whole change yourself. Return work with prompt_task or submit_review; accept finished work with accept_task, which merges the worker's part into this task as one commit. When you return a part, say what to verify and how. If the same part comes back wrong again, return it with effort one level higher (prompt_task effort); a part that still fails goes to a stronger agent as a new part. A part gets two checks by its reviewers, and your returns do not start the count again: when you are told a part reached its review limit, accept it or put the decision to the human; returning it opens no new review.
 4. When a worker asks you a question, answer with prompt_task using the questionId from the message. Permissions are never yours to grant: the human decides them.
 5. Share facts other agents need with post_note; read_notes lists what others posted.
+
+${verification}
 
 Research: when you hand a question about the code to a subagent, do not research the same question yourself while it runs. End your message and wait: its result arrives on its own. Run it in the foreground instead when your next step depends on it. Your session lives through the whole crew, so every file you read yourself is carried by every later step; the subagent reads in its own context and returns only the answer.
 
@@ -129,7 +134,7 @@ export function composeBrief(palette: CrewCompose): string {
 	});
 	return [
 		`You compose your crew yourself: the human chose this at launch. Read the task and the code first, then call propose_plan with crew and parts together; the human approves both before any worker starts, and may edit the crew.`,
-		`crew: the fewest agents the task's independent parts need, with zones that do not overlap. When the task is one chain of dependent steps, one developer and no reviewer is the whole crew: a split pays only when parts can run side by side. Each agent has name (short and unique, names its area, like \`API\` or \`UI\`), template (one of the templates below), summary (one line: what it is for), zone (the paths or globs it owns), and optionally provider, model and effort (names from the lists below; leave them out for the template's defaults) and checkedBy (names of reviewers in your crew who check it). ${modelLadder} Add a reviewer only where a part needs a second reader, and put it in checkedBy of the developers it checks; one reviewer can check several developers. Reviewers take no part of the code. Each part goes to an agent of this crew. You have no leads: the crew is one level under you.`,
+		`crew: the fewest agents the task's independent parts need, with zones that do not overlap. When the task is one chain of dependent steps, one developer and no reviewer is the whole crew: a split pays only when parts can run side by side. Each agent has name (short and unique, names its area, like \`API\` or \`UI\`), template (one of the templates below), summary (one line: what it is for), zone (the paths or globs it owns), and optionally provider, model and effort (names from the lists below; leave them out for the template's defaults) and checkedBy (names of reviewers in your crew who check it). ${modelLadder} Add a reviewer only where a part needs a second reader, and put it in checkedBy of the developers it checks; one reviewer can check several developers. Reviewers take no part of the code. Add a designer only when the task names a design source to match. At most one agent runs the smoke in the running app, and nobody checks it. Each part goes to an agent of this crew. You have no leads: the crew is one level under you.`,
 		`Templates: ${templates.join(', ') || 'none'}.`,
 		...(providers.length ? [`Models: ${providers.join('. ')}.`] : []),
 	].join('\n');

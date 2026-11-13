@@ -8,6 +8,7 @@ import { SessionStore } from '@brigadir/persistence';
 import {
 	builtinAgentTemplates,
 	builtinCrewTemplates,
+	starterCrewTemplate,
 	defaultAppSettings,
 	resolveCrew,
 	reviewCrewTemplateId,
@@ -175,7 +176,7 @@ it('still asks for a plan and refuses reviewers in a crew that reviews no PR (sp
 		host.tool('create_worker_task', { agent: 'Astra', title: 'x', prompt: 'y' }, signal)
 	).rejects.toThrow('Call propose_plan first');
 	// A checker stays a checker even in a PR review: the host starts it with the part it checks.
-	const checked = await crew(builtinCrewTemplates[0]!, 'quick');
+	const checked = await crew(starterCrewTemplate, 'quick');
 	await expect(
 		checked.host.tool('create_worker_task', { agent: 'Reviewer', title: 'x', prompt: 'y' }, signal)
 	).rejects.toThrow('the host starts reviewers itself');

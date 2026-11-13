@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
 	approvedSpec,
 	builtinAgentTemplates,
@@ -7,10 +8,11 @@ import {
 	resolveCrew,
 	templateLookup,
 	type AgentTemplate,
+	type CrewSpec,
 	type CrewTemplate,
 	type ProviderCatalog,
 } from '@brigadir/core';
-import { foremanBrief, workerContext } from './brief';
+import { foremanBrief, verification, workerContext } from './brief';
 import { crewToolsBrief } from './tools-brief';
 const tester: AgentTemplate = {
 	id: 'tester',
@@ -113,8 +115,11 @@ it("names the crew's tools to the foreman and a lead so the plan carries the che
 	for (const id of ['root', 'lead']) {
 		const brief = foremanBrief(spec, id, all);
 		expect(brief).toContain(crewToolsBrief(all));
-		expect(brief).toContain('opens the page in the browser and checks it');
-		expect(brief).toContain('checks it on the simulator after implementing');
+		expect(brief).toContain('runs them as project commands');
+		expect(brief).toContain(
+			'A check in the browser or simulator is the one smoke described above, not a step of every part.'
+		);
+		expect(brief).not.toContain('checks it on the simulator after implementing');
 	}
 	expect(foremanBrief(spec, 'root')).not.toContain('browser_');
 	expect(workerContext(spec, 'dev', all)).not.toContain('browser_');
@@ -179,13 +184,18 @@ it('gives a composing foreman the palette instead of a roster, and the roster on
 	expect(brief).toContain('You compose your crew yourself');
 	// The person's own `Tester` stands in for the built-in one: a name means one template.
 	expect(brief).toContain(
-		'Templates: `Developer` (developer; default Claude · provider default model), `Senior developer` (developer; Migrations, performance work, cross-module refactors and parts without a clear spec; default Claude · Opus · High), `Technical writer` (developer; Documentation for a change: README, guides, the spec, API comments; changes no behaviour; default Claude · Sonnet), `Reviewer` (reviewer; default Claude · provider default model), `Designer` (reviewer; Checks screens in the running app: themes, states, keyboard, layout; default Claude · provider default model), `Security reviewer` (reviewer; Checks changes for security defects: untrusted input, access checks, secrets; default Claude · Opus · High), `Tester` (developer; Writes Playwright e2e tests; give it every test part; default Claude · provider default model).'
+		'Templates: `Developer` (developer; default Claude · provider default model), `Senior developer` (developer; Migrations, performance work, cross-module refactors and parts without a clear spec; default Claude · Opus · High), `Technical writer` (developer; Documentation for a change: README, guides, the spec, API comments; changes no behaviour; default Claude · Sonnet), `Reviewer` (reviewer; default Claude · provider default model), `Designer` (reviewer; Checks changed screens against the design source (Figma node, mock-up, reference screen), node by node, in the running app; default Claude · provider default model), `Security reviewer` (reviewer; Checks changes for security defects: untrusted input, access checks, secrets; default Claude · Opus · High), `Tester` (developer; Writes Playwright e2e tests; give it every test part; default Claude · provider default model).'
 	);
 	expect(brief).toContain('Models: Claude: `OPUS` (effort LOW, MAX), `HAIKU` (effort LOW).');
 	// spec/crew#compose: the fewest agents; one developer without a reviewer is a whole crew for one chain of steps.
 	expect(brief).toContain("crew: the fewest agents the task's independent parts need");
 	expect(brief).toContain('one developer and no reviewer is the whole crew');
 	expect(brief).toContain('Add a reviewer only where a part needs a second reader');
+	// spec/crew#smoke: the check roles in the palette's terms.
+	expect(brief).toContain('Add a designer only when the task names a design source to match.');
+	expect(brief).toContain(
+		'At most one agent runs the smoke in the running app, and nobody checks it.'
+	);
 	expect(brief).not.toMatch(/Always add at least one reviewer|checkedBy of every developer/);
 	expect(brief).not.toContain('Your agents:');
 	let id = 0;
@@ -222,4 +232,36 @@ it("runs the plan in the foreman's own task, passes acceptance for reviewers and
 	expect(brief).not.toContain('returns spends');
 	expect(brief).toContain('You do not write code yourself.');
 	expect(brief).not.toContain('EnterPlanMode');
+});
+it('tells every foreman how the crew checks its work in the running app: one time-boxed smoke, no matrix, no review of it (spec/crew#smoke)', () => {
+	for (const id of ['root', 'lead']) {
+		const brief = foremanBrief(spec, id);
+		expect(brief).toContain(verification);
+		for (const phrase of [
+			'a worker proves its part with the command its prompt names',
+			'do not ask every worker to drive the simulator or the browser',
+			'give it as one part to one agent, once, on the integrated work',
+			'10 minutes unless the task needs another',
+			'no list of checks with a screenshot each, no repeats to be sure',
+			'no run per device or configuration unless the task is about that device',
+			'Nobody reviews the smoke report',
+			"Design fidelity is the designer's check",
+			'names its design source in its prompt',
+		])
+			expect(brief).toContain(phrase);
+	}
+	expect(workerContext(spec, 'dev')).not.toContain(verification);
+});
+it('builds the brief of an old snapshot from the role texts it was resolved with (spec/crew-templates-and-editor#snapshot)', () => {
+	const old = JSON.parse(
+		readFileSync(
+			new URL('../../core/src/fixtures/crew-snapshot-default.json', import.meta.url),
+			'utf8'
+		)
+	) as CrewSpec;
+	const designer = workerContext(old, 'designer');
+	expect(designer).toContain('neighbouring screens and the design tokens of the project');
+	expect(designer).not.toContain('expected from the design, found in the app');
+	expect(designer).toContain('You check `Screens`');
+	expect(foremanBrief(old, 'root')).toContain(verification);
 });

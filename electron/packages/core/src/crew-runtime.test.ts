@@ -3,6 +3,7 @@ import {
 	crewReportDone,
 	crewReviewRounds,
 	crewReviewStep,
+	isCrewPartBrief,
 	isCrewWorkerRecord,
 	isReviewRun,
 } from './crew-runtime';
@@ -18,19 +19,10 @@ const record = {
 
 it('loads a worker record written before the part kept its prompt and rounds, and checks the new fields (spec/crew#files)', () => {
 	expect(isCrewWorkerRecord(record)).toBe(true);
-	expect(
-		isCrewWorkerRecord({
-			...record,
-			prompt: 'Build it.',
-			acceptance: 'Tests pass.',
-			rounds: 2,
-			limitTold: true,
-		})
-	).toBe(true);
+	expect(isCrewWorkerRecord({ ...record, rounds: 2, limitTold: true })).toBe(true);
 	expect(isCrewWorkerRecord({ ...record, rounds: -1 })).toBe(false);
 	expect(isCrewWorkerRecord({ ...record, rounds: 1.5 })).toBe(false);
 	expect(isCrewWorkerRecord({ ...record, limitTold: 'yes' })).toBe(false);
-	expect(isCrewWorkerRecord({ ...record, acceptance: 'x'.repeat(20_001) })).toBe(false);
 	const run = {
 		reviewId: 'r1',
 		taskId: 'task-1',
@@ -76,4 +68,13 @@ it('opens a round while the part has rounds left, tells the parent once at the l
 	expect(step(0, false, true, 0)).toBe('report');
 	// A report that is not done spends nothing, even past the limit.
 	expect(step(5, false, false)).toBe('report');
+});
+
+it('checks the part brief a member keeps for its reviewers (spec/crew#workers)', () => {
+	const brief = { schemaVersion: 1, part: 2, prompt: 'Build it.' };
+	expect(isCrewPartBrief(brief)).toBe(true);
+	expect(isCrewPartBrief({ ...brief, acceptance: 'Tests pass.', clipped: true })).toBe(true);
+	expect(isCrewPartBrief({ ...brief, prompt: 'x'.repeat(100_001) })).toBe(false);
+	expect(isCrewPartBrief({ ...brief, acceptance: 'x'.repeat(20_001) })).toBe(false);
+	expect(isCrewPartBrief({ ...brief, part: 0 })).toBe(false);
 });

@@ -83,7 +83,7 @@ Composed of: the fixed core (`foremanCore`), the lead's place in the tree (leads
 
 The core says:
 1. **Role:** never modify files; split, delegate to named agents, read reports and diffs, review, accept.
-2. **Loop:** `propose_plan` (one part per agent: title, agent, owned files, full prompt, written for an agent that sees nothing of the foreman's conversation: the goal, the behaviour expected, what stays untouched, and the command proving the part: a test, a typecheck, a build) → wait for the result, do not end the turn while approval is pending, continue immediately once approved → `create_worker_task` per part with the same agent name, and its acceptance criteria in `acceptance` when the part has reviewers → reports arrive by themselves (no `task_status` polling) → `read_report`, then `read_diff` one file at a time: where the report raises a question when a reviewer approved the part, the whole change when nobody checks it → return with `prompt_task` / `submit_review`, accept with `accept_task`. A part that comes back wrong a second time is returned with `effort` one level higher (see [Returning with more effort](#return-effort)). Every return spends a review round of the part; a part past its [review limit](#reviewer) is accepted or put to the person, not returned for another review.
+2. **Loop:** `propose_plan` (one part per agent: title, agent, owned files, full prompt, written for an agent that sees nothing of the foreman's conversation: the goal, the behaviour expected, what stays untouched, and the command proving the part: a test, a typecheck, a build) → wait for the result, do not end the turn while approval is pending, continue immediately once approved → `create_worker_task` per part with the same agent name, and its acceptance criteria in `acceptance` when the part has reviewers → reports arrive by themselves (no `task_status` polling) → `read_report`, then `read_diff` one file at a time: where the report raises a question when a reviewer approved the part, the whole change when nobody checks it → return with `prompt_task` / `submit_review`, accept with `accept_task`. A part that comes back wrong a second time is returned with `effort` one level higher (see [Returning with more effort](#return-effort)). A return spends no review round and does not restart the count; a part past its [review limit](#review-limit) is accepted or put to the person, not returned for another review.
 3. **Own task:** the plan runs in this task through `create_worker_task`; the foreman never creates a separate task for it, even when the person says "in a separate task" (that means the crew's workers). The foreman plans only through `propose_plan`: its session gets no sentence about the CLI's plan mode (see [Plan approval](chat-turns-plans-and-questions.md#plan-approval)).
 4. **Splitting:** each worker's prompt states which files it owns and that others belong to other agents; a shared type/config goes to one agent, the rest read it; dependent parts go in waves. Each agent has one task for the whole crew; its next part is another `create_worker_task` after accepting the previous one.
 5. **Questions and permissions:** answer a worker's question with `prompt_task` and its `questionId`; permissions are never the foreman's.
@@ -149,7 +149,7 @@ Workers never start before the person approves the root foreman's plan.
 
 - `agent` names one of the caller's children; it may be omitted only when there is exactly one non-reviewer child. Unknown name → error with the list. A reviewer cannot be given a part: the host starts reviewers itself.
 - `files` outside the agent's zone → error. Title ≤ 80, prompt ≤ 200 000, `acceptance` ≤ 20 000.
-- The part's prompt and `acceptance` (what must hold for the part to count as done) are kept on the worker record for its reviewers (see [Reviewer agents](#reviewer)); the next part replaces them.
+- The part's prompt (clipped to 100 000 chars, marked `clipped`) and `acceptance` (what must hold for the part to count as done) are kept for its reviewers in `crew-part.json` in the member's own task directory, with the part number (see [Reviewer agents](#reviewer)); the next part replaces it. A file of its own keeps `crew-workers.json` small, whatever the prompts weigh.
 - The worker task: `isolation: 'worktree'`, `baseRef` = the foreman's branch (or `HEAD` when the foreman is not isolated), the foreman's setup command and `.env` copying, `crewTaskId` (root crew), `crewNodeId`, `parentTaskId`, launch options from the node's requested choices (model, effort, mode). Unavailable options are recorded in `unavailableOptions`.
 - **Branch name:** `<foreman branch>-<agent slug>` (dash, because `a/b` cannot coexist with ref `a`), then `-2`, `-3` only when taken in some repo of the project.
 - **Scopes:** a worker's worktree contains all enabled repos so the workspace builds; `scopes` narrows which are selected. Multi-root bases resolve per repo (`origin/HEAD`, then `origin/main`/`origin/master`, then `HEAD`).
@@ -186,9 +186,9 @@ A crew node has one task, one session, one worktree and one branch for the crew'
 <a id="reports"></a>
 ## Reports: push, built by code
 
-When a worker's turn ends, the worker host pushes a report to the parent (outbox `crew-outbox.json` survives a missing parent). The parent receives an ordinary `session/prompt` — queued if it is busy, so it arrives as the next turn. Nobody polls.
+When a worker's turn ends, the worker host pushes a report to the parent with the task status that turn left (outbox `crew-outbox.json` survives a missing parent). The parent receives an ordinary `session/prompt` — queued if it is busy, so it arrives as the next turn. Nobody polls.
 
-- **Done or not.** A report is *done* when the worker's task is `done` after that turn and the turn ended with `end_turn` (`crewReportDone`). A turn that was cancelled, failed, hit a rate limit, stopped on `max_tokens`, `max_turn_requests` or a refusal, or left the task `needs-you` (a sync or merge conflict) is not done. Only a done report with changed files goes to the part's reviewers; any other report goes straight to the parent, opens no check and spends no round.
+- **Done or not.** A report is *done* when the worker's task was `done` after that turn and the turn ended with `end_turn` (`crewReportDone`). Both come from the report's own turn: the status pushed with it and the last `turn.completed` at or before its `seq`, so a report that waited in the outbox while a later turn ran is judged by its own turn (a report from an older outbox without a status is judged by the status now). A turn that was cancelled, failed, hit a rate limit, stopped on `max_tokens`, `max_turn_requests` or a refusal, or left the task `needs-you` (a sync or merge conflict) is not done. Only a done report with changed files goes to the part's reviewers; any other report goes straight to the parent, opens no check and spends no round.
 
 `buildReport` (`packages/orchestrator/src/report.ts`) builds it from the journal and the snapshot diff:
 
@@ -274,15 +274,15 @@ Routing (in the parent's host): a developer's report does not go to the parent u
 5. Comments in the last round → `disputed`: the report goes to the parent with both sides.
 
 <a id="review-limit"></a>
-**Rounds belong to the part.** The worker record counts the part's rounds (`rounds`): each check the host opens is one, and each `prompt_task` from the parent that is not an answer to a question is one more. The count never restarts within a part; the next part starts from zero. The limit is two (`crewReviewRounds`).
+**Rounds belong to the part.** The worker record counts the part's rounds (`rounds`): a round is a check the host opens, and nothing else. A return from the parent (`prompt_task`, `submit_review`) spends no round and does not restart the count; nothing within a part restarts it, and the next part starts from zero. The limit is two (`crewReviewRounds`). A developer nobody checks has no rounds and gets no notice.
 
 - While the count is under the limit, a done report with changed files opens the next round (`round n of 2`, n = the count after it). Opening a round supersedes a run of the task still `reviewing`; a run left in `comments` keeps its state and no longer decides the round.
-- Once the limit is reached, the host opens no check for that part. The parent is told **once** (`limitTold` on the record): the dispute report says the part reached its review limit, the comments stay open in the review thread, and the parent accepts the part with `accept_task` or puts the decision to the person (`ask_user`; a lead asks its own parent with `ask_foreman`) instead of returning it for another review. A report that arrives past the limit without a dispute (a return after an approval, a change during the last round) carries the same notice the first time; later reports of the part go to the parent as plain reports.
+- Once the limit is reached, the host opens no check for that part. The parent is told **once** (`limitTold` on the record): the dispute report says the part reached its review limit, the comments stay open in the review thread, and the parent accepts the part with `accept_task` or puts the decision to the person (`ask_user`; a lead asks its own parent with `ask_foreman`) instead of returning it for another review. A report that arrives past the limit without a dispute (a change after the second check approved or during it) carries the same notice the first time; later reports of the part go to the parent as plain reports.
 
 `ReviewRun` (`crew-reviews.json`): `reviewId`, `taskId`, `nodeId`, `name`, `title`, `part?` (the member's part, absent = 1), `reportSeq`, `reportHash`, `scopeSnapshots` (base and result tree OID per scope, from the part's `changeBase`), `round`, `reviewerNodeIds`, `dispatched`, `verdicts`, `state` ∈ `reviewing | comments | approved | disputed | superseded | cancelled`.
 
 - Report and diff of a run are immutable; reviewers' `read_report`/`read_diff` read that snapshot.
-- A new report or tree change supersedes earlier approvals; an old verdict returns `stale_review`. OIDs are re-checked before handing the report up.
+- Any newer report of the developer — done or not, with changes or without — supersedes a run still `reviewing`, and so does a tree change; an old verdict returns `stale_review`. OIDs are re-checked before handing the report up.
 - One reviewer serves one run at a time; the rest queue FIFO and survive a restart. Waiting on a question or permission is not a finished review.
 - State and the delivery queue are written before waking an agent; deliveries have ids and are idempotent; a different verdict on a closed `reviewId` is rejected; restart restores runs and never treats silence as approval. An unrecoverable session gives `needs-you`, keeping snapshot and verdicts. The member's next part starts again from round 1.
 - The task's own review before its pull request keeps its own rounds (see [Diff and review](diff-and-review.md#agent-review-rounds)); the per-part count applies to crew members.
@@ -344,11 +344,12 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | File | Task | Content |
 | --- | --- | --- |
 | `crew-plan.json` | foreman/lead | `{plan, decision}`; `decision: null` while pending |
-| `crew-workers.json` | foreman/lead | `CrewWorkerRecord[]`: `taskId`, `nodeId`, `name`, `title`, `createdAt`, `planPartId`, `acceptedAt?`, `effectiveChoices?`, `unavailableOptions?`, `part?`, `acceptedTips?`, `next?` (`queued \| merging`, `previous`, `heads?`), and for the current part `prompt?`, `acceptance?`, `rounds?`, `limitTold?` |
+| `crew-workers.json` | foreman/lead | `CrewWorkerRecord[]`: `taskId`, `nodeId`, `name`, `title`, `createdAt`, `planPartId`, `acceptedAt?`, `effectiveChoices?`, `unavailableOptions?`, `part?`, `acceptedTips?`, `next?` (`queued \| merging`, `previous`, `heads?`), and for the current part `rounds?`, `limitTold?` |
 | `crew-questions.json` | parent | `CrewQuestion[]` (`id`, `workerTaskId`, `parentTaskId`, `callId`, `agent`, `question`, `options`, `createdAt`, `escalateAt`, `state`, `answer?`, `answeredBy?`) |
 | `crew-reviews.json` | parent | `ReviewRun[]` |
 | `crew-notes.jsonl` | root foreman | `CrewNote` per line |
-| `crew-outbox.json` | worker | report seqs not yet delivered |
+| `crew-outbox.json` | worker | reports not yet delivered: `seq`, `status?` (the task status that turn left) |
+| `crew-part.json` | worker | the current part for its reviewers: `part`, `prompt` (≤ 100 000 chars), `acceptance?`, `clipped?` |
 | `git-merge.json` | any | open merge/squash per repo (`from`, `into`, conflicts) |
 
 <a id="limits"></a>
@@ -362,7 +363,7 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | Note text / files | 8 KiB / 64 |
 | Notes per `read_notes` page | 100 |
 | Question escalation | 5 min |
-| Review rounds per part (checks and the parent's returns) | 2 |
+| Review rounds per part (checks the host opens) | 2 |
 | Part acceptance criteria / part prompt in a reviewer's prompt | 20 000 / 100 000 chars |
 | Report file list / outside list | 200 / 20 |
 | Concurrent worker launches | 2 (plus the global agent limit) |

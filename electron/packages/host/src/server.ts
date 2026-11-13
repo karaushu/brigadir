@@ -1151,7 +1151,8 @@ export async function startHost(config: HostConfig) {
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
 			if (crewWorker && event.kind === 'turn.completed' && !stopping)
 				void (async () => {
-					if (!crewHost || (await crewHost.branchReady())) await crewWorker.report(record.seq);
+					if (!crewHost || (await crewHost.branchReady()))
+						await crewWorker.report(record.seq, status ?? undefined);
 				})().catch(() => {});
 		});
 		eventTail = result;

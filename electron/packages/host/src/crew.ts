@@ -44,6 +44,9 @@ import {
 	isReviewRun,
 	crewReviewRounds,
 	crewAcceptanceLimit,
+	crewReviewerPromptLimit,
+	isCrewPartBrief,
+	type CrewPartBrief,
 	crewReportDone,
 	crewReviewStep,
 	type CrewSpec,
@@ -297,22 +300,21 @@ const transcriptLine = 2000,
 	transcriptBytes = 64 * 1024,
 	notePageBytes = 64 * 1024 - 256;
 /** spec/crew#reviewer: a reviewer's prompt carries the part as the foreman gave it, so the scope comes with the check. */
-const reviewerPromptLimit = 100_000;
 export function partBrief(
-	worker: Pick<CrewWorkerRecord, 'name' | 'prompt' | 'acceptance'>
+	name: string,
+	brief: Pick<CrewPartBrief, 'prompt' | 'acceptance' | 'clipped'> | null
 ): string {
-	const prompt = worker.prompt?.trim() ?? '',
-		acceptance = worker.acceptance?.trim() ?? '';
+	const prompt = brief?.prompt.trim() ?? '',
+		acceptance = brief?.acceptance?.trim() ?? '';
 	if (!prompt && !acceptance) return '';
-	const clipped =
-		prompt.length > reviewerPromptLimit
-			? `${prompt.slice(0, reviewerPromptLimit)}\n[The prompt is longer; the rest is left out.]`
-			: prompt;
+	const clipped = brief?.clipped
+		? `${prompt}\n[The prompt is longer; the rest is left out.]`
+		: prompt;
 	return [
 		'',
 		...(clipped
 			? [
-					`The part as the foreman gave it to \`${worker.name}\`:`,
+					`The part as the foreman gave it to \`${name}\`:`,
 					'<part_prompt>',
 					clipped,
 					'</part_prompt>',
@@ -883,9 +885,7 @@ export class CrewHost {
 			await this.saveWorkers();
 		}
 		const record = await this.spawnWorkerTask(agent, title, prompt, scopes);
-		record.prompt = prompt;
-		if (acceptance) record.acceptance = acceptance;
-		await this.saveWorkers();
+		await this.savePartBrief(record, prompt, acceptance);
 		// spec/crew#reviewer: reviewers of this agent start with it, as workers without files, and wait for reports.
 		for (const checkerId of agent.checkedBy) {
 			const checker = this.node.agents.find((item) => item.id === checkerId);
@@ -1108,11 +1108,9 @@ export class CrewHost {
 		delete worker.acceptedAt;
 		worker.next = next;
 		// spec/crew#review-limit: the next part starts its own rounds, with its own prompt for the reviewers.
-		worker.prompt = prompt;
-		if (acceptance) worker.acceptance = acceptance;
-		else delete worker.acceptance;
 		delete worker.rounds;
 		delete worker.limitTold;
+		await this.savePartBrief(worker, prompt, acceptance);
 		const planPart = (await this.approvedParts()).find(
 			(item) => crewName(item.agent) === worker.name
 		);
@@ -1725,7 +1723,12 @@ export class CrewHost {
 			if ((this.reportSeqs.get(key.id) ?? 0) >= seq) return { accepted: true, duplicate: true };
 			this.reportSeqs.set(key.id, seq);
 			await this.saveWorkers();
-			await this.handleReport(worker, seq);
+			// spec/crew#reports: the worker's status when that turn ended, as its host recorded it with the report.
+			await this.handleReport(
+				worker,
+				seq,
+				typeof input.status === 'string' && input.status.length <= 40 ? input.status : undefined
+			);
 			return { accepted: true };
 		}
 		if (
@@ -1749,7 +1752,7 @@ export class CrewHost {
 	}
 	// ── check edges (spec/crew#reviewer) ─────────────────────────────────
 	/** A worker's report goes to its checkers first when the tree has edges; otherwise straight to this agent. */
-	private async handleReport(worker: CrewWorkerRecord, seq: number) {
+	private async handleReport(worker: CrewWorkerRecord, seq: number, status?: string) {
 		const node = findSpecAgent(this.deps.context.spec.root, worker.nodeId)!;
 		// A reviewer's own turns are verdicts, not reports: nothing of theirs goes up (spec/crew#reviewer). In a PR review the reviewers are the
 		// workers and their findings are the report (spec/pull-requests-and-ci#review-crew).
@@ -1766,7 +1769,7 @@ export class CrewHost {
 			return;
 		}
 		// spec/crew#reports, spec/crew#review-limit: only a done report with changed files is checked, and only while the part has rounds left.
-		const done = await this.reportDone(worker, seq),
+		const done = await this.reportDone(worker, seq, status),
 			files = done ? await this.partFiles(worker) : 0,
 			step = crewReviewStep({
 				done,
@@ -1778,8 +1781,8 @@ export class CrewHost {
 			await this.openCheck(worker, reviewers, seq);
 			return;
 		}
-		if (done && files) {
-			// The work changed under a check that can no longer pass it: that check is over.
+		{
+			// spec/crew#reviewer: any newer report makes an open check stale, done or not, with changes or without.
 			let superseded = false;
 			for (const run of this.reviews)
 				if (run.taskId === worker.taskId && run.state === 'reviewing') {
@@ -1808,23 +1811,50 @@ export class CrewHost {
 			{ kind: node.role === 'foreman' ? 'branch-report' : 'report', report: report.summary }
 		);
 	}
-	/** spec/crew#reports: the turn that ended at `seq` leaves the worker's task `done` after `end_turn`. */
-	private async reportDone(worker: CrewWorkerRecord, seq: number) {
+	/**
+	 * spec/crew#reports: the turn that ended at `seq` left the worker's task `done` after `end_turn`. The status is the one the worker host pushed with
+	 * that report; a report from an older outbox has none and is judged by the task's status now.
+	 */
+	private async reportDone(worker: CrewWorkerRecord, seq: number, status?: string) {
 		const key = this.workerKey(worker);
 		const [task, journal] = await Promise.all([
-			this.deps.store.task(key).catch(() => null),
+			status === undefined ? this.deps.store.task(key).catch(() => null) : null,
 			this.journal(key),
 		]);
 		const ended = journal.records.findLast(
 			(record) => record.seq <= seq && record.event.kind === 'turn.completed'
 		);
+		const at = status ?? task?.status;
 		return (
-			!!task &&
-			crewReportDone(
-				task.status,
-				ended?.event.kind === 'turn.completed' ? ended.event.reason : null
-			)
+			at !== undefined &&
+			crewReportDone(at, ended?.event.kind === 'turn.completed' ? ended.event.reason : null)
 		);
+	}
+	/** spec/crew#workers: the part's prompt and acceptance for its reviewers, in the member's own task directory (`crew-part.json`). */
+	private async savePartBrief(worker: CrewWorkerRecord, prompt: string, acceptance: string) {
+		const clipped = prompt.length > crewReviewerPromptLimit;
+		const brief: CrewPartBrief = {
+			schemaVersion: 1,
+			part: worker.part ?? 1,
+			prompt: clipped ? prompt.slice(0, crewReviewerPromptLimit) : prompt,
+			...(acceptance ? { acceptance } : {}),
+			...(clipped ? { clipped: true } : {}),
+		};
+		await atomicJson(
+			await safePath(await this.deps.store.taskDir(this.workerKey(worker)), 'crew-part.json'),
+			brief
+		);
+	}
+	/** The current part's brief, or null when it is missing or belongs to another part. */
+	private async readPartBrief(worker: CrewWorkerRecord): Promise<CrewPartBrief | null> {
+		try {
+			const doc = await readDocument(
+				await safePath(await this.deps.store.taskDir(this.workerKey(worker)), 'crew-part.json')
+			);
+			return isCrewPartBrief(doc) && doc.part === (worker.part ?? 1) ? doc : null;
+		} catch {
+			return null;
+		}
 	}
 	/** Changed files of the member's part, from its change base (spec/crew#parts). */
 	private async partFiles(worker: CrewWorkerRecord) {
@@ -1842,7 +1872,7 @@ export class CrewHost {
 				(run.part ?? 1) === (worker.part ?? 1) &&
 				(run.state === 'comments' || run.state === 'disputed')
 		);
-		return `This part reached its review limit: ${crewReviewRounds} rounds, counting the checks and your returns. No further review opens for it${open ? `, and the reviewers' comments stay open in the review thread of task ${worker.taskId}` : ''}. Accept it with accept_task, or put the decision to ${this.deps.context.isRoot ? 'the human with ask_user' : 'your parent with ask_foreman'}; returning it with prompt_task opens no new review.`;
+		return `This part reached its review limit: ${crewReviewRounds} checks. No further review opens for it${open ? `, and the reviewers' comments stay open in the review thread of task ${worker.taskId}` : ''}. Accept it with accept_task, or put the decision to ${this.deps.context.isRoot ? 'the human with ask_user' : 'your parent with ask_foreman'}; returning it with prompt_task opens no new review.`;
 	}
 	/**
 	 * spec/diff-and-review#agent-review-rounds: a round of the task's own review — after the person started it, and after the agent's turn that answered
@@ -2014,7 +2044,7 @@ export class CrewHost {
 					kind: 'prompt',
 					text: self
 						? `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nThis is the review of the task's changes before its pull request. The files of your tree are the task's state for this round. Read with read_report and read_diff passing this reviewId. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). In round 2 the report ends with the agent's last message: read its reasons before you insist. Do not change files.${run.round > 1 ? await this.selfThreads(run.round) : ''}${this.deps.self?.guidance() ?? ''}`
-						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}${partBrief(worker)}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId). Check the change against the part's prompt and acceptance criteria above; ask the foreman only what they leave open.`,
+						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}${partBrief(worker.name, await this.readPartBrief(worker))}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId). Check the change against the part's prompt and acceptance criteria above; ask the foreman only what they leave open.`,
 					crew: { kind: 'report', report: report.summary },
 				})
 				.catch(async () => {
@@ -2563,22 +2593,9 @@ export class CrewHost {
 			);
 		const link = await this.spawn(this.workerKey(worker));
 		const effort = wanted ? await this.raiseEffort(worker, link, wanted) : null;
-		// spec/crew#review-limit: a return spends a round of the part, counted before the worker can report on it.
-		const counts = !this.isSelf(worker);
-		if (counts) await this.countRound(worker, 1);
-		try {
-			await link.peer.request('command', { kind: 'prompt', text });
-		} catch (error) {
-			if (counts) await this.countRound(worker, -1);
-			throw error;
-		}
+		// spec/crew#review-limit: a return spends no round and restarts none; the part's count stays as it is.
+		await link.peer.request('command', { kind: 'prompt', text });
 		return { sent: true, taskId: worker.taskId, ...(effort ? { effort } : {}) };
-	}
-	private countRound(worker: CrewWorkerRecord, by: 1 | -1) {
-		return this.serial(async () => {
-			worker.rounds = Math.max(0, (worker.rounds ?? 0) + by);
-			await this.saveWorkers();
-		});
 	}
 	/** spec/crew#return-effort: a level of the worker's current model, by the catalog's name or value; set before the prompt, kept for the rest of its task. */
 	private async raiseEffort(worker: CrewWorkerRecord, link: Link, wanted: string) {
@@ -3301,7 +3318,7 @@ export class CrewHost {
 export class CrewWorker {
 	private parentPeer: Peer | null = null;
 	private waiters: (() => void)[] = [];
-	private outbox: { seq: number }[] = [];
+	private outbox: { seq: number; status?: string }[] = [];
 	private stopping = false;
 	constructor(
 		private store: SessionStore,
@@ -3315,7 +3332,10 @@ export class CrewWorker {
 			);
 			if (Array.isArray(doc.reports))
 				this.outbox = doc.reports.filter(
-					(item): item is { seq: number } => isRecord(item) && Number.isSafeInteger(item.seq)
+					(item): item is { seq: number; status?: string } =>
+						isRecord(item) &&
+						Number.isSafeInteger(item.seq) &&
+						(item.status === undefined || typeof item.status === 'string')
 				);
 		} catch (error) {
 			if (!isRecord(error) || error.code !== 'ENOENT') throw error;
@@ -3374,9 +3394,12 @@ export class CrewWorker {
 			isRecord(params) && typeof params.callId === 'string' ? params.callId : randomUUID();
 		return peer.request(tool, { ...(isRecord(params) ? params : {}), callId });
 	}
-	/** Reports push up when a turn ends; a missing parent keeps them in the outbox (spec/crew#task-type: push, not polling). */
-	async report(seq: number) {
-		this.outbox.push({ seq });
+	/**
+	 * Reports push up when a turn ends; a missing parent keeps them in the outbox (spec/crew#task-type: push, not polling). `status` is the task's
+	 * status that turn left, so a report delivered late is judged by its own turn (spec/crew#reports).
+	 */
+	async report(seq: number, status?: string) {
+		this.outbox.push(status ? { seq, status } : { seq });
 		await this.saveOutbox();
 		await this.flush();
 	}

@@ -77,10 +77,7 @@ export type CrewWorkerRecord = {
 	part?: number;
 	acceptedTips?: Record<string, string>;
 	next?: CrewNextPart;
-	/** spec/crew#workers: the current part's prompt and acceptance criteria, for its reviewers; the next part replaces them. */
-	prompt?: string;
-	acceptance?: string;
-	/** spec/crew#review-limit: review rounds the current part spent — checks the host opened and the parent's returns. Absent = 0. */
+	/** spec/crew#review-limit: checks the host opened for the current part. Absent = 0. */
 	rounds?: number;
 	/** spec/crew#review-limit: the parent was told the part is past its review limit. */
 	limitTold?: boolean;
@@ -218,8 +215,6 @@ export function isCrewWorkerRecord(value: unknown): value is CrewWorkerRecord {
 					([path, tip]) => path.length <= 4096 && isSha(tip)
 				))) &&
 		(value.next === undefined || isCrewNextPart(value.next)) &&
-		(value.prompt === undefined || text(value.prompt, 200_000)) &&
-		(value.acceptance === undefined || text(value.acceptance, crewAcceptanceLimit)) &&
 		(value.rounds === undefined ||
 			(Number.isSafeInteger(value.rounds) && Number(value.rounds) >= 0)) &&
 		(value.limitTold === undefined || typeof value.limitTold === 'boolean') &&
@@ -509,6 +504,30 @@ export function isReviewRun(value: unknown): value is ReviewRun {
 export const crewReviewRounds = 2;
 /** spec/crew#workers: `acceptance` of `create_worker_task`. */
 export const crewAcceptanceLimit = 20_000;
+/** spec/crew#reviewer: the part's prompt as a reviewer's prompt carries it. */
+export const crewReviewerPromptLimit = 100_000;
+/**
+ * spec/crew#workers: `crew-part.json` in the member's own task directory — the current part's prompt (clipped to `crewReviewerPromptLimit`) and
+ * acceptance criteria for its reviewers. Its own file keeps `crew-workers.json` small whatever the prompts weigh.
+ */
+export type CrewPartBrief = {
+	schemaVersion: 1;
+	part: number;
+	prompt: string;
+	acceptance?: string;
+	clipped?: boolean;
+};
+export function isCrewPartBrief(value: unknown): value is CrewPartBrief {
+	return (
+		isRecord(value) &&
+		value.schemaVersion === 1 &&
+		Number.isSafeInteger(value.part) &&
+		Number(value.part) >= 1 &&
+		text(value.prompt, crewReviewerPromptLimit) &&
+		(value.acceptance === undefined || text(value.acceptance, crewAcceptanceLimit)) &&
+		(value.clipped === undefined || typeof value.clipped === 'boolean')
+	);
+}
 /**
  * spec/crew#reports: a report is done when the worker's task is `done` after the turn and the turn ended with `end_turn`. A cancelled, failed or
  * rate-limited turn, a stop on `max_tokens`, `max_turn_requests` or a refusal, and a task left `needs-you` (a sync or merge conflict) are not done.

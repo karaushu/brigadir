@@ -218,6 +218,8 @@ it("runs the plan in the foreman's own task, passes acceptance for reviewers and
 	expect(brief).toContain(
 		'when you are told a part reached its review limit, accept it or put the decision to the human'
 	);
+	expect(brief).toContain('your returns do not start the count again');
+	expect(brief).not.toContain('returns spends');
 	expect(brief).toContain('You do not write code yourself.');
 	expect(brief).not.toContain('EnterPlanMode');
 });

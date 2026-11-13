@@ -1,10 +1,10 @@
 import { afterEach, expect, it } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { SessionStore } from '@brigadir/persistence';
+import { SessionStore, readDocument } from '@brigadir/persistence';
 import {
 	builtinAgentTemplates,
 	resolveCrew,
@@ -53,7 +53,9 @@ const reviewLoop: CrewTemplate = {
  * A root foreman CrewHost in-process (spec/crew#reviewer): worker hosts are never launched — a worker's turn is written into its journal and its report
  * handed to `handleReport` as the worker host would push it; the link to a worker answers every command and records the prompts.
  */
-async function crew() {
+async function crew(
+	prompt = 'Build the client details screen in out/. Prove it with pnpm test out.'
+) {
 	const root = await mkdtemp(join(tmpdir(), 'brigadir-crew-rounds-'));
 	cleanup.push(() => rm(root, { recursive: true, force: true }));
 	const repo = join(root, 'repo');
@@ -121,7 +123,7 @@ async function crew() {
 		{
 			agent: 'Developer',
 			title: 'Client details',
-			prompt: 'Build the client details screen in out/. Prove it with pnpm test out.',
+			prompt,
 			acceptance: 'The screen shows the name, phone and notes; pnpm test out passes.',
 			files: ['out/**'],
 		},
@@ -135,12 +137,19 @@ async function crew() {
 	cleanup.unshift(() => writer.close());
 	let files = 1;
 	host['partFiles'] = async () => files;
-	/** The developer ends a turn: its task status and turn end as the worker host writes them, then its report is pushed. */
-	const report = async (status: 'done' | 'interrupted' = 'done', reason = 'end_turn') => {
+	/**
+	 * The developer ends a turn: its task status and turn end as the worker host writes them, then its report is pushed — with the status that turn
+	 * left when `pushed` is given, as a current worker host sends it, or without one, as an older outbox holds it.
+	 */
+	const report = async (
+		status: 'done' | 'interrupted' = 'done',
+		reason = 'end_turn',
+		pushed?: string
+	) => {
 		await writer.append({ kind: 'turn.started', text: 'work' });
 		const ended = await writer.append({ kind: 'turn.completed', reason });
 		await store.setStatus(key, status);
-		await host['handleReport'](developer(), ended.seq);
+		await host['handleReport'](developer(), ended.seq, pushed);
 	};
 	const runs = () => host['reviews'] as ReviewRun[];
 	/** Every reviewer of the open run gives its verdict, as `submit_review` / `approve` record it. */
@@ -175,7 +184,7 @@ async function crew() {
 	};
 }
 
-it('counts review rounds per part with the foreman returns: after a dispute and a return the next report opens no new round (spec/crew#review-limit)', async () => {
+it('counts review rounds per part, never restarted by a return: after a dispute and a return the next report opens no new round (spec/crew#review-limit)', async () => {
 	const { host, prompts, signal, created, developer, report, runs, verdict } = await crew();
 	await report();
 	expect(runs().map((item) => [item.round, item.state])).toEqual([[1, 'reviewing']]);
@@ -194,9 +203,9 @@ it('counts review rounds per part with the foreman returns: after a dispute and 
 		'Accept it with accept_task, or put the decision to the human with ask_user'
 	);
 	expect(developer()).toMatchObject({ rounds: 2, limitTold: true });
-	// The foreman returns the work anyway: that return is a round of the part too.
+	// The foreman returns the work anyway: the return spends nothing and restarts nothing.
 	await host.tool('prompt_task', { taskId: created.taskId, text: 'Fix the phone format.' }, signal);
-	expect(developer().rounds).toBe(3);
+	expect(developer().rounds).toBe(2);
 	const before = prompts.length;
 	await report();
 	// No third run: the run left in `comments` no longer makes the next report «round 2» again.
@@ -210,17 +219,31 @@ it('counts review rounds per part with the foreman returns: after a dispute and 
 	expect(runs()).toHaveLength(2);
 });
 
-it('tells the foreman once when a return after an approval used the last round (spec/crew#review-limit)', async () => {
-	const { host, prompts, signal, created, report, runs, verdict } = await crew();
+it('reviews the fix after a return that followed an approval, and tells the foreman once when both checks are spent (spec/crew#review-limit)', async () => {
+	const { host, prompts, signal, created, developer, report, runs, verdict } = await crew();
+	// A clarification before the first report spends nothing.
+	await host.tool(
+		'prompt_task',
+		{ taskId: created.taskId, text: 'Use the shared phone field.' },
+		signal
+	);
+	expect(developer().rounds ?? 0).toBe(0);
 	await report();
 	await verdict(true);
 	expect(prompts.at(-1)!.text).toContain('Reviewer approved');
 	await host.tool('prompt_task', { taskId: created.taskId, text: 'Rename the field.' }, signal);
 	await report();
-	expect(runs()).toHaveLength(1);
-	expect(prompts.at(-1)!.text).toContain('This part reached its review limit');
-	expect(prompts.at(-1)!.text).not.toContain('comments stay open');
+	expect(runs().map((item) => [item.round, item.state])).toEqual([
+		[1, 'approved'],
+		[2, 'reviewing'],
+	]);
+	await verdict(true);
 	await host.tool('prompt_task', { taskId: created.taskId, text: 'And the label.' }, signal);
+	await report();
+	expect(runs()).toHaveLength(2);
+	expect(prompts.at(-1)!.text).toContain('This part reached its review limit: 2 checks.');
+	expect(prompts.at(-1)!.text).not.toContain('comments stay open');
+	await host.tool('prompt_task', { taskId: created.taskId, text: 'And the icon.' }, signal);
 	await report();
 	expect(prompts.at(-1)!.text).not.toContain('review limit');
 });
@@ -241,9 +264,45 @@ it('opens a review only for a done report with changed files; other reports go u
 	expect(developer().rounds).toBe(1);
 });
 
+it('judges a report by the status its own turn left, not by the task status when it arrives (spec/crew#reports)', async () => {
+	const { developer, report, runs } = await crew();
+	// A rate-limited end_turn whose report waited in the outbox while the retry finished: the task is done now, the report was not.
+	await report('done', 'end_turn', 'rate-limited');
+	expect(runs()).toEqual([]);
+	expect(developer().rounds ?? 0).toBe(0);
+	// The retry's own report opens the one check.
+	await report('done', 'end_turn', 'done');
+	expect(runs().map((item) => item.round)).toEqual([1]);
+	expect(developer().rounds).toBe(1);
+	// An interrupted turn whose task is done again by the time its report arrives is still not done.
+	await report('done', 'cancelled', 'interrupted');
+	expect(runs().filter((item) => item.state === 'reviewing')).toEqual([]);
+	expect(developer().rounds).toBe(1);
+});
+
+it('makes an open check stale on any newer report, interrupted or empty (spec/crew#reviewer)', async () => {
+	const { host, reviewer, created, report, runs, setFiles } = await crew();
+	const approve = (reviewId: string) =>
+		host['reviewerTool'](reviewer(), 'approve', { taskId: created.taskId, reviewId });
+	await report();
+	const first = runs()[0]!;
+	await report('interrupted', 'cancelled');
+	expect(first.state).toBe('superseded');
+	await expect(approve(first.reviewId)).rejects.toThrow(/stale_review/);
+	await report();
+	const second = runs().at(-1)!;
+	expect([second.round, second.state]).toEqual([2, 'reviewing']);
+	setFiles(0);
+	await report();
+	expect(second.state).toBe('superseded');
+	await expect(approve(second.reviewId)).rejects.toThrow(/stale_review/);
+});
+
 it("gives the reviewer the part's prompt and acceptance criteria with the report (spec/crew#reviewer)", async () => {
-	const { store, host, sent, key, developer, reviewer, report } = await crew();
-	expect(developer()).toMatchObject({
+	const { store, host, sent, key, reviewer, report } = await crew();
+	expect(await readDocument(join(await store.taskDir(key), 'crew-part.json'))).toEqual({
+		schemaVersion: 1,
+		part: 1,
 		prompt: 'Build the client details screen in out/. Prove it with pnpm test out.',
 		acceptance: 'The screen shows the name, phone and notes; pnpm test out passes.',
 	});
@@ -264,15 +323,31 @@ it("gives the reviewer the part's prompt and acceptance criteria with the report
 	expect(check.text).toContain('ask the foreman only what they leave open');
 });
 
+it("keeps a long part prompt out of crew-workers.json: the reviewer copy is clipped in the member's own file, and both reload within their limits (spec/crew#workers)", async () => {
+	// 150 000 two-byte characters: 300 KB of prompt for one member; six such members used to push crew-workers.json past its 1 MiB read limit.
+	const { store, host, sent, key, reviewer, report } = await crew('я'.repeat(150_000));
+	const part = await readDocument(join(await store.taskDir(key), 'crew-part.json'));
+	expect(part).toMatchObject({ part: 1, clipped: true });
+	expect((part.prompt as string).length).toBe(100_000);
+	const workersFile = join(await store.taskDir(host['deps'].key as TaskKey), 'crew-workers.json');
+	expect((await stat(workersFile)).size).toBeLessThan(8 * 1024);
+	expect((await readDocument(workersFile)).workers).toHaveLength(2);
+	await store.setStatus({ projectId: key.projectId, id: reviewer().taskId }, 'done');
+	await report();
+	await host['dispatchReviews']();
+	expect(sent.find((item) => item.taskId === reviewer().taskId)!.text).toContain(
+		'[The prompt is longer; the rest is left out.]'
+	);
+});
+
 it('clips a long part prompt for the reviewer and leaves out what the foreman did not give (spec/crew#reviewer)', () => {
-	expect(partBrief({ name: 'A' })).toBe('');
-	expect(partBrief({ name: 'A', prompt: 'Do it.' })).toBe(
+	expect(partBrief('A', null)).toBe('');
+	expect(partBrief('A', { prompt: 'Do it.' })).toBe(
 		'\nThe part as the foreman gave it to `A`:\n<part_prompt>\nDo it.\n</part_prompt>'
 	);
-	const long = partBrief({ name: 'A', prompt: 'x'.repeat(100_001), acceptance: 'Tests pass.' });
-	expect(long).toContain('[The prompt is longer; the rest is left out.]');
+	const long = partBrief('A', { prompt: 'x'.repeat(10), acceptance: 'Tests pass.', clipped: true });
+	expect(long).toContain('xxxxxxxxxx\n[The prompt is longer; the rest is left out.]');
 	expect(long).toContain('<acceptance>\nTests pass.\n</acceptance>');
-	expect(long.length).toBeLessThan(100_300);
 });
 
 it('hides create_task from the root foreman while its plan waits or was approved, not after a rejection, never from a solo task (spec/crew#roles)', () => {

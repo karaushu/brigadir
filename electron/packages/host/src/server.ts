@@ -127,11 +127,12 @@ import {
 	CrewHost,
 	CrewWorker,
 	isCrewToolCall,
+	crewHiddenTools,
 	type CrewContext,
 } from './crew';
 import { TaskReviewLife } from './task-review';
 import { humanToolsAllowed, isWorkspaceTool, simulatorQueued } from '@brigadir/orchestrator';
-import { serveMcp } from './mcp';
+import { hiddenToolMessages, serveMcp, type HiddenToolSource } from './mcp';
 import { ModuleSettings } from './modules';
 import { claudeSubagentModel } from './agent-settings';
 import { terminalColors } from './terminal-colors';
@@ -281,6 +282,15 @@ export async function startHost(config: HostConfig) {
 	}
 	// spec/settings-modules-and-onboarding#modules: the modules on in Settings decide which human tools the MCP sessions list; a switch reaches open sessions.
 	const modules = new ModuleSettings(store.root);
+	// spec/crew#roles: the root foreman's `create_task` is hidden while its crew plan exists; open MCP sessions hear the change.
+	const hiddenListeners = new Set<() => void>();
+	const hiddenTools: HiddenToolSource = {
+		current: () => crewHiddenTools(crew, records),
+		subscribe(listener) {
+			hiddenListeners.add(listener);
+			return () => hiddenListeners.delete(listener);
+		},
+	};
 	await modules.load();
 	modules.start();
 	const brief = sessionBrief(crew, task.provider, {
@@ -1128,6 +1138,8 @@ export async function startHost(config: HostConfig) {
 			} catch {
 				ui?.close();
 			}
+			if (event.kind === 'crew.plan.requested' || event.kind === 'crew.plan.resolved')
+				for (const listener of hiddenListeners) listener();
 			if (crewLinkEvents.has(event.kind))
 				for (const peer of crewPeers) {
 					try {
@@ -1139,7 +1151,8 @@ export async function startHost(config: HostConfig) {
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
 			if (crewWorker && event.kind === 'turn.completed' && !stopping)
 				void (async () => {
-					if (!crewHost || (await crewHost.branchReady())) await crewWorker.report(record.seq);
+					if (!crewHost || (await crewHost.branchReady()))
+						await crewWorker.report(record.seq, status ?? undefined);
 				})().catch(() => {});
 		});
 		eventTail = result;
@@ -2291,7 +2304,11 @@ export async function startHost(config: HostConfig) {
 		if (method.startsWith('commands_')) return commandsTool(method.slice(9), params, signal);
 		// spec/terminal-and-cli-agents#agent-console-tools: the console of this task, as the person sees it.
 		if (method.startsWith('console_')) return consoleTool(method.slice(8), params);
-		if (method === 'create_task') return proposeTask(params, signal);
+		if (method === 'create_task') {
+			if (crewHiddenTools(crew, records).has('create_task'))
+				throw new Error(hiddenToolMessages.create_task);
+			return proposeTask(params, signal);
+		}
 		if (method === 'review_reply') {
 			if (
 				!isRecord(params) ||
@@ -2352,7 +2369,8 @@ export async function startHost(config: HostConfig) {
 								crew?.role ?? null,
 								mcpRequest,
 								modules,
-								task.prReview?.mode === 'review'
+								task.prReview?.mode === 'review',
+								hiddenTools
 							)
 						);
 				} else if (

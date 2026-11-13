@@ -269,7 +269,7 @@ A new task that starts with the knowledge of a previous one. Entry points: the s
 
 An agent can propose a new task in the **same** project with context and extra folders; the person decides.
 
-- Available to a plain task (GUI and CLI) and the root foreman; not to workers, leads or reviewers (`humanToolsAllowed`).
+- Available to a plain task (GUI and CLI) and the root foreman; not to workers, leads or reviewers (`humanToolsAllowed`). The root foreman loses it while its crew plan exists (see [Crew](crew.md#roles)).
 - Arguments: `title?` (≤ 80), `prompt` (English, a complete brief), `context[]` (≤ 10: `summary`, `diff` with `full?`, `file` (absolute path), `text` (`name`, `text`)), `folders[]` (≤ 5 absolute paths outside the project root), `agent?` (`provider`, `model?`, `effort?`), `start` (`now` default \| `backlog` \| `schedule` with `schedule.rule`, see [Schedules](notifications-slack-notes-and-schedules.md)).
 - Inheritance: repos, isolation, transport and folders from the current task; the branch is always new. Without `agent`, provider/model/effort are inherited; with it, the named provider and the provider defaults for whatever is left out.
 - Validation before the card: the host refuses without an active turn, for a folder inside the project root, and for missing folders or files. The host asks main (`ui.request('task_agent')`) to resolve `agent` against the provider's catalog (model by value or case-insensitive name; effort among the model's levels). Unknown model/effort, a disabled provider or an empty catalog fail the call with the available values; no card appears.

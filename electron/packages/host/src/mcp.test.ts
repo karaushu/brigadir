@@ -5,7 +5,15 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { CrewProcessRole } from '@brigadir/orchestrator';
-import { mcpTools, progressBeatMs, serveMcp, type McpCall, type ModuleSource } from './mcp';
+import {
+	hiddenToolMessages,
+	mcpTools,
+	progressBeatMs,
+	serveMcp,
+	type HiddenToolSource,
+	type McpCall,
+	type ModuleSource,
+} from './mcp';
 import { defaultModules, type AppModules } from '@brigadir/core';
 import { Peer } from './peer';
 // Recorded from the SDK server (`@modelcontextprotocol/sdk` 1.30.0 + zod) that this replaces: the same requests, per role.
@@ -44,7 +52,12 @@ const cases: [string, string, unknown?][] = [
 		{ protocolVersion: '1999-01-01', capabilities: {}, clientInfo: { name: 'x', version: '1' } },
 	],
 ];
-async function served(role: CrewProcessRole | null, call: McpCall, modules?: ModuleSource) {
+async function served(
+	role: CrewProcessRole | null,
+	call: McpCall,
+	modules?: ModuleSource,
+	hidden?: HiddenToolSource
+) {
 	const root = await mkdtemp(join(tmpdir(), 'brigadir-mcp-')),
 		path = join(root, 'm.sock');
 	let closed!: () => void;
@@ -53,7 +66,7 @@ async function served(role: CrewProcessRole | null, call: McpCall, modules?: Mod
 	});
 	const server = createServer((socket) => {
 		socket.setEncoding('utf8');
-		socket.on('data', serveMcp(socket, role, call, modules));
+		socket.on('data', serveMcp(socket, role, call, modules, false, hidden));
 		socket.once('close', closed);
 	});
 	await new Promise<void>((resolve) => server.listen(path, resolve));
@@ -628,4 +641,72 @@ it('says in every tool description when to use it (spec/agents-and-providers#too
 			description: string;
 		}[])
 			expect(tool.description, tool.name).toMatch(/\b(Call|Use) (it|this tool)\b/);
+});
+
+it('hides create_task from the root foreman while its crew plan exists, tells the open session and answers a stale call with a sentence (spec/crew#roles)', async () => {
+	let planned = false;
+	const listeners = new Set<() => void>();
+	const hidden: HiddenToolSource = {
+		current: () => (planned ? new Set(['create_task']) : new Set()),
+		subscribe: (listener) => {
+			listeners.add(listener);
+			return () => {
+				listeners.delete(listener);
+			};
+		},
+	};
+	const calls: string[] = [];
+	const mcp = await served(
+		'foreman',
+		async (method) => {
+			calls.push(method);
+			return 'ok';
+		},
+		undefined,
+		hidden
+	);
+	const names = async (id: number) => {
+		mcp.send(request(id, 'tools/list'));
+		return (JSON.parse(await mcp.reply(id)).result.tools as { name: string }[]).map(
+			(tool) => tool.name
+		);
+	};
+	try {
+		mcp.send(
+			request(1, 'initialize', {
+				protocolVersion: '2025-06-18',
+				capabilities: {},
+				clientInfo: { name: 'x', version: '1' },
+			})
+		);
+		await mcp.reply(1);
+		mcp.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+		expect(await names(2)).toContain('create_task');
+		planned = true;
+		for (const listener of listeners) listener();
+		expect(JSON.parse(await mcp.reply(undefined))).toEqual({
+			jsonrpc: '2.0',
+			method: 'notifications/tools/list_changed',
+		});
+		const list = await names(3);
+		expect(list).not.toContain('create_task');
+		expect(list).toContain('create_worker_task');
+		expect(list).toContain('ask_user');
+		mcp.send(
+			request(4, 'tools/call', { name: 'create_task', arguments: { prompt: 'Do the plan' } })
+		);
+		expect(JSON.parse(await mcp.reply(4)).result).toEqual({
+			content: [{ type: 'text', text: hiddenToolMessages.create_task }],
+			isError: true,
+		});
+		expect(calls).toEqual([]);
+	} finally {
+		await mcp.close();
+	}
+	// The same role and modules without a plan keep the tool.
+	expect(
+		(mcpTools('foreman').list.tools as { name: string }[]).some(
+			(tool) => tool.name === 'create_task'
+		)
+	).toBe(true);
 });

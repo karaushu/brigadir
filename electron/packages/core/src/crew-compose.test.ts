@@ -249,35 +249,25 @@ describe('composeCrew (spec/crew#compose)', () => {
 			)
 		).toThrow(/already set/);
 	});
-	it('needs a reviewer for every developer while the palette has one (spec/crew#compose)', () => {
-		const spec = composing(),
-			fail = (crew: unknown) => () => composeCrew(spec, crew, newId);
+	it('takes one developer and no reviewer as a whole crew, and a reviewer only for the developers that name it (spec/crew#compose)', () => {
+		const spec = composing();
 		expect(
-			fail([
-				{ name: 'API', template: 'Developer' },
-				{ name: 'UI', template: 'Developer' },
-			])
-		).toThrow(
-			'The crew needs at least one reviewer to check the developers. Reviewer templates: Reviewer, Security reviewer, Designer.'
-		);
-		expect(
-			fail([
-				{ name: 'API', template: 'Developer', checkedBy: ['Check'] },
-				{ name: 'UI', template: 'Developer' },
-				{ name: 'Check', template: 'Reviewer' },
-			])
-		).toThrow('Every developer needs a reviewer in checkedBy: UI.');
+			composeCrew(spec, [{ name: 'API', template: 'Developer' }], newId).map((agent) => agent.role)
+		).toEqual(['developer']);
 		expect(
 			composeCrew(
 				spec,
 				[
 					{ name: 'API', template: 'Developer', checkedBy: ['Check'] },
-					{ name: 'UI', template: 'Developer', checkedBy: ['Check'] },
+					{ name: 'UI', template: 'Developer' },
 					{ name: 'Check', template: 'Reviewer' },
 				],
 				newId
 			).map((agent) => agent.checkedBy.length)
-		).toEqual([1, 1, 0]);
+		).toEqual([1, 0, 0]);
+		expect(() => composeCrew(spec, [{ name: 'Check', template: 'Reviewer' }], newId)).toThrow(
+			'The crew needs at least one developer'
+		);
 	});
 });
 

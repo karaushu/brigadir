@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { SimulatorFrame, SimulatorState, SimulatorVideoConfig } from '@brigadir/core';
@@ -7,6 +8,10 @@ import { Simulators } from './simulator';
 // Live check of spec/browser-and-simulator#simulator on this Mac: the built sim-helper, a real iOS device booted without a window.
 // Opt in with BRIGADIR_LIVE_SIMULATOR=<UDID>; BRIGADIR_RECORD_FRAME=1 also writes tests/fixtures/sim-frame.json.
 const udid = process.env.BRIGADIR_LIVE_SIMULATOR;
+// BRIGADIR_LIVE_LOG=<file>: the agent answers and their timings, for the report of a live run.
+const report = (text: string) => {
+	if (process.env.BRIGADIR_LIVE_LOG) appendFileSync(process.env.BRIGADIR_LIVE_LOG, `${text}\n`);
+};
 it.skipIf(!udid)(
 	'boots a real device, streams H.264 and answers the agent tools',
 	async () => {
@@ -40,6 +45,26 @@ it.skipIf(!udid)(
 			await simulators.agent(key, { tool: 'act', action: 'button', button: 'home' });
 			const tree = (await simulators.agent(key, { tool: 'ui' })) as string;
 			expect(tree).toMatch(/^Screen \d+×\d+ pt/);
+			// spec/browser-and-simulator#sim-act-settle, #sim-wait: one call acts, waits for a still screen and says what changed.
+			const timed = async (command: Parameters<Simulators['agent']>[1]) => {
+				const start = Date.now(),
+					answer = (await simulators.agent(key, command)) as string;
+				report(
+					`${JSON.stringify(command)} → ${Date.now() - start} ms\n${answer.split('\n').slice(0, 6).join('\n')}`
+				);
+				return answer;
+			};
+			await timed({ tool: 'act', action: 'button', button: 'home' });
+			expect(await timed({ tool: 'act', action: 'tap', label: 'Settings' })).toMatch(
+				/^Tapped Settings\. (Screen settled in|The screen was still changing after) [\d.]+ s.*\n(Changes: |No changes)/
+			);
+			expect(await timed({ tool: 'wait', text: 'General' })).toMatch(/^Found .*"General"/);
+			expect(await timed({ tool: 'act', action: 'tap', label: 'General' })).toMatch(/\nChanges: /);
+			expect(await timed({ tool: 'wait', text: 'no such text', timeoutMs: 1500 })).toMatch(
+				/^Timed out after 1\.5 s: no element with text "no such text" appeared\.\nScreen /
+			);
+			await timed({ tool: 'act', action: 'button', button: 'home' });
+			expect(await timed({ tool: 'wait', label: 'General', gone: true })).toMatch(/is gone after/);
 			// Turned: the home screen stays portrait, Safari turns; a tap by label lands in the turned interface.
 			expect(await simulators.agent(key, { tool: 'act', action: 'rotate' })).toMatch(
 				/^Rotated to landscapeRight/

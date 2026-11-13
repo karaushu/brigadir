@@ -171,9 +171,13 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		expect(await simulators.agent(key, { tool: 'act', action: 'tap', id: 'take-order' })).toMatch(
 			/^Tapped #take-order\. Screen settled in 0\.\d s\.\nChanges: 1 appeared, 0 disappeared, 0 changed\.\n\+ Text "Order taken" #status 12,560 378×40$/
 		);
+		// A still screen keeps the last tree: no frame since the tap, so the key reads none (spec/browser-and-simulator#sim-act-settle).
+		const reads = async () => (await readFile(log, 'utf8')).split('"cmd":"ui"').length;
+		const readsBefore = await reads();
 		expect(await simulators.agent(key, { tool: 'act', action: 'key', key: 'Enter' })).toMatch(
 			/^Pressed Enter\. Screen settled in 0\.\d s\.\nNo changes in the accessibility tree\.$/
 		);
+		expect(await reads()).toBe(readsBefore);
 		// spec/browser-and-simulator#sim-wait: found at once, or a timeout with the screen as last read.
 		expect(await simulators.agent(key, { tool: 'wait', text: 'order taken' })).toMatch(
 			/^Found Text "Order taken" #status 12,560 378×40 after 0(\.\d)? s\.$/
@@ -222,6 +226,10 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		// The fake app does not turn first (portrait tree): points pass as they are; then it turns with the device.
 		expect(await simulators.agent(key, { tool: 'ui' })).toMatch(/^Screen 402×874 pt/);
 		await writeFile(log + '.turned', '');
+		// The app turning draws: a frame ends the tree read before it.
+		const drawn = frames.length;
+		await simulators.command('project', { kind: 'keyframe' });
+		await expect.poll(() => frames.length).toBeGreaterThan(drawn);
 		expect(await simulators.agent(key, { tool: 'ui' })).toMatch(/^Screen 874×402 pt/);
 		await simulators.agent(key, { tool: 'act', action: 'tap', x: 150, y: 32 });
 		expect(

@@ -38,7 +38,9 @@ import {
 	formatRequests,
 	type MetroDeps,
 } from './metro';
-import { ScreenWatch, settleLine, waitForElement } from './simulator-settle';
+import { isChange, ScreenWatch, settleLine, waitForElement } from './simulator-settle';
+/** How long a tree read stays true on a screen that sends no frames (spec/browser-and-simulator#sim-act-settle). */
+const treeKeepMs = 10_000;
 const run = promisify(execFile);
 const metroMissing =
 	'Metro is not attached: start Metro in this task (a project command or the console), then open the app.';
@@ -65,6 +67,9 @@ type Runtime = {
 	nextId: number;
 	/** spec/browser-and-simulator#sim-act-settle: the agent's calls that wait for the screen. */
 	watches: Set<ScreenWatch>;
+	/** Changing frames so far (`isChange`), and the last tree with the count it was read at. */
+	changes: number;
+	tree: { ui: SimulatorUi; changes: number; at: number } | null;
 };
 type Tools = {
 	run: (file: string, args: string[]) => Promise<string>;
@@ -299,7 +304,7 @@ export class Simulators {
 			return formatUi(await this.ui(runtime, command.grid === true), command.offset ?? 0);
 		if (command.tool === 'wait')
 			return this.withWatch(runtime, (watch) =>
-				waitForElement(command, () => this.ui(runtime, false), watch)
+				waitForElement(command, () => this.ui(runtime, false, true), watch)
 			);
 		return this.withWatch(runtime, (watch) => this.act(projectId, runtime, command, watch));
 	}
@@ -627,9 +632,25 @@ export class Simulators {
 			: 'portrait';
 	}
 	/** The helper waits up to 25 s for the device's accessibility service after a boot (it answers «no app» meanwhile). */
-	private async ui(runtime: Runtime, grid: boolean) {
-		const ui = simulatorUi(await this.request(runtime, { cmd: 'ui', grid }, 40_000));
-		if (!ui) throw new Error('The device sent no accessibility tree.');
+	private async ui(runtime: Runtime, grid: boolean, fresh = false) {
+		// spec/browser-and-simulator#sim-act-settle: a tree stays true while the screen sends no changing frame, for 10 s at most.
+		const kept = runtime.tree;
+		let ui: SimulatorUi | null;
+		if (
+			!grid &&
+			!fresh &&
+			kept &&
+			kept.changes === runtime.changes &&
+			Date.now() - kept.at < treeKeepMs
+		)
+			ui = kept.ui;
+		else {
+			const changes = runtime.changes,
+				at = Date.now();
+			ui = simulatorUi(await this.request(runtime, { cmd: 'ui', grid }, 40_000));
+			if (!ui) throw new Error('The device sent no accessibility tree.');
+			if (!grid) runtime.tree = { ui, changes, at };
+		}
 		const app = ui.elements.find((element) => element.role === 'Application');
 		runtime.turned =
 			!runtime.serial && isLandscape(runtime.orientation) && !!app && app.frame[2] > app.frame[3];
@@ -879,6 +900,8 @@ export class Simulators {
 			replies: new Map(),
 			nextId: 1,
 			watches: new Set(),
+			changes: 0,
+			tree: null,
 		};
 		runtime.status = 'booting';
 		runtime.error = null;
@@ -1018,6 +1041,7 @@ export class Simulators {
 					stdio: ['pipe', 'pipe', 'pipe'],
 				});
 		runtime.helper = helper;
+		runtime.tree = null;
 		let buffer: Buffer = Buffer.alloc(0);
 		helper.stdout!.on('data', (chunk: Buffer) => {
 			buffer = buffer.length ? Buffer.concat([buffer, chunk]) : chunk;
@@ -1067,6 +1091,7 @@ export class Simulators {
 				data: new Uint8Array(payload.subarray(9)),
 			};
 			for (const projectId of this.watching(runtime.device.id)) this.frame(projectId, frame);
+			if (isChange(runtime.device.platform, frame)) runtime.changes++;
 			for (const watch of runtime.watches) watch.frame(frame);
 			return;
 		}

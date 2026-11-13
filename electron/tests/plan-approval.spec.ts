@@ -19,6 +19,15 @@ const wire = async (log: string) =>
 		.filter(Boolean)
 		.map((line) => JSON.parse(line) as { event: string; params: any });
 
+/** spec/reviews#plan-start: these flows are about the card; the plan review is off so no reviewer (a real Codex on a developer's machine) starts. */
+async function noPlanReview(root: string) {
+	await mkdir(join(root, 'data'), { recursive: true });
+	await writeFile(
+		join(root, 'data', 'settings.json'),
+		JSON.stringify({ schemaVersion: 1, settings: { planReviewOff: true } })
+	);
+}
+
 async function start(page: Page, text: string) {
 	await page.getByRole('button', { name: 'New task · repository' }).click();
 	await page.getByRole('textbox', { name: 'Message' }).fill(text);
@@ -32,6 +41,7 @@ test('a plan for approval reads as a card, opens as .md, sends edits and feedbac
 	const repo = join(root, 'repository');
 	await mkdir(repo);
 	const log = join(root, 'wire.jsonl');
+	await noPlanReview(root);
 	const app = await electron.launch({
 		executablePath,
 		args: [desktop, `--user-data-dir=${join(root, 'profile')}`],
@@ -175,6 +185,7 @@ test('a Codex plan comes from plan_update, and Plan further rejects with the per
 	const repo = join(root, 'repository');
 	await mkdir(repo);
 	const log = join(root, 'wire.jsonl');
+	await noPlanReview(root);
 	const app = await electron.launch({
 		executablePath,
 		args: [desktop, `--user-data-dir=${join(root, 'profile')}`],
@@ -238,6 +249,7 @@ test('Approve plan returns the session to its mode from before the plan @area:ch
 	const repo = join(root, 'repository');
 	await mkdir(repo);
 	const log = join(root, 'wire.jsonl');
+	await noPlanReview(root);
 	const app = await electron.launch({
 		executablePath,
 		args: [desktop, `--user-data-dir=${join(root, 'profile')}`],

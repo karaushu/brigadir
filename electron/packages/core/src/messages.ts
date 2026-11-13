@@ -2332,6 +2332,32 @@ const uk = {
 	'Review closed': 'Ревʼю закрито',
 	'{reviewer} reading': '{reviewer} читає',
 	'{reviewer} checks the fixes': '{reviewer} звіряє правки',
+	'{agent} revises the plan': '{agent} переписує план',
+	'Plan vs ticket': 'План і тикет',
+	'Plan vs code': 'План і код',
+	'Gaps in the ticket': 'Прогалини в тикеті',
+	missed: 'пропущено',
+	contradicts: 'суперечить',
+	'out of scope': 'поза задачею',
+	'wrong assumption': 'хибне припущення',
+	'left open': 'не вирішено',
+	'cannot verify': 'не перевірити',
+	split: 'поділ',
+	gap: 'прогалина',
+	'ended by the approval': 'завершено погодженням',
+	'Open the source': 'Відкрити джерело',
+	'Saving a source': 'Зберігає джерело',
+	'Saved a source': 'Зберіг джерело',
+	'Could not save the source': 'Не вдалося зберегти джерело',
+	'Reading the plan': 'Читає план',
+	'Read the plan': 'Прочитав план',
+	'Could not read the plan': 'Не вдалося прочитати план',
+	'Reading the sources': 'Читає джерела',
+	'Read the sources': 'Прочитав джерела',
+	'Could not read the sources': 'Не вдалося прочитати джерела',
+	'Sending the plan review': 'Надсилає ревʼю плану',
+	'Sent the plan review': 'Надіслав ревʼю плану',
+	'Could not send the plan review': 'Не вдалося надіслати ревʼю плану',
 	'{count} open': 'відкрито {count}',
 	'{n} accepted': 'прийнято {n}',
 	'no findings': 'без зауважень',
@@ -5032,6 +5058,17 @@ export function findingCount(locale: Locale, count: number): string {
 		{ one: 'зауваження', few: 'зауваження', many: 'зауважень', other: 'зауваження' }[
 			form as 'one' | 'few' | 'many' | 'other'
 		] ?? 'зауваження';
+	return `${new Intl.NumberFormat('uk').format(count)} ${word}`;
+}
+
+/** spec/reviews#plan-verdict: gaps in the ticket — «1 прогалина», «3 прогалини», «5 прогалин» (rule 9). */
+export function gapCount(locale: Locale, count: number): string {
+	if (locale === 'en') return `${count} ${count === 1 ? 'gap' : 'gaps'}`;
+	const form = new Intl.PluralRules('uk').select(count);
+	const word =
+		{ one: 'прогалина', few: 'прогалини', many: 'прогалин', other: 'прогалини' }[
+			form as 'one' | 'few' | 'many' | 'other'
+		] ?? 'прогалини';
 	return `${new Intl.NumberFormat('uk').format(count)} ${word}`;
 }
 

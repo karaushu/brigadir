@@ -114,7 +114,8 @@ const launchSeeded = async (
 		join(data, 'settings.json'),
 		JSON.stringify({
 			schemaVersion: 1,
-			settings: { appearance: 'light', language: 'en', ...settings },
+			// spec/reviews#plan-start: the foreman's split would start a plan review; these flows are about the crew.
+			settings: { appearance: 'light', language: 'en', planReviewOff: true, ...settings },
 		})
 	);
 	const app = await electron.launch({

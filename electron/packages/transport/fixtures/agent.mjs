@@ -314,10 +314,28 @@ connection = agent({name:'fixture'})
    if(result.outcome.outcome==='selected'&&exits[result.outcome.optionId]){await toMode(exits[result.outcome.optionId]);await new Promise(resolve=>setTimeout(resolve,400));await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Working on the plan.'}});}
    return {stopReason:'end_turn'};
   }
+  // spec/reviews#plan-loop: the scripted plan reviewer reads the plan and the sources through the host, leaves one finding and one gap, then
+  // approves the revision in its closure check.
+  const planCheck=/^Check (?:the plan|the foreman's split) of task (\S+) \(reviewId (\S+), (plan review, first read|closure check)\)/.exec(text);
+  if(planCheck){
+   const config=mcpServers.find(s=>s.name==='brigadir'),mcp=new Client({name:'fixture',version:'1.0.0'}),stdio=new StdioClientTransport({command:config.command,args:config.args,env:{...process.env,...Object.fromEntries(config.env.map(e=>[e.name,e.value]))}});
+   const ids={taskId:planCheck[1],reviewId:planCheck[2]};
+   try{await mcp.connect(stdio);
+    const call=async(name,args)=>{const result=await mcp.callTool({name,arguments:args});record('plan-review-call',{name,args,text:result.content?.[0]?.text??'',error:!!result.isError});};
+    await call('read_plan',ids);await call('read_sources',ids);
+    if(planCheck[3]==='closure check')await call('approve',ids);
+    else await call('submit_plan_review',{...ids,findings:[{kind:'missed',text:'Firefox is not covered',where:'plan.md:9'}],gaps:[{text:'Which browsers must keep the ring?'}]});}
+   finally{await mcp.close();}
+   await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'checked the plan'}});
+   return {stopReason:'end_turn'};
+  }
   // spec/chat-turns-plans-and-questions#plan-approval: a plan for approval, Claude-shaped (plan in the tool content) or Codex-shaped (plan_update, then a request without text).
-  if(text==='plan'||text==='plan-codex'||text.startsWith('I did not approve the plan.')||text.startsWith('I edited your plan.')) {
+  // spec/reviews#plan-loop: the plan review's findings come back as a batch; the revision covers Firefox.
+  const planReviewed=text.includes(' in the plan review. Revise the plan')||text.startsWith('The person asks you to fix');
+  if(text==='plan'||text==='plan-codex'||text.startsWith('I did not approve the plan.')||text.startsWith('I edited your plan.')||planReviewed) {
    record('plan-prompt',text);
-   const plan='# Keep the focus ring in Safari\n\n## Context\n`Button.module.css` sets `outline: none`.\n\n## Changes\n1. Add the `--focus-ring` token.\n2. Use `:focus-visible` in `Button.module.css`.\n3. Test that Tab keeps the ring.\n\n## Checks\n- `pnpm --filter kit test`\n- Safari: Tab through the story.\n- Firefox: the ring stays.\n- Chrome: the ring stays.';
+   const plan0='# Keep the focus ring in Safari\n\n## Context\n`Button.module.css` sets `outline: none`.\n\n## Changes\n1. Add the `--focus-ring` token.\n2. Use `:focus-visible` in `Button.module.css`.\n3. Test that Tab keeps the ring.\n\n## Checks\n- `pnpm --filter kit test`\n- Safari: Tab through the story.\n- Firefox: the ring stays.\n- Chrome: the ring stays.';
+   const plan=planReviewed?plan0.replace('3. Test that Tab keeps the ring.','3. Test that Tab keeps the ring.\n4. Firefox: Tab keeps the ring too.'):plan0;
    const codex=text==='plan-codex';
    if(codex)await update(client,{sessionUpdate:'plan_update',plan:{type:'markdown',planId:'plan-1',content:plan}});
    else await update(client,{sessionUpdate:'tool_call',toolCallId:'plan-tool',title:'Approve Plan',kind:'switch_mode',status:'pending',content:[{type:'content',content:{type:'text',text:plan}}]});

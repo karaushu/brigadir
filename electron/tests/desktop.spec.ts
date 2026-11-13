@@ -280,6 +280,7 @@ test('reads v2, isolates the renderer, updates theme, and opens Kit @area:shell 
 				'readAttachmentThumbnail',
 				'openPlanFile',
 				'readPlanFile',
+				'openSourceFile',
 				'openWebLink',
 				'addProject',
 				'setProjectIcon',

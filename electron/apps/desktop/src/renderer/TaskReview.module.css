@@ -247,3 +247,38 @@
 	font-size: var(--text-11);
 	color: var(--fg2);
 }
+/* spec/reviews#plan-surfaces: plan findings open nothing, so their rows have no hover. */
+.comment[data-static]:hover,
+.comment[data-static]:active {
+	background: none;
+}
+.tag[data-tag='kind'] {
+	background: var(--amber-soft);
+	color: var(--amber);
+}
+.sources {
+	padding: 2px 0;
+}
+/* The line above a waiting plan's footer: the sources, then the plan review's state. */
+.planLine {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px 10px;
+	padding: 6px 14px;
+	border-top: 1px solid var(--hair);
+	font-size: var(--text-12);
+}
+.planLine > .sources {
+	padding: 0;
+}
+.planState {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	color: var(--fg2);
+}
+.planState[data-state='yours'] > .count:first-of-type {
+	color: var(--amber);
+}

@@ -98,6 +98,11 @@ const whenToUse: Record<string, string> = {
 		'Do not use it to ask the person to check a page, the app or a command you can check with your own tools.',
 	save_source:
 		'Call it when the task comes from a ticket, a spec or a contract you were given or fetched (for example from Notion, Jira or Linear), before you present a plan.',
+	read_plan: 'Call it first in a plan review, with the reviewId of the check you were asked to do.',
+	read_sources:
+		'Call it in a plan review after read_plan, to check the plan against the ticket and the contract.',
+	submit_plan_review:
+		'Call it once per check of a plan review; when nothing must change, call approve instead.',
 	create_task:
 		'Use it when the person asks for a separate task, or when you find work outside this task that another agent should do.',
 	tasks_list:

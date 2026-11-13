@@ -279,7 +279,8 @@ workers`) stays available all the time.
 
 - **By itself, when the plan is presented**: a plan for approval with text (`permission.requested` with `switch_mode`)
   or the root foreman's `propose_plan` (a lead's plan is approved by the host and has none). Not when `Plan review` is
-  `Off` ([Who reviews](#who)), not in the main tree, and not while another review of the task lives.
+  `Off` ([Who reviews](#who)), not when no app is attached to the task's host (it cannot read the setting), not in the
+  main tree, and not while another review of the task lives.
 - **One full read per plan.** A plan is every presentation from the first one after the last approved plan (an approved
   plan for approval, or `Start workers`) up to its approval. A plan that already had a plan review gets no new read by
   itself: a revision presented while the author answers the findings, or while the person decides, gets the
@@ -345,7 +346,7 @@ must change and the ticket has no gaps). At most 12 items in all, ranked: the mo
    review. Revise the plan once: fix each finding in the plan, or object to it with review_reply(findingId, reason);
    then present the plan again. <reviewer> then checks only whether each finding is closed.` with each finding's id,
    kind, place and text. A solo task's waiting plan is answered with its first `reject_once` (else the first
-   `reject_*`), as in [plan chat](chat-turns-plans-and-questions.md#plan-chat), and the batch runs right after the
+   `reject_*`, else the request is cancelled), as in [plan chat](chat-turns-plans-and-questions.md#plan-chat), and the batch runs right after the
    turn; a foreman's waiting `propose_plan` returns `approved: false` with the batch as `review` (after its turn ended,
    the batch comes as the decision prompt). With no plan waiting, the batch only queues.
 3. **Check closure once.** The next presentation of the plan opens the closure check on that revision:
@@ -379,9 +380,11 @@ a part that depends on another part's files while both run in parallel, and an e
   glyph, the title; a click opens the saved text in the editor), the `Reviewer` rows, then `Plan vs ticket N`, `Plan vs
   code N` and `Gaps in the ticket N`. A finding row: its text, `<where> · <reviewer>` (muted), and a tag — its kind
   while it waits for the author, then its state ([Findings](#findings)); open ones stand first with the reviewer's reason.
-  A gap row has no reviewer and the tag `gap`. Plan findings have no thread in the diff.
+  A gap row has no reviewer and the tag `gap`. Plan findings have no thread in the diff. A finished plan review (passed,
+  closed or stopped) offers `Review again` while a plan waits.
 - **The plan card** (plan for approval and the foreman's split card): a line above the footer — the sources as the same
-  chips, then the review's state: spinner and `Review · <reviewer> reading` (or `<reviewer> checks the revision`), or
+  chips, then the review's state: spinner and `Review · <reviewer> reading` (or `<reviewer> checks the fixes`, `<agent>
+  revises the plan`), or
   `<N findings>` and `<N gaps>` as links (open findings in `--amber`, `· N open`), or `Review passed` with
   `check-pass`. A click on the state expands the strip on the plan step.
 

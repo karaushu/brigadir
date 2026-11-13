@@ -20,10 +20,13 @@ import {
 	TaskReviewLife,
 	ownReviewCrew,
 	ownReviewTool,
+	type PresentedPlan,
 	type StartReview,
 	type TaskReviewDeps,
 } from './task-review';
 import { staleIntroduced, scopedPath } from './crew';
+import { mcpTools } from './mcp';
+import { readSourcesForReview, readTaskSources, saveTaskSource } from './task-sources';
 
 /**
  * spec/reviews#loop: the task side of a review with a stand-in for the crew host's check edge — the test plays the reviewer's verdicts
@@ -69,7 +72,10 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 		checks: 0,
 		stopped: 0,
 		settled: true,
+		/** spec/reviews#plan-review: the plan that waits for the person. */
+		plan: null as PresentedPlan | null,
 	};
+	const planBatches: { text: string; batch: ReviewBatch }[] = [];
 	const host = {
 		checkSelf: async () => {
 			state.checks++;
@@ -108,6 +114,12 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 		},
 		brief: async () => '',
 		part: async () => null,
+		planWaiting: () => state.plan,
+		planFeedback: async (text, batch) => {
+			planBatches.push({ text, batch });
+			// The waiting plan is answered with its reject option.
+			state.plan = null;
+		},
 		foreman: false,
 		...patch,
 	};
@@ -199,6 +211,7 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 		answer,
 		kinds,
 		emit,
+		planBatches,
 	};
 }
 
@@ -609,5 +622,309 @@ describe('fixes of an independent review of the loop', () => {
 		expect(staleIntroduced([at('root', 'README.md'), at('submodule-b', 'x.ts')], changed)).toBe(
 			'x.ts'
 		);
+	});
+});
+
+describe('the plan review (spec/reviews#plan-review)', () => {
+	const plan = (
+		revision: number,
+		text = `# Client notes\n\n- read notes\n- step ${revision}`,
+		kind: PresentedPlan['kind'] = 'approval'
+	): PresentedPlan => ({ kind, id: `plan-${revision}`, revision, text });
+	/** The plan waits for the person, and the host hears it presented. */
+	const present = async (s: Awaited<ReturnType<typeof setup>>, value: PresentedPlan) => {
+		s.state.plan = value;
+		await s.life.planPresented(value);
+	};
+	/** The first read listed two findings for the author and one gap; the author's batch went out. */
+	const readWithFindings = async (s: Awaited<ReturnType<typeof setup>>) => {
+		await present(s, plan(1));
+		await s.life.hooks().planVerdict('Codex', 1, {
+			findings: [
+				{ kind: 'missed', text: 'Edit and delete are missing', where: 'CRM-412 · Notes' },
+				{ kind: 'left-open', text: 'Two saves at once overwrite each other' },
+			],
+			gaps: [{ text: 'No empty state for a client without orders', where: 'CRM-412 · Orders' }],
+		});
+		await s.verdict(1, 'comments');
+	};
+	/** The author's turn took the batch (a solo task: the batch runs as its own turn). */
+	const takeBatch = (s: Awaited<ReturnType<typeof setup>>) =>
+		s.emit({
+			kind: 'turn.started',
+			text: 'revise',
+			review: { id: s.doc().review!.batch!, comments: [] },
+		});
+
+	it('starts by itself when the plan is presented and reads at once while the turn waits; Off starts nothing', async () => {
+		const s = await setup();
+		s.state.busy = true;
+		await present(s, plan(1));
+		expect(s.doc().review).toMatchObject({
+			point: 'plan',
+			startedBy: 'host',
+			state: 'reading',
+			plan: { kind: 'approval', id: 'plan-1', revision: 1, read: 1, seen: 1 },
+			findings: [],
+		});
+		expect(s.state.checks).toBe(1);
+		expect(s.kinds()).toEqual(['task-review.started']);
+
+		const off = await setup({ resolve: async () => ({ off: true }) });
+		await present(off, plan(1));
+		expect(off.doc().review).toBeNull();
+		expect(off.state.checks).toBe(0);
+	});
+
+	it('one full read per plan: a later revision gets none, the next plan after an approval gets its own', async () => {
+		const s = await setup();
+		await present(s, plan(1));
+		// Gaps alone pass the review: they are the person's questions, not the author's.
+		await s.life.hooks().planVerdict('Codex', 1, {
+			gaps: [{ text: 'No phone format for non-UA numbers', where: 'CRM-412 · Header' }],
+		});
+		await s.verdict(1, 'comments');
+		const first = s.doc().review!;
+		expect(first.state).toBe('passed');
+		expect(first.findings).toMatchObject([{ kind: 'gap', reviewer: 'Codex', round: 1 }]);
+		expect(s.records.find((r) => r.event.kind === 'task-review.findings')?.event).toMatchObject({
+			findings: 0,
+			gaps: 1,
+		});
+		expect(s.planBatches).toHaveLength(0);
+
+		await present(s, plan(2));
+		expect(s.doc().review!.id).toBe(first.id);
+		expect(s.state.checks).toBe(1);
+
+		await s.life.planDecided(true);
+		expect(s.doc().review!.plan!.approved).toBe(true);
+		await present(s, plan(3));
+		expect(s.doc().review!.id).not.toBe(first.id);
+		expect(s.doc().review!.state).toBe('reading');
+		expect(s.state.checks).toBe(2);
+	});
+
+	it('the author revises once or objects; the revision gets the closure check against the revision diff; the rest goes to the person', async () => {
+		const s = await setup();
+		await readWithFindings(s);
+		expect(s.doc().review!.state).toBe('fixing');
+		expect(s.planBatches).toHaveLength(1);
+		const batch = s.planBatches[0]!;
+		expect(batch.text).toContain('Codex left 2 findings in the plan review. Revise the plan once');
+		expect(batch.text).toContain('- id p1 [missed] (CRM-412 · Notes): Edit and delete are missing');
+		// Gaps never go to the author.
+		expect(batch.text).not.toContain('empty state');
+		expect(batch.batch.comments.map((item) => item.id)).toEqual(['p1', 'p2']);
+
+		await takeBatch(s);
+		await s.life.reply('p2', 'The store already serializes saves');
+		await present(s, plan(2, '# Client notes\n\n- read notes\n- edit and delete notes'));
+		expect(s.doc().review!.state).toBe('verifying');
+		expect(s.state.checks).toBe(2);
+		const read = await s.life.hooks().planRead(2);
+		expect(read).toMatchObject({ revision: 2, previous: 1, read: 1 });
+		expect(read.diff).toContain('+- edit and delete notes');
+		const prompt = await s.life.hooks().planPrompt('t1', 'r2', 2, 'Codex');
+		expect(prompt).toContain('closure check');
+		expect(prompt).toContain("Author's objection: The store already serializes saves");
+
+		await s.life.hooks().planVerdict('Codex', 2, {
+			findings: [{ replyTo: 'p2', text: 'A retry after a failed save still races' }],
+		});
+		await s.verdict(2, 'disputed');
+		const review = s.doc().review!;
+		expect(review.state).toBe('yours');
+		expect(review.findings!.find((f) => f.id === 'p1')).toMatchObject({ closed: 2 });
+		expect(review.findings!.find((f) => f.id === 'p2')).toMatchObject({
+			open: 2,
+			reason: 'A retry after a failed save still races',
+		});
+		expect(s.records.find((r) => r.event.kind === 'task-review.verified')?.event).toMatchObject({
+			closed: 1,
+			open: 1,
+			introduced: 0,
+		});
+
+		// `Fix {n}` answers the plan again with the open finding and its reason.
+		await s.life.decide('fix');
+		expect(s.doc().review!.state).toBe('fixing');
+		expect(s.planBatches.at(-1)!.text).toContain('The person asks you to fix 1 finding');
+		expect(s.planBatches.at(-1)!.text).toContain(
+			'Still open: A retry after a failed save still races'
+		);
+	});
+
+	it('a revision presented while the person decides gets a closure check of the open findings', async () => {
+		const s = await setup();
+		await readWithFindings(s);
+		await takeBatch(s);
+		await present(s, plan(2));
+		await s.life.hooks().planVerdict('Codex', 2, {
+			findings: [{ replyTo: 'p1', text: 'Delete is still missing' }],
+		});
+		await s.verdict(2, 'disputed');
+		expect(s.doc().review!.state).toBe('yours');
+		await present(s, plan(3));
+		expect(s.doc().review!.state).toBe('verifying');
+		expect(s.state.checks).toBe(3);
+		expect((await s.life.hooks().planRead(3)).previous).toBe(2);
+	});
+
+	it('Approve plan stays available: approving with open findings records them as accepted and ends the review', async () => {
+		const s = await setup();
+		await readWithFindings(s);
+		await takeBatch(s);
+		await present(s, plan(2));
+		await s.life.hooks().planVerdict('Codex', 2, {
+			findings: [{ replyTo: 'p2', text: 'Still races' }],
+		});
+		await s.verdict(2, 'disputed');
+		await s.life.planDecided(true);
+		const review = s.doc().review!;
+		expect(review.state).toBe('accepted');
+		expect(review.plan!.approved).toBe(true);
+		expect(review.findings!.find((f) => f.id === 'p2')!.accepted).toBe(true);
+		expect(review.findings!.find((f) => f.id === 'p1')!.accepted).toBeUndefined();
+		expect(s.state.stopped).toBe(1);
+		expect(s.records.at(-1)!.event).toMatchObject({
+			kind: 'task-review.finished',
+			state: 'accepted',
+			approval: true,
+			open: 1,
+		});
+
+		// An approval before the read ends stops the review; a rejection by the person changes nothing.
+		const early = await setup();
+		await present(early, plan(1));
+		await early.life.planDecided(false);
+		expect(early.doc().review!.state).toBe('reading');
+		await early.life.planDecided(true);
+		expect(early.doc().review!.state).toBe('stopped');
+		expect(early.records.at(-1)!.event).toMatchObject({ approval: true, open: 0 });
+	});
+
+	it('the batch waits behind a plan presented before the author took it: the plan is answered again', async () => {
+		const s = await setup();
+		await readWithFindings(s);
+		await present(s, plan(2));
+		expect(s.doc().review!.state).toBe('fixing');
+		expect(s.planBatches).toHaveLength(2);
+		expect(s.planBatches[1]!.batch.id).toBe(s.planBatches[0]!.batch.id);
+		// The author's turn ends without presenting the plan again: the closure check reads the plan as it was.
+		await takeBatch(s);
+		await s.emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await s.life.turnEnded();
+		expect(s.doc().review!.state).toBe('verifying');
+	});
+
+	it("the foreman's split: the reviewer checks the split too, and the next proposal is the closure check", async () => {
+		const s = await setup({ foreman: true });
+		const split = (revision: number) =>
+			plan(
+				revision,
+				`# Split proposed by the foreman\n\n## Part 1: Notes\n\n## Part ${revision + 1}: Details`,
+				'split'
+			);
+		await present(s, split(1));
+		const prompt = await s.life.hooks().planPrompt('t1', 'r1', 1, 'Codex');
+		expect(prompt).toContain("Check the foreman's split of task t1");
+		expect(prompt).toContain(
+			'a part that depends on files of another part while both run in parallel'
+		);
+		await s.life.hooks().planVerdict('Codex', 1, {
+			findings: [
+				{
+					kind: 'split',
+					text: 'Details reuses the notes components while both run in parallel',
+					where: 'Part 2',
+				},
+			],
+		});
+		await s.verdict(1, 'comments');
+		expect(s.doc().review!.state).toBe('fixing');
+		expect(s.planBatches[0]!.text).toContain('call propose_plan again');
+		// The split's rejection carried the batch: the next proposal is the answer, with no batch turn of its own.
+		await present(s, split(2));
+		expect(s.doc().review!.state).toBe('verifying');
+	});
+
+	it('a reviewer on another provider reads the plan and the saved sources through the host', async () => {
+		const s = await setup();
+		await saveTaskSource(
+			s.store,
+			s.key,
+			{
+				title: 'CRM-412 Client notes',
+				url: 'https://notion.so/crm-412',
+				text: 'Notes can be edited and deleted.',
+			},
+			s.emit
+		);
+		await present(s, plan(1));
+		expect(s.doc().review!.reviewer).toMatchObject({ provider: 'codex', source: 'other' });
+		expect(await s.life.hooks().planRead(1)).toMatchObject({
+			revision: 1,
+			text: plan(1).text,
+		});
+		const sources = await s.life.hooks().sources(undefined);
+		expect(sources.sources).toMatchObject([
+			{
+				title: 'CRM-412 Client notes',
+				url: 'https://notion.so/crm-412',
+				text: 'Notes can be edited and deleted.',
+			},
+		]);
+		const listed = mcpTools('reviewer').list.tools.map((tool) => (tool as { name: string }).name);
+		expect(listed).toEqual(
+			expect.arrayContaining(['read_plan', 'read_sources', 'submit_plan_review'])
+		);
+		expect(mcpTools(null).list.tools.map((tool) => (tool as { name: string }).name)).toContain(
+			'save_source'
+		);
+	});
+});
+
+describe('sources (spec/reviews#save-source)', () => {
+	it('saves the text next to the plans, replaces a source by title and reads within the bound', async () => {
+		const s = await setup();
+		const first = await saveTaskSource(
+			s.store,
+			s.key,
+			{ title: 'Ticket', text: 'a'.repeat(150_000) },
+			s.emit
+		);
+		await saveTaskSource(s.store, s.key, { title: 'Contract', text: 'b'.repeat(120_000) }, s.emit);
+		const index = await readTaskSources(s.store, s.key);
+		expect(index.sources.map((item) => item.title)).toEqual(['Ticket', 'Contract']);
+		expect(index.sources[0]!.file).toMatch(/^ticket-[0-9a-f]{8}\.md$/);
+		expect(s.records.filter((r) => r.event.kind === 'source.saved')).toHaveLength(2);
+		// One call stays under 200 000 characters; sourceId reads one whole.
+		const all = await readSourcesForReview(s.store, s.key);
+		const text = all.sources.map((item) => ('text' in item ? item.text : '')).join('');
+		expect(text.length).toBe(200_000);
+		expect(all.note).toContain('pass sourceId');
+		const one = await readSourcesForReview(s.store, s.key, index.sources[1]!.id);
+		expect(one.sources).toMatchObject([{ title: 'Contract', text: 'b'.repeat(120_000) }]);
+		// The same title replaces the source under its id.
+		const again = await saveTaskSource(
+			s.store,
+			s.key,
+			{ title: 'ticket', text: 'new text' },
+			s.emit
+		);
+		expect(again.id).toBe(first.id);
+		expect((await readTaskSources(s.store, s.key)).sources).toHaveLength(2);
+		await expect(
+			saveTaskSource(s.store, s.key, { title: 'Big', text: 'x'.repeat(200_001) }, s.emit)
+		).rejects.toThrow('text is at most 200000 characters');
+		await expect(
+			saveTaskSource(
+				s.store,
+				s.key,
+				{ title: 'Bad url', url: 'file:///etc/passwd', text: 'x' },
+				s.emit
+			)
+		).rejects.toThrow('url is an http(s) address');
 	});
 });

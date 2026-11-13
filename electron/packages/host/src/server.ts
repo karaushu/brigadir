@@ -273,6 +273,8 @@ export async function startHost(config: HostConfig) {
 			}),
 		// spec/reviews#who: the app resolves the reviewer from the settings, sign-ins and catalogs; without a window, a fresh session of the task's own provider.
 		resolve: async (point, auto) => {
+			// spec/reviews#plan-start: with no app attached the host cannot read `Plan review`; it starts none by itself.
+			if (auto && !ui) return { off: true };
 			if (ui) {
 				const answer = await ui
 					.request('review_reviewer', { point, ...(auto ? { auto: true } : {}) })

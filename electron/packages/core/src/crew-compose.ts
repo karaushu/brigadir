@@ -77,11 +77,32 @@ export function crewPalette(
 }
 /** The foreman proposes its crew while the palette is there and nobody is approved yet. */
 export function isComposing(spec: CrewSpec | null | undefined): boolean {
-	return !!spec?.compose && spec.root.agents.length === 0;
+	return !!spec?.compose && spec.root.agents.every(isTaskReviewAgent);
+}
+/**
+ * spec/reviews#reviewer-sessions: the reviewers of the task's own review sit below a foreman's root (ids `review-…`, role reviewer); a plan review
+ * adds them before the crew is composed. They are not the composed crew and stay when it is merged in.
+ */
+export function isTaskReviewAgent(agent: CrewSpecAgent): boolean {
+	return agent.role === 'reviewer' && agent.id.startsWith('review-');
+}
+/** The spec without the task review's reviewers: the crew as the plan card shows it. */
+export function withoutTaskReviewers(spec: CrewSpec): CrewSpec {
+	return {
+		...spec,
+		root: {
+			...spec.root,
+			agents: spec.root.agents.filter((agent) => !isTaskReviewAgent(agent)),
+			checkedBy: [],
+		},
+	};
 }
 /** The spec with the proposed agents under the root, for plan checks and the card. */
 export function composedSpec(spec: CrewSpec, agents: readonly CrewSpecAgent[]): CrewSpec {
-	return { ...spec, root: { ...spec.root, agents: [...agents] } };
+	return {
+		...spec,
+		root: { ...spec.root, agents: [...agents, ...spec.root.agents.filter(isTaskReviewAgent)] },
+	};
 }
 /** After approval the crew is an ordinary one; the palette goes. */
 export function approvedSpec(spec: CrewSpec, agents: readonly CrewSpecAgent[]): CrewSpec {

@@ -78,7 +78,7 @@ import { NoticeLog } from './notice-log';
 import { QuitGuard, type PendingWrite } from './quit-guard';
 import { Boards } from './boards';
 import { resolveReviewCrew, reviewCrewPrompt, reviewGuidance } from './review-crew';
-import { readTaskReview, reviewerAgent, reviewerFor } from './task-review';
+import { readTaskReview, rememberedReviewCrew, reviewerAgent, reviewerFor } from './task-review';
 import { ProjectViews } from './views';
 import { personTasks } from '@brigadir/core';
 import {
@@ -1136,10 +1136,17 @@ async function reviewStart(
 		point,
 		startedBy: choice.startedBy ?? 'person',
 	};
+	// The person's one-time crew must exist; a remembered one that went missing falls back to the reviewer (spec/reviews#who).
 	const crewId =
 		point === 'plan'
 			? null
-			: actionCrewId('taskReview', choice.agent, choice.crew, appliedSettings.actionCrews);
+			: (choice.crew ??
+				(choice.agent
+					? null
+					: rememberedReviewCrew(
+							library,
+							actionCrewId('taskReview', null, null, appliedSettings.actionCrews)
+						)));
 	if (crewId) {
 		const crew = resolveReviewCrew(library, crewId, appliedSettings.agents.provider);
 		return {

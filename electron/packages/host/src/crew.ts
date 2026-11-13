@@ -303,6 +303,18 @@ export type SelfReviewHooks = {
 	/** spec/reviews#loop: a run opened (`reviewing`), the first read listed findings (`comments`), a run approved, or a closure check left findings open (`disputed`). */
 	round(run: ReviewRun, state: 'reviewing' | 'comments' | 'approved' | 'disputed'): Promise<void>;
 };
+/** spec/reviews#loop: a file of one repo — the same path in two repos of a project is two files. */
+export const scopedPath = (scopeId: string, path: string) => `${scopeId}\0${path}`;
+/** The first `introduced` finding whose file did not change in its repo since the last check (its project-relative path), or null. */
+export function staleIntroduced(
+	comments: readonly Pick<ReviewComment, 'anchor'>[],
+	changed: ReadonlySet<string>
+): string | null {
+	const stale = comments.find(
+		(comment) => !changed.has(scopedPath(comment.anchor.scopeId, comment.anchor.path))
+	);
+	return stale ? stale.anchor.path : null;
+}
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const name = (key: TaskKey) => `${key.projectId}/${key.id}`;
 const slug = (text: string) =>
@@ -2324,16 +2336,19 @@ export class CrewHost {
 				throw new Error(
 					`replyTo ${String((unknown as Record<string, unknown>).replyTo)} is not one of your findings in this review. Your findings: ${own.map((comment) => comment.id).join(', ') || 'none'}.`
 				);
-			const changed = await this.changedSinceLastCheck(run);
-			const stale = items.find(
-				(item) => !changed.has(String((item as Record<string, unknown>).path ?? ''))
-			);
-			if (stale)
-				throw new Error(
-					`${String((stale as Record<string, unknown>).path)} did not change since the last check; it cannot be a problem the fix introduced.`
-				);
 		} else if (self && all.some((item) => isRecord(item) && item.replyTo !== undefined))
 			throw new Error('replyTo is for a closure check; the first read lists new findings only.');
+		// Anchored before anything is written: an `introduced` item must sit in a file of its repo that changed since the last check.
+		const comments = items.length
+			? await this.anchorComments(target, items, `${reviewer.name} · checks ${target.name}`, run)
+			: [];
+		if (closure) {
+			const stale = staleIntroduced(comments, await this.changedSinceLastCheck(run));
+			if (stale)
+				throw new Error(
+					`${stale} did not change since the last check; it cannot be a problem the fix introduced.`
+				);
+		}
 		if (insist.length)
 			await this.replyOnComments(
 				target,
@@ -2349,9 +2364,6 @@ export class CrewHost {
 				run.round,
 				insist.map((item) => String((item as Record<string, unknown>).replyTo))
 			);
-		const comments = items.length
-			? await this.anchorComments(target, items, `${reviewer.name} · checks ${target.name}`, run)
-			: [];
 		if (self) {
 			const reviewId = this.deps.self?.id() ?? run.reviewId;
 			for (const comment of comments)
@@ -3220,7 +3232,7 @@ export class CrewHost {
 		);
 		await atomicJson(path, { ...doc, comments });
 	}
-	/** The paths that changed between the previous run of the task's review and this one: where a fix could bring a problem in. */
+	/** The files (repo and repo-relative path) that changed between the previous run of the task's review and this one: where a fix could bring a problem in. */
 	private async changedSinceLastCheck(run: ReviewRun) {
 		const index = this.reviews.indexOf(run),
 			previous = this.reviews
@@ -3234,7 +3246,7 @@ export class CrewHost {
 				before = previous.scopeSnapshots.find((entry) => entry.scopeId === item.scopeId)?.result;
 			if (!scope || !before || before === item.result) continue;
 			for (const file of await changedFiles(scope, before, item.result).catch(() => []))
-				paths.add(file.path);
+				paths.add(scopedPath(item.scopeId, file.path));
 		}
 		return paths;
 	}

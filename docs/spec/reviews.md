@@ -32,7 +32,8 @@ provider's own option catalog.
 1. **The setting**, when set: Settings ▸ Agents ▸ Customize per action ▸ `Reviews` — `Plan review` (action
    `planReview`) for the plan, `Code reviews` (action `taskReview`) for mid-task and before-PR reviews. A remembered
    crew of `Code reviews` (from the launch dialog's `Remember for code reviews`) makes every agent below the crew's root
-   a reviewer.
+   a reviewer; a remembered crew the library no longer offers (deleted or hidden) counts as none, and the next rules
+   decide.
 2. Otherwise **another provider** that is enabled, installed and signed in, with that provider's default model and
    effort from its own catalog (no launch options). Providers are tried in the app's provider order, skipping the
    task's own.
@@ -96,7 +97,8 @@ what was just finished, e.g. `the data layer`; it shows in the chat row (`mid-ta
   before the PR covers that).
 - The description tells the agent that the host decides, that the reviewer reads the task's state now, that it keeps
   working, and that findings arrive later as a prompt to fix or object to.
-- The host answers at once: `{ started: true, reviewer: "Codex" }`, or `{ started: false, reason }` when a review of
+- The host takes a checkpoint first (the agent may have written through its own shell), then answers at once:
+  `{ started: true, reviewer: "Codex" }`, or `{ started: false, reason }` when a review of
   the task runs (`A review of this task is already running.`), nothing changed since the task start or the last
   review's snapshot (`Nothing changed since the last review.`), or no reviewer is available (the review is then
   recorded as `failed`).
@@ -120,7 +122,9 @@ deliveries, stale verdicts (`stale_review`), restart recovery and the rule that 
    then checks only whether each finding is closed.` and, for a `mid` review, `Then continue the task.` A finding the
    agent does not fix as asked gets MCP `review_reply(commentId, text)` (the task's own agent only); the reply joins
    the finding's thread.
-3. **Check closure once.** The turn that answers the batch ends → the host opens a closure check from the new snapshot:
+3. **Check closure once.** The turn that took the batch ends → the host opens a closure check from the new snapshot. A
+   foreman hands fixes to its workers: its closure check opens at the first turn end after the batch at which its crew
+   has no open work (an objection without edits leaves none, so it opens at once). The check:
    `Check task <id> of \`Task agent\` (reviewId …, closure check)` with the reviewer's own findings, their state
    (`fixed`, the agent's objection) and the instruction: for each finding decide whether it is closed — an objection the
    reviewer accepts counts as closed; call `approve` when all are closed and the fix introduced no problem; otherwise
@@ -130,8 +134,8 @@ deliveries, stale verdicts (`stale_review`), restart recovery and the rule that 
      description says so.
    - The host refuses any other item (`In a closure check only replyTo (a finding still open) or introduced: true (a
      problem the fix brought in) is accepted.`), a `replyTo` that is not this reviewer's finding of this review, and an
-     `introduced` item in a file that did not change since the previous round (`<path> did not change since the last
-     check; it cannot be a problem the fix introduced.`).
+     `introduced` item in a file that did not change in its repo since the previous round, matched by repo and path
+     (`<path> did not change since the last check; it cannot be a problem the fix introduced.`).
    - All closed → the review **passes**.
    - Anything open or new → the review goes to **the person** (`yours`). There is no automatic third round.
 4. **The person decides** with the short list: `Fix {n}` sends the open and new findings to the agent as one more batch
@@ -199,6 +203,8 @@ the state in muted text, the **step track**, actions, chevron.
 - `<point>` is `plan`, `mid-task` or `before PR`. **The findings count is a link** wherever it stands — the strip row
   and the chat rows: a dotted underline in the text colour at rest, solid on hover; a click expands the strip on the
   findings.
+- `Retry` on a review whose reviewer failed to start stops that review first (it still waits for the read), then starts
+  a new one.
 - `Create PR` has no ellipsis although it opens the New PR dialog: the strip names the step, not the dialog — an
   exception to the `…` rule of [UI copy](../ui-copy.md) that holds only here.
 - **Expanded** (chevron or a click on the row): a full-width segment `Plan · Mid-task · Before PR` (the plan segment
@@ -236,9 +242,10 @@ the state in muted text, the **step track**, actions, chevron.
 
 - **The gate.** `Create PR` on a task (not the main tree) whose changes no review before the PR has covered starts a
   `pre-pr` review instead of opening the New PR dialog, and expands the strip. A change is covered when the last
-  `pre-pr` review read exactly the task's current trees and ended `passed`, `accepted` or `stopped`. When the review
-  cannot start (no reviewer), the dialog opens at once and the strip says `Review did not start`. While a review runs,
-  `Create PR` expands the strip.
+  `pre-pr` review read exactly the task's current repos and trees (a repo that joined later is not covered) and ended
+  `passed`, `accepted` or `stopped`. When the review cannot start (no reviewer), the dialog opens at once and the strip
+  says `Review did not start`. While any review runs or waits for the person, mid-task included, `Create PR` expands
+  the strip.
 - After the review passes or is accepted, the strip's `Create PR` opens the dialog.
 - **The New PR sheet** shows a row above `Title`; `Create PR` in the sheet stays available in every state:
 
@@ -264,7 +271,8 @@ the strip.
   outdated`, `round` (runs opened: 1 = the read, then closure checks), `passes` (author passes), `reviewers`,
   `trees` (the result tree per repo of the last run), `base?`, `batch?` (the last batch sent to the agent: the turn
   that takes it opens the closure check, also after a restart), `failure?`, `finishedAt?`. A version-1 document reads as
-  a `pre-pr` review started by the person; it is written back as version 2 on the next change.
+  a `pre-pr` review started by the person; a review that was fixing takes its batch from the journal (the turn that
+  took it, else the queued prompt); it is written back as version 2 on the next change.
 - Findings are review comments in the task's `review.json` with `review` = `{reviewId, round, reviewer, open?, closed?,
   introduced?, accepted?}` (`disputed` of older files reads as `open`).
 - Journal events (rule 2), each with `id` and `point`: `task-review.started` (`startedBy`, `reviewers`, `reason?`),

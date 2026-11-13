@@ -11,8 +11,11 @@ import {
 	taskReviewAt,
 	taskReviewCommentState,
 	taskReviewCovers,
+	taskReviewLive,
 	taskReviewRunning,
 	templateLookup,
+	inTask,
+	type CrewLibrary,
 	type ActionAgents,
 	type AgentCheck,
 	type AgentProvider,
@@ -105,6 +108,18 @@ export function reviewerFor(input: {
 		defaults,
 	});
 }
+/**
+ * spec/reviews#who: a crew remembered for code reviews that the library no longer offers (deleted or hidden) counts as no crew: the review
+ * falls back to the resolved reviewer instead of failing to start.
+ */
+export function rememberedReviewCrew(
+	library: Pick<CrewLibrary, 'crews' | 'hiddenCrews'>,
+	id: string | null
+) {
+	return id && library.crews.some((crew) => crew.id === id) && !library.hiddenCrews.includes(id)
+		? id
+		: null;
+}
 /** spec/reviews#strip: the task's reviews as the window shows them — the record, the reviewers' states, every review's findings and the gate. */
 export async function readTaskReview(
 	store: SessionStore,
@@ -121,9 +136,16 @@ export async function readTaskReview(
 	};
 	const doc = readTaskReviewDocument(await json(store, key, 'task-review.json', [1, 2]), key.id);
 	const snapshots = await readSnapshots(store, key).catch(() => null),
-		now = snapshots?.checkpoints.at(-1)?.trees ?? [];
+		// The repos a review reads: in the task and on disk (a run pins the same set).
+		inReview = new Set(
+			(snapshots?.scopes ?? [])
+				.filter((scope) => inTask(scope) && scope.available !== false)
+				.map((scope) => scope.id)
+		),
+		now = (snapshots?.checkpoints.at(-1)?.trees ?? []).filter((tree) => inReview.has(tree.scopeId));
+	// spec/reviews#before-pr: any review that runs or waits for the person — mid-task too — is the one `Create PR` expands.
 	const gate = (pre: TaskReview | null): TaskReviewView['beforePR'] =>
-		taskReviewRunning(pre) || pre?.state === 'yours'
+		taskReviewLive(doc?.review)
 			? 'running'
 			: !changes.files || taskReviewCovers(pre, now)
 				? 'covered'

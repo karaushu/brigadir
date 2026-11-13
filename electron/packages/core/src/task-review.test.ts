@@ -201,6 +201,10 @@ describe('the review document (spec/reviews#data)', () => {
 			expect(taskReviewCovers(review({ state }), now)).toBe(true);
 		expect(taskReviewCovers(review({ state: 'yours' }), now)).toBe(false);
 		expect(taskReviewCovers(review(), [{ scopeId: 's1', tree: 'c'.repeat(40) }])).toBe(false);
+		// A repo that joined the task after the review (a new gitignored nested repo) is not covered.
+		expect(taskReviewCovers(review(), [...now, { scopeId: 's2', tree: 'e'.repeat(40) }])).toBe(
+			false
+		);
 	});
 });
 

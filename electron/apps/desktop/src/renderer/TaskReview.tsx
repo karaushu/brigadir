@@ -21,6 +21,7 @@ import {
 	type MessageKey,
 	type ReviewPoint,
 	type TaskKey,
+	type TaskReview,
 	type TaskReviewCommentRow,
 	type TaskReviewFindingState,
 	type TaskReviewMember,
@@ -185,7 +186,28 @@ export async function reviewBeforePR(task: AgentTask, locale: Locale): Promise<b
 		const { [name(task)]: _, ...hidden } = state.hidden;
 		return { hidden };
 	});
-	return (await startNow(task, locale, 'pre-pr', 'host')) !== null;
+	if ((await startNow(task, locale, 'pre-pr', 'host')) === null) return false;
+	// Only a review that could not start for want of a reviewer lets the dialog open; a refusal (one already runs) does not.
+	const after = await window.brigadir.readTaskReview(task).catch(() => null);
+	return after?.review?.point === 'pre-pr' && after.review.state === 'failed';
+}
+/**
+ * spec/reviews#strip: `Retry` on a review that did not start. A review whose reviewer failed to start still lives on the host (it waits for
+ * the read), so it is stopped first and a new one starts; the person fixes the sign-in and retries.
+ */
+export async function retryReview(
+	task: TaskKey,
+	review: { point: ReviewPoint; state: TaskReview['state'] },
+	bridge: Pick<typeof window.brigadir, 'stopTaskReview' | 'startTaskReview'> = window.brigadir
+): Promise<string | null> {
+	if (taskReviewLive(review as TaskReview)) await bridge.stopTaskReview(task).catch(() => {});
+	return bridge.startTaskReview(task, {
+		agent: null,
+		crew: null,
+		notes: '',
+		since: 'start',
+		point: review.point,
+	});
 }
 /** spec/reviews#start: who reviews unless the person chooses — the remembered crew or agent of `Code reviews`, else `Auto`. */
 function useRememberedWho(locale: Locale) {
@@ -808,7 +830,16 @@ export function ReviewStrip({
 			onStep={(next) => openReviewStrip(task, true, next)}
 			onStop={() => act(window.brigadir.stopTaskReview(task))}
 			onDecide={(decision) => act(window.brigadir.decideTaskReview(task, decision))}
-			onRetry={() => void startNow(task, locale, review.point)}
+			onRetry={() =>
+				void retryReview(task, review).then(
+					(reason) => {
+						void load(task);
+						if (reason !== null)
+							toastError(`${t(locale, 'Could not start the review')}: ${reason}`);
+					},
+					(error: unknown) => toastError(error instanceof Error ? error.message : String(error))
+				)
+			}
 			onAgain={() => openTaskReviewLaunch(task, view)}
 			onCreatePR={() => {
 				const scope = forge?.data?.scopes[0];

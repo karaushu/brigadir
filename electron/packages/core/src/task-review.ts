@@ -242,8 +242,9 @@ export function withNextReview(doc: TaskReviewDocument, next: TaskReview): TaskR
 	return { ...doc, proposal: null, review: next, past: past.slice(-taskReviewPastLimit) };
 }
 /**
- * spec/reviews#before-pr: the changes are covered when the last review before the PR read exactly the trees the task has now and ended
- * passed, accepted or stopped. `current` holds the latest checkpoint tree of each repo of the task.
+ * spec/reviews#before-pr: the changes are covered when the last review before the PR read exactly the trees the task has now — the same
+ * repos, each with the same tree — and ended passed, accepted or stopped. `current` holds the latest checkpoint tree of each repo of the
+ * task (a repo that joined after the review is not covered).
  */
 export function taskReviewCovers(
 	review: TaskReview | null | undefined,
@@ -251,8 +252,10 @@ export function taskReviewCovers(
 ) {
 	if (!review || !['passed', 'accepted', 'stopped'].includes(review.state) || !review.trees.length)
 		return false;
-	return review.trees.every(
-		(tree) => current.find((item) => item.scopeId === tree.scopeId)?.tree === tree.tree
+	return (
+		review.trees.every(
+			(tree) => current.find((item) => item.scopeId === tree.scopeId)?.tree === tree.tree
+		) && current.every((item) => review.trees.some((tree) => tree.scopeId === item.scopeId))
 	);
 }
 

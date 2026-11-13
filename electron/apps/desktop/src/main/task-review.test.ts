@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionStore, atomicJson } from '@brigadir/persistence';
 import type { AgentCheck, ProviderCatalog } from '@brigadir/core';
-import { readTaskReview, reviewerFor } from './task-review';
+import { readTaskReview, rememberedReviewCrew, reviewerFor } from './task-review';
 
 const run = promisify(execFile);
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -144,10 +144,49 @@ describe('what the window reads (spec/reviews#strip, spec/reviews#before-pr)', (
 		expect(view.comments[1]!.reason).toBe('Still there.');
 		expect(view.beforePR).toBe('running');
 	});
+	it('Create PR during a mid-task review expands that review instead of starting one', async () => {
+		const { store, key } = await task();
+		await atomicJson(join(await store.taskDir(key), 'task-review.json'), {
+			schemaVersion: 2,
+			proposal: null,
+			review: {
+				id: 'm1',
+				point: 'mid',
+				target: { taskId: key.id },
+				startedBy: 'agent',
+				who: { kind: 'agent' },
+				instructions: '',
+				guidance: '',
+				startedAt: '2026-01-01T00:00:00.000Z',
+				state: 'reading',
+				round: 1,
+				passes: 0,
+				reviewers: ['Codex'],
+				trees: [],
+			},
+			past: [],
+		});
+		expect((await readTaskReview(store, key, async () => ({ comments: [] }))).beforePR).toBe(
+			'running'
+		);
+	});
 	it('a task without changes needs no review before the PR', async () => {
 		const { store, key } = await task();
 		expect((await readTaskReview(store, key, async () => ({ comments: [] }))).beforePR).toBe(
 			'covered'
 		);
+	});
+});
+
+describe('a crew remembered for code reviews (spec/reviews#who)', () => {
+	it('counts as no crew once the library has hidden or lost it', () => {
+		const library = {
+			crews: [{ id: 'mine' }, { id: 'default' }] as never,
+			hiddenCrews: ['default'],
+		};
+		expect(rememberedReviewCrew(library, 'mine')).toBe('mine');
+		expect(rememberedReviewCrew(library, 'default')).toBeNull();
+		expect(rememberedReviewCrew(library, 'tests')).toBeNull();
+		expect(rememberedReviewCrew(library, null)).toBeNull();
 	});
 });

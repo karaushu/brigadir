@@ -7,7 +7,7 @@ import {
 	type TaskReviewCommentRow,
 	type TaskReviewView,
 } from '@brigadir/core';
-import { ReviewStripView, reviewStripState } from './TaskReview';
+import { ReviewStripView, retryReview, reviewStripState } from './TaskReview';
 
 /** spec/reviews#strip: the strip's row in every state, from props only. */
 const task = { projectId: 'p', id: 't', title: 'Client screen', provider: 'claude' } as AgentTask;
@@ -200,5 +200,31 @@ describe('the Review strip (spec/reviews#strip)', () => {
 		expect(text(html)).toMatch(/Plan.*Mid-task.*Before PR/);
 		expect(text(html)).toContain('Codex · Codex');
 		expect(buttons(html)).toContain('Log');
+	});
+});
+
+describe('Retry (spec/reviews#strip)', () => {
+	const bridge = () => {
+		const calls: string[] = [];
+		return {
+			calls,
+			stopTaskReview: async () => {
+				calls.push('stop');
+			},
+			startTaskReview: async (_: unknown, choice: { point?: string }) => {
+				calls.push(`start ${choice.point}`);
+				return null;
+			},
+		};
+	};
+	it('stops a review whose reviewer failed to start before starting a new one', async () => {
+		const b = bridge();
+		expect(await retryReview(task, { point: 'pre-pr', state: 'reading' }, b as never)).toBeNull();
+		expect(b.calls).toEqual(['stop', 'start pre-pr']);
+	});
+	it('starts at once after a review that could not start', async () => {
+		const b = bridge();
+		await retryReview(task, { point: 'mid', state: 'failed' }, b as never);
+		expect(b.calls).toEqual(['start mid']);
 	});
 });

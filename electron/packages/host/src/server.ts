@@ -138,7 +138,7 @@ import {
 	partBrief,
 	type CrewContext,
 } from './crew';
-import { TaskReviewLife } from './task-review';
+import { TaskReviewLife, ownReviewCrew, ownReviewTool } from './task-review';
 import {
 	assignmentBlock,
 	compactionDue,
@@ -225,6 +225,7 @@ export async function startHost(config: HostConfig) {
 		busy: () => busy,
 		foreman: foremanTask,
 		existing: () => crewHost,
+		settled: () => crewHost?.settled() ?? true,
 		submitReview: (text, review, round) =>
 			command({
 				kind: 'submitReview',
@@ -2209,14 +2210,19 @@ export async function startHost(config: HostConfig) {
 		if (method === 'crew_tool') {
 			if (!isCrewToolCall(params)) throw new Error('Invalid crew tool call');
 			if (stopping) throw new Error('Host is stopping');
-			// A solo task's crew host only runs its review: its own agent has no crew tools.
-			if (crewHost && crew && params.tool !== 'ask_foreman')
+			// A solo task's crew host only runs its review: its own agent has no crew tools. A developer's crew host runs only its own review
+			// (spec/reviews#points): its crew tools go up to its foreman.
+			if (crewHost && foremanTask && params.tool !== 'ask_foreman')
 				return crewHost.tool(params.tool, params.params, signal);
 			if (crewWorker) return crewWorker.tool(params.tool, params.params, signal);
 			throw new Error('This task has no crew');
 		}
 		// spec/agents-and-providers#tools-awareness: crew workers keep the browser, the simulator and the project commands of their own task.
-		if (!humanToolsAllowed(crew?.role ?? null) && !isWorkspaceTool(method))
+		if (
+			!humanToolsAllowed(crew?.role ?? null) &&
+			!isWorkspaceTool(method) &&
+			!ownReviewTool(crew?.role ?? null, method)
+		)
 			throw new Error('Method is not available to this role');
 		// spec/pull-requests-and-ci#review-with-agent, spec/pull-requests-and-ci#review-drafts: the PR's drafts file in the project — the one every task shows in its PR panel and «Review ▾» form.
 		if (method === 'pr_comment') {
@@ -3225,7 +3231,11 @@ export async function startHost(config: HostConfig) {
 		);
 		if (crew && (crew.role === 'foreman' || crew.role === 'lead'))
 			crewHost = await crewHostFor(crew);
-		else if (!crew && task.reviewCrew) crewHost = await crewHostFor(selfContext(task.reviewCrew));
+		else {
+			// spec/reviews#points: a solo task's or a crew developer's own review continues after a restart.
+			const spec = ownReviewCrew(task, crew?.role ?? null);
+			if (spec) crewHost = await crewHostFor(selfContext(spec));
+		}
 		await taskReview.load();
 		await crewWorker?.start();
 		ready = true;

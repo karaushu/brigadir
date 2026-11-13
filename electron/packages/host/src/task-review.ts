@@ -9,6 +9,7 @@ import {
 	taskReviewSummaryLimit,
 	withNextReview,
 	type EventRecord,
+	type CrewSpec,
 	type ReviewBatch,
 	type ReviewLoopEvent,
 	type ReviewPoint,
@@ -34,6 +35,18 @@ import {
 } from './review-findings';
 
 export type StartReview = Extract<SessionCommand, { kind: 'startReview' }>;
+/** spec/reviews#points: the roles whose task has reviews of its own — a solo task, a foreman, a crew developer (its part is a task). */
+const ownReviewRoles: readonly (string | null)[] = [null, 'foreman', 'developer'];
+/** spec/reviews#request-tool: `request_review` and `review_reply` belong to a task with reviews of its own. */
+export const ownReviewTool = (role: string | null, method: string) =>
+	(method === 'request_review' || method === 'review_reply') && ownReviewRoles.includes(role);
+/** The review crew a host restores at start: a solo task's or a developer's own (a foreman keeps its reviewers in its crew). */
+export function ownReviewCrew(
+	task: { reviewCrew?: CrewSpec },
+	role: string | null
+): CrewSpec | null {
+	return task.reviewCrew && (role === null || role === 'developer') ? task.reviewCrew : null;
+}
 /** What the crew host offers the task's review: its rounds on the task itself (`checkSelf`), the agent's replies and the stop. */
 export type SelfReviewHost = Pick<CrewHost, 'checkSelf' | 'replySelf' | 'stopSelf' | 'selfTrees'>;
 export type TaskReviewDeps = {
@@ -47,6 +60,8 @@ export type TaskReviewDeps = {
 	crew(start: StartReview): Promise<SelfReviewHost>;
 	/** The crew host that already runs the task's review after a restart, if any. */
 	existing(): SelfReviewHost | null;
+	/** A foreman's crew has no open work: the fixes it handed to workers are accepted (spec/reviews#loop). */
+	settled(): boolean;
 	/** A batch of findings as the task's own review batch (the `submitReview` command). */
 	submitReview(text: string, review: ReviewBatch, round: number): Promise<void>;
 	/** spec/reviews#who: the reviewer of a start the host or the agent makes — asked of the app, else a fresh session of the task's own provider. */
@@ -95,6 +110,12 @@ export class TaskReviewLife {
 				throw error;
 		}
 		this.host = this.deps.existing();
+		// spec/reviews#data: a version-1 review read while the agent fixed has no batch id; the journal holds the batch it was sent.
+		const review = this.doc.review;
+		if (review?.state === 'fixing' && !review.batch) {
+			const batch = lastReviewBatch(this.deps.records());
+			if (batch) this.doc = { ...this.doc, review: { ...review, batch } };
+		}
 	}
 	document(): TaskReviewDocument {
 		return this.doc;
@@ -197,11 +218,8 @@ export class TaskReviewLife {
 		this.doc = withNextReview(this.doc, review);
 		await this.save();
 		await this.emitStarted(review);
-		// spec/reviews#start: the agent's review reads at once (after a checkpoint); the others wait for a running turn to end.
-		if (startedBy === 'agent') {
-			await this.deps.checkpoint().catch(() => {});
-			await this.read();
-		} else if (!this.deps.busy()) await this.read();
+		// spec/reviews#start: the agent's review reads at once (`request` took a checkpoint); the others wait for a running turn to end.
+		if (startedBy === 'agent' || !this.deps.busy()) await this.read();
 		return review;
 	}
 	private emitStarted(review: TaskReview) {
@@ -222,6 +240,8 @@ export class TaskReviewLife {
 		return this.serial(async () => {
 			if (taskReviewLive(this.doc.review))
 				return { started: false, reason: 'A review of this task is already running.' };
+			// The agent may have written through its own shell since the last checkpoint: look at the files now.
+			await this.deps.checkpoint().catch(() => {});
 			if (!(await this.deps.changes()) || !(await this.changedSinceLast()))
 				return { started: false, reason: 'Nothing changed since the last review.' };
 			const resolved = await this.deps.resolve(input.point);
@@ -349,8 +369,9 @@ export class TaskReviewLife {
 				return;
 			}
 			if (review.state !== 'fixing') return;
-			const answered = this.answered(review.batch);
-			if (!answered || (this.deps.foreman && !(await this.differs(review.trees)))) return;
+			// spec/reviews#loop: the turn that took the batch has ended. A foreman hands fixes to its workers: its closure check waits until
+			// they are accepted (an objection without edits leaves nothing open, so it runs at once).
+			if (!this.taken(review.batch) || (this.deps.foreman && !this.deps.settled())) return;
 			const list = await reviewFindings(this.deps.store, this.deps.key, review.id),
 				sent = review.passes > 1 ? openFindings(list) : list,
 				counts = findingCounts(sent);
@@ -364,12 +385,12 @@ export class TaskReviewLife {
 			if (await this.step({ kind: 'answered' })) await this.round();
 		});
 	}
-	/** The turn that took the last batch has ended (the newest turn start carries it). */
-	private answered(batch: string | undefined) {
+	/** A turn took the last batch; this runs when a turn ends, so that turn or a later one has ended. */
+	private taken(batch: string | undefined) {
 		if (!batch) return false;
-		const records = this.deps.records(),
-			start = records.findLast((record) => record.event.kind === 'turn.started');
-		return start?.event.kind === 'turn.started' && start.event.review?.id === batch;
+		return this.deps
+			.records()
+			.some((record) => record.event.kind === 'turn.started' && record.event.review?.id === batch);
 	}
 	private async read() {
 		if (await this.step({ kind: 'begin' })) await this.round();
@@ -446,4 +467,19 @@ export class TaskReviewLife {
 		const next = await this.step({ kind: 'verified', open });
 		if (next?.state === 'passed') await this.finished('passed');
 	}
+}
+/** The newest review batch of the task's own review in the journal: the turn that took it, else the queued prompt that holds it. */
+export function lastReviewBatch(records: readonly EventRecord[]): string | null {
+	for (let index = records.length - 1; index >= 0; index--) {
+		const event = records[index]!.event;
+		if (event.kind === 'turn.started' && event.review && event.crew?.kind === 'review-comments')
+			return event.review.id;
+		if (
+			event.kind === 'prompt.queued' &&
+			event.prompt.command.kind === 'submitReview' &&
+			event.prompt.command.crew?.kind === 'review-comments'
+		)
+			return event.prompt.command.review.id;
+	}
+	return null;
 }

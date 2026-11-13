@@ -16,7 +16,14 @@ import {
 	type SessionEvent,
 	type TaskKey,
 } from '@brigadir/core';
-import { TaskReviewLife, type StartReview, type TaskReviewDeps } from './task-review';
+import {
+	TaskReviewLife,
+	ownReviewCrew,
+	ownReviewTool,
+	type StartReview,
+	type TaskReviewDeps,
+} from './task-review';
+import { staleIntroduced, scopedPath } from './crew';
 
 /**
  * spec/reviews#loop: the task side of a review with a stand-in for the crew host's check edge — the test plays the reviewer's verdicts
@@ -56,7 +63,13 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 	const records: EventRecord[] = [],
 		batches: { text: string; batch: ReviewBatch }[] = [],
 		prompts: string[] = [];
-	const state = { busy: false, trees: [{ scopeId: 's1', tree: tree('a') }], checks: 0, stopped: 0 };
+	const state = {
+		busy: false,
+		trees: [{ scopeId: 's1', tree: tree('a') }],
+		checks: 0,
+		stopped: 0,
+		settled: true,
+	};
 	const host = {
 		checkSelf: async () => {
 			state.checks++;
@@ -83,6 +96,7 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 		busy: () => state.busy,
 		crew: async () => host,
 		existing: () => host,
+		settled: () => state.settled,
 		submitReview: async (text, batch) => {
 			batches.push({ text, batch });
 		},
@@ -493,5 +507,107 @@ describe('an older task (spec/reviews#data, rule 2)', () => {
 		await life.decide('accept');
 		const saved = JSON.parse(await readFile(join(dir, 'task-review.json'), 'utf8'));
 		expect(saved).toMatchObject({ schemaVersion: 2, review: { state: 'accepted' } });
+	});
+});
+
+describe('fixes of an independent review of the loop', () => {
+	it('a foreman’s closure check waits until the fixes it handed to workers are accepted, though later turns carry no batch', async () => {
+		const h = await setup({ foreman: true });
+		await h.life.start(start());
+		await h.firstRead(1);
+		h.state.settled = false;
+		await h.answer();
+		expect(h.doc().review!.state).toBe('fixing');
+		// A worker's report turn: no batch id, the crew is done.
+		h.state.settled = true;
+		await h.emit({ kind: 'turn.started', text: 'report' });
+		await h.emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await h.life.turnEnded();
+		expect(h.doc().review!.state).toBe('verifying');
+		expect(h.state.checks).toBe(2);
+	});
+	it('a foreman that only objects, without edits, gets its closure check at once', async () => {
+		const h = await setup({ foreman: true });
+		await h.life.start(start());
+		await h.firstRead(1);
+		await h.answer();
+		expect(h.doc().review!.state).toBe('verifying');
+	});
+	it('a version-1 review read while the agent fixed finds its batch in the journal and goes on', async () => {
+		const h = await setup();
+		const dir = await h.store.taskDir(h.key);
+		await h.emit({
+			kind: 'prompt.queued',
+			prompt: {
+				id: 'q1',
+				command: {
+					kind: 'submitReview',
+					text: 'batch',
+					review: { id: 'old-batch', comments: [] },
+					crew: { kind: 'review-comments', round: 1, comments: 1 },
+				},
+				attachments: [],
+			},
+		});
+		await atomicJson(join(dir, 'task-review.json'), {
+			schemaVersion: 1,
+			proposal: null,
+			review: {
+				id: 'r0',
+				who: { kind: 'agent' },
+				instructions: '',
+				guidance: '',
+				startedAt: '2026-01-01T00:00:00.000Z',
+				state: 'comments',
+				round: 1,
+				reviewers: ['Reviewer'],
+				trees: [{ scopeId: 's1', tree: tree('a') }],
+			},
+		});
+		const life = new TaskReviewLife(h.deps);
+		await life.load();
+		expect(life.document().review).toMatchObject({ state: 'fixing', batch: 'old-batch' });
+		await h.emit({ kind: 'turn.started', text: 'fix', review: { id: 'old-batch', comments: [] } });
+		await h.emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await life.turnEnded();
+		expect(life.document().review!.state).toBe('verifying');
+	});
+	it('a request looks at the files after a checkpoint: shell edits since the last one count', async () => {
+		let files = 0;
+		const h = await setup({
+			changes: async () => files,
+			checkpoint: async () => {
+				files = 1;
+			},
+		});
+		expect(
+			await h.life.request({ point: 'mid', startedBy: 'agent', reason: 'the data layer' })
+		).toEqual({ started: true, reviewer: 'Codex' });
+	});
+	it('a crew developer has review tools and restores its own review crew; a reviewer and a lead do not', () => {
+		for (const role of [null, 'foreman', 'developer'])
+			expect(ownReviewTool(role, 'request_review') && ownReviewTool(role, 'review_reply')).toBe(
+				true
+			);
+		for (const role of ['reviewer', 'lead'])
+			expect(ownReviewTool(role, 'request_review')).toBe(false);
+		expect(ownReviewTool('developer', 'ask_user')).toBe(false);
+		const spec = { name: 'Review' } as never;
+		expect(ownReviewCrew({ reviewCrew: spec }, 'developer')).toBe(spec);
+		expect(ownReviewCrew({ reviewCrew: spec }, null)).toBe(spec);
+		expect(ownReviewCrew({ reviewCrew: spec }, 'foreman')).toBeNull();
+		expect(ownReviewCrew({}, 'developer')).toBeNull();
+	});
+	it('an introduced finding is matched by repo and path across the reference case’s git roots (spec/overview#reference-case)', () => {
+		// Root repo, two submodules, a gitignored nested repo, a worktree: the fix changed `src/db.ts` of the nested repo only.
+		const changed = new Set([scopedPath('nested', 'src/db.ts'), scopedPath('root', 'README.md')]);
+		const at = (scopeId: string, path: string) => ({ anchor: { scopeId, path } as never });
+		expect(staleIntroduced([at('nested', 'src/db.ts')], changed)).toBeNull();
+		// The same repo-relative path in another root did not change.
+		expect(staleIntroduced([at('submodule-a', 'src/db.ts')], changed)).toBe('src/db.ts');
+		expect(staleIntroduced([at('worktree', 'README.md')], changed)).toBe('README.md');
+		expect(staleIntroduced([at('root', 'README.md'), at('submodule-b', 'x.ts')], changed)).toBe(
+			'x.ts'
+		);
 	});
 });

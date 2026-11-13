@@ -10,10 +10,19 @@ import { isHelperAgent, type AgentProviderId, type HelperAgent, type HelperRun }
 export const taskActions = [
 	'review',
 	'reviewSuggestions',
+	'planReview',
 	'taskReview',
 	'agentFix',
 	'conflicts',
 ] as const;
+/**
+ * spec/reviews#who: who reviews the plan (`planReview`) and the code mid-task and before the PR (`taskReview`). Unset is `Auto` — another
+ * signed-in provider, else a fresh session of the task's own — not the Default agent.
+ */
+export const reviewerActions = ['planReview', 'taskReview'] as const;
+export type ReviewerAction = (typeof reviewerActions)[number];
+export const isReviewerAction = (action: AgentAction): action is ReviewerAction =>
+	reviewerActions.includes(action as ReviewerAction);
 export const helperActions = [
 	'prSummary',
 	'reviewDrafts',

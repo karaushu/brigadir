@@ -2317,12 +2317,42 @@ const uk = {
 	'Answered a reviewer': 'Відповів ревʼюеру',
 	'Could not answer the reviewer': 'Не вдалося відповісти ревʼюеру',
 	'Review before PR': 'Ревʼю перед PR',
-	'Back to the agent': 'Назад агенту',
+	// spec/reviews: the steps, the strip, the findings and the person's answers.
+	'Plan review': 'Ревʼю плану',
+	'Mid-task review': 'Ревʼю посеред задачі',
+	'mid-task': 'посеред задачі',
+	'before PR': 'перед PR',
+	'Mid-task': 'Посеред задачі',
+	'Before PR': 'Перед PR',
+	'not started': 'не почато',
+	Findings: 'Зауваження',
+	open: 'відкрите',
+	new: 'нове',
+	'Fix {n}': 'Виправити {n}',
+	'Review closed': 'Ревʼю закрито',
+	'{reviewer} reading': '{reviewer} читає',
+	'{reviewer} checks the fixes': '{reviewer} звіряє правки',
+	'{count} open': 'відкрито {count}',
+	'{n} accepted': 'прийнято {n}',
+	'no findings': 'без зауважень',
+	'by you': 'тобою',
+	'after {reason}': 'після: {reason}',
+	'Code reviews': 'Ревʼю коду',
+	Reviews: 'Ревʼю',
+	'Another signed-in agent, else a fresh session': 'Інший агент із входом, інакше нова сесія',
+	'Remember for code reviews': 'Запамʼятати для ревʼю коду',
+	'One read: findings go to {agent}, the reviewer checks only that they are closed':
+		'Одне читання: зауваження йдуть {agent}, ревʼюер лише звіряє, чи їх закрито',
+	'{files} after the review': '{files} після ревʼю',
+	'{reviewers} and {agent} did not close them; your call':
+		'{reviewers} і {agent} їх не закрили; вирішуєш ти',
+	'The review left findings open; your call.': 'Ревʼю лишило відкриті зауваження; вирішуєш ти.',
+	'Asking for a review': 'Просить ревʼю',
+	'Asked for a review': 'Попросив ревʼю',
+	'Could not ask for a review': 'Не вдалося попросити ревʼю',
 	'Changed since round {round} of the last review: {files}':
 		'Змінено після раунду {round} останнього ревʼю: {files}',
 	'Changed since the review': 'Змінено після ревʼю',
-	'Could not resolve the comment.': 'Не вдалося закрити зауваження.',
-	'Could not send the comment to the agent.': 'Не вдалося надіслати зауваження агенту.',
 	'Could not start the review': 'Не вдалося почати ревʼю',
 	Fixing: 'Виправляє',
 	resolved: 'закрито',
@@ -2331,13 +2361,10 @@ const uk = {
 	waits: 'чекає',
 	answered: 'з відповіддю',
 	'From the task start': 'Від початку задачі',
-	'Keep as is': 'Лишити як є',
 	Log: 'Лог',
 	'Not reviewed': 'Без ревʼю',
 	'Options…': 'Параметри…',
-	'Remember for reviews before PR': 'Запамʼятати для ревʼю перед PR',
 	'Review again': 'Ревʼю ще раз',
-	'Review again…': 'Ревʼю ще раз…',
 	'Review first': 'Спершу ревʼю',
 	'Review in progress': 'Ревʼю триває',
 	'Review skipped': 'Ревʼю пропущено',
@@ -2347,15 +2374,11 @@ const uk = {
 	'Review did not start': 'Ревʼю не почалося',
 	Reviewed: 'Переглянуто',
 	'Review…': 'Ревʼю…',
-	'Round {n} of 2': 'Раунд {n} з 2',
 	'Since the last review': 'Після останнього ревʼю',
 	'Start again…': 'Почати знову…',
-	'Up to 2 rounds: comments go to {agent}, the reviewers check the fixes':
-		'До 2 раундів: зауваження йдуть {agent}, ревʼюери перевіряють правки',
 	What: 'Що',
 	'What the reviewers read': 'Що читають ревʼюери',
 	checking: 'перевіряє',
-	'checking the fixes': 'перевіряють правки',
 	'did not start': 'не почав',
 	reading: 'читає',
 	review: 'ревʼю',
@@ -2364,14 +2387,9 @@ const uk = {
 	'changed after the review': 'змінено після ревʼю',
 	'{agent} fixes': '{agent} править',
 	'{agent} thinks the task is done': '{agent} вважає задачу готовою',
-	'{files} after round {n}': '{files} після раунду {n}',
 	'{files} changed since the task start': '{files} змінено від початку задачі',
 	'{n} answered': '{n} з відповіддю',
 	'{n} fixed': '{n} виправлено',
-	'{reviewers} and {agent} did not agree; your call':
-		'{reviewers} і {agent} не погодились; вирішуєш ти',
-	'{reviewers} approved in round {n}': '{reviewers} схвалили в раунді {n}',
-	'{reviewer} disputes {count}': '{reviewer} заперечує: {count}',
 	fixed: 'виправлено',
 	'Could not write to the task': 'Не вдалося написати в задачу',
 	'No task with this ID in this project. Call tasks_list for the IDs.': 'немає такої задачі',
@@ -5004,6 +5022,17 @@ export function commentCount(locale: Locale, count: number): string {
 			form as 'one' | 'few' | 'many' | 'other'
 		] ?? 'коментаря';
 	return `${count} ${word}`;
+}
+
+/** spec/reviews#findings: a reviewer's findings — «1 зауваження», «3 зауваження», «5 зауважень», «1,5 зауваження». */
+export function findingCount(locale: Locale, count: number): string {
+	if (locale === 'en') return `${count} ${count === 1 ? 'finding' : 'findings'}`;
+	const form = new Intl.PluralRules('uk').select(count);
+	const word =
+		{ one: 'зауваження', few: 'зауваження', many: 'зауважень', other: 'зауваження' }[
+			form as 'one' | 'few' | 'many' | 'other'
+		] ?? 'зауваження';
+	return `${new Intl.NumberFormat('uk').format(count)} ${word}`;
 }
 
 /** spec/remote-access-and-mobile#phone-task-tools: approvals a merge still waits for — «1 схвалення», «3 схвалення», «5 схвалень». */

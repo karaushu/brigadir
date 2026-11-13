@@ -1,0 +1,61 @@
+/* spec/reviews#strip: the step track of a deck row — three 20-px steps, 8 × 1 px connectors at 34 % of --fg (readable on --green-soft and
+   --amber-soft), the current step on --tint2, a hovered one on --tint. */
+.track {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	margin-right: 2px;
+	color: var(--fg3);
+	white-space: nowrap;
+}
+.track > i {
+	flex: none;
+	width: 8px;
+	height: 1px;
+	background: color-mix(in srgb, var(--fg) 34%, transparent);
+}
+.step {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: 20px;
+	min-width: 20px;
+	padding: 0 4px;
+	border: 0;
+	border-radius: 5px;
+	background: none;
+	color: var(--fg3);
+	font: inherit;
+	transition:
+		background-color var(--motion-fast) ease,
+		color var(--motion-fast) ease;
+}
+.step[data-tone='green'] {
+	color: var(--green);
+}
+.step[data-tone='amber'] {
+	color: var(--amber);
+}
+.step:not(:disabled):hover {
+	background: var(--tint);
+	color: var(--fg);
+}
+.step[data-tone='green']:not(:disabled):hover {
+	color: var(--green);
+}
+.step[data-tone='amber']:not(:disabled):hover {
+	color: var(--amber);
+}
+.step[aria-current='step'] {
+	background: var(--tint2);
+}
+.step:active:not(:disabled) {
+	background: var(--segment-press);
+}
+.step:focus-visible {
+	outline: none;
+	box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.step:disabled {
+	opacity: 0.6;
+}

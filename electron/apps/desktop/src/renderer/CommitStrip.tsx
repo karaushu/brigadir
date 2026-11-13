@@ -236,7 +236,7 @@ export function CommitStrip({
 							className={styles.counts}
 							split
 						/>
-						{/* spec/diff-and-review#agent-review-surfaces: `Review…` beside Commit, with the review's state. */}
+						{/* spec/reviews#surfaces: `Review…` beside Commit, with the review's state. */}
 						<ReviewButton task={task} locale={locale} />
 						{/* While the dialog's commits run (it may be hidden), the button keeps its width, a spinner in place of the name. */}
 						<Button
@@ -270,7 +270,7 @@ export function CommitStrip({
 						{push}
 					</>
 				)}
-				{/* spec/diff-and-review#agent-review-surfaces: with everything committed `Review…` stays — the review reads the task's changes, not the uncommitted ones. */}
+				{/* spec/reviews#surfaces: with everything committed `Review…` stays — the review reads the task's changes, not the uncommitted ones. */}
 				{active && !files.length && <ReviewButton task={task} locale={locale} />}
 			</div>
 		</section>

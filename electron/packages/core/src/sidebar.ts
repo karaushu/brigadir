@@ -117,7 +117,7 @@ export type CrewWorkerRow = {
 };
 /** Worker rows of a foreman card in tree order with the agent name as prefix and lead depth (spec/crew-templates-and-editor#after-launch, spec/crew#subordinates). */
 export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]): CrewWorkerRow[] {
-	// spec/diff-and-review#agent-review-surfaces: a task's reviewers are its rows like a crew's workers; a solo task shows its current review's.
+	// spec/reviews#surfaces: a task's reviewers are its rows like a crew's workers; a solo task shows its current review's.
 	const spec = foreman.crew ?? foreman.reviewCrew;
 	if (!spec) return [];
 	const current = foreman.crew ? null : new Set(spec.root.checkedBy);

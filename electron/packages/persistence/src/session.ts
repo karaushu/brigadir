@@ -123,9 +123,11 @@ export async function atomicText(path: string, text: string | Uint8Array): Promi
 		await unlink(temp).catch(() => {});
 	}
 }
+/** A JSON document of one of `versions` (rule 10): a newer document of an older reader fails with `unsupported_schema`. */
 export async function readDocument(
 	path: string,
-	maxBytes = 1024 * 1024
+	maxBytes = 1024 * 1024,
+	versions: readonly number[] = [1]
 ): Promise<Record<string, unknown>> {
 	const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
 	try {
@@ -133,7 +135,8 @@ export async function readDocument(
 		const value: unknown = JSON.parse(await file.readFile('utf8'));
 		if (!isRecord(value) || !Number.isInteger(value.schemaVersion))
 			throw new ReadFailure('invalid_document');
-		if (value.schemaVersion !== 1) throw new ReadFailure('unsupported_schema');
+		if (!versions.includes(value.schemaVersion as number))
+			throw new ReadFailure('unsupported_schema');
 		return value;
 	} finally {
 		await file.close();

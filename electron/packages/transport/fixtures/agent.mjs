@@ -182,6 +182,11 @@ connection = agent({name:'fixture'})
    // Scripted reviewer: round 1 comments on the first changed file, round 2 approves unless the part is titled «dispute».
    if(/^@on-report accept/m.test(script))autoAccept=true;
    const incoming=/^Report from `[^`]*` · [^\n]* \(task ([^,\s)]+)[^)]*\)/.exec(script);if(autoAccept&&incoming)script=`@call accept_task {"taskId":"${incoming[1]}"}`;
+   // spec/reviews#loop: a task's own review says `first read` or `closure check`; a crew member's check says `round n of 2`.
+   const own=/^Check task (\S+) of `[^`]*` \(reviewId (\S+), (first read|closure check)\)/.exec(script);
+   if(own){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const title=script.split('\n')[1]??'';const finding=/^- id (\S+) \(/m.exec(script)?.[1];
+    script=own[3]==='first read'?(file&&!/clean/i.test(title)?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round 1: say hello instead"}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"}`)
+     :/dispute/i.test(title)&&finding?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"replyTo":"${finding}","text":"Still says done."}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"}`;}
    const check=/^Check task (\S+) of `[^`]*` \(reviewId (\S+), round (\d) of \d\)/.exec(script);
    if(check&&/hold the verdict/.test(script.split('\n')[1]??'')){await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}
    if(check){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const dispute=/dispute/i.test(script.split('\n')[1]??'');const comment=file&&(check[3]==='1'||dispute);

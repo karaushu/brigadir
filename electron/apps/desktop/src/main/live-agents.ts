@@ -104,7 +104,7 @@ export class LiveAgents {
 				task.status === 'needs-you' && activity?.kind !== 'tool'
 					? activity?.kind === 'plan'
 						? 'permission'
-						: activity?.kind === 'proposal'
+						: activity?.kind === 'proposal' || activity?.kind === 'review'
 							? 'question'
 							: (activity?.kind ?? null)
 					: null,

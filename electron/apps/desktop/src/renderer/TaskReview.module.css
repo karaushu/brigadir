@@ -1,4 +1,4 @@
-/* spec/diff-and-review#agent-review-ui: the review's own pieces; the card is ui/ChatCard, the strip is a list of ui/Deck, the service rows are the
+/* spec/reviews#strip: the review's own pieces; the card is ui/ChatCard, the strip is a list of ui/Deck with ui/StepTrack, the service rows are the
    crew's (Crew.module.css .service). */
 .summary {
 	align-self: stretch;
@@ -25,7 +25,7 @@
 .skipped > span {
 	flex: 1;
 }
-/* A comment count is a link: dotted at rest, solid on hover (spec/diff-and-review#agent-review-ui). */
+/* A comment count is a link: dotted at rest, solid on hover (spec/reviews#strip). */
 .count {
 	flex: none;
 	padding: 0;
@@ -62,20 +62,18 @@
 .muted {
 	color: var(--fg2);
 }
-[data-review-strip='passed'] li {
-	background: var(--green-soft);
+/* The state glyph takes the review's tone; the row's own fill is ui/Deck's (`tone`). */
+.glyph {
+	display: inline-flex;
+	color: var(--fg2);
 }
-[data-review-strip='passed'] li > span:first-child {
+.glyph[data-state='passed'] {
 	color: var(--green);
 }
-[data-review-strip='disputed'] li {
-	background: var(--amber-soft);
-}
-[data-review-strip='disputed'] li > span:first-child,
-[data-review-strip='failed'] li > span:first-child {
+.glyph[data-state='yours'] {
 	color: var(--amber);
 }
-[data-review-strip='failed'] li > span:first-child {
+.glyph[data-state='failed'] {
 	color: var(--red);
 }
 .details {
@@ -129,10 +127,10 @@
 	color: var(--green);
 }
 .details li[data-state='failed'] > small,
-.details li[data-state='disputed'] > small {
+.details li[data-state='open'] > small {
 	color: var(--amber);
 }
-/* A comment: its text, `file:line · reviewer`, a tag; the row is one target (rule 15). */
+/* A finding: its text, `file:line · reviewer`, the reviewer's reason when it is open, a tag; the row is one target (rule 15). */
 .comment {
 	flex: 1;
 	display: flex;
@@ -165,7 +163,7 @@
 .comment code {
 	font: var(--text-10-5) var(--mono-family);
 }
-[data-comment='fixed'] .text {
+[data-finding='fixed'] .text {
 	text-decoration: line-through;
 	color: var(--fg2);
 }
@@ -185,27 +183,16 @@
 	background: var(--green-soft);
 	color: var(--green);
 }
-.tag[data-tag='disputed'] {
+.tag[data-tag='open'],
+.tag[data-tag='new'] {
 	background: var(--amber-soft);
 	color: var(--amber);
 }
-.dispute {
-	flex-basis: 100%;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	padding: 0 0 6px;
-}
-.dispute blockquote {
-	margin: 0;
-	padding: 6px 9px;
-	border-radius: 6px;
-	background: var(--amber-soft);
-	color: var(--fg);
-}
-.dispute > span {
-	display: flex;
-	gap: 6px;
+.reason {
+	font-size: var(--text-11);
+	line-height: 15px;
+	color: var(--fg2);
+	white-space: normal;
 }
 /* `Review…` beside Commit takes the review's tone; a dot says the tree changed after the review. */
 .button {
@@ -230,7 +217,7 @@
 	border-radius: 50%;
 	background: var(--accent);
 }
-/* spec/diff-and-review#agent-review-pr: the row of the New pull request sheet. */
+/* spec/reviews#before-pr: the row of the New pull request sheet. */
 .reminder {
 	display: flex;
 	align-items: center;

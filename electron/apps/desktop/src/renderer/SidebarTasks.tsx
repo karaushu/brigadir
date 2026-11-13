@@ -10,7 +10,7 @@ import {
 	t,
 	type AgentTask,
 	type Locale,
-	commentCount,
+	findingCount,
 	type TaskReviewView,
 } from '@brigadir/core';
 import { cardTree, statusLabels, taskActivityText } from './task-line';
@@ -53,7 +53,7 @@ export function CrewCard({
 	}, [preview]);
 	const rows = crewWorkerRows(task, tasks),
 		providers = task.crew ? specProviders(task.crew.root) : [],
-		// spec/diff-and-review#agent-review-surfaces: a solo task's reviewers — the card has no helmet and counts reviewers.
+		// spec/reviews#surfaces: a solo task's reviewers — the card has no helmet and counts reviewers.
 		reviewOnly = !task.crew,
 		review = useTaskReview(reviewOnly && !preview ? task : null);
 	// spec/appearance#evolution-redesign: a collapsed crew says what its workers do when the foreman has no activity line.
@@ -147,24 +147,23 @@ export function CrewCard({
 		</div>
 	);
 }
-/** spec/diff-and-review#agent-review-surfaces: `Review · round n`, `N comments · waits`, `Approved`, `N disputed comments`. */
+/** spec/reviews#surfaces: `Review`, `N findings · waits`, `Approved`, `N open`. */
 function reviewerState(view: TaskReviewView, taskId: string, locale: Locale): { state?: string } {
-	const member = view.members.find((item) => item.taskId === taskId),
-		round = Math.max(1, view.review?.round ?? 1);
+	const member = view.members.find((item) => item.taskId === taskId);
 	if (!member) return {};
 	switch (member.state) {
 		case 'starting':
 		case 'reading':
 		case 'checking':
-			return {
-				state: `${t(locale, 'Review')} · ${t(locale, 'round {n}').replace('{n}', String(round))}`,
-			};
-		case 'comments':
-			return { state: `${commentCount(locale, member.comments)} · ${t(locale, 'waits')}` };
+			return { state: t(locale, 'Review') };
+		case 'findings':
+			return { state: `${findingCount(locale, member.findings)} · ${t(locale, 'waits')}` };
 		case 'approved':
 			return { state: t(locale, 'Approved') };
-		case 'disputed':
-			return { state: `${commentCount(locale, member.comments)} · ${t(locale, 'disputed')}` };
+		case 'open':
+			return {
+				state: t(locale, '{count} open').replace('{count}', findingCount(locale, member.findings)),
+			};
 		default:
 			return {};
 	}
@@ -181,7 +180,7 @@ function WorkerRow({
 	row: ReturnType<typeof crewWorkerRows>[number];
 	selected: boolean;
 	locale: Locale;
-	/** spec/diff-and-review#agent-review-surfaces: a reviewer of the task's review says its state instead of its task title. */
+	/** spec/reviews#surfaces: a reviewer of the task's review says its state instead of its task title. */
 	state?: string;
 	onOpen(task: AgentTask): void;
 	onMenu(task: AgentTask): void;

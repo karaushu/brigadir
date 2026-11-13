@@ -450,6 +450,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'tasks_list',
 			'task_send',
 			'propose_review',
+			'request_review',
 			'review_reply',
 			'add_folder',
 			'commands_list',
@@ -479,6 +480,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'tasks_list',
 			'task_send',
 			'propose_review',
+			'request_review',
 			'review_reply',
 			'add_folder',
 			'commands_list',
@@ -527,6 +529,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'tasks_list',
 			'task_send',
 			'propose_review',
+			'request_review',
 			'review_reply',
 			'add_folder',
 			'console_list',
@@ -633,6 +636,23 @@ it("gives crew workers the browser, the simulator, the project commands and the 
 	expect(off.some((name) => /^(browser|simulator|commands)_/.test(name))).toBe(false);
 	// spec/terminal-and-cli-agents#agent-console-tools: the console is no module; a worker reads its own with every module off.
 	expect(off).toEqual(expect.arrayContaining(['console_list', 'console_read']));
+});
+
+it('gives request_review and review_reply to a solo agent, a foreman and a crew developer, never to a reviewer (spec/reviews#request-tool)', () => {
+	const names = (role: 'developer' | 'reviewer' | 'lead' | 'foreman' | null) =>
+		(mcpTools(role, allModules).list.tools as { name: string; description: string }[]).filter(
+			(tool) => tool.name === 'request_review' || tool.name === 'review_reply'
+		);
+	for (const role of [null, 'foreman', 'developer'] as const)
+		expect(
+			names(role).map((tool) => tool.name),
+			String(role)
+		).toEqual(['request_review', 'review_reply']);
+	expect(names('reviewer')).toEqual([]);
+	expect(names('lead')).toEqual([]);
+	// The description says when to call it: after a layer other work builds on, not at the end.
+	expect(names(null)[0]!.description).toMatch(/data layer/);
+	expect(names(null)[0]!.description).toMatch(/Brigadir decides/);
 });
 
 it('says in every tool description when to use it (spec/agents-and-providers#tools-awareness)', () => {

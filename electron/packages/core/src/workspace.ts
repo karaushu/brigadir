@@ -73,10 +73,12 @@ export type Project = {
 };
 /** `modelName`/`effortName` are the provider's names at launch (spec/projects-and-board#board rule 6); `updatedAt` is derived from task.json mtime when read. */
 /** `plan` is a permission that is a plan for approval (spec/chat-turns-plans-and-questions#plan-approval). */
+/** `review`: a review's open findings wait for the person (spec/reviews#surfaces); `count` is how many. */
 export type TaskActivity = {
-	kind: 'tool' | 'permission' | 'question' | 'plan' | 'proposal';
+	kind: 'tool' | 'permission' | 'question' | 'plan' | 'proposal' | 'review';
 	title: string;
 	path: string | null;
+	count?: number;
 	/** spec/chat#subagent-block: the work is a subagent's; `title` is its name. */
 	subagent?: true;
 };
@@ -127,7 +129,7 @@ export type AgentTask = {
 	/** spec/tasks#archive: when the person marked it completed. */ completedAt?: string;
 	prReview?: TaskPRReview;
 	crew?: CrewSpec;
-	/** spec/diff-and-review#agent-review-members: the reviewers of the task's own changes, as a crew whose root is the task's agent. */ reviewCrew?: CrewSpec;
+	/** spec/reviews#reviewer-sessions: the reviewers of the task's own changes, as a crew whose root is the task's agent. */ reviewCrew?: CrewSpec;
 	crewTaskId?: string;
 	crewNodeId?: string;
 	parentTaskId?: string;
@@ -290,9 +292,11 @@ export function isAgentTask(value: unknown): value is AgentTask {
 		(value.activity === undefined ||
 			value.activity === null ||
 			(isRecord(value.activity) &&
-				['tool', 'permission', 'question', 'plan', 'proposal'].includes(
+				['tool', 'permission', 'question', 'plan', 'proposal', 'review'].includes(
 					value.activity.kind as string
 				) &&
+				(value.activity.count === undefined ||
+					(Number.isSafeInteger(value.activity.count) && Number(value.activity.count) >= 0)) &&
 				typeof value.activity.title === 'string' &&
 				(value.activity.subagent === undefined || value.activity.subagent === true) &&
 				(value.activity.path === null || typeof value.activity.path === 'string'))) &&

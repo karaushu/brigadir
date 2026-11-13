@@ -661,7 +661,8 @@ export function CrewEventRow({
 		if (
 			marker.kind === 'question' ||
 			marker.kind === 'part-dropped' ||
-			marker.kind === 'review-comments'
+			marker.kind === 'review-comments' ||
+			marker.kind === 'review-continue'
 		)
 			return null;
 		return (

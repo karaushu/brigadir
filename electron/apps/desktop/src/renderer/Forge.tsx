@@ -1,5 +1,5 @@
 import { HelperSplit, useHelperRun } from './HelperAgent';
-import { ReviewReminder } from './TaskReview';
+import { ReviewReminder, reviewBeforePR } from './TaskReview';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { onSessionEvent } from './session-events';
 import {
@@ -147,8 +147,15 @@ export function ForgeProvider({
 				error,
 				locale,
 				refresh,
-				open: (action, id, returnFocus, done) =>
-					setModal({ action, id, returnFocus: returnFocus ?? null, done }),
+				open: (action, id, returnFocus, done) => {
+					// spec/reviews#before-pr: `Create PR` on changes no review before the PR covered starts that review instead of the dialog.
+					if (action === 'pr' && task)
+						void reviewBeforePR(task, locale).then((opens) => {
+							if (opens && mounted.current)
+								setModal({ action, id, returnFocus: returnFocus ?? null, done });
+						});
+					else setModal({ action, id, returnFocus: returnFocus ?? null, done });
+				},
 				hide: async (id) => {
 					if (!task) return;
 					const value = await window.brigadir.hidePullRequestSuggestion(task, id);
@@ -688,7 +695,7 @@ function ForgeDialog({
 							{t(locale, 'Uncommitted changes stay local and are not included in this PR.')}
 						</p>
 					)}
-					{/* spec/diff-and-review#agent-review-pr: whether the agents reviewed these changes; Create PR stays available. */}
+					{/* spec/reviews#before-pr: whether the agents reviewed these changes; Create PR stays available. */}
 					<ReviewReminder task={task} locale={locale} onLeave={close} />
 					{own && pr.canRename && (
 						<label className={styles.field}>

@@ -8,6 +8,8 @@ import {
 	isCrewAction,
 	helperEfforts,
 	inheritsDefaultAgent,
+	isReviewerAction,
+	reviewerActions,
 	modelDisplayName,
 	selectOption,
 	slackAgentActions,
@@ -104,7 +106,13 @@ export function ActionAgentsRows({
 			agent={settings.actionAgents[action] ?? null}
 			crew={(isCrewAction(action) && settings.actionCrews[action]) || null}
 			resetCrew={() => resetCrew(action)}
-			defaultName={inheritsDefaultAgent(action) ? defaults.task : defaults.helper}
+			defaultName={
+				isReviewerAction(action)
+					? t(locale, 'Another signed-in agent, else a fresh session')
+					: inheritsDefaultAgent(action)
+						? defaults.task
+						: defaults.helper
+			}
 			defaultProvider={
 				inheritsDefaultAgent(action)
 					? settings.agents.provider
@@ -153,7 +161,10 @@ export function ActionAgentsRows({
 			{open && (
 				<>
 					<div className={styles.heading}>{t(locale, 'Tasks')}</div>
-					{taskActions.map(row)}
+					{taskActions.filter((action) => !isReviewerAction(action)).map(row)}
+					{/* spec/reviews#who: who reviews the plan and the code; unset is `Auto`. */}
+					<div className={styles.heading}>{t(locale, 'Reviews')}</div>
+					{reviewerActions.map(row)}
 					<div className={styles.heading}>{t(locale, 'One-off texts')}</div>
 					{helperActions.map(row)}
 					{/* spec/notifications-slack-notes-and-schedules#slack: the @ mentions' answers and the agent of code questions. */}
@@ -194,7 +205,8 @@ function ActionRow({
 	save(agent: HelperAgent | null): void;
 }) {
 	const task = inheritsDefaultAgent(action),
-		sameAs = t(locale, task ? 'Same as Default agent' : 'Same as Helper agent');
+		reviewer = isReviewerAction(action),
+		sameAs = t(locale, reviewer ? 'Auto' : task ? 'Same as Default agent' : 'Same as Helper agent');
 	const catalog = agent ? catalogs[agent.provider] : undefined,
 		modelOption = catalog ? selectOption(catalog.options, 'model') : undefined,
 		modelName =

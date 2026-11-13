@@ -101,7 +101,9 @@ const whenToUse: Record<string, string> = {
 	task_send:
 		'Use it when the person asks you to send, hand over or tell something to another task. Never use your own messaging or agent tools for Brigadir tasks: they do not reach them.',
 	review_reply:
-		'Call it only for a comment of a review batch of this task, when you do not fix it as asked.',
+		'Call it only for a finding of a review batch of this task, when you do not fix it as asked.',
+	request_review:
+		'Call it after you finish a layer that other work builds on, such as the data layer, a shared API, a schema or a migration, before you build on top of it. Do not call it after small steps or at the end of the task: the review before the pull request covers that.',
 	propose_review:
 		'Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.',
 	add_folder: 'Use it when the work needs files outside the project, such as a sibling repository.',
@@ -261,18 +263,26 @@ const humanTools: Tool[] = [
 		},
 		run: async (args, call, signal) => text(await call('task_send', args, signal)),
 	},
-	// spec/diff-and-review#agent-review-start: a card in the chat that offers the person a review of this task's changes by other agents.
+	// spec/reviews#start: a card in the chat that offers the person a review of this task's changes by other agents.
 	{
 		name: 'propose_review',
 		description:
-			"Offer the person a review of this task's changes by other agents before the pull request. The person sees a card and starts the review or dismisses it; the call does not wait. When the person starts it, reviewer agents read your changes and their comments come back to you as a review batch: fix what is right, and where you disagree say why in your answer, since the reviewers read it in the next round. summary: one or two sentences on what was done and what the reviewers should look at. Returns proposed: true, or the reason it was refused.",
+			"Offer the person a review of this task's changes by another agent before the pull request. The person sees a card and starts the review or dismisses it; the call does not wait. When the person starts it, the reviewer reads your changes once and its findings come back to you as a review batch: fix each one once, or object to it with review_reply; the reviewer then checks only whether each finding is closed. summary: one or two sentences on what was done and what the reviewer should look at. Returns proposed: true, or the reason it was refused.",
 		shape: { summary: z.string().trim().max(4000).default('') },
 		run: async (args, call, signal) => text(await call('propose_review', args, signal)),
+	},
+	// spec/reviews#request-tool: the host decides and runs a mid-task review; the agent works on.
+	{
+		name: 'request_review',
+		description:
+			"Ask Brigadir for a mid-task review of this task's changes by another agent. Brigadir decides: it refuses while a review of the task runs, when nothing changed since the last review, or when no reviewer is available. A started review reads the task's state now, so keep working; its findings arrive later as a review batch: fix each one once, or object to it with review_reply. reason: what you just finished, e.g. 'the data layer'. Returns started: true with the reviewer, or started: false with the reason.",
+		shape: { reason: z.string().trim().min(1).max(500) },
+		run: async (args, call, signal) => text(await call('request_review', args, signal)),
 	},
 	{
 		name: 'review_reply',
 		description:
-			"Answer a reviewer's comment from a review batch of this task's own review: the reply joins the comment's thread, and the reviewers read it in the next round. Use it for a comment you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed.",
+			"Object to a reviewer's finding from a review batch of this task's own review: the reply joins the finding's thread, and the reviewer reads it in its closure check. Use it for a finding you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed.",
 		shape: {
 			commentId: z.string().trim().min(1).max(100),
 			text: z.string().trim().min(1).max(10_000),
@@ -702,18 +712,25 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 	},
 	submit_review: {
 		description:
-			'Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments.',
+			"Send review comments to a worker task. Each comment names a changed file (project-relative path), start and end lines on the new side, and the text. The worker receives them as review comments. In a closure check of a task's own review, an item is either {replyTo: <finding id>, text} for a finding still open, or {path, start, text, introduced: true} for a problem the fix brought in.",
 		shape: {
 			taskId,
 			reviewId: z.string().max(128).optional(),
+			// spec/reviews#loop: a closure check names an open finding by `replyTo` (no path) or flags a problem the fix introduced.
 			comments: z
 				.array(
-					z.object({
-						path: z.string().min(1).max(1024),
-						start: z.number().int().min(1).optional(),
-						end: z.number().int().min(1).optional(),
-						text: z.string().min(1).max(10_000),
-					})
+					z
+						.object({
+							path: z.string().min(1).max(1024).optional(),
+							start: z.number().int().min(1).optional(),
+							end: z.number().int().min(1).optional(),
+							text: z.string().min(1).max(10_000),
+							replyTo: z.string().min(1).max(100).optional(),
+							introduced: z.boolean().optional(),
+						})
+						.refine((item) => item.path !== undefined || item.replyTo !== undefined, {
+							message: 'Each comment needs a path, or replyTo for a finding still open',
+						})
 				)
 				.min(1)
 				.max(200),
@@ -770,6 +787,7 @@ export const hiddenToolMessages: Record<string, string> = {
 		'create_task is not available while your crew plan exists: run the plan in this task with create_worker_task.',
 };
 const noHidden: ReadonlySet<string> = new Set();
+const ownReviewTools: ReadonlySet<string> = new Set(['request_review', 'review_reply']);
 const served = new Map<string, Served>();
 /**
  * Registration order of the SDK server: the human's tools, then the crew tools of the role. Built once per role and set
@@ -791,7 +809,13 @@ export function mcpTools(
 	// spec/agents-and-providers#tools-awareness: a crew worker keeps the browser, the simulator and the project commands; the person's other tools stay up the tree.
 	const human = [...humanTools, ...simulatorTools].filter((tool) => {
 		const module = toolModule(tool.name);
-		return (!module || modules[module]) && (humanToolsAllowed(role) || isWorkspaceTool(tool.name));
+		return (
+			(!module || modules[module]) &&
+			(humanToolsAllowed(role) ||
+				isWorkspaceTool(tool.name) ||
+				// spec/reviews#points: a crew developer's part is a task with reviews of its own.
+				(role === 'developer' && ownReviewTools.has(tool.name)))
+		);
 	});
 	const tools = [
 		...human,

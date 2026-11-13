@@ -23,8 +23,8 @@ const send = async (page: Page, text: string) => {
 	await page.keyboard.press('Enter');
 };
 
-// spec/diff-and-review#agent-review: the agent proposes, the person starts the review from the card, the reviewer's comment goes to the agent, round 2
-// passes; the strip, the chat rows, the Changes button and the sidebar's reviewer row follow it. Reviewer hosts are real processes.
+// spec/reviews#loop: the agent proposes, the person starts the review from the card, the reviewer's finding goes to the agent, the closure
+// check passes; the strip, the chat rows and the sidebar's reviewer row follow it. Reviewer hosts are real processes.
 test('a task is reviewed inside it before the PR @area:review', async () => {
 	test.setTimeout(240_000);
 	const root = await mkdtemp(join(tmpdir(), 'brigadir-task-review-')),
@@ -92,18 +92,18 @@ test('a task is reviewed inside it before the PR @area:review', async () => {
 		await expect(card).toBeVisible({ timeout: 30_000 });
 		await expect(card).toContainText('The output file is written.');
 		await card.getByRole('button', { name: 'Start review', exact: true }).click();
-		// The strip over the composer follows the review; its count opens the comments.
+		// The strip over the composer follows the review; the findings count opens the findings.
 		const strip = page.locator('[data-review-strip]');
 		await expect(strip).toBeVisible({ timeout: 30_000 });
-		await expect(page.locator('[data-review-row="comments"]')).toBeVisible({ timeout: 90_000 });
+		await expect(page.locator('[data-review-row="findings"]')).toBeVisible({ timeout: 90_000 });
 		await page
-			.locator('[data-review-row="comments"]')
-			.getByRole('button', { name: '1 comment' })
+			.locator('[data-review-row="findings"]')
+			.getByRole('button', { name: '1 finding' })
 			.click();
 		const details = page.locator('[data-review-details]');
 		await expect(details).toContainText('Round 1: say hello instead');
 		await expect(page.locator('[data-review-strip="passed"]')).toBeVisible({ timeout: 120_000 });
-		await expect(page.locator('[data-review-row="approved"]')).toBeVisible();
+		await expect(page.locator('[data-review-row="passed"]')).toBeVisible();
 		// The Changes button says the changes are reviewed; the sidebar lists the reviewer under the task.
 		await expect(page.locator('[data-crew-card="task"]')).toContainText('Reviewer');
 	} finally {

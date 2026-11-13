@@ -338,7 +338,7 @@ export function CommentCard({
 	onEdit,
 	onRemove,
 	onResolve,
-	onSendBack,
+	onOpenReview,
 	agent = '',
 }: {
 	comment: ReviewComment & ReviewStatus;
@@ -348,12 +348,12 @@ export function CommentCard({
 	onEdit(): void;
 	onRemove(): void;
 	onResolve(): void;
-	/** spec/diff-and-review#agent-review-surfaces: `Back to the agent` on a disputed reviewer's comment. */
-	onSendBack?(): void;
+	/** spec/reviews#surfaces: `Open the review` on a finding that waits for the person — the strip holds `Fix {n}` and `Accept`. */
+	onOpenReview?(): void;
 	/** The task's agent by name, for its replies in the thread. */
 	agent?: string;
 }) {
-	// spec/diff-and-review#agent-review-surfaces: a reviewer's comment of the task's review shows the reviewer, its round and where it went.
+	// spec/reviews#surfaces: a reviewer's comment of the task's review shows the reviewer, its round and where it went.
 	const round = comment.review,
 		tag = round ? taskReviewCommentState(comment) : null;
 	return (
@@ -416,22 +416,15 @@ export function CommentCard({
 					))}
 					<footer className={styles.reviewFoot} data-tag={tag}>
 						<small>
-							{tag === 'disputed'
-								? t(locale, 'Your call')
-								: tag === 'fixed'
-									? t(locale, 'fixed')
-									: tag === 'answered'
-										? t(locale, 'answered')
-										: `${t(locale, 'round {n}').replace('{n}', String(round.round))} · ${t(locale, 'sent')}`}
+							{tag === 'open' || tag === 'new'
+								? `${t(locale, tag)} · ${t(locale, 'Your call')}`
+								: tag === 'fixed' || tag === 'answered' || tag === 'accepted'
+									? t(locale, tag)
+									: `${t(locale, 'round {n}').replace('{n}', String(round.round))} · ${t(locale, 'sent')}`}
 						</small>
-						{tag === 'disputed' && onSendBack && (
-							<Button variant="ghost" appearance="primary" onClick={onSendBack}>
-								{t(locale, 'Back to the agent')}
-							</Button>
-						)}
-						{tag === 'disputed' && (
-							<Button variant="ghost" appearance="primary" onClick={onResolve}>
-								{t(locale, 'Keep as is')}
+						{(tag === 'open' || tag === 'new') && onOpenReview && (
+							<Button variant="ghost" appearance="primary" onClick={onOpenReview}>
+								{t(locale, 'Open the review')}
 							</Button>
 						)}
 					</footer>

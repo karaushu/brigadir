@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 import {
+	providerName,
 	actionChoice,
 	agentProviders,
 	crewLabel,
@@ -55,7 +56,7 @@ type PullRequestReviewRequest = {
 	start(choice: ReviewChoice): Promise<boolean>;
 };
 /**
- * spec/diff-and-review#agent-review-start: `Review before PR` of a task — no `Where` (reviewers work in their own worktree), `What` instead;
+ * spec/reviews#start: `Review before PR` of a task — no `Where` (reviewers work in their own worktree), `What` instead;
  * `start` resolves the reason it did not start, else null.
  */
 export type TaskReviewRequest = {
@@ -158,7 +159,28 @@ function ReviewLaunchDialog({
 		[agent, setAgent] = useState<HelperRun | null>(null),
 		[crew, setCrew] = useState<string | null>(null),
 		[segment, setSegment] = useState<'agent' | 'crew' | null>(null),
-		[remember, setRemember] = useState(false);
+		[remember, setRemember] = useState(false),
+		// spec/reviews#start: a task's review offers `Auto` — the reviewer the app resolves (spec/reviews#who) — as its inherited entry.
+		[auto, setAuto] = useState<string | null>(null);
+	useEffect(() => {
+		if (!task) return;
+		let live = true;
+		void window.brigadir
+			.readTaskReviewer({ projectId: task.projectId, id: task.taskId }, 'pre-pr')
+			.then(
+				(value) =>
+					live &&
+					setAuto(
+						'failure' in value
+							? value.failure
+							: [providerName(value.provider), value.model].filter(Boolean).join(' · ')
+					),
+				() => {}
+			);
+		return () => {
+			live = false;
+		};
+	}, [task?.taskId]);
 	useEffect(() => {
 		let live = true;
 		void window.brigadir.readTemplates().then(
@@ -205,7 +227,7 @@ function ReviewLaunchDialog({
 		shown = segment ?? (chosenCrew ? 'crew' : 'agent'),
 		fallback = agents.find((item) => item.default),
 		isDefault = (pick: HelperRun | null) =>
-			!pick || (pick.provider === fallback?.provider && pick.model === fallback.model);
+			!pick || (!task && pick.provider === fallback?.provider && pick.model === fallback.model);
 	const crews = library?.crews ?? [];
 	const rememberPick = (pick: HelperRun | null) => {
 		if (isDefault(pick) && ownCrew) void saveActionCrew(action, null).catch(() => {});
@@ -229,7 +251,10 @@ function ReviewLaunchDialog({
 			void saveActionCrew(action, { templateId: template.id, name: template.name }).catch(() => {});
 	};
 	const chooseAgent = (value: string) => {
-		const item = agents.find((entry) => `${entry.provider}:${entry.model}` === value) ?? null,
+		const item =
+				value === 'auto'
+					? null
+					: (agents.find((entry) => `${entry.provider}:${entry.model}` === value) ?? null),
 			pick = item ? { provider: item.provider, model: item.model, effort: null } : null;
 		setCrew(null);
 		// Over a remembered agent or crew the Default agent for one review is named explicitly, else the setting would win.
@@ -243,9 +268,11 @@ function ReviewLaunchDialog({
 	};
 	const agentValue = chosen
 		? `${chosen.provider}:${chosen.model}`
-		: fallback
-			? `${fallback.provider}:${fallback.model}`
-			: '';
+		: task
+			? 'auto'
+			: fallback
+				? `${fallback.provider}:${fallback.model}`
+				: '';
 	const crewValue = chosenCrew ?? crews[0]?.id ?? '';
 	async function start() {
 		if (busy) return;
@@ -429,12 +456,26 @@ function ReviewLaunchDialog({
 									/>
 								}
 								onChange={chooseAgent}
-								options={agents.map((item) => ({
-									value: `${item.provider}:${item.model}`,
-									label: item.name,
-									icon: <Glyph name={item.provider === 'codex' ? 'openai' : 'claude'} size={12} />,
-									...(item.default ? { tail: t(locale, 'Default agent') } : {}),
-								}))}
+								options={[
+									...(task
+										? [
+												{
+													value: 'auto',
+													label: t(locale, 'Auto'),
+													icon: <Glyph name="review" size={12} />,
+													...(auto ? { tail: auto } : {}),
+												},
+											]
+										: []),
+									...agents.map((item) => ({
+										value: `${item.provider}:${item.model}`,
+										label: item.name,
+										icon: (
+											<Glyph name={item.provider === 'codex' ? 'openai' : 'claude'} size={12} />
+										),
+										...(item.default && !task ? { tail: t(locale, 'Default agent') } : {}),
+									})),
+								]}
 							/>
 						) : (
 							<Popup
@@ -458,7 +499,7 @@ function ReviewLaunchDialog({
 						<span className={styles.caption}>
 							{t(
 								locale,
-								'Up to 2 rounds: comments go to {agent}, the reviewers check the fixes'
+								'One read: findings go to {agent}, the reviewer checks only that they are closed'
 							).replace('{agent}', task.agent)}
 						</span>
 					) : (
@@ -474,7 +515,7 @@ function ReviewLaunchDialog({
 						label={t(
 							locale,
 							action === 'taskReview'
-								? 'Remember for reviews before PR'
+								? 'Remember for code reviews'
 								: action === 'review'
 									? 'Remember for reviews with an agent'
 									: 'Remember for agent suggestions in review'

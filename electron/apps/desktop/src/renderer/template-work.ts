@@ -20,7 +20,7 @@ const builtinWork: Readonly<Record<string, MessageKey>> = {
 	[reviewerTemplateId]: 'Checks the work, writes no code',
 	[testerTemplateId]: 'Writes tests, changes no production code',
 	[technicalWriterTemplateId]: 'Writes docs, changes no behaviour',
-	[designerTemplateId]: 'Checks screens in the running app',
+	[designerTemplateId]: 'Checks screens against the design',
 	[securityReviewerTemplateId]: 'Looks for security defects in changes',
 };
 /**

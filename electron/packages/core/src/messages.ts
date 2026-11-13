@@ -128,7 +128,7 @@ const uk = {
 	'Default model': 'Типова модель',
 	'Writes tests, changes no production code': 'Пише тести, робочий код не змінює',
 	'Writes docs, changes no behaviour': 'Пише документацію, поведінку не змінює',
-	'Checks screens in the running app': 'Перевіряє екрани в запущеному застосунку',
+	'Checks screens against the design': 'Звіряє екрани з дизайном',
 	'Looks for security defects in changes': 'Шукає дефекти безпеки у змінах',
 	'Strongest model · Medium': 'Найсильніша модель · Medium',
 	'Faster model · Medium': 'Швидша модель · Medium',

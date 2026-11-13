@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import { seedOwnCrew } from './fixtures/own-crew';
 const desktop = resolve('apps/desktop'),
 	executablePath = createRequire(join(desktop, 'package.json'))('electron') as string;
 const env = Object.fromEntries(
@@ -359,6 +360,8 @@ test("sheet picks the first catalog model, offers the model's effort levels and 
 		join(data, 'settings.json'),
 		JSON.stringify({ schemaVersion: 1, settings: { appearance: 'light', language: 'en' } })
 	);
+	// The app ships no crew of developers: the person's own crew uses the built-in Reviewer.
+	await seedOwnCrew(data);
 	const app = await launchIn(root, {
 		BRIGADIR_TEST_AGENT: resolve('packages/transport/fixtures/agent.mjs'),
 		BRIGADIR_FIXTURE_SCENARIO: 'model-effort',
@@ -494,7 +497,7 @@ test("sheet picks the first catalog model, offers the model's effort levels and 
 			choices: { configOptions: { model: 'lite' } },
 			choiceNames: { model: 'Lite' },
 		});
-		// The built-in crew resolves through the overlaid role: its reviewer shows the chosen model on the sheet.
+		// A crew resolves through the overlaid role: the seeded crew's reviewer shows the chosen model on the sheet.
 		await settings.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(settings).toHaveCount(0);
 		await page.getByRole('button', { name: 'New task · repo', exact: true }).click();

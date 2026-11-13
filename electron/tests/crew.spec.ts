@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { defaultAppSettings as defaultSettings } from '../packages/core/src/settings';
+import { seedOwnCrew } from './fixtures/own-crew';
 const desktop = resolve('apps/desktop'),
 	executablePath = createRequire(join(desktop, 'package.json'))('electron') as string,
 	fixtureAgent = resolve('packages/transport/fixtures/agent.mjs');
@@ -42,6 +43,8 @@ const launchCrew = async (prefix: string) => {
 		join(project, 'project.json'),
 		JSON.stringify({ schemaVersion: 1, project: { id: 'project', name: 'repo', path: repo } })
 	);
+	// The app ships no crew of developers: the person's own crew stands in.
+	await seedOwnCrew(join(root, 'data'));
 	const app = await electron.launch({
 		executablePath,
 		args: [desktop, `--user-data-dir=${join(root, 'profile')}`],
@@ -137,12 +140,13 @@ test('launches a crew from the sheet, confirms the plan card and shows workers a
 		await expect(sheet.locator('[data-crew-row]')).toHaveCount(0);
 		await sheet.getByRole('radio', { name: 'Brigadir' }).click();
 		await expect(sheet.locator('[data-crew-row]')).toBeVisible();
-		// spec/crew#compose: the foreman composes by default; this test takes the built-in crew.
+		// spec/crew#compose: the foreman composes by default; this test takes the person's own crew.
 		await expect(sheet.getByRole('button', { name: 'Crew', exact: true })).toContainText(
 			'Foreman composes'
 		);
 		await sheet.getByRole('button', { name: 'Crew', exact: true }).click();
 		const list = sheet.getByRole('listbox', { name: 'Crew' }); // spec/crew#compose: «Foreman composes» first, then the templates.
+		// «Foreman composes», the built-in Review crew and the seeded own crew; no built-in crew of developers.
 		await expect(list.getByRole('option')).toHaveCount(3);
 		await expect(list.getByRole('option').first()).toHaveText('Foreman composes');
 		await expect(list.getByRole('option', { name: /^Crew \d/ })).toContainText('3');

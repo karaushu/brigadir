@@ -88,9 +88,25 @@ The core says:
 4. **Splitting:** each worker's prompt states which files it owns and that others belong to other agents; a shared type/config goes to one agent, the rest read it; dependent parts go in waves. Each agent has one task for the whole crew; its next part is another `create_worker_task` after accepting the previous one.
 5. **Questions and permissions:** answer a worker's question with `prompt_task` and its `questionId`; permissions are never the foreman's.
 6. **Notes:** share facts with `post_note`, read others' with `read_notes`.
-7. **Research rule:** a question handed to a subagent is not researched in parallel by the foreman; end the message and wait for the result (the adapter holds the turn until background subagents finish), or run the subagent in the foreground when the next step depends on it. **Why:** the foreman's session lives for the whole crew, so every file it reads is carried by every later step. The same reason is behind the diff rule in the loop: reviewers read line by line, the foreman reads where the decision is its own.
+7. **Verification:** see [Checks in the running app](#smoke) below; the core carries that paragraph word for word.
+8. **Research rule:** a question handed to a subagent is not researched in parallel by the foreman; end the message and wait for the result (the adapter holds the turn until background subagents finish), or run the subagent in the foreground when the next step depends on it. **Why:** the foreman's session lives for the whole crew, so every file it reads is carried by every later step. The same reason is behind the diff rule in the loop: reviewers read line by line, the foreman reads where the decision is its own.
 
 The **roster** (`roster`) lists each child with summary, provider · model · effort (catalog names; "provider default model" when unset), `leads …`, zone, `checked by …`, and for reviewers `checks …`. It tells the foreman to pass `agent` to `create_worker_task` and `propose_plan`, how to match a part to a model (the [model ladder](#model-ladder)), that reports come after checks pass, and that reviewers get no code.
+
+<a id="smoke"></a>
+### Checks in the running app
+
+One paragraph of the core (`verification` in `brief.ts`), so it reaches every foreman and lead, composing or not:
+
+1. **A worker proves its part with the command its prompt names** (a test, a typecheck, a build). The foreman does not ask every worker to drive the simulator or the browser.
+2. **A check in the running app is a smoke:** the flows the change touches, run **once, on the integrated work** (a part given after the parts it covers were accepted), **by one agent**, within a time box the part prompt states, 10 minutes unless the task needs another.
+3. **Not a test matrix:** no list of checks with a screenshot each, no repeats to be sure, and no run per device or configuration unless the task is about that device.
+4. **Nobody reviews the smoke report.** The foreman reads it and decides; a defect it finds is a part to fix, not a reason for another round of checks. The agent that runs the smoke gets no reviewer.
+5. **Design fidelity is the designer's check**, not the smoke's. A part a designer checks names its design source in its prompt: a Figma node or frame, a mock-up file or a reference screen.
+
+The crew tools sentence (`crewToolsBrief`) says the same in terms of the modules that are on: a part that needs a dev server, a build or the tests runs them as project commands; a check in the running app is the one smoke; the simulator is one device that agents take in turns. The [Tester](crew-templates-and-editor.md#builtin-templates) writes automated tests; a smoke is a different job, and its text says so.
+
+**Why:** a check repeated by every worker, by a checker and by a tester multiplies the cost of one look at the app and finds nothing a single pass would miss; a check matrix with a reviewer on its report grows by escalation, not by risk.
 
 <a id="model-ladder"></a>
 ### Model ladder
@@ -149,6 +165,7 @@ Workers never start before the person approves the root foreman's plan.
 | `parts[]` | 1–64; each `title` (≤ 80), `agent` (a child name), `prompt` (≤ 100 000), `files` (≤ 1024 project-relative paths or globs; empty = the agent's whole zone/scope), `scopes` |
 | `crew[]` | only when composing; see [Composing the crew](#compose) |
 
+- **Prompts of check parts** (the brief asks for them; the host does not check them): a smoke part names the flows, its time box (10 minutes by default) and that it reports and stops; a part a designer checks names its design source ([Checks in the running app](#smoke)).
 - The host validates parts against the crew (`planDifferences`): `unknown_agent`, `reviewer_part`, `duplicate_agent` (one part per agent at a time), `outside_zone`, `empty`, and the non-blocking `idle_agent`. Any blocking difference is a tool error listing the messages (`The plan does not match the crew: …`), not a card. `crew` without composing → `Your crew is already set; call propose_plan without crew.` Only one plan may wait at a time.
 - The card lets the person edit part titles, prompts, agents and files; differences introduced by edits are shown on the card and block `Start workers` (`planBlocked`; idle agents only show). Agent names arrive pre-filled in editable fields.
 - `Start workers` approves; `Reject` rejects (the foreman revises or asks). The tool result returns `approved`, the possibly edited parts and the difference messages.
@@ -165,6 +182,7 @@ Workers never start before the person approves the root foreman's plan.
 - While `compose` is set and the root has no agents, the brief carries the palette instead of a roster (`composeBrief`): read the task and code first, then call `propose_plan` with `crew` and `parts` together; **the fewest agents the task's independent parts need**, non-overlapping zones; one developer and no reviewer is a whole crew for a single chain of dependent steps (a split pays only when parts can run side by side); a reviewer only where a part needs a second reader, named in that developer's `checkedBy` (one reviewer may check several); models by the [model ladder](#model-ladder); reviewers take no code; no leads (one level under the foreman). The palette lists every non-foreman template of the library by name, with its role, specialty and default model; an own template with the name of a built-in stands in for that built-in, so a name always means one template.
 - `crew[]` entries: `name` (≤ 80, short, unique, names its area), `template` (palette template name), optional `summary` (≤ 240), `zone`, `provider`, `model`, `effort` (palette names), `checkedBy` (reviewer names). The host builds nodes (a different provider drops the template's choices), checks the editor's rules (unique names, a reviewer checks only developers, zones) and then the parts against this crew. Unknown template or model → tool error listing what is available.
 - A composed crew needs at least one developer; reviewers are optional, and a reviewer nobody names in `checkedBy` checks nothing.
+- The palette brief adds the check roles in the terms of [Checks in the running app](#smoke): a Designer only when the task names a design source to match; at most one agent runs the smoke, and nobody checks it.
 - The plan card shows a `Crew members` section above the parts (provider glyph, name, template role, model · effort, specialty, `checks …`). `Edit crew…` opens the crew editor on the proposed crew as a one-off crew; on `Done` parts are re-checked and part agents are chosen from the new list. The foreman itself cannot be changed there (`The foreman is already working: its settings stay.`). Approve/reject covers crew and parts together.
 - After approval the crew becomes `task.crew.root.agents`, `compose` is dropped, and the task is an ordinary crew; the host updates its context without a restart and the approval reply lists the approved roster (prefixed "The human edited your crew." when edited).
 
@@ -408,6 +426,8 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 - Asking on `Stop` of a foreman whether to stop its workers too (default yes).
 - Foreman indicators (tokens, worst context, quota) aggregated over its workers; tokens per accepted part on the plan card.
 - Raising a worker's effort automatically after a disputed check.
+- The design check as a host step: the contract table per design node, with the host verifying that each row's screenshot exists.
+- The smoke as a host step with a time box the host enforces: at the limit it stops the run and asks for the report.
 
 <a id="non-goals"></a>
 ## Non-goals

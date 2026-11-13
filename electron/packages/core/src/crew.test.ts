@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
 	builtinAgentCustomized,
 	builtinCrewCustomized,
@@ -7,6 +8,12 @@ import {
 	builtinCrewTemplates,
 	isAgentTemplate,
 	isBuiltinCrewName,
+	isBuiltinTemplateId,
+	starterCrewTemplate,
+	unshippedCrewLaunch,
+	rememberedCrewId,
+	unshippedCrewTemplateIds,
+	type CrewSpec,
 	seniorDeveloperTemplateId,
 	withBuiltinChoices,
 	crewIssues,
@@ -465,7 +472,7 @@ it('ships Senior developer with a model, and an overlay replaces its provider an
 	expect(builtinAgentCustomized({ ...developer, provider: 'codex' })).toBe(true);
 });
 it("a built-in crew is customized when its tree differs from the app's (spec/crew-templates-and-editor#builtin-templates)", () => {
-	const base = builtinCrewTemplates.find((item) => item.id === 'default')!;
+	const base = builtinCrewTemplates.find((item) => item.id === 'review')!;
 	expect(builtinCrewCustomized(base)).toBe(false);
 	// Key order and absent values are no difference.
 	expect(
@@ -489,13 +496,13 @@ it("a built-in crew is customized when its tree differs from the app's (spec/cre
 			agents: base.root.agents!.slice(0, 1).map(({ checkedBy: _, ...agent }) => agent),
 		},
 	});
-	expect(edited).toMatchObject({ id: 'default', name: 'Crew', builtin: true });
+	expect(edited).toMatchObject({ id: 'review', name: 'Review crew', builtin: true });
 	expect(builtinCrewCustomized(edited)).toBe(true);
 	// An own crew is never a customized built-in.
 	expect(builtinCrewCustomized({ ...edited, id: 'own', builtin: false })).toBe(false);
 	expect(withBuiltinCrew(base, undefined)).toBe(base);
 });
-it('ships the specialists as a Developer or a Reviewer with a specialty, and a crew with a tester (spec/crew-templates-and-editor#builtin-templates)', () => {
+it('ships the specialists as a Developer or a Reviewer with a specialty, and the review crew as the only built-in crew (spec/crew-templates-and-editor#builtin-templates)', () => {
 	const roles = Object.fromEntries(builtinAgentTemplates.map((item) => [item.id, item.role]));
 	expect(roles).toEqual({
 		'foreman-default': 'foreman',
@@ -517,10 +524,89 @@ it('ships the specialists as a Developer or a Reviewer with a specialty, and a c
 	}
 	const lookup = templateLookup([]);
 	for (const crew of builtinCrewTemplates) expect(crewIssues(crew, lookup)).toEqual([]);
-	const tests = builtinCrewTemplates.find((item) => item.id === 'tests')!;
-	expect(tests.root.agents!.map((item) => [item.name, item.template, item.checkedBy])).toEqual([
-		['Developer', 'developer', ['reviewer']],
-		['Tester', 'tester', ['reviewer']],
+	// A tree of developers chosen before the task is read is not shipped: the foreman composes one (spec/crew#compose).
+	expect(builtinCrewTemplates.map((item) => item.id)).toEqual(['review']);
+	for (const id of unshippedCrewTemplateIds) expect(isBuiltinTemplateId(id)).toBe(false);
+	// The starter tree of «New crew» and the intro is a valid crew that the library does not list.
+	expect(isCrewTemplate(starterCrewTemplate)).toBe(true);
+	expect(crewIssues(starterCrewTemplate, lookup)).toEqual([]);
+	expect(starterCrewTemplate.builtin).toBe(false);
+	expect(isBuiltinTemplateId(starterCrewTemplate.id)).toBe(false);
+	expect(
+		starterCrewTemplate.root.agents!.map((item) => [item.name, item.template, item.checkedBy])
+	).toEqual([
+		['Developer 1', 'developer', ['reviewer']],
+		['Developer 2', 'developer', ['reviewer']],
 		['Reviewer', 'reviewer', undefined],
 	]);
+});
+it('runs a schedule that names a crew the app no longer ships as «Foreman composes» (spec/crew-templates-and-editor#unshipped-crew-ids)', () => {
+	const crews = [...builtinCrewTemplates];
+	expect(unshippedCrewLaunch({ templateId: 'default' }, crews)).toEqual({ compose: true });
+	expect(unshippedCrewLaunch({ templateId: 'tests' }, crews)).toEqual({ compose: true });
+	// A person's edit moved to an own crew under the same id keeps the schedule on that crew.
+	const adopted = [...crews, { ...starterCrewTemplate, id: 'default' }];
+	expect(unshippedCrewLaunch({ templateId: 'default' }, adopted)).toEqual({
+		templateId: 'default',
+	});
+	// Any other missing id stays as it is, so the run fails as for a deleted crew.
+	expect(unshippedCrewLaunch({ templateId: 'gone' }, crews)).toEqual({ templateId: 'gone' });
+	expect(unshippedCrewLaunch({ templateId: 'review' }, crews)).toEqual({ templateId: 'review' });
+	expect(unshippedCrewLaunch({ compose: true }, crews)).toEqual({ compose: true });
+});
+it('starts the launch sheet with «Foreman composes» when the remembered crew is one the app no longer ships (spec/crew-templates-and-editor#unshipped-crew-ids)', () => {
+	const crews = [...builtinCrewTemplates];
+	expect(rememberedCrewId('default', crews)).toBe('compose');
+	expect(rememberedCrewId('tests', crews)).toBe('compose');
+	expect(rememberedCrewId(undefined, crews)).toBe('compose');
+	expect(rememberedCrewId('compose', crews)).toBe('compose');
+	expect(rememberedCrewId('review', crews)).toBe('review');
+	// A person's edit moved to an own crew under the same id stays the remembered crew.
+	expect(rememberedCrewId('default', [...crews, { ...starterCrewTemplate, id: 'default' }])).toBe(
+		'default'
+	);
+});
+it('keeps an old task snapshot of a crew the app no longer ships valid, with the role texts it was resolved with (spec/crew-templates-and-editor#snapshot)', () => {
+	const old = JSON.parse(
+		readFileSync(new URL('./fixtures/crew-snapshot-default.json', import.meta.url), 'utf8')
+	) as unknown;
+	expect(isCrewSpec(old)).toBe(true);
+	const spec = old as CrewSpec;
+	expect(spec.templateId).toBe('default');
+	const designer = findSpecAgent(spec.root, 'designer')!;
+	expect(designer.instructions).toContain('neighbouring screens and the design tokens');
+	expect(designer.instructions).not.toBe(
+		builtinAgentTemplates.find((item) => item.id === 'designer')!.instructions
+	);
+});
+it('makes the Designer check against the design source, node by node, and keeps the Tester off manual app checks (spec/crew-templates-and-editor#builtin-templates)', () => {
+	const text = (id: string) => builtinAgentTemplates.find((item) => item.id === id)!.instructions;
+	const designer = text('designer');
+	for (const phrase of [
+		'a Figma node or frame, a mock-up file, or a reference screen',
+		'ask the foreman for it with ask_foreman; do not judge from neighbouring screens',
+		'node, property, expected from the design, found in the app, screenshot',
+		'List the icons one by one',
+		'Never approve from the code alone, and never without having opened the screen and the design',
+		'do not approve',
+		'simulator_act and browser_act already wait for the screen',
+		'use simulator_wait',
+		'names the node, the property, what the design expects and what you found',
+		'read_report',
+		'read_diff',
+		'submit_review',
+		'approve',
+	])
+		expect(designer).toContain(phrase);
+	expect(designer).not.toContain(
+		'Compare spacing, sizes and colours with the neighbouring screens'
+	);
+	const tester = text('tester');
+	expect(tester).toContain('automated tests');
+	expect(tester).toContain('Checking the running app by hand is a different job');
+	expect(tester).toContain('10 minutes when it states none');
+	for (const id of ['tester', 'designer'])
+		expect(
+			builtinAgentTemplates.find((item) => item.id === id)!.summary!.length
+		).toBeLessThanOrEqual(240);
 });

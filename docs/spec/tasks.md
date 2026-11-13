@@ -103,7 +103,7 @@ An `Auto` task can give its agent a **role**: an agent template from the library
 
 - The popup lists `No role` (the default: an agent with no role text), then every template of the library that is not a foreman, built-in ones first, in the library's order. Each item carries the template's glyph: code for one that writes, review for a checker.
 - Picking a template that has a provider sets the sheet's provider, model and effort to the template's; the person can change them after. A template without a provider, or with a provider turned off in Settings ▸ Agents, leaves the sheet's agent as it is. `No role` changes nothing.
-- A checker (a template with reviewer rights) writes no code: the task gets `readOnlyAgent`, takes no repo lock and runs in the GUI, so `Transport` is not offered. It hires nobody (it gets no `auto`) and reports what it found to the person.
+- A checker (a template with reviewer rights) writes no code: the task gets `readOnlyAgent`, takes no repo lock and runs in the GUI, so `Transport` is not offered. It hires nobody (it gets no `auto`, and an Auto task edited to a checker's role runs as a solo checker) and reports what it found to the person.
 - The role is a snapshot (`agentRole`): the task never reads the library again. It is not remembered for the project: the next sheet opens with `No role`. Edit task… and Duplicate task… open with the task's role. In the edit sheet a role whose template is gone stays chosen by its name; a duplicate of such a task opens with `No role`.
 - Schedules and Continue in a new task have no role control.
 - The role text goes to the agent in the session brief ([What the agent is told](#agent-context)).

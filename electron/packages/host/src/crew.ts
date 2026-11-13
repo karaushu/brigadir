@@ -150,7 +150,8 @@ export async function readCrewContext(
 	task: AgentTask
 ): Promise<CrewContext | null> {
 	// spec/crew#auto: an Auto task is the root of its own crew from its first session; a CLI task stays one agent.
-	if (task.auto && task.transport !== 'terminal')
+	// spec/tasks#sheet-role: a checker writes no code and hires nobody, also when an edit gave an Auto task a checker's role.
+	if (task.auto && task.transport !== 'terminal' && task.readOnlyAgent !== true)
 		return {
 			role: 'auto',
 			crewKey: task,
@@ -249,6 +250,8 @@ export function sessionBrief(
 ): string {
 	const human = humanToolsAllowed(context?.role ?? null);
 	return [
+		// spec/tasks#agent-context: an Auto task's role text comes first, then its Auto brief.
+		context?.role === 'auto' ? (options.role ?? '') : '',
 		context ? crewBrief(context, options.tools) : (options.role ?? ''),
 		checklistBrief,
 		worktreeBrief,
@@ -542,7 +545,7 @@ export class CrewHost {
 	private checks(agent: CrewSpecAgent) {
 		return this.node.agents.some((item) => item.checkedBy.includes(agent.id));
 	}
-	private isReviewWorker(agent: CrewSpecAgent | null | undefined) {
+	protected isReviewWorker(agent: CrewSpecAgent | null | undefined) {
 		return !!this.reviewing && agent?.role === 'reviewer' && !this.checks(agent);
 	}
 	/** The parts of the crew: every worker but a checker; in a PR review the reviewers are its parts. */
@@ -963,7 +966,9 @@ export class CrewHost {
 		prompt: string,
 		requestedScopes: string[],
 		/** spec/reviews#reviewer-sessions: a reviewer of the task's own changes reads the round's snapshot; it runs nothing. */
-		selfReviewer = false
+		selfReviewer = false,
+		/** spec/crew#auto-hire: what a hired part adds to its record, written with the record so a crash leaves no worker without it. */
+		extra: Partial<CrewWorkerRecord> = {}
 	): Promise<CrewWorkerRecord> {
 		const store = this.deps.store,
 			parentTask = await store.task(this.deps.key),
@@ -1070,6 +1075,7 @@ export class CrewHost {
 			title,
 			createdAt: new Date().toISOString(),
 			planPartId: planPart?.id ?? null,
+			...extra,
 		};
 		this.workers.push(record);
 		await this.saveWorkers();
@@ -1435,7 +1441,8 @@ export class CrewHost {
 				if (!(await this.hasSlot())) break;
 				const taskId = this.waiting.shift()!;
 				const worker = this.workers.find((item) => item.taskId === taskId);
-				if (!worker || this.launching.has(taskId)) continue;
+				// spec/crew#auto-dismiss: a worker dismissed while it waited for a slot never starts.
+				if (!worker || crewWorkerClosed(worker) || this.launching.has(taskId)) continue;
 				this.launching.set(
 					taskId,
 					(async () => {
@@ -1501,6 +1508,8 @@ export class CrewHost {
 		const key = this.workerKey(worker),
 			store = this.deps.store,
 			task = await store.task(key);
+		// spec/crew#auto-dismiss: a dismissed worker does not start, at any step of its launch.
+		if (crewWorkerClosed(worker)) return;
 		if (worker.next?.state === 'queued' && task.hasStarted) return this.startNextPart(worker);
 		if (task.status !== 'queued' || task.hasStarted) return;
 		const launch = task.launch!;
@@ -1554,6 +1563,10 @@ export class CrewHost {
 			throw error;
 		}
 		if (this.stopping) throw new Error('Host is stopping');
+		if (crewWorkerClosed(worker)) {
+			await store.setStatus(key, 'completed');
+			return;
+		}
 		const link = await this.spawn(key);
 		await link.peer.request('start_agent', { allowScopeConflict: false });
 		const session = await awaitSessionStarted(link, 90_000);
@@ -1602,6 +1615,11 @@ export class CrewHost {
 			await this.saveWorkers();
 		});
 		await store.updateTask(key, { launchOptions: [] });
+		if (crewWorkerClosed(worker)) {
+			await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
+			await store.setStatus(key, 'completed');
+			return;
+		}
 		await link.peer.request('command', {
 			kind: 'prompt',
 			text: task.prompt ?? '',

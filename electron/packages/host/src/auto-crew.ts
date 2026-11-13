@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -83,6 +83,15 @@ export function partUsage(records: readonly EventRecord[], now = Date.now()) {
 	if (started !== null) minutes += Math.max(0, now - started) / 60_000;
 	return { minutes: Math.round(minutes * 10) / 10, tokens };
 }
+/** A name not in `taken`: `base`, then `base 2`, `base 3`, … — the base shortened first so the suffix always fits the name limit. */
+export function uniqueName(base: string, taken: ReadonlySet<string>, limit = 80): string {
+	if (!taken.has(base)) return base;
+	for (let n = 2; ; n++) {
+		const suffix = ` ${n}`,
+			name = `${base.slice(0, limit - suffix.length).trimEnd()}${suffix}`;
+		if (!taken.has(name)) return name;
+	}
+}
 export class AutoCrewHost extends CrewHost {
 	private hireWaiter: {
 		hire: AutoHire;
@@ -130,13 +139,17 @@ export class AutoCrewHost extends CrewHost {
 				return this.dismissTool(input);
 			case 'request_model':
 				return this.requestModel(input, signal);
-			case 'prompt_task': {
+			// spec/crew#auto-dismiss, spec/crew#auto-budget: every path that gives a worker another turn.
+			case 'prompt_task':
+			case 'submit_review': {
+				if (tool === 'submit_review' && input.taskId === this.deps.key.id)
+					return super.tool(tool, params, signal);
 				const worker = this.worker(input.taskId);
 				if (worker.dismissedAt)
 					throw new Error(
 						`${worker.name} was dismissed; its task keeps its diff. Hire again for more work on «${worker.title}».`
 					);
-				if (worker.exceededAt && (await this.overBudgetNow(worker)))
+				if (worker.exceededAt && (!worker.budgetStopped || (await this.overBudgetNow(worker))))
 					throw new Error(
 						`«${worker.title}» went over its budget and waits for the person: they continue it or dismiss ${worker.name}.`
 					);
@@ -158,7 +171,7 @@ export class AutoCrewHost extends CrewHost {
 	private running() {
 		return this.workers
 			.filter((worker) => !crewWorkerClosed(worker) && worker.zone?.length)
-			.map((worker) => ({ name: worker.name, zone: worker.zone! }));
+			.map((worker) => ({ name: worker.name, zone: worker.zone!, hireId: worker.hireId }));
 	}
 	private parseParts(input: unknown): AutoHirePart[] {
 		if (!Array.isArray(input) || !input.length) throw new Error('Pass parts: at least one part.');
@@ -222,11 +235,22 @@ export class AutoCrewHost extends CrewHost {
 			throw error;
 		}
 	}
+	/** spec/crew#auto-hire: one hire at a time, reserved before anything is awaited, so two calls in one turn cannot both reach the card. */
+	private hiring = false;
 	private async hireWorkers(input: Record<string, unknown>, signal: AbortSignal) {
 		const refusedHere = this.hireIsolation();
 		if (refusedHere) throw new Error(refusedHere);
-		if (this.hireWaiter || (await this.pendingHire()))
+		if (this.hiring || this.hireWaiter)
 			throw new Error('A hire is already waiting for the person.');
+		this.hiring = true;
+		try {
+			return await this.hireNow(input, signal);
+		} finally {
+			this.hiring = false;
+		}
+	}
+	private async hireNow(input: Record<string, unknown>, signal: AbortSignal) {
+		if (await this.pendingHire()) throw new Error('A hire is already waiting for the person.');
 		const summary =
 			typeof input.summary === 'string' ? input.summary.slice(0, autoSummaryLimit) : '';
 		const parts = autoHireGates(this.parseParts(input.parts), this.running());
@@ -286,8 +310,19 @@ export class AutoCrewHost extends CrewHost {
 		};
 	}
 	/** spec/crew#auto-hire: `Hire {n}` or `Do it yourself`. The card survives a restart: a decision with no waiting call goes as a prompt. */
+	private deciding = false;
 	async decideHire(decision: AutoHireDecision) {
 		if (!isAutoHireDecision(decision)) throw new Error('Invalid hire decision');
+		// A second press while the first decision still starts workers would start them twice.
+		if (this.deciding) throw new Error('The hire is being decided');
+		this.deciding = true;
+		try {
+			await this.decideNow(decision);
+		} finally {
+			this.deciding = false;
+		}
+	}
+	private async decideNow(decision: AutoHireDecision) {
 		const pending = this.hireWaiter?.hire ?? (await this.pendingHire());
 		if (!pending || pending.id !== decision.id) throw new Error('The hire is no longer pending');
 		const edited = decision.parts ? editedHireParts(pending.parts, decision.parts) : null;
@@ -295,8 +330,12 @@ export class AutoCrewHost extends CrewHost {
 		for (const part of edited ?? [])
 			if (!this.auto.roles.some((role) => role.id === part.role))
 				throw new Error(`Unknown role for «${part.title}»`);
-		// The gates read the workers running now: one may have started since the card showed.
-		const parts = autoHireGates(edited ?? pending.parts, this.running());
+		// The gates read the workers running now: one may have started since the card showed. Workers of this hire that started
+		// before a crash are its own parts, not someone else's zone.
+		const parts = autoHireGates(
+			edited ?? pending.parts,
+			this.running().filter((item) => item.hireId !== pending.id)
+		);
 		const hired = decision.approved ? await this.executeHire(pending.id, parts) : [];
 		await atomicJson(await this.file(hireFile), { schemaVersion: 1, hire: pending, decision });
 		await this.deps.emit({
@@ -340,51 +379,82 @@ export class AutoCrewHost extends CrewHost {
 				)
 		);
 	}
-	/** spec/crew#auto-hire: commit the agent's edits, add the parts to the crew and start one worker task per part. */
+	/**
+	 * spec/crew#auto-hire: commit the agent's edits, add the parts to the crew and start one worker task per part. A worker carries its hire
+	 * and part from the moment its record is written, so a decision made again after a crash starts only the parts that have no worker yet.
+	 */
 	private async executeHire(hireId: string, parts: readonly AutoHirePart[]): Promise<AutoHired[]> {
 		const hireable = autoHireable(parts);
 		if (!hireable.length) return [];
-		const refusedHere = this.hireIsolation();
-		if (refusedHere) throw new Error(refusedHere);
-		await this.commitLead('hire', hireable.map((part) => part.title).join(', '));
-		const from = await this.leadHeads();
-		const spec = this.deps.context.spec,
-			taken = new Set(this.specNames(spec.root));
-		const nodes = hireable.map((part) => {
-			const role = this.auto.roles.find((item) => item.id === part.role)!;
-			let name = role.name;
-			for (let n = 2; taken.has(name); n++) name = `${role.name} ${n}`.slice(0, 80);
-			taken.add(name);
-			const node: CrewSpecAgent = {
-				...role,
-				id: `w-${randomUUID().slice(0, 12)}`,
-				name,
-				template: role.id,
-				zone: part.zone,
-				checkedBy: [],
-				agents: [],
+		const started = new Map(
+			this.workers
+				.filter((worker) => worker.hireId === hireId && worker.planPartId)
+				.map((worker) => [worker.planPartId!, worker])
+		);
+		const pending = hireable.filter((part) => !started.has(part.id));
+		if (pending.length) {
+			const refusedHere = this.hireIsolation();
+			if (refusedHere) throw new Error(refusedHere);
+			await this.commitLead('hire', pending.map((part) => part.title).join(', '));
+			const from = await this.leadHeads();
+			const spec = this.deps.context.spec,
+				taken = new Set(this.specNames(spec.root));
+			// A part's node id comes from its hire and part, so a decision made again after a crash finds the node it already added.
+			const nodeId = (part: AutoHirePart) =>
+				`w-${createHash('sha256').update(`${hireId}\0${part.id}`).digest('hex').slice(0, 16)}`;
+			const nodes = pending.map((part) => {
+				const existing = spec.root.agents.find((agent) => agent.id === nodeId(part));
+				if (existing) return { part, node: existing, added: false };
+				const role = this.auto.roles.find((item) => item.id === part.role)!;
+				const name = uniqueName(role.name, taken);
+				taken.add(name);
+				const node: CrewSpecAgent = {
+					...role,
+					id: nodeId(part),
+					name,
+					template: role.id,
+					zone: part.zone,
+					checkedBy: [],
+					agents: [],
+				};
+				return { part, node, added: true };
+			});
+			const next: CrewSpec = {
+				...spec,
+				root: {
+					...spec.root,
+					agents: [
+						...spec.root.agents,
+						...nodes.filter((item) => item.added).map((item) => item.node),
+					],
+				},
 			};
-			return { part, node };
-		});
-		const next: CrewSpec = {
-			...spec,
-			root: { ...spec.root, agents: [...spec.root.agents, ...nodes.map((item) => item.node)] },
-		};
-		const task = await this.deps.store.task(this.deps.key);
-		await this.deps.store.updateTask(task, { crew: next });
-		this.adoptSpec(next);
-		const hired: AutoHired[] = [];
-		for (const { part, node } of nodes) {
-			const record = await this.spawnWorkerTask(node, part.title, part.prompt, part.scopes);
-			record.budget = part.budget;
-			record.zone = part.zone;
-			record.hiredFrom = from;
-			record.hireId = hireId;
-			await this.saveWorkers();
-			await this.savePartBrief(record, part.prompt, part.acceptance ?? '');
-			hired.push({ partId: part.id, taskId: record.taskId, name: node.name, role: part.roleName });
+			const task = await this.deps.store.task(this.deps.key);
+			await this.deps.store.updateTask(task, { crew: next });
+			this.adoptSpec(next);
+			for (const { part, node } of nodes) {
+				const record = await this.spawnWorkerTask(
+					node,
+					part.title,
+					part.prompt,
+					part.scopes,
+					false,
+					{
+						budget: part.budget,
+						zone: part.zone,
+						hiredFrom: from,
+						hireId,
+						planPartId: part.id,
+					}
+				);
+				await this.savePartBrief(record, part.prompt, part.acceptance ?? '');
+				started.set(part.id, record);
+			}
 		}
-		return hired;
+		return hireable.map((part) => {
+			const record = started.get(part.id)!;
+			return { partId: part.id, taskId: record.taskId, name: record.name, role: part.roleName };
+		});
 	}
 	private specNames(node: CrewSpecAgent): string[] {
 		return [node.name, ...node.agents.flatMap((child) => this.specNames(child))];
@@ -403,6 +473,15 @@ export class AutoCrewHost extends CrewHost {
 				heads[scope.path === project.path ? '' : scope.path.slice(project.path.length + 1)] = head;
 		}
 		return heads;
+	}
+
+	/** spec/crew#auto-hire: a hired reviewer does a part of its own (a check the agent handed out), so its turns report like a developer's. */
+	protected override isReviewWorker(agent: CrewSpecAgent | null | undefined) {
+		return (
+			super.isReviewWorker(agent) ||
+			(agent?.role === 'reviewer' &&
+				this.workers.some((worker) => worker.nodeId === agent.id && worker.hireId !== undefined))
+		);
 	}
 
 	// ── the agent's own commit ────────────────────────────────────────────
@@ -522,30 +601,41 @@ export class AutoCrewHost extends CrewHost {
 	/** spec/crew#auto-budget: a part over its working time or tokens stops and goes to the person; the budget is not checked again after that. */
 	async checkBudgets(now = Date.now()) {
 		for (const worker of this.workers) {
-			if (!worker.budget || worker.exceededAt || crewWorkerClosed(worker)) continue;
-			const used = partUsage((await this.journal(this.workerKey(worker))).records, now);
-			if (used.minutes < worker.budget.minutes && used.tokens < worker.budget.tokens) continue;
-			worker.exceededAt = new Date(now).toISOString();
-			await this.saveWorkers();
-			const event = {
-				kind: 'crew.budget.exceeded' as const,
-				taskId: worker.taskId,
-				name: worker.name,
-				title: worker.title,
-				budget: worker.budget,
-				used,
-			};
-			await this.deps.emit(event);
-			const link = await this.link(this.workerKey(worker)).catch(() => null);
-			await link?.peer
-				.request('command', {
-					kind: 'overBudget',
+			if (!worker.budget || crewWorkerClosed(worker)) continue;
+			if (!worker.exceededAt) {
+				const used = partUsage((await this.journal(this.workerKey(worker))).records, now);
+				if (used.minutes < worker.budget.minutes && used.tokens < worker.budget.tokens) continue;
+				worker.exceededAt = new Date(now).toISOString();
+				await this.saveWorkers();
+				await this.deps.emit({
+					kind: 'crew.budget.exceeded',
+					taskId: worker.taskId,
+					name: worker.name,
 					title: worker.title,
 					budget: worker.budget,
 					used,
-				})
-				.catch(() => {});
+				});
+			}
+			// spec/crew#auto-budget: the stop is sent until the worker's host takes it, also after a disconnect or a restart of either host.
+			if (!worker.budgetStopped) await this.sendBudgetStop(worker, now);
 		}
+	}
+	private async sendBudgetStop(worker: CrewWorkerRecord, now: number) {
+		const link = await this.link(this.workerKey(worker)).catch(() => null);
+		if (!link) return;
+		const used = partUsage((await this.journal(this.workerKey(worker))).records, now);
+		try {
+			await link.peer.request('command', {
+				kind: 'overBudget',
+				title: worker.title,
+				budget: worker.budget!,
+				used,
+			});
+		} catch {
+			return;
+		}
+		worker.budgetStopped = new Date(now).toISOString();
+		await this.saveWorkers();
 	}
 
 	// ── the lead's writes in hired zones ──────────────────────────────────
@@ -657,7 +747,20 @@ export class AutoCrewHost extends CrewHost {
 		const role = await new Promise<CrewSpecAgent | null>((resolve, reject) => {
 			this.modelWaiters.set(request.id, { request, resolve, reject });
 			const abort = () => {
-				if (this.modelWaiters.delete(request.id)) reject(new Error('The question was cancelled'));
+				if (!this.modelWaiters.delete(request.id)) return;
+				reject(new Error('The question was cancelled'));
+				// spec/crew#auto-model: the card closes with the call, so nobody answers a question that is gone.
+				void this.deps
+					.emit({
+						kind: 'crew.model.resolved',
+						id: request.id,
+						answer: null,
+						by: 'agent',
+						role: base.name,
+						cancelled: true,
+						...(request.part ? { part: request.part } : {}),
+					})
+					.catch(() => {});
 			};
 			signal.addEventListener('abort', abort, { once: true });
 			if (signal.aborted) abort();
@@ -688,10 +791,11 @@ export class AutoCrewHost extends CrewHost {
 		waiter.resolve(role);
 	}
 	private async addModelRole(base: CrewSpecAgent, answer: AutoModelAnswer): Promise<CrewSpecAgent> {
-		let role = modelRole(base, answer, `role-${randomUUID().slice(0, 12)}`);
-		const names = new Set(this.auto.roles.map((item) => item.name));
-		for (let n = 2; names.has(role.name); n++)
-			role = { ...role, name: `${role.name.replace(/ \d+$/, '')} ${n}` };
+		const made = modelRole(base, answer, `role-${randomUUID().slice(0, 12)}`),
+			role = {
+				...made,
+				name: uniqueName(made.name, new Set(this.auto.roles.map((item) => item.name))),
+			};
 		const task = await this.deps.store.task(this.deps.key),
 			auto: AutoTask = { ...this.auto, roles: [...this.auto.roles, role] };
 		await this.deps.store.updateTask(task, { auto });

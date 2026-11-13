@@ -272,7 +272,7 @@ An [Auto](crew.md#auto-model) agent's `request_model` shows the question card fa
 - **Header strip.** `{agent} asks for another model`, the part's name chip, `waiting <age>`.
 - **Body.** The agent's reason; then one list of the catalog models of the enabled providers, grouped by provider with its glyph. The task's own model and the base role's model carry `the model of this task` / `the model of role {role}`. Rows hover whole; the chosen row is `--accent-soft`. `Effort` segments for the chosen model's levels. `Save as role` (a checkbox that reveals a name field) also saves the role to the library.
 - **Footer.** `⌘↩ to answer`, `Keep {role}` and the primary `Use this model`. While a catalog loads: `Loading models…`, and the answer waits. With no other models: `No other models.`, `Settings…` and `Keep {role}` only.
-- **After the answer** the card folds to `Model · Resolved` and the choice: `GPT-6 Astra · High · saved as role “Vision developer”`, or `Keep Developer`. A choice the agent made itself with `Any catalog model` is one service row: `model GPT-6 Astra · High · {part} · chosen by {agent}`.
+- **After the answer** the card folds to `Model · Resolved` and the choice: `GPT-6 Astra · High · saved as role “Vision developer”`, or `Keep Developer`. A choice the agent made itself with `Any catalog model` is one service row: `model GPT-6 Astra · High · {part} · chosen by {agent}`. A question whose call was cancelled before an answer folds to `model {role} · {part} · No answer`.
 
 <a id="questions"></a>
 ## Questions

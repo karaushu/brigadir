@@ -353,7 +353,7 @@ const checks: Record<string, Check> = {
 			by: (v) => v === 'person' || v === 'agent',
 			role: text,
 		},
-		{ part: text }
+		{ part: text, cancelled: (v) => v === true }
 	),
 	'turn.completed': object({ reason: text }),
 	'session.failed': object({ message: text }, { reason: (v) => v === 'auth' }),

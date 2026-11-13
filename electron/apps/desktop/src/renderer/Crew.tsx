@@ -936,18 +936,23 @@ function ModelResolvedRow({
 			<span className={styles.label}>
 				{answer
 					? chosen || crewLabel(locale, event.role)
-					: t(locale, 'Keep {role}').replace('{role}', crewLabel(locale, event.role))}
+					: event.cancelled
+						? crewLabel(locale, event.role)
+						: t(locale, 'Keep {role}').replace('{role}', crewLabel(locale, event.role))}
 				{event.part ? <span> · {event.part}</span> : null}
 			</span>
 			<small>
-				{event.by === 'agent'
-					? t(locale, 'chosen by {agent}').replace(
-							'{agent}',
-							autoRootName(owner?.provider ?? 'claude')
-						)
-					: answer?.saveAs
-						? t(locale, 'saved as role “{name}”').replace('{name}', answer.saveAs)
-						: t(locale, 'Resolved')}
+				{/* spec/crew#auto-model: the agent's call was cancelled before anyone answered. */}
+				{event.cancelled
+					? t(locale, 'No answer')
+					: event.by === 'agent'
+						? t(locale, 'chosen by {agent}').replace(
+								'{agent}',
+								autoRootName(owner?.provider ?? 'claude')
+							)
+						: answer?.saveAs
+							? t(locale, 'saved as role “{name}”').replace('{name}', answer.saveAs)
+							: t(locale, 'Resolved')}
 			</small>
 		</div>
 	);

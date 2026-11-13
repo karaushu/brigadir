@@ -21,7 +21,7 @@ import {
 } from '@brigadir/core';
 import { Snapshots, readChanges } from '@brigadir/git';
 import { mcpTools } from './mcp';
-import { AutoCrewHost, partUsage } from './auto-crew';
+import { AutoCrewHost, partUsage, uniqueName } from './auto-crew';
 import { readCrewContext, sessionBrief, type CrewContext } from './crew';
 
 const run = promisify(execFile);
@@ -49,11 +49,32 @@ const roles = () =>
 /** Workers are tasks in the store here: the launch path (worktrees, hosts) is the named crew's and has its own tests. */
 class TestAutoHost extends AutoCrewHost {
 	spawned: string[] = [];
+	/** Fails the spawn of this many workers from now on (a crash in the middle of a hire). */
+	failSpawns = 0;
+	failAfter = Infinity;
+	commands: unknown[] = [];
+	linked = false;
+	protected override link(key: Parameters<AutoCrewHost['link']>[0]) {
+		if (!this.linked) return Promise.resolve(null);
+		void key;
+		return Promise.resolve({
+			peer: {
+				request: async (_method: string, params: unknown) => {
+					this.commands.push(params);
+					return null;
+				},
+			},
+		} as never);
+	}
 	protected override async spawnWorkerTask(
 		agent: CrewSpecAgent,
 		title: string,
-		prompt: string
+		prompt: string,
+		_scopes: string[] = [],
+		_selfReviewer = false,
+		extra: Partial<CrewWorkerRecord> = {}
 	): Promise<CrewWorkerRecord> {
+		if (this.spawned.length >= this.failAfter) throw new Error('crashed');
 		const store = this.deps.store;
 		let task = await store.createTask(
 			this.deps.key.projectId,
@@ -75,6 +96,7 @@ class TestAutoHost extends AutoCrewHost {
 			title,
 			createdAt: new Date().toISOString(),
 			planPartId: null,
+			...extra,
 		};
 		this.workers.push(record);
 		await this.saveWorkers();
@@ -651,5 +673,165 @@ describe('old tasks still load', () => {
 		expect(
 			JSON.parse(await readFile(join(await store.taskDir(task), 'crew-hire.json'), 'utf8')).hire.id
 		).toBe('x');
+	});
+});
+
+describe('review fixes', () => {
+	const signal = () => new AbortController().signal;
+	async function hiredFixture() {
+		const fixture = await setup();
+		const call = fixture.host.tool('hire_workers', hireInput, signal());
+		const hire = await until(() => pendingHire(fixture.events));
+		await fixture.host.decideHire({ id: hire.id, approved: true, parts: null });
+		await call;
+		return fixture;
+	}
+	it('1: the role chosen on the sheet reaches an Auto agent before its Auto brief', async () => {
+		const { store, task } = await setup();
+		const context = (await readCrewContext(store, task))!;
+		const brief = sessionBrief(context, 'claude', { role: 'You write tests only.' });
+		expect(brief.indexOf('You write tests only.')).toBeGreaterThanOrEqual(0);
+		expect(brief.indexOf('You write tests only.')).toBeLessThan(
+			brief.indexOf('You do this task yourself')
+		);
+	});
+	it('2: a second hire in the same turn is refused before it can replace the first', async () => {
+		const { host, events } = await setup();
+		const first = host.tool('hire_workers', hireInput, signal());
+		await expect(host.tool('hire_workers', hireInput, signal())).rejects.toThrow('already waiting');
+		const hire = await until(() => pendingHire(events));
+		expect(events.filter((event) => event.kind === 'crew.hire.requested')).toHaveLength(1);
+		await host.decideHire({ id: hire.id, approved: false, parts: null });
+		expect(await first).toMatchObject({ approved: false });
+	});
+	it('3: a hire decided again after a crash starts only the parts with no worker, and a double press starts nothing twice', async () => {
+		const { host, events, store, task } = await setup();
+		void host.tool('hire_workers', hireInput, signal()).catch(() => {});
+		const hire = await until(() => pendingHire(events));
+		host.failAfter = 1;
+		await expect(host.decideHire({ id: hire.id, approved: true, parts: null })).rejects.toThrow(
+			'crashed'
+		);
+		expect(host.spawned).toHaveLength(1);
+		expect(pendingInputs(host['deps'].records()).crewHire?.id).toBe(hire.id);
+		host.failAfter = Infinity;
+		const again = host.decideHire({ id: hire.id, approved: true, parts: null });
+		await expect(host.decideHire({ id: hire.id, approved: true, parts: null })).rejects.toThrow(
+			'being decided'
+		);
+		await again;
+		expect(host.spawned).toHaveLength(2);
+		const resolved = events.findLast((event) => event.kind === 'crew.hire.resolved');
+		expect(resolved).toMatchObject({ approved: true });
+		expect(
+			resolved?.kind === 'crew.hire.resolved' && resolved.hired.map((item) => item.taskId)
+		).toEqual(host.spawned);
+		expect((await store.task(task)).crew?.root.agents).toHaveLength(2);
+	});
+	it('4: a dismissed worker does not start from its slot', async () => {
+		const { host, store, task } = await hiredFixture();
+		const worker = host['workers'][0]!,
+			key = { projectId: task.projectId, id: worker.taskId };
+		await host.tool('dismiss_worker', { taskId: worker.taskId }, signal());
+		await store.setStatus(key, 'queued');
+		await host['launchWorker'](worker);
+		expect((await store.task(key)).status).toBe('queued');
+		expect((await store.task(key)).preparation).toBeUndefined();
+	});
+	it('5: submit_review does not restart a dismissed worker or one over its budget', async () => {
+		const { host } = await hiredFixture();
+		const [dismissed, over] = host['workers'];
+		await host.tool('dismiss_worker', { taskId: dismissed!.taskId }, signal());
+		const review = (taskId: string) =>
+			host.tool(
+				'submit_review',
+				{ taskId, comments: [{ path: 'apps/api/a.ts', start: 1, text: 'x' }] },
+				signal()
+			);
+		await expect(review(dismissed!.taskId)).rejects.toThrow('dismissed');
+		over!.exceededAt = new Date().toISOString();
+		await expect(review(over!.taskId)).rejects.toThrow('over its budget');
+	});
+	it('6: a role name at the length limit still gets a unique worker name', async () => {
+		expect(uniqueName('L'.repeat(80), new Set(['L'.repeat(80)]))).toBe(`${'L'.repeat(78)} 2`);
+		expect(uniqueName('Dev', new Set(['Dev', 'Dev 2']))).toBe('Dev 3');
+		const { host, events } = await setup();
+		const auto = host['deps'].context.auto!,
+			long = {
+				...auto.roles.find((role) => role.id === 'developer')!,
+				id: 'long-role',
+				name: 'L'.repeat(80),
+			};
+		auto.roles.push(long);
+		const call = host.tool(
+			'hire_workers',
+			{ parts: hireInput.parts.slice(0, 2).map((part) => ({ ...part, role: long.name })) },
+			signal()
+		);
+		const hire = await until(() => pendingHire(events));
+		await host.decideHire({ id: hire.id, approved: true, parts: null });
+		expect(
+			((await call) as { hired: { worker: string }[] }).hired.map((item) => item.worker)
+		).toEqual(['L'.repeat(80), `${'L'.repeat(78)} 2`]);
+	});
+	it('7: a hired reviewer reports like a part; a reviewer of a check edge does not', async () => {
+		const { host, events } = await setup();
+		const call = host.tool(
+			'hire_workers',
+			{ parts: [{ ...hireInput.parts[0], role: 'Reviewer', title: 'Check the API' }] },
+			signal()
+		);
+		const hire = await until(() => pendingHire(events));
+		await host.decideHire({ id: hire.id, approved: true, parts: null });
+		await call;
+		const node = host['deps'].context.spec.root.agents.at(-1)!;
+		expect(node.role).toBe('reviewer');
+		expect(host['isReviewWorker'](node)).toBe(true);
+		expect(host['isReviewWorker']({ ...node, id: 'edge-reviewer' })).toBe(false);
+	});
+	it('8: a task edited to a checker’s role is a solo checker, not Auto', async () => {
+		const { store, task } = await setup();
+		expect(await readCrewContext(store, { ...task, readOnlyAgent: true })).toBeNull();
+	});
+	it('9: a budget stop that could not be delivered is sent again until the worker takes it', async () => {
+		const { host, store, task, events } = await hiredFixture();
+		const worker = host['workers'][0]!,
+			key = { projectId: task.projectId, id: worker.taskId };
+		const writer = await store.writer(key);
+		await writer.append({ kind: 'turn.started', text: 'go' });
+		await writer.close();
+		const later = Date.now() + 41 * 60_000;
+		await host.checkBudgets(later);
+		expect(worker.exceededAt).toEqual(expect.any(String));
+		expect(worker.budgetStopped).toBeUndefined();
+		host.linked = true;
+		await host.checkBudgets(later);
+		expect(worker.budgetStopped).toEqual(expect.any(String));
+		expect(host.commands).toEqual([
+			expect.objectContaining({ kind: 'overBudget', title: worker.title }),
+		]);
+		await host.checkBudgets(later);
+		expect(host.commands).toHaveLength(1);
+		expect(events.filter((event) => event.kind === 'crew.budget.exceeded')).toHaveLength(1);
+	});
+	it('10: a cancelled model question closes its card', async () => {
+		const { host, events } = await setup();
+		const controller = new AbortController();
+		const call = host.tool('request_model', { reason: 'x', part: 'Screen' }, controller.signal);
+		await until(() =>
+			events.some((event) => event.kind === 'crew.model.requested') ? true : undefined
+		);
+		controller.abort();
+		await expect(call).rejects.toThrow('cancelled');
+		await until(() =>
+			events.some((event) => event.kind === 'crew.model.resolved') ? true : undefined
+		);
+		expect(events.at(-1)).toMatchObject({
+			kind: 'crew.model.resolved',
+			answer: null,
+			cancelled: true,
+			part: 'Screen',
+		});
+		expect(pendingInputs(host['deps'].records()).crewModels).toHaveLength(0);
 	});
 });

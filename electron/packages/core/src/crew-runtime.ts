@@ -88,6 +88,8 @@ export type CrewWorkerRecord = {
 	/** spec/crew#auto-budget: the part's budget, and when it went over it. */
 	budget?: AutoBudget;
 	exceededAt?: string;
+	/** When the worker's host took the stop; until then the host sends it again at every check. */
+	budgetStopped?: string;
 	/** spec/crew#auto-guard: the zone the Auto agent hired out, and the commit per repo (path relative to the project, '' — root) it started from. */
 	zone?: string[];
 	hiredFrom?: Record<string, string>;
@@ -249,6 +251,7 @@ export function isCrewWorkerRecord(value: unknown): value is CrewWorkerRecord {
 			crewDismissReasons.includes(value.dismissReason as CrewDismissReason)) &&
 		(value.budget === undefined || isAutoBudget(value.budget)) &&
 		(value.exceededAt === undefined || typeof value.exceededAt === 'string') &&
+		(value.budgetStopped === undefined || typeof value.budgetStopped === 'string') &&
 		(value.zone === undefined ||
 			(Array.isArray(value.zone) &&
 				value.zone.length <= 256 &&

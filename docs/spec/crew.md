@@ -43,7 +43,7 @@ An Auto task is one agent that reads the task and the repo and writes the code i
 <a id="auto-root"></a>
 ### The task and its crew
 
-- `task.auto` marks an Auto task: `{ roles, budget }` ([Roles](#auto-roles), [Budget](#auto-budget)). Main sets it at creation for a GUI task launched with `Auto`, unless the sheet's role is a checker (that task writes no code and stays a solo checker).
+- `task.auto` marks an Auto task: `{ roles, budget }` ([Roles](#auto-roles), [Budget](#auto-budget)). Main sets it at creation for a GUI task launched with `Auto`, unless the sheet's role is a checker (that task writes no code and stays a solo checker). A task whose role became a checker's in Edit task… (`readOnlyAgent`) runs as that solo checker too: the host gives it no Auto role, brief or tools.
 - The agent is the root of its own crew from its first session: its host runs with `BRIGADIR_ROLE=auto`. Until the first hire the crew is that root alone (named after the provider, `Claude` or `Codex`, with the task's own provider and choices), plus the reviewers of the task's own review when one ran ([Reviews](reviews.md)). `task.crew` is written at the first approved hire; the sidebar card turns into the card with the tray at that moment ([Sidebar](sidebar.md#crew-card)).
 - Reviews of [Reviews](reviews.md) apply to an Auto task and to each hired part as they are. A hired part gets no reviewer of its own unless the person adds one.
 
@@ -55,7 +55,7 @@ The Auto agent has its whole tool set from its first session, so the list never 
 <a id="auto-brief"></a>
 ### The brief (`autoBrief`)
 
-The opposite of a foreman's: you do this task yourself and write the code. Hire only when the task has two or more parts that are independent (each writes its own files, none needs another's result to start) and each is large enough to pay for a session of its own; say on the card what each part is and why the parts are independent. A small task, or one chain of dependent steps, is done from start to end without a plan card and without questions. Then: how to hire (title, role, zone, the estimate of files and lines, the budget when the default does not fit, a prompt that stands on its own and names the command that proves the part); that a refused part stays with the agent; that its edits are committed before a hire and an accept, and that it no longer writes inside a zone it hired out; how reports, returns, `accept_task` and `dismiss_worker` work; the roles it hires from with provider, model and effort, the [model ladder](#model-ladder), and that a model outside the roles needs `request_model`. A Claude session also gets the plan sentence of a solo session ([Plan approval](chat-turns-plans-and-questions.md#plan-approval)), so a person who asks for a plan first gets one. A task without a worktree is told it cannot hire here ([Isolation](#auto-isolation)).
+The opposite of a foreman's: you do this task yourself and write the code. Hire only when the task has two or more parts that are independent (each writes its own files, none needs another's result to start) and each is large enough to pay for a session of its own; say on the card what each part is and why the parts are independent. A small task, or one chain of dependent steps, is done from start to end without a plan card and without questions. Then: how to hire (title, role, zone, the estimate of files and lines, the budget when the default does not fit, a prompt that stands on its own and names the command that proves the part); that a refused part stays with the agent; that its edits are committed before a hire and an accept, and that it no longer writes inside a zone it hired out; how reports, returns, `accept_task` and `dismiss_worker` work; the roles it hires from with provider, model and effort, the [model ladder](#model-ladder), and that a model outside the roles needs `request_model`. The role chosen on the sheet ([Role](tasks.md#sheet-role)) comes first, before the Auto brief. A Claude session also gets the plan sentence of a solo session ([Plan approval](chat-turns-plans-and-questions.md#plan-approval)), so a person who asks for a plan first gets one. A task without a worktree is told it cannot hire here ([Isolation](#auto-isolation)).
 
 A named crew's foreman keeps its own brief and still writes no code ([Foreman brief](#foreman-brief)).
 
@@ -67,9 +67,12 @@ A named crew's foreman keeps its own brief and still writes no code ([Foreman br
 1. The host checks the parts ([Gates](#auto-gates)). When no part passes, the call returns the refusals and no card shows.
 2. Otherwise it writes `crew-hire.json` `{hire, decision: null}` and journals `crew.hire.requested`; the task goes `needs-you`. The [hire card](chat-turns-plans-and-questions.md#hire-card) waits for the person, with no host-side timeout. The card survives a restart: it comes from the journal, and the decision is kept in `crew-hire.json`.
 3. The person may edit each part's title, role, budget and prompt, then approve (`Hire {n}`) or reject (`Do it yourself`). Zones, scopes and estimates are what the gates read and stay as proposed. The gates run again on the decision, against the workers running at that moment.
-4. On approval the host commits the agent's edits ([Commit](#auto-commit)), adds one node per hireable part under the root (the role's resolved node, named after the role, `Developer`, then `Developer 2`, …, with the part's zone), writes `task.crew`, and starts one worker task per part ([Workers are tasks](#workers)) with the part's prompt, acceptance criteria, budget, zone and the commit it starts from in its record. `crew.hire.resolved` lists the edited parts (null — as proposed) and the started workers.
+4. On approval the host commits the agent's edits ([Commit](#auto-commit)), adds one node per hireable part under the root (the role's resolved node, named after the role, `Developer`, then `Developer 2`, …, the role's name shortened so the number fits 80 characters; its id comes from the hire and the part), writes `task.crew`, and starts one worker task per part ([Workers are tasks](#workers)). The worker's record carries its hire, its part (`planPartId`), budget, zone and the commit it starts from from the moment it is written. `crew.hire.resolved` lists the edited parts (null — as proposed) and the started workers.
+   - The decision is recorded only after every worker started. When the host stops in between, the card is still waiting; deciding it again starts only the parts that have no worker yet, reuses their nodes, and does not take the hire's own workers for overlapping zones.
+   - A second press while a decision starts workers is refused (`The hire is being decided`).
 5. The tool returns `approved`, the started workers (task id, name, role, title, budget) and the parts that stay with the agent. Declined returns `approved: false`: the agent does the parts itself and goes on alone. When the call is gone (the turn ended, or the host restarted), the decision goes to the agent as a prompt marked `hire-decision`.
-6. Only one hire waits at a time.
+6. Only one hire waits at a time. The host takes the place before it awaits anything, so a second `hire_workers` in the same turn is refused (`A hire is already waiting for the person.`) and never replaces the first card.
+7. A hired `Reviewer` (a check the agent hands out) reports like any part when its turn ends; a reviewer on a check edge or of the task's own review gives verdicts, not reports.
 
 **Each hire is a new worker task.** One task per crew member, continuing across parts, is how a named crew works ([Next parts](#parts)); an Auto worker does one part and is dismissed.
 
@@ -109,7 +112,7 @@ After a hire the agent no longer writes inside the zones of its running workers.
 <a id="auto-dismiss"></a>
 ### Dismissing a worker
 
-A worker is dismissed when its part is accepted (`accept_task`), when the agent discards it (`dismiss_worker`), or when the person picks `Dismiss` on its row in the sidebar. The host stops its session, sets its task `completed`, records `dismissedAt` and `dismissReason` (`accepted`, `discarded`, `person`) and journals `crew.worker.dismissed`. A dismissed worker keeps its task, its worktree and its diff; a discarded part merges nothing. `prompt_task` to a dismissed worker is refused. Nothing of a dismissed worker waits on the host ([host lifecycle](architecture-and-platform.md#host-lifecycle)).
+A worker is dismissed when its part is accepted (`accept_task`), when the agent discards it (`dismiss_worker`), or when the person picks `Dismiss` on its row in the sidebar. The host stops its session, sets its task `completed`, records `dismissedAt` and `dismissReason` (`accepted`, `discarded`, `person`) and journals `crew.worker.dismissed`. A dismissed worker keeps its task, its worktree and its diff; a discarded part merges nothing. `prompt_task` and `submit_review` to a dismissed worker are refused. A worker dismissed while it waits for a slot, prepares its worktree or starts its session does not start: the launch stops at its next step and the task stays `completed`. Nothing of a dismissed worker waits on the host ([host lifecycle](architecture-and-platform.md#host-lifecycle)).
 
 <a id="auto-budget"></a>
 ### Budget per part
@@ -118,7 +121,8 @@ Each hired part has a budget: working minutes and tokens. Defaults come from Set
 
 - **Working minutes** are minutes inside the worker's turns (from `turn.started` to its end; a running turn counts until now), not the time it waits for a review. **Tokens** are input, cache writes and output of its `turn.usage` records; cache reads do not count. Usage arrives at a turn's end, so a part can pass its token budget by up to one turn.
 - The agent's host checks every 30 s. A part over either budget goes to the person instead of running on: the host records `exceededAt`, journals `crew.budget.exceeded` in its own journal, and tells the worker's host, which stops the running turn, journals the same event and sets its task `needs-you` with `overBudget`. The sidebar row says `over budget`.
-- The person continues the worker with a message (its next turn clears `overBudget`; the budget is not checked again) or dismisses it. Until then `prompt_task` from the agent to that worker is refused.
+- The stop is sent at every check until the worker's host takes it (`budgetStopped`), so a disconnect or a restart of either host does not let the part run on.
+- The person continues the worker with a message (its next turn clears `overBudget`; the budget is not checked again) or dismisses it. Until then `prompt_task` and `submit_review` from the agent to that worker are refused.
 
 <a id="auto-roles"></a>
 ### Roles to hire from
@@ -134,7 +138,7 @@ Each hired part has a budget: working minutes and tokens. Defaults come from Set
 
 - By default the [model question card](chat-turns-plans-and-questions.md#model-card) waits for the person (`crew.model.requested`, `needs-you`): the catalog models of the enabled providers, effort, and `Save as role`. `Use this model` adds a role to `task.auto.roles`: the base role's instructions on the chosen provider and options, named after the base role and the model, or the name given in `Save as role`, which also saves it to the library as an agent template. `Keep {role}` adds nothing. `crew.model.resolved` closes the card; the tool returns the role's name to hire with.
 - With Settings ▸ Auto ▸ `Any catalog model` on, the app checks the provider, model and effort names against the provider's catalog at once (`auto_model`), the role is added without a card, and the chat shows the agent's choice as a service row. Without a model name, or with the setting off, the card shows.
-- A model question does not survive a restart: the agent's call is gone with its session, and the card closes.
+- A model question does not survive a restart: the agent's call is gone with its session, and the card closes. A call cancelled while the host runs closes its card too: `crew.model.resolved` with `cancelled`, shown as `{role} · {part} · No answer`.
 
 
 
@@ -508,7 +512,7 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | --- | --- | --- |
 | `crew-plan.json` | foreman/lead | `{plan, decision}`; `decision: null` while pending |
 | `crew-hire.json` | Auto | `{hire, decision}` of the newest hire; `decision: null` while the card waits |
-| `crew-workers.json` | foreman/lead/Auto | `CrewWorkerRecord[]`: `taskId`, `nodeId`, `name`, `title`, `createdAt`, `planPartId`, `acceptedAt?`, `effectiveChoices?`, `unavailableOptions?`, `part?`, `acceptedTips?`, `next?` (`queued \| merging`, `previous`, `heads?`), and for the current part `rounds?`, `limitTold?`; an Auto worker also `hireId`, `budget`, `exceededAt?`, `zone`, `hiredFrom` (repo path → the commit it started from), `dismissedAt?`, `dismissReason?` |
+| `crew-workers.json` | foreman/lead/Auto | `CrewWorkerRecord[]`: `taskId`, `nodeId`, `name`, `title`, `createdAt`, `planPartId`, `acceptedAt?`, `effectiveChoices?`, `unavailableOptions?`, `part?`, `acceptedTips?`, `next?` (`queued \| merging`, `previous`, `heads?`), and for the current part `rounds?`, `limitTold?`; an Auto worker also `hireId`, `planPartId` (its part of the hire), `budget`, `exceededAt?`, `budgetStopped?`, `zone`, `hiredFrom` (repo path → the commit it started from), `dismissedAt?`, `dismissReason?` |
 | `crew-questions.json` | parent | `CrewQuestion[]` (`id`, `workerTaskId`, `parentTaskId`, `callId`, `agent`, `question`, `options`, `createdAt`, `escalateAt`, `state`, `answer?`, `answeredBy?`) |
 | `crew-reviews.json` | parent | `ReviewRun[]` |
 | `crew-notes.jsonl` | root foreman | `CrewNote` per line |

@@ -220,6 +220,8 @@ export type SessionEvent =
 			by: 'person' | 'agent';
 			role: string;
 			part?: string;
+			/** The agent's call was cancelled before anyone answered; the card closes unanswered. */
+			cancelled?: true;
 	  }
 	/** `returnMode`: `Погодити` on a plan asked the host to bring this mode back once the agent leaves the plan (spec/chat-turns-plans-and-questions#plan-approval). */
 	| { kind: 'permission.resolved'; id: string; optionId: string | null; returnMode?: string }

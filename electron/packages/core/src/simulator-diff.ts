@@ -4,11 +4,13 @@ import {
 	type SimulatorElement,
 	type SimulatorUi,
 	type SimulatorWaitRequest,
+	utf8Length,
 } from './simulator-agent';
 /**
  * spec/browser-and-simulator#sim-act-settle: what an action changed in the accessibility tree. Elements are matched by `testID`, else by role
  * and label, in screen order; an element with neither label, value nor `testID` cannot be named by the agent and is left out. A pair left over
- * with the same role and frame is one element whose label changed.
+ * without a `testID`, with the same role and frame, is one element whose label changed; a `testID` is the identity, so a new one in the same
+ * place is a removal and an addition.
  */
 export type SimulatorUiDiff = {
 	added: SimulatorElement[];
@@ -41,8 +43,9 @@ export function diffUi(before: SimulatorUi, after: SimulatorUi): SimulatorUiDiff
 	}
 	const removed = [...waiting.values()].flat();
 	diff.removed = removed.filter((element) => {
+		if (element.id) return true;
 		const index = diff.added.findIndex(
-			(item) => item.role === element.role && place(item) === place(element)
+			(item) => !item.id && item.role === element.role && place(item) === place(element)
 		);
 		if (index < 0) return true;
 		diff.changed.push({ before: element, after: diff.added[index]! });
@@ -63,7 +66,8 @@ function was({ before, after }: SimulatorUiDiff['changed'][number]) {
 		parts.push(before.value ? `= ${JSON.stringify(before.value)}` : 'no value');
 	return `(was ${parts.join(' ')})`;
 }
-/** One change a line in the `simulator_ui` format, 32 KiB at most (spec/architecture-and-platform#perf-agent-responses). */
+const bytes = utf8Length;
+/** One change a line in the `simulator_ui` format, `max` UTF-8 bytes at most with the truncation line (spec/architecture-and-platform#perf-agent-responses). */
 export function formatUiDiff(diff: SimulatorUiDiff, max = 32 * 1024) {
 	const lines = [
 		...diff.changed.map((change) => `~ ${formatElement(change.after)} ${was(change)}`),
@@ -74,18 +78,19 @@ export function formatUiDiff(diff: SimulatorUiDiff, max = 32 * 1024) {
 	if (!lines.length) return 'No changes in the accessibility tree.';
 	const head = `Changes: ${diff.added.length} appeared, ${diff.removed.length} disappeared, ${diff.changed.length} changed.`;
 	const out = [head];
-	let size = head.length;
-	// Room for the truncation line, so the answer never passes `max`.
-	const room = max - 100;
+	let size = bytes(head);
+	const marker = (left: number) =>
+		`… truncated: ${left} more changes. Call simulator_ui for the whole screen.`;
 	for (const [index, line] of lines.entries()) {
-		if (size + line.length + 1 > room) {
-			out.push(
-				`… truncated: ${lines.length - index} more changes. Call simulator_ui for the whole screen.`
-			);
+		const rest = lines.length - index - 1,
+			after = size + 1 + bytes(line);
+		// The line fits when it is the last one, or when the marker for what follows still fits after it.
+		if (after + (rest ? 1 + bytes(marker(rest)) : 0) > max) {
+			out.push(marker(lines.length - index));
 			break;
 		}
 		out.push(line);
-		size += line.length + 1;
+		size = after;
 	}
 	return out.join('\n');
 }

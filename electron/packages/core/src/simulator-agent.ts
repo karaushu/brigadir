@@ -122,26 +122,37 @@ export function isSimulatorAgentCommand(value: unknown): value is SimulatorAgent
 			return false;
 	}
 }
+/** UTF-8 bytes of a text, the unit of the 32 KiB bounds (core runs where `TextEncoder` and `Buffer` may be missing). */
+export function utf8Length(text: string) {
+	let size = 0;
+	for (const char of text) {
+		const code = char.codePointAt(0)!;
+		size += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+	}
+	return size;
+}
 /** `Button "Take order" = "value" #take-order 12,622 378×48`, in points. */
 export function formatElement(element: SimulatorElement) {
 	const [x, y, w, h] = element.frame.map(Math.round) as [number, number, number, number];
 	return `${element.role || 'Element'}${element.label ? ` ${JSON.stringify(element.label)}` : ''}${element.value ? ` = ${JSON.stringify(element.value)}` : ''}${element.id ? ` #${element.id}` : ''} ${x},${y} ${w}×${h}`;
 }
 /**
- * One element a line, `limit` lines and 32 KiB at most (spec/architecture-and-platform#perf-agent-responses); `again` names the call that
+ * One element a line, `limit` lines and 32 KiB of UTF-8 at most (spec/architecture-and-platform#perf-agent-responses); `again` names the call that
  * pages on.
  */
 export function formatUi(ui: SimulatorUi, offset = 0, limit = 150, again = 'call again') {
 	const lines: string[] = [
 		`Screen ${Math.round(ui.width)}×${Math.round(ui.height)} pt · ${ui.elements.length} elements`,
 	];
-	let size = lines[0]!.length,
+	// UTF-8 bytes; the page hint after the lines takes at most 100.
+	let size = utf8Length(lines[0]!) + 100,
 		shown = 0;
 	for (const element of ui.elements.slice(offset, offset + limit)) {
-		const line = formatElement(element);
-		if (size + line.length + 1 > 32 * 1024) break;
+		const line = formatElement(element),
+			bytes = utf8Length(line);
+		if (size + bytes + 1 > 32 * 1024) break;
 		lines.push(line);
-		size += line.length + 1;
+		size += bytes + 1;
 		shown++;
 	}
 	const rest = ui.elements.length - offset - shown;

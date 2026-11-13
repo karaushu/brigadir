@@ -23,7 +23,7 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: Workspace
 		);
 	if (tools.simulator)
 		lines.push(
-			`- The project simulator, an iOS Simulator or Android Emulator device (simulator_*). For a React Native or other mobile app, check your change on the device: simulator_open, simulator_ui, simulator_act, simulator_screenshot, simulator_logs.${simulatorQueued(role) ? ` ${sharedSimulator}` : ''}`
+			`- The project simulator, an iOS Simulator or Android Emulator device (simulator_*). For a React Native or other mobile app, check your change on the device: simulator_open, simulator_ui, simulator_act, simulator_wait, simulator_screenshot, simulator_logs. simulator_act already waits for the screen to settle and lists what changed: do not sleep or take a screenshot to check a tap, and use simulator_wait for what comes later.${simulatorQueued(role) ? ` ${sharedSimulator}` : ''}`
 		);
 	if (tools.commands)
 		lines.push(

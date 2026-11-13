@@ -88,8 +88,8 @@ it('simulator_wait reads again when the screen changes and answers with what it 
 	}, 1300);
 	const answer = waitForElement({ text: 'saved' }, read, watch);
 	await vi.advanceTimersByTimeAsync(5000);
-	expect(await answer).toBe('Found Text "Saved" #saved 0,20 200×20 after 1.5 s.');
-	// At once, a second after the gap without frames, then right after the gap that followed the frame.
+	expect(await answer).toBe('Found Text "Saved" #saved 0,20 200×20 after 1.3 s.');
+	// At once, a second after the first read began (no frames), then on the frame.
 	expect(read).toHaveBeenCalledTimes(3);
 	const gone = waitForElement({ id: 'saved', gone: true }, read, watch);
 	setTimeout(() => {
@@ -112,6 +112,20 @@ it('simulator_wait times out with the last tree, and a failed read does not end 
 		'Timed out after 3 s: no element with label "Saved" appeared.\nScreen 402×874 pt · 1 elements\nText "Order #4821" #order-4821 0,0 200×20'
 	);
 	expect(calls).toBe(3);
+});
+it('simulator_wait reads at least once a second from the start of the read before: a failed first read is retried in time', async () => {
+	const watch = new ScreenWatch('ios');
+	const starts: number[] = [];
+	const start = Date.now();
+	const read = async () => {
+		starts.push(Date.now() - start);
+		if (starts.length === 1) throw new Error('The device did not describe its screen.');
+		return ui('Saved');
+	};
+	const answer = waitForElement({ text: 'Saved', timeoutMs: 1100 }, read, watch);
+	await vi.advanceTimersByTimeAsync(2000);
+	expect(await answer).toBe('Found Text "Saved" #saved 0,0 200×20 after 1 s.');
+	expect(starts).toEqual([0, 1000]);
 });
 it('simulator_wait does not wait past its deadline for a slow read, and says why no tree was read', async () => {
 	const watch = new ScreenWatch('android');

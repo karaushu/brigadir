@@ -3,6 +3,7 @@ import {
 	findElement,
 	formatUi,
 	isSimulatorAgentCommand,
+	utf8Length,
 	type SimulatorUi,
 } from './simulator-agent';
 const ui: SimulatorUi = {
@@ -38,6 +39,24 @@ it('prints the accessibility tree one element a line, in points, with a page hin
 	expect(first).toHaveLength(152);
 	expect(first.at(-1)).toBe('… 10 more: call again with offset 150');
 	expect(formatUi(long, 150).split('\n').slice(1)).toHaveLength(10);
+});
+it('keeps a page of the tree within 32 KiB of UTF-8, whatever the script of the labels (spec/architecture-and-platform#perf-agent-responses)', () => {
+	const cyrillic: SimulatorUi = {
+		...ui,
+		elements: Array.from({ length: 150 }, (_, index) => ({
+			role: 'Text',
+			label: `${'Замовлення з доставкою до дверей '.repeat(6)}${index}`,
+			id: '',
+			frame: [0, index * 44, 402, 44] as [number, number, number, number],
+		})),
+	};
+	const text = formatUi(cyrillic);
+	expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(32 * 1024);
+	expect(text.split('\n').at(-1)).toMatch(/^… \d+ more: call again with offset \d+$/);
+});
+it('counts UTF-8 bytes as TextEncoder does', () => {
+	for (const text of ['', 'Take order', 'Замовлення', '€ 5', '👍 ok', 'é\u0301'])
+		expect(utf8Length(text), text).toBe(new TextEncoder().encode(text).length);
 });
 it('finds a target by testID, then by exact label, then by a label that contains the text', () => {
 	expect(findElement(ui, { id: 'take-order' })?.label).toBe('Take order');

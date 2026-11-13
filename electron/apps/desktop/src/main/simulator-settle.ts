@@ -131,11 +131,12 @@ export async function waitForElement(
 		} else if (outcome) failure = outcome.error;
 		const now = clock.now();
 		if (now >= deadline) break;
-		// Never closer than the gap, at least once a second, sooner when the screen changes.
+		// Reads start at least a second apart at most, sooner when the screen changes, never closer than the gap.
 		const gap = before + waitGapMs - now;
 		if (gap > 0) await clock.sleep(Math.min(gap, deadline - now));
 		if (clock.now() >= deadline) break;
-		await watch.changed(Math.min(waitPollMs, deadline - clock.now()), seen);
+		const left = before + waitPollMs - clock.now();
+		if (left > 0) await watch.changed(Math.min(left, deadline - clock.now()), seen);
 		if (clock.now() >= deadline) break;
 	}
 	const head = `Timed out after ${seconds(timeout)}: ${

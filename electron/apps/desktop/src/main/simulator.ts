@@ -84,6 +84,8 @@ type Tools = {
 	metro?: MetroDeps;
 	/** iOS needs macOS (spec/architecture-and-platform#linux-package); elsewhere `xcrun` is never run. */
 	platform: NodeJS.Platform;
+	/** The clock of the kept tree (spec/browser-and-simulator#sim-act-settle). */
+	now: () => number;
 };
 export class Simulators {
 	private toolchain: SimulatorToolchain | null = null;
@@ -115,6 +117,7 @@ export class Simulators {
 			detach: (file, args) => spawn(file, args, { detached: true, stdio: 'ignore' }).unref(),
 			stream: lineStream,
 			platform: process.platform,
+			now: Date.now,
 			...tools,
 		};
 	}
@@ -333,6 +336,7 @@ export class Simulators {
 		);
 		const settled = await watch.settle();
 		const lines = [`${done} ${settleLine(settled)}`];
+		let read = false;
 		if (!before)
 			lines.push(
 				'No tree diff on Android: reading the tree takes seconds. Call simulator_ui when you need it.'
@@ -342,14 +346,17 @@ export class Simulators {
 		else
 			lines.push(
 				await this.ui(runtime, false).then(
-					(after) => formatUiDiff(diffUi(before.ui, after)),
+					(after) => {
+						read = true;
+						return formatUiDiff(diffUi(before.ui, after));
+					},
 					(error: unknown) =>
 						`No tree diff: the tree after the action could not be read (${reason(error)}).`
 				)
 			);
-		// The tree after the turn tells whether the app turned with the device.
+		// Only a tree read after the turn tells whether the app turned with the device.
 		if (command.action === 'rotate' && !runtime.serial)
-			lines[0] = `Rotated to ${runtime.orientation}; the app ${runtime.turned ? 'turned with the device' : 'stays in portrait'}. ${settleLine(settled)}`;
+			lines[0] = `Rotated to ${runtime.orientation}; ${read ? `the app ${runtime.turned ? 'turned with the device' : 'stays in portrait'}` : 'whether the app turned is unknown (no tree after the turn)'}. ${settleLine(settled)}`;
 		return lines.join('\n');
 	}
 	/** The action itself; `ui` is the tree just read (iOS), so a target by id or label is not read twice. */
@@ -641,12 +648,12 @@ export class Simulators {
 			!fresh &&
 			kept &&
 			kept.changes === runtime.changes &&
-			Date.now() - kept.at < treeKeepMs
+			this.tools.now() - kept.at < treeKeepMs
 		)
 			ui = kept.ui;
 		else {
 			const changes = runtime.changes,
-				at = Date.now();
+				at = this.tools.now();
 			ui = simulatorUi(await this.request(runtime, { cmd: 'ui', grid }, 40_000));
 			if (!ui) throw new Error('The device sent no accessibility tree.');
 			if (!grid) runtime.tree = { ui, changes, at };

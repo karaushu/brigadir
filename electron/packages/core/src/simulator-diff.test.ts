@@ -80,6 +80,42 @@ it('stops at 32 KiB with a truncated marker that says how many changes are left 
 	);
 	expect(lines[0]).toBe('Changes: 2000 appeared, 0 disappeared, 0 changed.');
 });
+it('a new testID in the same place is a removal and an addition; only elements without one merge by role and frame', () => {
+	const diff = diffUi(
+		screen(
+			el('Button', 'Log in', 'login', [12, 622, 378, 48]),
+			el('Text', 'Guest', '', [12, 100, 200, 20])
+		),
+		screen(
+			el('Button', 'Log out', 'logout', [12, 622, 378, 48]),
+			el('Text', 'Andy', '', [12, 100, 200, 20])
+		)
+	);
+	expect(diff.added.map((e) => e.id)).toEqual(['logout']);
+	expect(diff.removed.map((e) => e.id)).toEqual(['login']);
+	expect(diff.changed.map((c) => `${c.before.label} → ${c.after.label}`)).toEqual(['Guest → Andy']);
+});
+it('counts the 32 KiB in UTF-8 bytes, the truncated marker included (spec/architecture-and-platform#perf-agent-responses)', () => {
+	const many = screen(
+		...Array.from({ length: 2000 }, (_, index) =>
+			el('Text', `Замовлення номер ${index}: доставка кур'єром до дверей`, `row-${index}`, [
+				0,
+				index * 44,
+				402,
+				44,
+			])
+		)
+	);
+	const text = formatUiDiff(diffUi(screen(), many));
+	expect(new TextEncoder().encode(text).length).toBeLessThanOrEqual(32 * 1024);
+	// Cyrillic is two bytes a letter: counted in UTF-16 units, the same lines would pass 32 KiB.
+	expect(text.length).toBeLessThan(28 * 1024);
+	expect(text.split('\n').at(-1)).toMatch(/^… truncated: \d+ more changes\./);
+	for (const max of [300, 301, 302, 400, 1000]) {
+		const small = formatUiDiff(diffUi(screen(), many), max);
+		expect(new TextEncoder().encode(small).length, String(max)).toBeLessThanOrEqual(max);
+	}
+});
 it('finds what simulator_wait waits for: text in a label or value, a testID, a label (spec/browser-and-simulator#sim-wait)', () => {
 	const ui = screen(
 		el('Button', 'Take order', 'take-order', [12, 622, 378, 48]),

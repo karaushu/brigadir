@@ -2870,8 +2870,10 @@ export async function startHost(config: HostConfig) {
 				return true;
 			},
 		});
-		// spec/agents-and-providers#session-brief: a brief in the system prompt never goes into the first prompt as well.
+		// spec/agents-and-providers#session-brief: a brief in the system prompt never goes into the first prompt as well; one the agent refused,
+		// on a load too, goes as `.context` of the next prompt.
 		if (transport.briefInSystemPrompt) briefPending = false;
+		else if (transport.briefRefused) briefPending = true;
 		ready = true;
 		kickPrompts();
 		// spec/agents-and-providers#sign-in-recovery: `retryTurn` closes this process on purpose; only the current transport's exit stops the host.

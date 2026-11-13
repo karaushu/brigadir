@@ -154,8 +154,9 @@ export class AgentTransport {
 	/** spec/agents-and-providers#one-shot: `sessionCapabilities.delete` of `initialize`; the memoised removal of this session. */
 	private canDelete = false;
 	private deleting: Promise<void> | null = null;
-	/** spec/agents-and-providers#session-brief: the session opened with the brief as its appended system prompt. */
+	/** spec/agents-and-providers#session-brief: the session opened with the brief as its appended system prompt, or the agent refused it. */
 	private systemPromptSent = false;
+	private systemPromptRefused = false;
 	/** spec/agents-and-providers#compaction-signal: `used` of the last `usage_update`, the compactions already reported, and a completed one waiting for the size after it. */
 	private contextUsed: number | null = null;
 	private compactions = new Set<string>();
@@ -244,6 +245,10 @@ export class AgentTransport {
 	get briefInSystemPrompt(): boolean {
 		return this.systemPromptSent;
 	}
+	/** spec/agents-and-providers#session-brief: the agent refused the brief as a system prompt — on a load too, so the host sends it as `.context`. */
+	get briefRefused(): boolean {
+		return this.systemPromptRefused;
+	}
 	get id(): string {
 		if (!this.sessionId) throw new Error('Session is not ready');
 		return this.sessionId;
@@ -252,7 +257,9 @@ export class AgentTransport {
 		return this.connection.closed;
 	}
 	private emit(event: AgentEvent): Promise<void> {
-		if (event.kind === 'turn.completed') void this.flushCompaction(null);
+		// spec/agents-and-providers#compaction-signal: a turn's end, also a failed one, journals the compaction still waiting for its size after.
+		if (event.kind === 'turn.completed' || event.kind === 'session.failed')
+			void this.flushCompaction(null);
 		if (event.kind === 'options.changed' || event.kind === 'session.started')
 			this.options = new Map(event.options.map((option) => [option.id, option]));
 		if (event.kind === 'session.started')
@@ -727,6 +734,7 @@ export class AgentTransport {
 					throw error;
 				this.config.onDiagnostic?.(`System prompt refused: ${error.message}`);
 				this.systemPromptSent = false;
+				this.systemPromptRefused = true;
 				return request(params());
 			}
 		};

@@ -70,10 +70,10 @@ connection = agent({name:'fixture'})
  })
  .onRequest(methods.agent.session.new, ({params,client}) => {if(scenario==='auth-startup'&&signedOut())throw RequestError.authRequired();refuseSystemPrompt('session/new');record('new',params); mcpServers = params.mcpServers; if(scenario==='steering-codex')setTimeout(()=>{void threadStatus(client,'idle');},20); return session();})
  // spec/composer-steering-queue-and-ghost#quick-question: like claude-agent-acp, the fork answers with the id only; the client opens it with `session/resume`.
- .onRequest(methods.agent.session.fork, async ({params}) => {record('fork',params); mcpServers = params.mcpServers; return {sessionId:'fixture-session'};})
+ .onRequest(methods.agent.session.fork, async ({params}) => {refuseSystemPrompt('session/fork');record('fork',params); mcpServers = params.mcpServers; return {sessionId:'fixture-session'};})
  // spec/agents-and-providers#one-shot: one-shot calls delete their session; claude-agent-acp and codex-acp advertise `delete`.
  .onRequest(methods.agent.session.delete, async ({params}) => {record('delete',params); return {};})
- .onRequest(methods.agent.session.resume, async ({params}) => {record('resume',params); mcpServers = params.mcpServers; return session();})
+ .onRequest(methods.agent.session.resume, async ({params}) => {refuseSystemPrompt('session/resume');record('resume',params); mcpServers = params.mcpServers; return session();})
  .onRequest(methods.agent.session.load, async ({params,client}) => {if(scenario==='auth-startup'&&signedOut())throw RequestError.authRequired();refuseSystemPrompt('session/load');record('load',params); mcpServers = params.mcpServers; await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Historical replay'}});
   // A loaded Claude session replays its compactions as completed updates; they are history, not a new compaction.
   if(scenario==='compaction'){await update(client,{sessionUpdate:'usage_update',used:500000,size:1000000});await update(client,{sessionUpdate:'compaction_update',compactionId:'replayed',status:'completed'});}
@@ -117,7 +117,7 @@ connection = agent({name:'fixture'})
   if(agentHold){const hold=agentHold;agentHold=null;return new Promise(answer=>hold({text,answer}));}
   if(agentTurns&&text==='background')return backgroundTurn(client);
   // spec/agents-and-providers#compaction-signal: `compact` — a compaction with its sizes around it (the completed update twice, as claude-agent-acp sends it);
-  // `compact-end` — the turn ends before any usage after it; `compact-failed` — a failed one.
+  // `compact-end` — the turn ends right after it, before any other update; `compact-error` — the request fails right after it; `compact-failed` — a failed one.
   if(scenario==='compaction'&&text.startsWith('compact')){
    const id=text,size=1000000;
    await update(client,{sessionUpdate:'usage_update',used:text==='compact'?940000:300000,size});
@@ -125,6 +125,8 @@ connection = agent({name:'fixture'})
    await update(client,{sessionUpdate:'compaction_summary_chunk',compactionId:id,content:{type:'text',text:'Summary of the work'}});
    await update(client,{sessionUpdate:'compaction_update',compactionId:id,status:text==='compact-failed'?'failed':'completed',...(text==='compact-failed'?{error:'Too long'}:{})});
    if(text==='compact'){await update(client,{sessionUpdate:'compaction_update',compactionId:id,status:'completed'});await update(client,{sessionUpdate:'usage_update',used:62000,size});}
+   if(text==='compact-end')return {stopReason:'end_turn'};
+   if(text==='compact-error')throw new Error('Request failed after the compaction');
    await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'after'}});
    return {stopReason:'end_turn'};
   }

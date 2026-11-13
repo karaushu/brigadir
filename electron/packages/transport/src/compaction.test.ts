@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { personClaudeWindow, personCodexLimit } from './compaction';
+import { personClaudeWindow, personCodexLimit, tomlHasKey } from './compaction';
 let root: string, home: string, cwd: string;
 beforeEach(async () => {
 	root = await mkdtemp(join(tmpdir(), 'brigadir-compaction-'));
@@ -57,4 +57,33 @@ it("finds the person's own Codex limit in CODEX_CONFIG and in every config.toml"
 		'[profiles.a]\n  model_auto_compact_token_limit=1\n'
 	);
 	expect(personCodexLimit({}, { CODEX_HOME: codexHome }, cwd, home)).toBe(true);
+});
+it('reads only real TOML keys: the same text in a string, a comment or an array is not one', () => {
+	const key = 'model_auto_compact_token_limit';
+	for (const text of [
+		'developer_instructions = """\nExample:\nmodel_auto_compact_token_limit = 1\n"""\n',
+		"developer_instructions = \'\'\'\nmodel_auto_compact_token_limit = 1\n\'\'\'\n",
+		'note = "model_auto_compact_token_limit = 1"\n',
+		'# model_auto_compact_token_limit = 1\n',
+		'list = [\n  "a",\n  "model_auto_compact_token_limit = 1",\n]\n',
+		'[model_auto_compact_token_limit]\nmodel = "x"\n',
+		'escaped = "a \\" model_auto_compact_token_limit = 1"\n',
+	])
+		expect(tomlHasKey(text, key)).toBe(false);
+	for (const text of [
+		'model_auto_compact_token_limit = 1\n',
+		'model = "x"\n[profiles.long]\n  model_auto_compact_token_limit=1\n',
+		'profiles.long.model_auto_compact_token_limit = 1\n',
+		'"model_auto_compact_token_limit" = 1\n',
+		'profiles = { long = { model = "x", model_auto_compact_token_limit = 1 } }\n',
+		'instructions = """\ntext\n"""\nmodel_auto_compact_token_limit = 1\n',
+	])
+		expect(tomlHasKey(text, key)).toBe(true);
+});
+it("ignores the key inside the person's developer instructions", async () => {
+	await writeFile(
+		join(home, '.codex', 'config.toml'),
+		'developer_instructions = """\nSet model_auto_compact_token_limit = 90000 for long runs.\nmodel_auto_compact_token_limit = 90000\n"""\n'
+	);
+	expect(personCodexLimit({}, {}, cwd, home)).toBe(false);
 });

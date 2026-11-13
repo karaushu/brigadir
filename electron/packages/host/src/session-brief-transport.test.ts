@@ -93,3 +93,59 @@ it('falls back to the brief in the first prompt when the agent refuses the syste
 	expect(JSON.stringify(blocks)).toContain(checklistBrief);
 	expect(JSON.stringify(records)).not.toContain(checklistBrief);
 });
+it('sends the brief as .context after a restart whose load refused the system prompt (spec/agents-and-providers#session-brief)', async () => {
+	const repo = join(root, 'repo-restart');
+	await mkdir(repo);
+	await gitText(repo, ['init', '-b', 'main']);
+	const store = await SessionStore.at(join(root, 'data-restart'));
+	const project = await store.addProject(repo),
+		task = await store.createTask(project.id, 'Brief', 'codex'),
+		log = join(root, 'agent-restart.jsonl'),
+		services = resolve('apps/desktop/out/services');
+	const turn = async (scenario: string, text: string, turns: number) => {
+		const host = await startHost({
+			key: task,
+			dataDir: store.root,
+			mcpEntry: join(services, 'mcp-relay'),
+			adapter: {
+				command: process.execPath,
+				args: [resolve('packages/transport/fixtures/agent.mjs'), scenario, log],
+			},
+		});
+		const client = await connectHost(host.identity);
+		try {
+			await client.command({ kind: 'prompt', text });
+			await expect
+				.poll(
+					async () =>
+						(await client.snapshot()).records.filter(
+							(record) => record.event.kind === 'turn.completed'
+						).length
+				)
+				.toBe(turns);
+		} finally {
+			client.close();
+			await host.stop();
+		}
+	};
+	const entries = async () =>
+		(await readFile(log, 'utf8'))
+			.trim()
+			.split('\n')
+			.map((line) => JSON.parse(line) as { event: string; params: unknown });
+	// The session opens with the brief in its system prompt…
+	await turn('system-prompt', 'Start', 1);
+	expect(
+		JSON.stringify((await entries()).filter((entry) => entry.event === 'prompt-blocks'))
+	).not.toContain(checklistBrief);
+	// …the restarted host loads it; the agent refuses the system prompt, so the next prompt carries the brief.
+	await turn('system-prompt-refused', 'Next', 2);
+	const after = await entries();
+	const loads = after.filter((entry) => entry.event === 'raw-session/load');
+	expect(loads).toHaveLength(2);
+	expect(loads[0]?.params).toHaveProperty('systemPrompt');
+	expect(loads[1]?.params).not.toHaveProperty('systemPrompt');
+	expect(JSON.stringify(after.filter((entry) => entry.event === 'prompt-blocks').at(-1))).toContain(
+		checklistBrief
+	);
+});

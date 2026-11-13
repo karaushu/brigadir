@@ -110,7 +110,7 @@ A Claude session's own subagents (search, reading, summaries) run on the session
 A value the person set wins, and then nothing is passed:
 
 - Claude: the variable in the environment; `autoCompactWindow`, or `env.CLAUDE_CODE_AUTO_COMPACT_WINDOW`, in `settings.json` of the Claude config folder (`CLAUDE_CONFIG_DIR`, else `~/.claude`) or in `.claude/settings.json` / `.claude/settings.local.json` of the session folder.
-- Codex: the key in the person's own `CODEX_CONFIG`, or a `model_auto_compact_token_limit` line in `config.toml` of `CODEX_HOME` (else `~/.codex`) or in `.codex/config.toml` of the session folder.
+- Codex: the key in the person's own `CODEX_CONFIG`, or a `model_auto_compact_token_limit` key, in any table, in `config.toml` of `CODEX_HOME` (else `~/.codex`) or in `.codex/config.toml` of the session folder. Only real keys count: the same text inside a string (multi-line ones included), a comment or an array is not one.
 
 A file that does not exist or cannot be parsed sets nothing. The window is fixed for an adapter process, so the setting applies to sessions started after the change: every GUI task, crew members included. Terminal sessions do not get it. **Why:** models with a 1M window otherwise compact near 967k, and every tool call of a long session re-reads that context.
 
@@ -120,7 +120,8 @@ A file that does not exist or cannot be parsed sets nothing. The window is fixed
 Every GUI session gets one brief, built by `sessionBrief` (`packages/host/src/crew.ts`) when the host starts: the crew role brief, the task's agent role and the tool sentences (checklist, plan, subagents, project commands, tool modules). It is built from `task.json` and the settings, never from the conversation, so it stays the same for the session.
 
 - When the agent advertises `sessionCapabilities.systemPrompt`, the brief goes as ACP `systemPrompt` (`{mode: "append", content: [{type: "text", text}]}`) on `session/new`, and again on every `session/load`, `session/fork` and `session/resume`. Claude appends it to its own system prompt and Codex to its developer instructions. The system prompt is re-sent with every model request, so the brief survives compaction word for word.
-- Otherwise the brief goes as the hidden `Brigadir brief` `.context` block of the session's first prompt, as it does when the agent rejects the `systemPrompt` as invalid params; the transport then opens the session again without it.
+- Otherwise the brief goes as the hidden `Brigadir brief` `.context` block of the session's first prompt.
+- When the agent rejects the `systemPrompt` as invalid params, the transport repeats that request without it, and the brief goes as `.context` of the next prompt. This holds for a `session/load` after a restart as well: the brief rebuilt by the new host still reaches the agent.
 - Either way, the transcript and the journal never show it.
 - A crew part prompt, a review batch and the scope manifest are prompts, not the brief: they change during the session.
 - Claude keeps the system prompt it got at the session's first request. A brief that changed on a later load (a setting changed between two host starts) takes effect after the next compaction.
@@ -130,7 +131,7 @@ Every GUI session gets one brief, built by `sessionBrief` (`packages/host/src/cr
 
 `initialize` declares `clientCapabilities.session.compaction: {}`, so both adapters report a compaction as ACP `compaction_update` (one `compactionId`: `in_progress`, then `completed`, `failed` or `cancelled`) instead of a `Compact conversation` tool call. The transport:
 
-- turns each compaction of the session that reaches `completed` into one `context.compacted`. `before` is `used` of the last `usage_update` before the compaction. The event goes on the event chain with the next update of the session that is not about the compaction: when that is a `usage_update`, `after` is its `used` (Claude sends one at once with the retained size) and the event goes ahead of its `usage.changed`; when it is anything else, or the turn ends first, `after` is null (Codex reports usage only after its next request);
+- turns each compaction of the session that reaches `completed` into one `context.compacted`. `before` is `used` of the last `usage_update` before the compaction. The event goes on the event chain with the next update of the session that is not about the compaction: when that is a `usage_update`, `after` is its `used` (Claude sends one at once with the retained size) and the event goes ahead of its `usage.changed`; when it is anything else, or the turn ends first (`turn.completed` or `session.failed`), `after` is null (Codex reports usage only after its next request);
 - ignores the other statuses, `compaction_summary_chunk` (the summary is neither shown nor journaled), the compactions of a subagent's session and those replayed while `session/load` runs.
 
 Journals written before the capability keep their `Compact conversation` tool rows.

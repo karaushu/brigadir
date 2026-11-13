@@ -779,20 +779,58 @@ it('declares compaction and reports each completed compaction once with its size
 	});
 	await transport.send({ kind: 'prompt', text: 'compact' });
 	await transport.send({ kind: 'prompt', text: 'compact-end' });
+	await expect(transport.send({ kind: 'prompt', text: 'compact-error' })).rejects.toThrow();
 	await transport.send({ kind: 'prompt', text: 'compact-failed' });
 	// The compaction the load replayed is history; summary chunks, the duplicate and the failed one leave nothing.
 	expect(events.filter((event) => event.kind === 'context.compacted')).toEqual([
 		{ kind: 'context.compacted', before: 940000, after: 62000 },
 		{ kind: 'context.compacted', before: 300000, after: null },
+		{ kind: 'context.compacted', before: 300000, after: null },
 	]);
 	const kinds = events.map((event) => event.kind);
 	const first = kinds.indexOf('context.compacted');
 	expect(kinds.slice(first, first + 2)).toEqual(['context.compacted', 'usage.changed']);
-	const second = kinds.lastIndexOf('context.compacted');
-	expect(kinds.slice(second, second + 3)).toEqual([
-		'context.compacted',
-		'message.delta',
-		'turn.completed',
-	]);
+	// A turn that ends, or fails, right after the compaction journals it just before its end.
+	const ends = kinds
+		.flatMap((kind, index) => (kind === 'context.compacted' ? [index] : []))
+		.slice(1);
+	expect(ends.map((index) => kinds[index + 1])).toEqual(['turn.completed', 'session.failed']);
+	// The failed turn's compaction does not wait for the next turn's usage.
+	expect(events.at(-1)).toEqual({ kind: 'turn.completed', reason: 'end_turn' });
 	expect(kinds).not.toContain('unhandled');
+});
+it('sends the brief on session/fork and the session/resume that opens it (spec/agents-and-providers#session-brief)', async () => {
+	const systemPrompt = { mode: 'append', content: [{ type: 'text', text: 'Brief of the role' }] };
+	const forked = await start('system-prompt', {
+		systemPrompt: 'Brief of the role',
+		forkSessionId: 'parent-session',
+	});
+	expect(forked.forked).toBe(true);
+	expect(forked.briefInSystemPrompt).toBe(true);
+	const requests = await wire();
+	expect(requests.find((r) => r.event === 'raw-session/fork')?.params).toMatchObject({
+		sessionId: 'parent-session',
+		systemPrompt,
+	});
+	expect(requests.find((r) => r.event === 'raw-session/resume')?.params).toMatchObject({
+		sessionId: 'fixture-session',
+		systemPrompt,
+	});
+});
+it('forks and resumes without the system prompt when the agent refuses it', async () => {
+	const forked = await start('system-prompt-refused', {
+		systemPrompt: 'Brief of the role',
+		forkSessionId: 'parent-session',
+	});
+	expect(forked.forked).toBe(true);
+	expect(forked.briefInSystemPrompt).toBe(false);
+	expect(forked.briefRefused).toBe(true);
+	const requests = await wire();
+	const forks = requests.filter((r) => r.event === 'raw-session/fork');
+	expect(forks).toHaveLength(2);
+	expect(forks[0]?.params).toHaveProperty('systemPrompt');
+	expect(forks[1]?.params).not.toHaveProperty('systemPrompt');
+	const resumes = requests.filter((r) => r.event === 'raw-session/resume');
+	expect(resumes).toHaveLength(1);
+	expect(resumes[0]?.params).not.toHaveProperty('systemPrompt');
 });

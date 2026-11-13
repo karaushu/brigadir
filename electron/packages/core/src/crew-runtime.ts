@@ -77,6 +77,13 @@ export type CrewWorkerRecord = {
 	part?: number;
 	acceptedTips?: Record<string, string>;
 	next?: CrewNextPart;
+	/** spec/crew#workers: the current part's prompt and acceptance criteria, for its reviewers; the next part replaces them. */
+	prompt?: string;
+	acceptance?: string;
+	/** spec/crew#review-limit: review rounds the current part spent — checks the host opened and the parent's returns. Absent = 0. */
+	rounds?: number;
+	/** spec/crew#review-limit: the parent was told the part is past its review limit. */
+	limitTold?: boolean;
 };
 export type CrewNote = {
 	id: string;
@@ -211,6 +218,11 @@ export function isCrewWorkerRecord(value: unknown): value is CrewWorkerRecord {
 					([path, tip]) => path.length <= 4096 && isSha(tip)
 				))) &&
 		(value.next === undefined || isCrewNextPart(value.next)) &&
+		(value.prompt === undefined || text(value.prompt, 200_000)) &&
+		(value.acceptance === undefined || text(value.acceptance, crewAcceptanceLimit)) &&
+		(value.rounds === undefined ||
+			(Number.isSafeInteger(value.rounds) && Number(value.rounds) >= 0)) &&
+		(value.limitTold === undefined || typeof value.limitTold === 'boolean') &&
 		isId(value.taskId) &&
 		isId(value.nodeId) &&
 		isCrewName(value.name) &&
@@ -441,6 +453,8 @@ export type ReviewRun = {
 	nodeId: string;
 	name: string;
 	title: string;
+	/** spec/crew#reviewer: the member's part the run checks; absent = 1. */
+	part?: number;
 	reportSeq: number;
 	reportHash: string;
 	scopeSnapshots: { scopeId: string; base: string; result: string }[];
@@ -459,6 +473,7 @@ export function isReviewRun(value: unknown): value is ReviewRun {
 		isId(value.nodeId) &&
 		isCrewName(value.name) &&
 		typeof value.title === 'string' &&
+		(value.part === undefined || (Number.isSafeInteger(value.part) && Number(value.part) >= 1)) &&
 		Number.isSafeInteger(value.reportSeq) &&
 		typeof value.reportHash === 'string' &&
 		Array.isArray(value.scopeSnapshots) &&
@@ -492,3 +507,27 @@ export function isReviewRun(value: unknown): value is ReviewRun {
 	);
 }
 export const crewReviewRounds = 2;
+/** spec/crew#workers: `acceptance` of `create_worker_task`. */
+export const crewAcceptanceLimit = 20_000;
+/**
+ * spec/crew#reports: a report is done when the worker's task is `done` after the turn and the turn ended with `end_turn`. A cancelled, failed or
+ * rate-limited turn, a stop on `max_tokens`, `max_turn_requests` or a refusal, and a task left `needs-you` (a sync or merge conflict) are not done.
+ */
+export function crewReportDone(status: string, reason: string | null | undefined): boolean {
+	return status === 'done' && reason === 'end_turn';
+}
+/**
+ * spec/crew#review-limit: what a developer's report with reviewers leads to. `review` opens the next round; `limit` goes to the parent once with the
+ * notice that the part is past its review limit; `report` goes to the parent as it is (not done, nothing changed, or the parent already knows).
+ */
+export type CrewReviewStep = 'review' | 'limit' | 'report';
+export function crewReviewStep(input: {
+	done: boolean;
+	files: number;
+	rounds: number;
+	limitTold: boolean;
+}): CrewReviewStep {
+	if (!input.done || input.files === 0) return 'report';
+	if (input.rounds < crewReviewRounds) return 'review';
+	return input.limitTold ? 'report' : 'limit';
+}

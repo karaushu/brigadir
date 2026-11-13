@@ -638,13 +638,14 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 	},
 	create_worker_task: {
 		description:
-			'Give one of your agents a part after the plan was approved. The prompt must state which files the part owns and the command that proves the part is done. Each agent has one task for the whole crew: the first part creates it; a later part, once you accepted the previous one, continues in the same task and session after your tree is merged into its branch. While a part is open, change or return it with prompt_task. Returns the taskId you use in the other tools.',
+			"Give one of your agents a part after the plan was approved. The prompt must state which files the part owns and the command that proves the part is done. acceptance: what must hold for the part to count as done; the agent's reviewers check the change against it and the prompt. Each agent has one task for the whole crew: the first part creates it; a later part, once you accepted the previous one, continues in the same task and session after your tree is merged into its branch. While a part is open, change or return it with prompt_task. Returns the taskId you use in the other tools.",
 		shape: {
 			agent: z.string().max(80).optional(),
 			title: z.string().min(1).max(80),
 			prompt: z.string().min(1).max(200_000),
 			files: z.array(z.string().max(1024)).max(1024).default([]),
 			scopes: z.array(z.string().max(4096)).max(512).default([]),
+			acceptance: z.string().max(20_000).optional(),
 		},
 	},
 	prompt_task: {
@@ -744,7 +745,14 @@ type Served = {
 	tools: Map<string, Tool & { schema: z.ZodObject }>;
 	list: { tools: unknown[] };
 	modules: AppModules;
+	hidden: ReadonlySet<string>;
 };
+/** spec/crew#roles: what a hidden tool answers when an agent calls it from a list it read before. English by rule 12. */
+export const hiddenToolMessages: Record<string, string> = {
+	create_task:
+		'create_task is not available while your crew plan exists: run the plan in this task with create_worker_task.',
+};
+const noHidden: ReadonlySet<string> = new Set();
 const served = new Map<string, Served>();
 /**
  * Registration order of the SDK server: the human's tools, then the crew tools of the role. Built once per role and set
@@ -753,12 +761,14 @@ const served = new Map<string, Served>();
 export function mcpTools(
 	role: CrewProcessRole | null,
 	modules: AppModules = defaultModules,
-	review = false
+	review = false,
+	/** spec/crew#roles: tools the session does not have right now (`create_task` while the root foreman's crew plan exists). */
+	hidden: ReadonlySet<string> = noHidden
 ): Served {
 	const key = `${role ?? ''}|${Object.entries(modules)
 		.filter(([, on]) => on)
 		.map(([name]) => name)
-		.join(',')}|${review}`;
+		.join(',')}|${review}|${[...hidden].sort().join(',')}`;
 	const cached = served.get(key);
 	if (cached) return cached;
 	// spec/agents-and-providers#tools-awareness: a crew worker keeps the browser, the simulator and the project commands; the person's other tools stay up the tree.
@@ -771,9 +781,12 @@ export function mcpTools(
 		// spec/pull-requests-and-ci#review-crew: a crew worker of a PR review never drafts comments — the foreman leaves the merged findings.
 		...(review && modules.pullRequests && humanToolsAllowed(role) ? reviewTools : []),
 		...(role ? crewTools(role).map(crewTool) : []),
-	].map((tool) => ({ ...tool, schema: z.object(tool.shape) }));
+	]
+		.filter((tool) => !hidden.has(tool.name))
+		.map((tool) => ({ ...tool, schema: z.object(tool.shape) }));
 	const value = {
 		modules: { ...modules },
+		hidden,
 		tools: new Map(tools.map((tool) => [tool.name, tool])),
 		list: {
 			tools: tools.map((tool) => ({
@@ -796,6 +809,12 @@ export type ModuleSource = {
 	subscribe(listener: (value: AppModules) => void): () => void;
 };
 const fixedModules: ModuleSource = { current: () => defaultModules, subscribe: () => () => {} };
+/** spec/crew#roles: the tools a session lacks right now and a notice when that changes. */
+export type HiddenToolSource = {
+	current(): ReadonlySet<string>;
+	subscribe(listener: () => void): () => void;
+};
+const nothingHidden: HiddenToolSource = { current: () => noHidden, subscribe: () => () => {} };
 const versions = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05', '2024-10-07'];
 type RpcError = Error & { code?: number };
 /** Below every client's idle limit for a tool call; exported for the test. */
@@ -830,6 +849,8 @@ async function callTool(
 	const tool = served.tools.get(params.name);
 	// Codex keeps the list it read at start (spec/settings-modules-and-onboarding#modules): a tool of a module switched off since then answers with a sentence.
 	if (!tool) {
+		const hidden = served.hidden.has(params.name) ? hiddenToolMessages[params.name] : undefined;
+		if (hidden) return toolError(hidden);
 		const module = toolModule(params.name);
 		return toolError(
 			module && !served.modules[module]
@@ -862,9 +883,10 @@ export function serveMcp(
 	role: CrewProcessRole | null,
 	call: McpCall,
 	modules: ModuleSource = fixedModules,
-	review = false
+	review = false,
+	hidden: HiddenToolSource = nothingHidden
 ): (chunk: string) => void {
-	const tools = () => mcpTools(role, modules.current(), review),
+	const tools = () => mcpTools(role, modules.current(), review, hidden.current()),
 		running = new Map<string | number, AbortController>();
 	const send = (value: unknown) => {
 		if (socket.destroyed) return;
@@ -879,8 +901,12 @@ export function serveMcp(
 	const unsubscribe = modules.subscribe(() => {
 		if (initialized) send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
 	});
+	const unsubscribeHidden = hidden.subscribe(() => {
+		if (initialized) send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
+	});
 	socket.once('close', () => {
 		unsubscribe();
+		unsubscribeHidden();
 		for (const controller of running.values()) controller.abort();
 		running.clear();
 	});

@@ -57,6 +57,7 @@ Every agent session gets the app's MCP server `brigadir` in `session/new` (stdio
 | `post_note`, `read_notes` | ✓ | ✓ | ✓ | ✓ |
 
 - The person's tools (`ask_user`, `create_task`, editor context, PR review drafting) exist only in the root foreman's session (`humanToolsAllowed`). Workers ask up the tree instead.
+- **No separate task for the plan.** While a crew plan exists (it waits for the person or was approved; `crewPlanExists`), the root foreman's `tools/list` leaves out `create_task` and the server announces the change with `notifications/tools/list_changed`; a call from a stale list and the host itself answer `create_task is not available while your crew plan exists: run the plan in this task with create_worker_task.` A rejected plan brings the tool back. **Why:** the plan is executed by this task's crew; a separate task leaves the crew, its review loop and its integration branch behind.
 - Workspace tools stay with every role: `browser_*`, `simulator_*`, `commands_*` (when their modules are on) and `console_*`. The simulator is one device per project: crew members queue for it, the foreman and solo agents go first.
 - **Two guards.** Structure: `tools/list` shows only the role's tools. Check: the host refuses a tool outside the role (`Tool X is not available to this agent`) and a reviewer call on a task outside its check edges. There is no `decide_permission` tool for any role.
 - One nesting rule: a worker gets no orchestration tools unless its node has subordinates (then it is a lead, see [Subordinates](#subordinates)).
@@ -82,11 +83,12 @@ Composed of: the fixed core (`foremanCore`), the lead's place in the tree (leads
 
 The core says:
 1. **Role:** never modify files; split, delegate to named agents, read reports and diffs, review, accept.
-2. **Loop:** `propose_plan` (one part per agent: title, agent, owned files, full prompt, written for an agent that sees nothing of the foreman's conversation: the goal, the behaviour expected, what stays untouched, and the command proving the part: a test, a typecheck, a build) → wait for the result, do not end the turn while approval is pending, continue immediately once approved → `create_worker_task` per part with the same agent name → reports arrive by themselves (no `task_status` polling) → `read_report`, then `read_diff` one file at a time: where the report raises a question when a reviewer approved the part, the whole change when nobody checks it → return with `prompt_task` / `submit_review`, accept with `accept_task`. A part that comes back wrong a second time is returned with `effort` one level higher (see [Returning with more effort](#return-effort)).
-3. **Splitting:** each worker's prompt states which files it owns and that others belong to other agents; a shared type/config goes to one agent, the rest read it; dependent parts go in waves. Each agent has one task for the whole crew; its next part is another `create_worker_task` after accepting the previous one.
-4. **Questions and permissions:** answer a worker's question with `prompt_task` and its `questionId`; permissions are never the foreman's.
-5. **Notes:** share facts with `post_note`, read others' with `read_notes`.
-6. **Research rule:** a question handed to a subagent is not researched in parallel by the foreman; end the message and wait for the result (the adapter holds the turn until background subagents finish), or run the subagent in the foreground when the next step depends on it. **Why:** the foreman's session lives for the whole crew, so every file it reads is carried by every later step. The same reason is behind the diff rule in the loop: reviewers read line by line, the foreman reads where the decision is its own.
+2. **Loop:** `propose_plan` (one part per agent: title, agent, owned files, full prompt, written for an agent that sees nothing of the foreman's conversation: the goal, the behaviour expected, what stays untouched, and the command proving the part: a test, a typecheck, a build) → wait for the result, do not end the turn while approval is pending, continue immediately once approved → `create_worker_task` per part with the same agent name, and its acceptance criteria in `acceptance` when the part has reviewers → reports arrive by themselves (no `task_status` polling) → `read_report`, then `read_diff` one file at a time: where the report raises a question when a reviewer approved the part, the whole change when nobody checks it → return with `prompt_task` / `submit_review`, accept with `accept_task`. A part that comes back wrong a second time is returned with `effort` one level higher (see [Returning with more effort](#return-effort)). Every return spends a review round of the part; a part past its [review limit](#reviewer) is accepted or put to the person, not returned for another review.
+3. **Own task:** the plan runs in this task through `create_worker_task`; the foreman never creates a separate task for it, even when the person says "in a separate task" (that means the crew's workers). The foreman plans only through `propose_plan`: its session gets no sentence about the CLI's plan mode (see [Plan approval](chat-turns-plans-and-questions.md#plan-approval)).
+4. **Splitting:** each worker's prompt states which files it owns and that others belong to other agents; a shared type/config goes to one agent, the rest read it; dependent parts go in waves. Each agent has one task for the whole crew; its next part is another `create_worker_task` after accepting the previous one.
+5. **Questions and permissions:** answer a worker's question with `prompt_task` and its `questionId`; permissions are never the foreman's.
+6. **Notes:** share facts with `post_note`, read others' with `read_notes`.
+7. **Research rule:** a question handed to a subagent is not researched in parallel by the foreman; end the message and wait for the result (the adapter holds the turn until background subagents finish), or run the subagent in the foreground when the next step depends on it. **Why:** the foreman's session lives for the whole crew, so every file it reads is carried by every later step. The same reason is behind the diff rule in the loop: reviewers read line by line, the foreman reads where the decision is its own.
 
 The **roster** (`roster`) lists each child with summary, provider · model · effort (catalog names; "provider default model" when unset), `leads …`, zone, `checked by …`, and for reviewers `checks …`. It tells the foreman to pass `agent` to `create_worker_task` and `propose_plan`, how to match a part to a model (the [model ladder](#model-ladder)), that reports come after checks pass, and that reviewers get no code.
 
@@ -95,12 +97,11 @@ The **roster** (`roster`) lists each child with summary, provider · model · ef
 
 One paragraph of the brief (`modelLadder`), the same in the roster and in the compose palette. It names no model (rule 7): the foreman reads the names in the roster or the palette.
 
-1. A well-scoped part built against a clear spec (a bug fix, one more case of an existing pattern) goes to a faster model at its default effort.
+1. A well-scoped part built against a clear spec (a bug fix, one more case of an existing pattern) goes to a faster model.
 2. A part that crosses modules, migrates data, tunes performance or has no clear spec goes to a stronger model.
-3. For a harder part, raise effort first, up to `high`. Past `high`, the next model up at a lower effort costs about the same and knows more: effort lets a model think longer, it adds no knowledge.
-4. Whoever checks a part is at least as strong as whoever wrote it.
+3. Effort `medium` is the default. For a harder part raise it, up to `high`. The step past `high` is a stronger model in a fresh session (a new part for a stronger agent), not a higher effort: effort lets a model think longer, it adds no knowledge.
 
-**Why:** a crew on one model pays the top price for every part; the check edge is what makes a cheaper developer safe.
+**Why:** a crew on one model pays the top price for every part; a reviewer is chosen for what the part needs checked, not to outrank its author.
 
 <a id="worker-context"></a>
 ### Worker context (`workerContext`)
@@ -126,6 +127,7 @@ Workers never start before the person approves the root foreman's plan.
 - The card lets the person edit part titles, prompts, agents and files; differences introduced by edits are shown on the card and block `Start workers` (`planBlocked`; idle agents only show). Agent names arrive pre-filled in editable fields.
 - `Start workers` approves; `Reject` rejects (the foreman revises or asks). The tool result returns `approved`, the possibly edited parts and the difference messages.
 - **Decision after the turn ended:** when the proposing turn has already completed (or the session failed / host stopped) while the MCP call stayed open, the decision is also sent as a separate prompt through the queue — approval lists the current (edited) parts and tells the foreman to create the worker tasks now; rejection asks for a new split. A live turn gets only the tool result.
+- **One plan mechanism.** The foreman plans only with `propose_plan`, and the plan runs in the foreman's own task: from the proposal on, `create_task` is hidden from it (see [Process roles](#roles)), and its session never gets the plan-mode sentence of a solo Claude session.
 - **Lead plans** are approved immediately by the host: the plan shows in the lead's activity, only the root plan waits for the person, and the root foreman can return the branch.
 - **Waiting plan = needs-you.** `crew.plan.requested` sets the foreman to `needs-you`; `crew.plan.resolved` recomputes the status. Sidebar, `⌘J`/`⇧⌘J`, `Active workers` and keep-awake treat it like a permission or question. A notification `The foreman proposes a split` with the attention sound and Dock badge closes when the plan is decided; it waits 750 ms (`planSettleMs`) so an auto-approved lead plan never notifies.
 - **No client timeout on a waiting call:** for Claude over ACP the host sets `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` to 7 days unless the person set it; Codex gets `tool_timeout_sec = 604800` for the `brigadir` server; a CLI task's `cli-mcp.json` sets `timeout` 7 days. The server also sends `notifications/progress` every 60 s (`progressBeatMs`) while a call that sent a `progressToken` waits.
@@ -134,19 +136,20 @@ Workers never start before the person approves the root foreman's plan.
 ### Composing the crew (`Foreman composes`)
 
 - `CrewLaunch` has a third kind `{compose: true, template?}`. Main stores in `task.crew.compose` a palette snapshot: every library agent template except the foreman, expanded as nodes (provider, model, effort, specialty, instructions), plus each enabled provider's catalog models and each model's effort levels. Template edits after launch do not affect the task.
-- While `compose` is set and the root has no agents, the brief carries the palette instead of a roster (`composeBrief`): read the task and code first, then call `propose_plan` with `crew` and `parts` together; as many agents as needed, non-overlapping zones; one developer and one reviewer when the task is a single chain of dependent steps (a split pays only when parts can run side by side); models by the [model ladder](#model-ladder); **at least one reviewer, and every developer in some reviewer's `checkedBy`** (one reviewer may check several); reviewers take no code; no leads (one level under the foreman). The palette lists every non-foreman template of the library by name, with its role, specialty and default model; an own template with the name of a built-in stands in for that built-in, so a name always means one template.
+- While `compose` is set and the root has no agents, the brief carries the palette instead of a roster (`composeBrief`): read the task and code first, then call `propose_plan` with `crew` and `parts` together; **the fewest agents the task's independent parts need**, non-overlapping zones; one developer and no reviewer is a whole crew for a single chain of dependent steps (a split pays only when parts can run side by side); a reviewer only where a part needs a second reader, named in that developer's `checkedBy` (one reviewer may check several); models by the [model ladder](#model-ladder); reviewers take no code; no leads (one level under the foreman). The palette lists every non-foreman template of the library by name, with its role, specialty and default model; an own template with the name of a built-in stands in for that built-in, so a name always means one template.
 - `crew[]` entries: `name` (≤ 80, short, unique, names its area), `template` (palette template name), optional `summary` (≤ 240), `zone`, `provider`, `model`, `effort` (palette names), `checkedBy` (reviewer names). The host builds nodes (a different provider drops the template's choices), checks the editor's rules (unique names, a reviewer checks only developers, zones) and then the parts against this crew. Unknown template or model → tool error listing what is available.
-- **Reviewer rule:** the host rejects a composed crew with no reviewer, or with a developer nobody checks; the English error names the palette's reviewer templates and the unchecked developers. It applies only when the palette has a template with the reviewer role. The person's own edit is not checked: `Edit crew…` may remove the reviewer.
+- A composed crew needs at least one developer; reviewers are optional, and a reviewer nobody names in `checkedBy` checks nothing.
 - The plan card shows a `Crew members` section above the parts (provider glyph, name, template role, model · effort, specialty, `checks …`). `Edit crew…` opens the crew editor on the proposed crew as a one-off crew; on `Done` parts are re-checked and part agents are chosen from the new list. The foreman itself cannot be changed there (`The foreman is already working: its settings stay.`). Approve/reject covers crew and parts together.
 - After approval the crew becomes `task.crew.root.agents`, `compose` is dropped, and the task is an ordinary crew; the host updates its context without a restart and the approval reply lists the approved roster (prefixed "The human edited your crew." when edited).
 
 <a id="workers"></a>
 ## Workers are tasks
 
-`create_worker_task(agent?, title, prompt, files, scopes)` — after plan approval only (`Call propose_plan first; …`), except in a PR review by a crew (see [Pull requests and CI](pull-requests-and-ci.md)).
+`create_worker_task(agent?, title, prompt, files, scopes, acceptance?)` — after plan approval only (`Call propose_plan first; …`), except in a PR review by a crew (see [Pull requests and CI](pull-requests-and-ci.md)).
 
 - `agent` names one of the caller's children; it may be omitted only when there is exactly one non-reviewer child. Unknown name → error with the list. A reviewer cannot be given a part: the host starts reviewers itself.
-- `files` outside the agent's zone → error. Title ≤ 80, prompt ≤ 200 000.
+- `files` outside the agent's zone → error. Title ≤ 80, prompt ≤ 200 000, `acceptance` ≤ 20 000.
+- The part's prompt and `acceptance` (what must hold for the part to count as done) are kept on the worker record for its reviewers (see [Reviewer agents](#reviewer)); the next part replaces them.
 - The worker task: `isolation: 'worktree'`, `baseRef` = the foreman's branch (or `HEAD` when the foreman is not isolated), the foreman's setup command and `.env` copying, `crewTaskId` (root crew), `crewNodeId`, `parentTaskId`, launch options from the node's requested choices (model, effort, mode). Unavailable options are recorded in `unavailableOptions`.
 - **Branch name:** `<foreman branch>-<agent slug>` (dash, because `a/b` cannot coexist with ref `a`), then `-2`, `-3` only when taken in some repo of the project.
 - **Scopes:** a worker's worktree contains all enabled repos so the workspace builds; `scopes` narrows which are selected. Multi-root bases resolve per repo (`origin/HEAD`, then `origin/main`/`origin/master`, then `HEAD`).
@@ -184,6 +187,8 @@ A crew node has one task, one session, one worktree and one branch for the crew'
 ## Reports: push, built by code
 
 When a worker's turn ends, the worker host pushes a report to the parent (outbox `crew-outbox.json` survives a missing parent). The parent receives an ordinary `session/prompt` — queued if it is busy, so it arrives as the next turn. Nobody polls.
+
+- **Done or not.** A report is *done* when the worker's task is `done` after that turn and the turn ended with `end_turn` (`crewReportDone`). A turn that was cancelled, failed, hit a rate limit, stopped on `max_tokens`, `max_turn_requests` or a refusal, or left the task `needs-you` (a sync or merge conflict) is not done. Only a done report with changed files goes to the part's reviewers; any other report goes straight to the parent, opens no check and spends no round.
 
 `buildReport` (`packages/orchestrator/src/report.ts`) builds it from the journal and the snapshot diff:
 
@@ -262,18 +267,25 @@ A node whose template has `role: reviewer` owns no code. It gets `read_report`, 
 
 Routing (in the parent's host): a developer's report does not go to the parent until its reviewers have passed it.
 
-1. The developer ends a turn; the host opens a `ReviewRun` and prompts each reviewer itself: `Check task … (reviewId …, round n of 2)` with the report. The parent spends no turn.
+1. The developer ends a turn with a [done report](#reports) and the part has changed files; the host opens a `ReviewRun` and prompts each reviewer itself: `Check task … (reviewId …, round n of 2)`, the report, then the part's prompt as the foreman gave it (≤ 100 000 chars, clipped with a note) and its acceptance criteria when the foreman gave them, and the instruction to check against them and ask the foreman only what they leave open. The parent spends no turn. A report that is not done, or a part with no changed files, opens no check and goes straight to the parent.
 2. Reviewers read with that `reviewId` and either `submit_review(taskId, reviewId, comments)` or `approve(taskId, reviewId)`.
 3. The host collects one verdict per reviewer and delivers one comment batch to the developer, who fixes and reports again.
 4. When all reviewers approve in a round, the report with verdicts goes to the parent, which accepts or returns (`prompt_task`). Only the parent returns work.
-5. Comments in round 2 (or a change after round 2) → `disputed`: the report goes to the parent with both sides; the parent decides.
+5. Comments in the last round → `disputed`: the report goes to the parent with both sides.
 
-`ReviewRun` (`crew-reviews.json`): `reviewId`, `taskId`, `nodeId`, `name`, `title`, `reportSeq`, `reportHash`, `scopeSnapshots` (base and result tree OID per scope, from the part's `changeBase`), `round`, `reviewerNodeIds`, `dispatched`, `verdicts`, `state` ∈ `reviewing | comments | approved | disputed | superseded | cancelled`.
+<a id="review-limit"></a>
+**Rounds belong to the part.** The worker record counts the part's rounds (`rounds`): each check the host opens is one, and each `prompt_task` from the parent that is not an answer to a question is one more. The count never restarts within a part; the next part starts from zero. The limit is two (`crewReviewRounds`).
+
+- While the count is under the limit, a done report with changed files opens the next round (`round n of 2`, n = the count after it). Opening a round supersedes a run of the task still `reviewing`; a run left in `comments` keeps its state and no longer decides the round.
+- Once the limit is reached, the host opens no check for that part. The parent is told **once** (`limitTold` on the record): the dispute report says the part reached its review limit, the comments stay open in the review thread, and the parent accepts the part with `accept_task` or puts the decision to the person (`ask_user`; a lead asks its own parent with `ask_foreman`) instead of returning it for another review. A report that arrives past the limit without a dispute (a return after an approval, a change during the last round) carries the same notice the first time; later reports of the part go to the parent as plain reports.
+
+`ReviewRun` (`crew-reviews.json`): `reviewId`, `taskId`, `nodeId`, `name`, `title`, `part?` (the member's part, absent = 1), `reportSeq`, `reportHash`, `scopeSnapshots` (base and result tree OID per scope, from the part's `changeBase`), `round`, `reviewerNodeIds`, `dispatched`, `verdicts`, `state` ∈ `reviewing | comments | approved | disputed | superseded | cancelled`.
 
 - Report and diff of a run are immutable; reviewers' `read_report`/`read_diff` read that snapshot.
 - A new report or tree change supersedes earlier approvals; an old verdict returns `stale_review`. OIDs are re-checked before handing the report up.
 - One reviewer serves one run at a time; the rest queue FIFO and survive a restart. Waiting on a question or permission is not a finished review.
-- State and the delivery queue are written before waking an agent; deliveries have ids and are idempotent; a different verdict on a closed `reviewId` is rejected; restart restores runs and never treats silence as approval. An unrecoverable session gives `needs-you`, keeping snapshot and verdicts. A part returned after acceptance starts again from round 1.
+- State and the delivery queue are written before waking an agent; deliveries have ids and are idempotent; a different verdict on a closed `reviewId` is rejected; restart restores runs and never treats silence as approval. An unrecoverable session gives `needs-you`, keeping snapshot and verdicts. The member's next part starts again from round 1.
+- The task's own review before its pull request keeps its own rounds (see [Diff and review](diff-and-review.md#agent-review-rounds)); the per-part count applies to crew members.
 - Edges only between children of one parent: a reviewer from another branch would not see that branch's brief or zone.
 
 <a id="subordinates"></a>
@@ -332,7 +344,7 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | File | Task | Content |
 | --- | --- | --- |
 | `crew-plan.json` | foreman/lead | `{plan, decision}`; `decision: null` while pending |
-| `crew-workers.json` | foreman/lead | `CrewWorkerRecord[]`: `taskId`, `nodeId`, `name`, `title`, `createdAt`, `planPartId`, `acceptedAt?`, `effectiveChoices?`, `unavailableOptions?`, `part?`, `acceptedTips?`, `next?` (`queued \| merging`, `previous`, `heads?`) |
+| `crew-workers.json` | foreman/lead | `CrewWorkerRecord[]`: `taskId`, `nodeId`, `name`, `title`, `createdAt`, `planPartId`, `acceptedAt?`, `effectiveChoices?`, `unavailableOptions?`, `part?`, `acceptedTips?`, `next?` (`queued \| merging`, `previous`, `heads?`), and for the current part `prompt?`, `acceptance?`, `rounds?`, `limitTold?` |
 | `crew-questions.json` | parent | `CrewQuestion[]` (`id`, `workerTaskId`, `parentTaskId`, `callId`, `agent`, `question`, `options`, `createdAt`, `escalateAt`, `state`, `answer?`, `answeredBy?`) |
 | `crew-reviews.json` | parent | `ReviewRun[]` |
 | `crew-notes.jsonl` | root foreman | `CrewNote` per line |
@@ -350,7 +362,8 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | Note text / files | 8 KiB / 64 |
 | Notes per `read_notes` page | 100 |
 | Question escalation | 5 min |
-| Review rounds | 2 |
+| Review rounds per part (checks and the parent's returns) | 2 |
+| Part acceptance criteria / part prompt in a reviewer's prompt | 20 000 / 100 000 chars |
 | Report file list / outside list | 200 / 20 |
 | Concurrent worker launches | 2 (plus the global agent limit) |
 | Waiting MCP call client timeout | 7 days; progress heartbeat 60 s |

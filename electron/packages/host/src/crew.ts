@@ -43,6 +43,9 @@ import {
 	type ReviewRun,
 	isReviewRun,
 	crewReviewRounds,
+	crewAcceptanceLimit,
+	crewReportDone,
+	crewReviewStep,
 	type CrewSpec,
 	type CrewSpecAgent,
 	type CrewWorkerRecord,
@@ -191,7 +194,7 @@ export type BriefOptions = {
 	/** spec/tasks#agent-context: the role text of a task without a crew. */ role?: string;
 };
 /** Every session gets a brief: the role brief of a crew node (or the role of a solo task, spec/tasks#agent-context) first, then the checklist sentence (spec/chat-turns-plans-and-questions#checklist-tools), then for a Claude session that
- *  talks to the person (no crew, or the foreman) the plan sentence (spec/chat-turns-plans-and-questions#plan-approval), then for sessions with the person's tools the context sentence (spec/agents-and-providers#context-tools),
+ *  has no crew the plan sentence (spec/chat-turns-plans-and-questions#plan-approval: a foreman plans through `propose_plan`, spec/crew#plan), then for sessions with the person's tools the context sentence (spec/agents-and-providers#context-tools),
  *  then for Codex and the CLI the tools line (spec/agents-and-providers#tools-awareness: they may not show our MCP instructions to the model), then the commands sentence.
  *  Codex cannot enter its Plan mode itself; a worker answers to its foreman. */
 export function sessionBrief(
@@ -199,13 +202,12 @@ export function sessionBrief(
 	provider: AgentProvider | undefined,
 	options: BriefOptions = {}
 ): string {
-	const talksToPerson = !context || context.role === 'foreman',
-		human = humanToolsAllowed(context?.role ?? null);
+	const human = humanToolsAllowed(context?.role ?? null);
 	return [
 		context ? crewBrief(context, options.tools) : (options.role ?? ''),
 		checklistBrief,
 		worktreeBrief,
-		provider === 'claude' && talksToPerson ? planApprovalBrief : '',
+		provider === 'claude' && !context ? planApprovalBrief : '',
 		human ? contextBrief : '',
 		provider === 'claude' && options.subagents && !options.cli ? subagentBrief : '',
 		options.tools && (provider === 'codex' || options.cli)
@@ -217,6 +219,28 @@ export function sessionBrief(
 		.join('\n\n');
 }
 
+/** spec/crew#roles: the newest crew plan waits for the person or was approved; a rejected plan leaves none. */
+export function crewPlanExists(records: readonly EventRecord[]): boolean {
+	const requested = records.findLast((record) => record.event.kind === 'crew.plan.requested');
+	if (requested?.event.kind !== 'crew.plan.requested') return false;
+	const id = requested.event.plan.id;
+	return !records.some(
+		(record) =>
+			record.seq > requested.seq &&
+			record.event.kind === 'crew.plan.resolved' &&
+			record.event.id === id &&
+			!record.event.approved
+	);
+}
+/** The tools the root foreman lacks while its crew plan exists (spec/crew#roles): the plan runs in its own task. */
+export function crewHiddenTools(
+	context: CrewContext | null,
+	records: readonly EventRecord[]
+): ReadonlySet<string> {
+	return context?.role === 'foreman' && crewPlanExists(records) ? planHidden : noneHidden;
+}
+const planHidden: ReadonlySet<string> = new Set(['create_task']),
+	noneHidden: ReadonlySet<string> = new Set();
 /** The only records a parent acts on (`childEvent`, `awaitSessionStarted`); a worker host sends its crew peers nothing else. */
 export const crewLinkEvents: ReadonlySet<SessionEvent['kind']> = new Set([
 	'session.started',
@@ -272,6 +296,31 @@ const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 const transcriptLine = 2000,
 	transcriptBytes = 64 * 1024,
 	notePageBytes = 64 * 1024 - 256;
+/** spec/crew#reviewer: a reviewer's prompt carries the part as the foreman gave it, so the scope comes with the check. */
+const reviewerPromptLimit = 100_000;
+export function partBrief(
+	worker: Pick<CrewWorkerRecord, 'name' | 'prompt' | 'acceptance'>
+): string {
+	const prompt = worker.prompt?.trim() ?? '',
+		acceptance = worker.acceptance?.trim() ?? '';
+	if (!prompt && !acceptance) return '';
+	const clipped =
+		prompt.length > reviewerPromptLimit
+			? `${prompt.slice(0, reviewerPromptLimit)}\n[The prompt is longer; the rest is left out.]`
+			: prompt;
+	return [
+		'',
+		...(clipped
+			? [
+					`The part as the foreman gave it to \`${worker.name}\`:`,
+					'<part_prompt>',
+					clipped,
+					'</part_prompt>',
+				]
+			: []),
+		...(acceptance ? ['Acceptance criteria:', '<acceptance>', acceptance, '</acceptance>'] : []),
+	].join('\n');
+}
 function lastMessage(records: readonly EventRecord[]): string {
 	let text = '';
 	for (const record of records) {
@@ -812,6 +861,9 @@ export class CrewHost {
 		const prompt = typeof input.prompt === 'string' ? input.prompt : '';
 		if (!prompt.trim()) throw new Error('prompt is required');
 		if (prompt.length > 200_000) throw new Error('prompt is too long');
+		// spec/crew#workers: what must hold for the part to count as done; its reviewers read it with the prompt.
+		const acceptance = typeof input.acceptance === 'string' ? input.acceptance.trim() : '';
+		if (acceptance.length > crewAcceptanceLimit) throw new Error('acceptance is too long');
 		const files = Array.isArray(input.files)
 			? input.files.filter((file): file is string => typeof file === 'string')
 			: [];
@@ -825,12 +877,15 @@ export class CrewHost {
 			: [];
 		if (own) {
 			const task = await this.deps.store.task(this.workerKey(own)).catch(() => null);
-			if (task) return this.continueWorker(own, title, prompt, scopes, task);
+			if (task) return this.continueWorker(own, title, prompt, acceptance, scopes, task);
 			// The human deleted the finished worker task (spec/tasks#delete-task): the member starts over in a new one.
 			this.workers = this.workers.filter((worker) => worker !== own);
 			await this.saveWorkers();
 		}
 		const record = await this.spawnWorkerTask(agent, title, prompt, scopes);
+		record.prompt = prompt;
+		if (acceptance) record.acceptance = acceptance;
+		await this.saveWorkers();
 		// spec/crew#reviewer: reviewers of this agent start with it, as workers without files, and wait for reports.
 		for (const checkerId of agent.checkedBy) {
 			const checker = this.node.agents.find((item) => item.id === checkerId);
@@ -1013,6 +1068,7 @@ export class CrewHost {
 		worker: CrewWorkerRecord,
 		title: string,
 		prompt: string,
+		acceptance: string,
 		requestedScopes: string[],
 		task: AgentTask
 	) {
@@ -1051,6 +1107,12 @@ export class CrewHost {
 		worker.part = part;
 		delete worker.acceptedAt;
 		worker.next = next;
+		// spec/crew#review-limit: the next part starts its own rounds, with its own prompt for the reviewers.
+		worker.prompt = prompt;
+		if (acceptance) worker.acceptance = acceptance;
+		else delete worker.acceptance;
+		delete worker.rounds;
+		delete worker.limitTold;
 		const planPart = (await this.approvedParts()).find(
 			(item) => crewName(item.agent) === worker.name
 		);
@@ -1700,17 +1762,87 @@ export class CrewHost {
 			.map((id) => this.node.agents.find((agent) => agent.id === id))
 			.filter((agent): agent is CrewSpecAgent => Boolean(agent));
 		if (!reviewers.length || node.role !== 'developer') {
-			const report = await this.buildWorkerReport(worker);
-			await this.deps.emit({ kind: 'crew.report', report: report.summary });
-			await this.deps.prompt(
-				node.role === 'foreman'
-					? `Branch report from lead \`${worker.name}\`: every part of the branch was accepted and merged into its tree.\n${report.text}`
-					: report.text,
-				{ kind: node.role === 'foreman' ? 'branch-report' : 'report', report: report.summary }
-			);
+			await this.reportUp(worker, node);
 			return;
 		}
-		await this.openCheck(worker, reviewers, seq);
+		// spec/crew#reports, spec/crew#review-limit: only a done report with changed files is checked, and only while the part has rounds left.
+		const done = await this.reportDone(worker, seq),
+			files = done ? await this.partFiles(worker) : 0,
+			step = crewReviewStep({
+				done,
+				files,
+				rounds: worker.rounds ?? 0,
+				limitTold: worker.limitTold === true,
+			});
+		if (step === 'review') {
+			await this.openCheck(worker, reviewers, seq);
+			return;
+		}
+		if (done && files) {
+			// The work changed under a check that can no longer pass it: that check is over.
+			let superseded = false;
+			for (const run of this.reviews)
+				if (run.taskId === worker.taskId && run.state === 'reviewing') {
+					run.state = 'superseded';
+					superseded = true;
+				}
+			if (superseded) await this.saveReviews();
+		}
+		if (step === 'limit') {
+			worker.limitTold = true;
+			await this.saveWorkers();
+			await this.reportUp(worker, node, this.limitNotice(worker));
+			await this.dispatchReviews();
+			return;
+		}
+		await this.reportUp(worker, node);
+	}
+	/** A report straight to this agent: no check, or none for this report (spec/crew#reports). */
+	private async reportUp(worker: CrewWorkerRecord, node: CrewSpecAgent, notice = '') {
+		const report = await this.buildWorkerReport(worker);
+		await this.deps.emit({ kind: 'crew.report', report: report.summary });
+		await this.deps.prompt(
+			node.role === 'foreman'
+				? `Branch report from lead \`${worker.name}\`: every part of the branch was accepted and merged into its tree.\n${report.text}`
+				: `${report.text}${notice ? `\n\n${notice}` : ''}`,
+			{ kind: node.role === 'foreman' ? 'branch-report' : 'report', report: report.summary }
+		);
+	}
+	/** spec/crew#reports: the turn that ended at `seq` leaves the worker's task `done` after `end_turn`. */
+	private async reportDone(worker: CrewWorkerRecord, seq: number) {
+		const key = this.workerKey(worker);
+		const [task, journal] = await Promise.all([
+			this.deps.store.task(key).catch(() => null),
+			this.journal(key),
+		]);
+		const ended = journal.records.findLast(
+			(record) => record.seq <= seq && record.event.kind === 'turn.completed'
+		);
+		return (
+			!!task &&
+			crewReportDone(
+				task.status,
+				ended?.event.kind === 'turn.completed' ? ended.event.reason : null
+			)
+		);
+	}
+	/** Changed files of the member's part, from its change base (spec/crew#parts). */
+	private async partFiles(worker: CrewWorkerRecord) {
+		try {
+			return (await this.workerChanges(worker)).changes.files.length;
+		} catch {
+			return 0;
+		}
+	}
+	/** spec/crew#review-limit: told once, when the part has no rounds left. */
+	private limitNotice(worker: CrewWorkerRecord) {
+		const open = this.reviews.some(
+			(run) =>
+				run.taskId === worker.taskId &&
+				(run.part ?? 1) === (worker.part ?? 1) &&
+				(run.state === 'comments' || run.state === 'disputed')
+		);
+		return `This part reached its review limit: ${crewReviewRounds} rounds, counting the checks and your returns. No further review opens for it${open ? `, and the reviewers' comments stay open in the review thread of task ${worker.taskId}` : ''}. Accept it with accept_task, or put the decision to ${this.deps.context.isRoot ? 'the human with ask_user' : 'your parent with ask_foreman'}; returning it with prompt_task opens no new review.`;
 	}
 	/**
 	 * spec/diff-and-review#agent-review-rounds: a round of the task's own review — after the person started it, and after the agent's turn that answered
@@ -1765,13 +1897,19 @@ export class CrewHost {
 				(run) => run.taskId === worker.taskId && ['reviewing', 'comments'].includes(run.state)
 			)
 			.at(-1);
-		// A new report cancels every earlier approval; a change during a check spends the next round (spec/crew#reviewer).
-		const round = previous ? previous.round + 1 : 1;
+		// A new report cancels every earlier approval (spec/crew#reviewer). A crew member's rounds belong to its part and count the parent's returns
+		// (spec/crew#review-limit); the task's own review counts its runs (spec/diff-and-review#agent-review-rounds).
+		const self = this.isSelf(worker),
+			round = self ? (previous ? previous.round + 1 : 1) : (worker.rounds ?? 0) + 1;
+		if (!self) {
+			worker.rounds = round;
+			await this.saveWorkers();
+		}
 		for (const run of this.reviews)
 			if (run.taskId === worker.taskId && run.state === 'reviewing') {
 				run.state = 'superseded';
 			}
-		if (round > crewReviewRounds) {
+		if (self && round > crewReviewRounds) {
 			await this.saveReviews();
 			await this.finishDisputed(
 				worker,
@@ -1803,6 +1941,7 @@ export class CrewHost {
 			nodeId: worker.nodeId,
 			name: worker.name,
 			title: worker.title,
+			...(self ? {} : { part: worker.part ?? 1 }),
 			reportSeq: seq,
 			reportHash: sha(report.text),
 			scopeSnapshots,
@@ -1818,7 +1957,7 @@ export class CrewHost {
 		for (const worker of this.workers)
 			if (run.reviewerNodeIds.includes(worker.nodeId)) this.retired.delete(worker.taskId);
 		await this.deps.emit({ kind: 'crew.report', report: report.summary });
-		if (this.isSelf(worker)) await this.deps.self?.round(run, 'reviewing');
+		if (self) await this.deps.self?.round(run, 'reviewing');
 		for (const reviewer of reviewers) await this.ensureReviewer(reviewer).catch(() => {});
 		await this.dispatchReviews();
 	}
@@ -1875,7 +2014,7 @@ export class CrewHost {
 					kind: 'prompt',
 					text: self
 						? `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nThis is the review of the task's changes before its pull request. The files of your tree are the task's state for this round. Read with read_report and read_diff passing this reviewId. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). In round 2 the report ends with the agent's last message: read its reasons before you insist. Do not change files.${run.round > 1 ? await this.selfThreads(run.round) : ''}${this.deps.self?.guidance() ?? ''}`
-						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId).`,
+						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}${partBrief(worker)}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId). Check the change against the part's prompt and acceptance criteria above; ask the foreman only what they leave open.`,
 					crew: { kind: 'report', report: report.summary },
 				})
 				.catch(async () => {
@@ -2150,8 +2289,14 @@ export class CrewHost {
 			comments: run.verdicts.reduce((sum, item) => sum + item.comments, 0),
 			state: 'disputed',
 		});
+		// spec/crew#review-limit: the last round ended in a dispute; the parent hears once that the part has no review left.
+		const self = this.isSelf(worker);
+		if (!self) {
+			worker.limitTold = true;
+			await this.saveWorkers();
+		}
 		await this.deps.prompt(
-			`${report.text}\n\n${why} Both sides are in the review thread of task ${worker.taskId}; you decide: return the work with prompt_task or accept it.`,
+			`${report.text}\n\n${why} Both sides are in the review thread of task ${worker.taskId}${self ? '; you decide: return the work with prompt_task or accept it.' : `. ${this.limitNotice(worker)}`}`,
 			{ kind: 'report', report: report.summary }
 		);
 	}
@@ -2418,8 +2563,22 @@ export class CrewHost {
 			);
 		const link = await this.spawn(this.workerKey(worker));
 		const effort = wanted ? await this.raiseEffort(worker, link, wanted) : null;
-		await link.peer.request('command', { kind: 'prompt', text });
+		// spec/crew#review-limit: a return spends a round of the part, counted before the worker can report on it.
+		const counts = !this.isSelf(worker);
+		if (counts) await this.countRound(worker, 1);
+		try {
+			await link.peer.request('command', { kind: 'prompt', text });
+		} catch (error) {
+			if (counts) await this.countRound(worker, -1);
+			throw error;
+		}
 		return { sent: true, taskId: worker.taskId, ...(effort ? { effort } : {}) };
+	}
+	private countRound(worker: CrewWorkerRecord, by: 1 | -1) {
+		return this.serial(async () => {
+			worker.rounds = Math.max(0, (worker.rounds ?? 0) + by);
+			await this.saveWorkers();
+		});
 	}
 	/** spec/crew#return-effort: a level of the worker's current model, by the catalog's name or value; set before the prompt, kept for the rest of its task. */
 	private async raiseEffort(worker: CrewWorkerRecord, link: Link, wanted: string) {

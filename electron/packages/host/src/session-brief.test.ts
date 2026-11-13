@@ -60,14 +60,11 @@ it('gives a session without a crew the checklist sentence, Claude the plan sente
 	);
 });
 
-it('puts the checklist, plan and context sentences after the role brief of the foreman (spec/chat-turns-plans-and-questions#checklist-tools, spec/chat-turns-plans-and-questions#plan-approval, spec/agents-and-providers#context-tools)', () => {
+it('puts the checklist and context sentences after the role brief of the foreman, without the plan-mode sentence: it plans through propose_plan (spec/chat-turns-plans-and-questions#plan-approval, spec/crew#plan, spec/agents-and-providers#context-tools)', () => {
 	const brief = sessionBrief(foreman, 'claude');
 	expect(brief.startsWith(crewBrief(foreman))).toBe(true);
-	expect(
-		brief.endsWith(
-			`\n\n${checklistBrief}\n\n${worktreeBrief}\n\n${planApprovalBrief}\n\n${contextBrief}`
-		)
-	).toBe(true);
+	expect(brief.endsWith(`\n\n${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}`)).toBe(true);
+	expect(brief).not.toContain('EnterPlanMode');
 	expect(
 		sessionBrief(foreman, 'codex').endsWith(
 			`\n\n${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}`

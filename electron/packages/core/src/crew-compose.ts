@@ -248,22 +248,6 @@ export function composeCrew(spec: CrewSpec, input: unknown, newId: () => string)
 	}
 	if (!agents.some((agent) => agent.role === 'developer'))
 		throw new Error('The crew needs at least one developer: reviewers take no part of the code.');
-	// spec/crew#compose: every developer of a composed crew has a reviewer, while the palette has one to take.
-	const reviewers = palette.templates.filter((template) => template.role === 'reviewer');
-	if (reviewers.length) {
-		const templates = listed(reviewers.map((template) => template.name));
-		if (!agents.some((agent) => agent.role === 'reviewer'))
-			throw new Error(
-				`The crew needs at least one reviewer to check the developers. Reviewer templates: ${templates}.`
-			);
-		const unchecked = agents.filter(
-			(agent) => agent.role === 'developer' && !agent.checkedBy.length
-		);
-		if (unchecked.length)
-			throw new Error(
-				`Every developer needs a reviewer in checkedBy: ${listed(unchecked.map((agent) => agent.name))}.`
-			);
-	}
 	if (!isCrewSpec(composedSpec(spec, agents))) throw new Error('The crew is invalid.');
 	return agents;
 }

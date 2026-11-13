@@ -182,9 +182,11 @@ it('gives a composing foreman the palette instead of a roster, and the roster on
 		'Templates: `Developer` (developer; default Claude · provider default model), `Senior developer` (developer; Migrations, performance work, cross-module refactors and parts without a clear spec; default Claude · Opus · High), `Technical writer` (developer; Documentation for a change: README, guides, the spec, API comments; changes no behaviour; default Claude · Sonnet), `Reviewer` (reviewer; default Claude · provider default model), `Designer` (reviewer; Checks screens in the running app: themes, states, keyboard, layout; default Claude · provider default model), `Security reviewer` (reviewer; Checks changes for security defects: untrusted input, access checks, secrets; default Claude · Opus · High), `Tester` (developer; Writes Playwright e2e tests; give it every test part; default Claude · provider default model).'
 	);
 	expect(brief).toContain('Models: Claude: `OPUS` (effort LOW, MAX), `HAIKU` (effort LOW).');
-	expect(brief).toContain(
-		'Always add at least one reviewer, and put a reviewer in checkedBy of every developer'
-	);
+	// spec/crew#compose: the fewest agents; one developer without a reviewer is a whole crew for one chain of steps.
+	expect(brief).toContain("crew: the fewest agents the task's independent parts need");
+	expect(brief).toContain('one developer and no reviewer is the whole crew');
+	expect(brief).toContain('Add a reviewer only where a part needs a second reader');
+	expect(brief).not.toMatch(/Always add at least one reviewer|checkedBy of every developer/);
 	expect(brief).not.toContain('Your agents:');
 	let id = 0;
 	const approved = approvedSpec(
@@ -201,4 +203,21 @@ it('gives a composing foreman the palette instead of a roster, and the roster on
 	const after = foremanBrief(approved, 'root');
 	expect(after).toContain('Your agents: `API` (Claude · OPUS · MAX; checked by `Check`)');
 	expect(after).not.toContain('You compose your crew');
+});
+
+it('ladders effort from medium to high and then to a stronger model in a fresh session, with no rule that the checker outranks the author (spec/crew#model-ladder)', () => {
+	const brief = foremanBrief(spec, 'root');
+	expect(brief).toContain('Effort medium is the default; for a harder part raise it, up to high.');
+	expect(brief).toContain('The step past high is a stronger model in a fresh session');
+	expect(brief).not.toContain('at least as strong as whoever wrote it');
+});
+it("runs the plan in the foreman's own task, passes acceptance for reviewers and stops returns at the review limit; the foreman still writes no code (spec/crew#foreman-brief)", () => {
+	const brief = foremanBrief(spec, 'root');
+	expect(brief).toContain('never create a separate task for it');
+	expect(brief).toContain('pass acceptance: what must hold for the part to count as done');
+	expect(brief).toContain(
+		'when you are told a part reached its review limit, accept it or put the decision to the human'
+	);
+	expect(brief).toContain('You do not write code yourself.');
+	expect(brief).not.toContain('EnterPlanMode');
 });

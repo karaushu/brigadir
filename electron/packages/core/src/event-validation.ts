@@ -197,6 +197,7 @@ const checks: Record<string, Check> = {
 		capacity: number,
 		cost: nil(object({ amount: number, currency: text })),
 	}),
+	'context.compacted': object({ before: nil(tokens), after: nil(tokens) }),
 	'turn.usage': object({ input: tokens, output: tokens, cacheRead: tokens, cacheWrite: tokens }),
 	'session.info': object({}, { title: text, updatedAt: text }),
 	'permission.requested': object({ request: permission }),

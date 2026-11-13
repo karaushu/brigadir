@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -662,4 +662,137 @@ it('turns a steer-orphaned tool call into an interrupted one and completes the t
 		kind: 'session.failed',
 		message: expect.stringContaining('toolu_orphan'),
 	});
+});
+/** Runs `body` with these environment variables (undefined removes one), then puts the old values back. */
+async function withEnv(values: Record<string, string | undefined>, body: () => Promise<void>) {
+	const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
+	for (const [key, value] of Object.entries(values))
+		if (value === undefined) delete process.env[key];
+		else process.env[key] = value;
+	try {
+		await body();
+	} finally {
+		for (const [key, value] of Object.entries(previous))
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+	}
+}
+it('passes the compaction window to Claude unless the person set one (spec/agents-and-providers#compaction-window)', async () => {
+	const home = join(directory, 'claude-home');
+	await mkdir(home, { recursive: true });
+	await withEnv(
+		{ CLAUDE_CONFIG_DIR: home, CLAUDE_CODE_AUTO_COMPACT_WINDOW: undefined },
+		async () => {
+			(await start('normal', { provider: 'claude', compactionWindow: 200_000 })).close();
+			expect((await wire()).find((r) => r.event === 'compact-window')?.params).toBe('200000');
+			await rm(join(directory, 'wire.jsonl'));
+			// No window: the agent's default, nothing passed.
+			(await start('normal', { provider: 'claude' })).close();
+			expect((await wire()).some((r) => r.event === 'compact-window')).toBe(false);
+			await rm(join(directory, 'wire.jsonl'));
+			// The person's own window in their Claude settings wins.
+			await writeFile(join(home, 'settings.json'), JSON.stringify({ autoCompactWindow: 300000 }));
+			(await start('normal', { provider: 'claude', compactionWindow: 200_000 })).close();
+			expect((await wire()).some((r) => r.event === 'compact-window')).toBe(false);
+			await rm(join(directory, 'wire.jsonl'));
+			await rm(join(home, 'settings.json'));
+			// …and in the environment.
+			process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = '500000';
+			(await start('normal', { provider: 'claude', compactionWindow: 200_000 })).close();
+			expect((await wire()).find((r) => r.event === 'compact-window')?.params).toBe('500000');
+		}
+	);
+});
+it('passes the compaction window to Codex unless the person set one (spec/agents-and-providers#compaction-window)', async () => {
+	const home = join(directory, 'codex-home');
+	await mkdir(home, { recursive: true });
+	await withEnv({ CODEX_HOME: home, CODEX_CONFIG: undefined }, async () => {
+		(await start('normal', { compactionWindow: 200_000 })).close();
+		expect((await wire()).find((r) => r.event === 'codex-config')?.params).toEqual({
+			tools: { update_plan: { enabled: true } },
+			model_auto_compact_token_limit: 200000,
+		});
+		await rm(join(directory, 'wire.jsonl'));
+		// The person's own limit in config.toml wins.
+		await writeFile(
+			join(home, 'config.toml'),
+			'model = "gpt"\n[profiles.long]\nmodel_auto_compact_token_limit = 400000\n'
+		);
+		(await start('normal', { compactionWindow: 200_000 })).close();
+		expect((await wire()).find((r) => r.event === 'codex-config')?.params).toEqual({
+			tools: { update_plan: { enabled: true } },
+		});
+		await rm(join(directory, 'wire.jsonl'));
+		await rm(join(home, 'config.toml'));
+		// …and in their own CODEX_CONFIG.
+		process.env.CODEX_CONFIG = JSON.stringify({ model_auto_compact_token_limit: 150000 });
+		(await start('normal', { compactionWindow: 200_000 })).close();
+		expect((await wire()).find((r) => r.event === 'codex-config')?.params).toMatchObject({
+			model_auto_compact_token_limit: 150000,
+		});
+	});
+});
+it('sends the brief as the appended system prompt on new and load where the agent takes one (spec/agents-and-providers#session-brief)', async () => {
+	const systemPrompt = { mode: 'append', content: [{ type: 'text', text: 'Brief of the role' }] };
+	const fresh = await start('system-prompt', { systemPrompt: 'Brief of the role' });
+	expect(fresh.briefInSystemPrompt).toBe(true);
+	fresh.close();
+	await rm(join(directory, 'wire.jsonl'));
+	const loaded = await start('system-prompt', {
+		systemPrompt: 'Brief of the role',
+		resumeSessionId: 'fixture-session',
+	});
+	expect(loaded.briefInSystemPrompt).toBe(true);
+	const requests = await wire();
+	expect(requests.find((r) => r.event === 'raw-session/load')?.params).toMatchObject({
+		systemPrompt,
+	});
+	await rm(join(directory, 'wire.jsonl'));
+	// An agent that does not advertise it gets none: the host sends the brief as `.context`.
+	const plain = await start('normal', { systemPrompt: 'Brief of the role' });
+	expect(plain.briefInSystemPrompt).toBe(false);
+	expect(JSON.stringify(await wire())).not.toContain('Brief of the role');
+});
+it('records the system prompt on session/new as sent', async () => {
+	await start('system-prompt', { systemPrompt: 'Brief of the role' });
+	expect((await wire()).find((r) => r.event === 'raw-session/new')?.params).toMatchObject({
+		systemPrompt: { mode: 'append', content: [{ type: 'text', text: 'Brief of the role' }] },
+	});
+});
+it('opens the session without the system prompt when the agent refuses it (spec/agents-and-providers#session-brief)', async () => {
+	const diagnostics: string[] = [];
+	const transport = await start('system-prompt-refused', {
+		systemPrompt: 'Brief of the role',
+		onDiagnostic: (text) => diagnostics.push(text),
+	});
+	expect(transport.briefInSystemPrompt).toBe(false);
+	const raw = (await wire()).filter((r) => r.event === 'raw-session/new');
+	expect(raw).toHaveLength(2);
+	expect(raw[1]?.params).not.toHaveProperty('systemPrompt');
+	expect(diagnostics.join('')).toContain('System prompt refused');
+	expect(events[0]?.kind).toBe('session.started');
+});
+it('declares compaction and reports each completed compaction once with its sizes (spec/agents-and-providers#compaction-signal)', async () => {
+	const transport = await start('compaction', { resumeSessionId: 'fixture-session' });
+	expect((await wire()).find((r) => r.event === 'initialize')?.params).toMatchObject({
+		clientCapabilities: { session: { compaction: {} } },
+	});
+	await transport.send({ kind: 'prompt', text: 'compact' });
+	await transport.send({ kind: 'prompt', text: 'compact-end' });
+	await transport.send({ kind: 'prompt', text: 'compact-failed' });
+	// The compaction the load replayed is history; summary chunks, the duplicate and the failed one leave nothing.
+	expect(events.filter((event) => event.kind === 'context.compacted')).toEqual([
+		{ kind: 'context.compacted', before: 940000, after: 62000 },
+		{ kind: 'context.compacted', before: 300000, after: null },
+	]);
+	const kinds = events.map((event) => event.kind);
+	const first = kinds.indexOf('context.compacted');
+	expect(kinds.slice(first, first + 2)).toEqual(['context.compacted', 'usage.changed']);
+	const second = kinds.lastIndexOf('context.compacted');
+	expect(kinds.slice(second, second + 3)).toEqual([
+		'context.compacted',
+		'message.delta',
+		'turn.completed',
+	]);
+	expect(kinds).not.toContain('unhandled');
 });

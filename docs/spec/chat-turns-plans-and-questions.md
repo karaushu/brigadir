@@ -177,7 +177,7 @@ Neither provider sends `plan` out of the box. The transport and the session brie
 | Claude | `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in the adapter environment. This gives Claude `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet`, and the adapter emits `plan` on each change | A value the person set (including `0`) is kept |
 | Codex | `tools.update_plan.enabled = true` in `CODEX_CONFIG`. `codex-acp` translates `turn/plan/updated` into ACP `plan` | A person's own `tools.update_plan` is kept, and other `tools` keys and `mcp_servers` are preserved. The person's `~/.codex/config.toml` is never written |
 
-Every session's first prompt gets a hidden `Brigadir brief` block (in `.context`). Sessions without a crew get it too. The brief includes `checklistBrief` (English): keep a step checklist with the todo, task or plan tool (`update_plan` in Codex) for work of three or more steps, mark each step, and do not repeat the checklist as a list in messages. See `sessionBrief` in `packages/host/src/crew.ts`.
+Every session gets the [session brief](agents-and-providers.md#session-brief): as the appended system prompt where the agent takes one, else as a hidden `Brigadir brief` block (in `.context`) of the first prompt. Sessions without a crew get it too. The brief includes `checklistBrief` (English): keep a step checklist with the todo, task or plan tool (`update_plan` in Codex) for work of three or more steps, mark each step, and do not repeat the checklist as a list in messages. See `sessionBrief` in `packages/host/src/crew.ts`.
 
 <a id="plan-approval"></a>
 ### Plan for approval

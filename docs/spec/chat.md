@@ -82,7 +82,7 @@ All disclosure state (tool, group, pinned copy `pin/<id>`, thought, subagent, co
 | `toolGroup` | A run of tool calls with thoughts between them. |
 | `subagentBlock` | A subagent with its own rows and answer. |
 | `turnStatus` | The live status line at the end of a running turn. |
-| activity events | Crew plates, plan cards, crew answers, quick-ask service rows, task links, `session.failed` plate (`--red-soft` with glyph). |
+| activity events | Crew plates, plan cards, crew answers, quick-ask service rows, [context compaction](#context-compacted) rows, task links, `session.failed` plate (`--red-soft` with glyph). |
 
 Live permission and question cards are not log rows: they stand above the composer as "the app is waiting for you"; the log keeps their history.
 
@@ -236,6 +236,11 @@ Behavior:
 - The answer is the subagent's last message after its last call. A final completed call whose whole input is one `message` string (handback-style builds) is recognized by shape and becomes the answer, not a call.
 - Turn status row when only subagents work: `Working · 4m 21s · Subagent <name>` (+N for the rest). The sidebar card's second line reads `Subagent · <name>` while the latest work is a subagent's start or one of its calls (`task.activity.subagent`).
 - Hover on the whole header; the answer line, `Show in full` and the live call have their own hover.
+
+<a id="context-compacted"></a>
+### Context compaction
+
+A [`context.compacted`](agents-and-providers.md#context-compacted) event is one service row in the crew service-row look (`--tint` strip, radius 6, 11.5 px, `collapse-all` glyph in `--fg2`): **Context compacted**, then ` · 940k → 62k` in secondary text when both sizes are known (`formatTokenCount`, the context meter's format). Without the sizes the row is the label alone. It is not a button, has no hover and no menu; it shows where in the conversation the agent's memory was cut to a summary. The phone chat skips it.
 
 <a id="links"></a>
 ## Links

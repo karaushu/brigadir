@@ -22,6 +22,7 @@ import { useSurfaceLayout } from './surface-layout';
 import { Button, Choice, Popup, PopupMarks, Segments, Stepper, Switch } from './ui/Controls';
 import { HelperAgentRow } from './HelperAgentRow';
 import { SubagentModelRow } from './SubagentModelRow';
+import { CompactionWindowRow } from './CompactionWindowRow';
 import { ActionAgentsRows } from './ActionAgents';
 import { CliUpdatesRow } from './CliUpdatesRow';
 import { AppUpdateRow } from './AppUpdates';
@@ -597,6 +598,14 @@ export function LayoutSettings({
 											}}
 										/>
 										<SubagentModelRow
+											settings={snapshot.settings}
+											locale={locale}
+											busy={busy}
+											update={(patch) => {
+												void update(patch);
+											}}
+										/>
+										<CompactionWindowRow
 											settings={snapshot.settings}
 											locale={locale}
 											busy={busy}

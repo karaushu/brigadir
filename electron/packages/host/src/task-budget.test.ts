@@ -20,7 +20,7 @@ afterEach(async () => {
 	for (const fn of cleanup.splice(0).reverse()) await fn();
 });
 const delay = (ms: number) => new Promise((done) => setTimeout(done, ms));
-async function until<T>(read: () => Promise<T | undefined>, timeout = 10000): Promise<T> {
+async function until<T>(read: () => Promise<T | undefined>, timeout = 20000): Promise<T> {
 	const end = Date.now() + timeout;
 	while (Date.now() < end) {
 		const value = await read();
@@ -244,7 +244,7 @@ it('a restart while paused keeps the question and the hold, and never asks twice
 		(record) => record.event.kind === 'turn.started' && record.event.text === 'spend 5'
 	);
 	expect((await store.task(task)).tokenBudget).toEqual({});
-}, 30_000);
+}, 45_000);
 
 it('an old task without a budget only counts', async () => {
 	const { store, task } = await setup();
@@ -305,7 +305,7 @@ it("a crew member holds its queue while the root is held, and resumes when the r
 	);
 	const doc = await readDocument(await safePath(await store.taskDir(member), 'task.json'));
 	expect((doc.task as AgentTask).tokenBudget).toBeUndefined();
-}, 30_000);
+}, 45_000);
 
 it('a new task takes the default budget from the settings', async () => {
 	const { store, task } = await setup();

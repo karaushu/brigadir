@@ -279,7 +279,8 @@ workers`) stays available all the time.
 
 - **By itself, when the plan is presented**: a plan for approval with text (`permission.requested` with `switch_mode`)
   or the root foreman's `propose_plan` (a lead's plan is approved by the host and has none). Not when `Plan review` is
-  `Off` ([Who reviews](#who)), not when no app is attached to the task's host (it cannot read the setting), not in the
+  `Off` ([Who reviews](#who)), not when no app is attached to the task's host or the app does not answer who reviews (the
+  host cannot read the setting), not in the
   main tree, and not while another review of the task lives.
 - **One full read per plan.** A plan is every presentation from the first one after the last approved plan (an approved
   plan for approval, or `Start workers`) up to its approval. A plan that already had a plan review gets no new read by
@@ -297,8 +298,8 @@ A reviewer on any provider reads everything through host tools; it needs no conn
 - **The task's prompt** (and, for a crew, nothing of the workers: they have not started).
 - **The plan**: `read_plan(taskId, reviewId)` → `{revision, text}`: the plan's Markdown as presented (a split is
   rendered as Markdown: the summary, then per part its number, title, executor with its role, provider and model, files,
-  scopes and prompt, then the crew's roster). In a closure check it adds `read` (the revision the first read had) and
-  `diff`: a line diff of the plan between the revision the reviewer last saw and this one. The text is cut at 200 000
+  scopes and prompt, then the crew's roster). In a closure check it adds `read` (the revision the first read had), `previous` (the
+  revision the previous round read) and `diff`: a line diff of the plan between `previous` and this one. The text is cut at 200 000
   characters with a note.
 - **The sources**: `read_sources(taskId, reviewId, sourceId?)` → the saved sources as `{id, title, url?, chars, text}`;
   texts are cut when the call passes 200 000 characters, and `sourceId` reads one source whole.
@@ -343,9 +344,11 @@ must change and the ticket has no gaps). At most 12 items in all, ranked: the mo
 1. **Read once**: `Check the plan of task <id> (reviewId …, plan review, first read)` with the task's prompt and the
    instruction to read the plan, the sources and the repo once, and to answer with the verdict above.
 2. **Revise once or object.** The findings go to the author as one batch: `<reviewer> left N findings in the plan
-   review. Revise the plan once: fix each finding in the plan, or object to it with review_reply(findingId, reason);
-   then present the plan again. <reviewer> then checks only whether each finding is closed.` with each finding's id,
-   kind, place and text. A solo task's waiting plan is answered with its first `reject_once` (else the first
+   review. Revise the plan once: fix each finding in the plan, or object to it with review_reply(commentId, reason) where
+   commentId is the finding's id; then present the plan for approval again with ExitPlanMode` (a foreman: `then call
+   propose_plan again with the revised split`) `. <reviewer> then checks only whether each finding is closed.` with each
+   finding's id, kind, place and text (`- id p1 [missed] (CRM-412 · Notes): …`). `Fix {n}` sends `The person asks you
+   to fix N findings of the plan review that are still open…` with the reviewer's reasons. A solo task's waiting plan is answered with its first `reject_once` (else the first
    `reject_*`, else the request is cancelled), as in [plan chat](chat-turns-plans-and-questions.md#plan-chat), and the batch runs right after the
    turn; a foreman's waiting `propose_plan` returns `approved: false` with the batch as `review` (after its turn ended,
    the batch comes as the decision prompt). With no plan waiting, the batch only queues.

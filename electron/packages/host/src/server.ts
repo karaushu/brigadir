@@ -273,7 +273,8 @@ export async function startHost(config: HostConfig) {
 			}),
 		// spec/reviews#who: the app resolves the reviewer from the settings, sign-ins and catalogs; without a window, a fresh session of the task's own provider.
 		resolve: async (point, auto) => {
-			// spec/reviews#plan-start: with no app attached the host cannot read `Plan review`; it starts none by itself.
+			// spec/reviews#plan-start: a plan review the host starts by itself needs the app's answer — it reads `Plan review`; with no app
+			// attached, or no answer, none starts.
 			if (auto && !ui) return { off: true };
 			if (ui) {
 				const answer = await ui
@@ -283,6 +284,7 @@ export async function startHost(config: HostConfig) {
 				if (isRecord(answer) && typeof answer.failure === 'string')
 					return { failure: answer.failure };
 				if (isSessionCommand(answer) && answer.kind === 'startReview') return answer;
+				if (auto) return { off: true };
 			}
 			const provider = (await store.task(config.key)).provider ?? 'claude';
 			return {

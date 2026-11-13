@@ -84,6 +84,8 @@ two similar actions. Do not add a description when the name is enough.
 - A full stop ends a sentence. Names, buttons, menu items and switch labels have no full stop.
 - `…` marks a wait (`Searching…`) or a next step that needs input or a choice (`Save as command…`,
   `Вибрати теку…`). It is never decoration. Three dots `...` are not used.
+- One exception: the Review strip's `Create PR` / `Створити PR` has no `…` although it opens the New PR dialog — the
+  strip names the step that follows a review ([Reviews](spec/reviews.md#strip)).
 - No exclamation marks.
 - A colon stands only before a list, an example or a value (`Незакомічені зміни у worktree буде втрачено: {files}.`),
   not as a link in the middle of a sentence.

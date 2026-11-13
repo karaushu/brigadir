@@ -127,7 +127,7 @@ export type CrewTurnMarker =
 	| { kind: 'plan-decision'; planId: string; approved: boolean }
 	| { kind: 'branch-report'; report: CrewReportSummary }
 	| { kind: 'part-dropped'; taskId: string; agent: string; part: number }
-	/** spec/diff-and-review#agent-review-rounds: the reviewers' comments of a round go to the task's own agent. */
+	/** spec/reviews#loop: the reviewers' comments of a round go to the task's own agent. */
 	| { kind: 'review-comments'; round: number; comments: number };
 export const crewPlanPartLimit = 64,
 	crewPlanPromptLimit = 100_000,

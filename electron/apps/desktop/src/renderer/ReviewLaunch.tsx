@@ -55,7 +55,7 @@ type PullRequestReviewRequest = {
 	start(choice: ReviewChoice): Promise<boolean>;
 };
 /**
- * spec/diff-and-review#agent-review-start: `Review before PR` of a task — no `Where` (reviewers work in their own worktree), `What` instead;
+ * spec/reviews#start: `Review before PR` of a task — no `Where` (reviewers work in their own worktree), `What` instead;
  * `start` resolves the reason it did not start, else null.
  */
 export type TaskReviewRequest = {

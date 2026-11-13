@@ -290,7 +290,7 @@
 		opacity: 0;
 	}
 }
-/* spec/diff-and-review#agent-review-surfaces: the thread of a reviewer's comment — the agent's answer or a reviewer insisting, then where it went. */
+/* spec/reviews#surfaces: the thread of a reviewer's comment — the agent's answer or a reviewer insisting, then where it went. */
 .reply {
 	border-top: 1px solid var(--sep);
 }

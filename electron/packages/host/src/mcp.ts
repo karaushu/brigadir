@@ -261,7 +261,7 @@ const humanTools: Tool[] = [
 		},
 		run: async (args, call, signal) => text(await call('task_send', args, signal)),
 	},
-	// spec/diff-and-review#agent-review-start: a card in the chat that offers the person a review of this task's changes by other agents.
+	// spec/reviews#start: a card in the chat that offers the person a review of this task's changes by other agents.
 	{
 		name: 'propose_review',
 		description:

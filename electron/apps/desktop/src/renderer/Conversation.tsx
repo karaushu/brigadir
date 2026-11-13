@@ -1349,7 +1349,7 @@ export function Conversation({
 						}
 					/>
 				);
-			// spec/diff-and-review#agent-review-ui: the review before the PR — the proposal card and its own service rows; the task's own report and its
+			// spec/reviews#strip: the review before the PR — the proposal card and its own service rows; the task's own report and its
 			// reviewers' creation are the review's machinery, not rows.
 			if (e.kind === 'review.proposed')
 				return (

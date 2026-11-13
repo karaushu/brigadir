@@ -1,6 +1,6 @@
 /* spec/appearance#one-look-one-component: a card of the log lifts off it — no frame, the --lift shadow, a 12-px radius; hairlines part
    the head, the body and the foot. The task proposal (spec/tasks#agent-created-tasks) and the review proposal
-   (spec/diff-and-review#agent-review-ui) are this card. */
+   (spec/reviews#strip) are this card. */
 .card {
 	position: relative;
 	margin: 0 16px 16px;

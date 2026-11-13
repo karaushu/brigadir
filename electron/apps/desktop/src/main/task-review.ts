@@ -27,7 +27,7 @@ async function json(store: SessionStore, key: TaskKey, name: string) {
 	}
 }
 /**
- * spec/diff-and-review#agent-review-start: one reviewer when the person picked an agent — the Reviewer template with that provider and its launch
+ * spec/reviews#start: one reviewer when the person picked an agent — the Reviewer template with that provider and its launch
  * options (model, effort) as the node's choices.
  */
 export function reviewerAgent(
@@ -50,7 +50,7 @@ export function reviewerAgent(
 		false
 	);
 }
-/** spec/diff-and-review#agent-review-ui: the review as the window shows it — the task's record, its reviewers' states and its comments. */
+/** spec/reviews#strip: the review as the window shows it — the task's record, its reviewers' states and its comments. */
 export async function readTaskReview(
 	store: SessionStore,
 	key: TaskKey,

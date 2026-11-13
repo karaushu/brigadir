@@ -688,7 +688,7 @@ function ForgeDialog({
 							{t(locale, 'Uncommitted changes stay local and are not included in this PR.')}
 						</p>
 					)}
-					{/* spec/diff-and-review#agent-review-pr: whether the agents reviewed these changes; Create PR stays available. */}
+					{/* spec/reviews#before-pr: whether the agents reviewed these changes; Create PR stays available. */}
 					<ReviewReminder task={task} locale={locale} onLeave={close} />
 					{own && pr.canRename && (
 						<label className={styles.field}>

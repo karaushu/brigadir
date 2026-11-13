@@ -1188,7 +1188,7 @@ export type DesktopBridge = {
 	readCodeSyntax(language: string, text: string): Promise<SyntaxSnapshot>;
 	readReviewPositions(key: TaskKey, commentId: string): Promise<ReviewPosition[]>;
 	readReview(key: TaskKey, fileId: string | null): Promise<ReviewSnapshot>;
-	/** spec/diff-and-review#agent-review: the task's review before the PR as the window shows it. */
+	/** spec/reviews#points: the task's review before the PR as the window shows it. */
 	readTaskReview(key: TaskKey): Promise<import('./task-review').TaskReviewView>;
 	/** Starts it with the launch dialog's choice; resolves the reason when it could not start, else null. */
 	startTaskReview(

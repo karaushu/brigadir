@@ -34,7 +34,7 @@ export type TaskReviewDeps = {
 	foreman: boolean;
 };
 /**
- * spec/diff-and-review#agent-review: the task side of a review before the PR — the agent's proposal, the review the person started, and when its
+ * spec/reviews#points: the task side of a review before the PR — the agent's proposal, the review the person started, and when its
  * rounds begin. The rounds themselves are the crew host's check edge on the task (`CrewHost.checkSelf`).
  */
 export class TaskReviewLife {
@@ -68,7 +68,7 @@ export class TaskReviewLife {
 	document(): TaskReviewDocument {
 		return this.doc;
 	}
-	/** spec/diff-and-review#agent-review-start: `propose_review` — the proposal waits for the person; a new one replaces it. */
+	/** spec/reviews#start: `propose_review` — the proposal waits for the person; a new one replaces it. */
 	propose(summary: string) {
 		return this.serial(async () => {
 			if (taskReviewLive(this.doc.review))
@@ -120,11 +120,11 @@ export class TaskReviewLife {
 				reviewers: command.reviewers.map((agent) => agent.name),
 				who: command.who,
 			});
-			// spec/diff-and-review#agent-review-start: a turn that runs now ends first; the review starts from its snapshot.
+			// spec/reviews#start: a turn that runs now ends first; the review starts from its snapshot.
 			if (!this.deps.busy()) await this.round();
 		});
 	}
-	/** spec/diff-and-review#agent-review-rounds: `review_reply` — the task's agent answers a reviewer's comment in its thread. */
+	/** spec/reviews#loop: `review_reply` — the task's agent answers a reviewer's comment in its thread. */
 	reply(commentId: string, text: string) {
 		return this.serial(async () => {
 			const review = this.doc.review;
@@ -142,7 +142,7 @@ export class TaskReviewLife {
 			await this.finish('stopped');
 		});
 	}
-	/** spec/diff-and-review#agent-review-rounds: after a turn of the task's agent — the waiting review starts, the answered comments go back to the reviewers,
+	/** spec/reviews#loop: after a turn of the task's agent — the waiting review starts, the answered comments go back to the reviewers,
 	 *  and a later change makes an approval outdated. */
 	turnEnded() {
 		return this.serial(async () => {

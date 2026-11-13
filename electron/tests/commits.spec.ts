@@ -113,7 +113,7 @@ test('commit strip is one row that opens the dialog, which generates explicitly,
 			snapshot = strip.getByRole('button', { name: 'Compare snapshots', exact: true });
 		await expect(open).toBeEnabled();
 		await expect(strip.getByRole('textbox')).toHaveCount(0);
-		// spec/diff-and-review#agent-review-surfaces: `Review…` stands beside Commit.
+		// spec/reviews#surfaces: `Review…` stands beside Commit.
 		await expect(strip.getByRole('button')).toHaveCount(3);
 		await expect(strip.locator('[data-review-button]')).toHaveCount(1);
 		await expect(strip.locator('[aria-expanded]')).toHaveCount(1);

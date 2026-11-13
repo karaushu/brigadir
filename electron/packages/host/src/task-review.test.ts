@@ -103,7 +103,7 @@ const reviewer = resolveCrewAgent(
 	false
 );
 
-it('reviews a task inside it: the agent proposes, reviewers comment, the agent answers and round 2 approves (spec/diff-and-review#agent-review)', async () => {
+it('reviews a task inside it: the agent proposes, reviewers comment, the agent answers and round 2 approves (spec/reviews#points)', async () => {
 	const { repo, store, task } = await setup('Write the output');
 	const client = await launch(store, task);
 	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
@@ -184,7 +184,7 @@ it('reviews a task inside it: the agent proposes, reviewers comment, the agent a
 	expect((await git(repo, 'status', '--porcelain')).stdout).toContain('out/');
 }, 240_000);
 
-it('stops a review: the open round ends, nothing more reaches the agent (spec/diff-and-review#agent-review-rounds)', async () => {
+it('stops a review: the open round ends, nothing more reaches the agent (spec/reviews#loop)', async () => {
 	const { store, task } = await setup('Write the output');
 	const client = await launch(store, task);
 	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
@@ -219,7 +219,7 @@ it('stops a review: the open round ends, nothing more reaches the agent (spec/di
 	);
 }, 120_000);
 
-it('a dispute after round 2 goes to the person; the agent answers a comment in its thread (spec/diff-and-review#agent-review-rounds)', async () => {
+it('a dispute after round 2 goes to the person; the agent answers a comment in its thread (spec/reviews#loop)', async () => {
 	const { store, task } = await setup('dispute the output');
 	const client = await launch(store, task);
 	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });

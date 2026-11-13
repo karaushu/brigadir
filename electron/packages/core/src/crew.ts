@@ -855,7 +855,7 @@ export function isCrewSpec(value: unknown): value is CrewSpec {
 				(child.checkedBy.length === 0 || child.role === 'developer') &&
 				edges(child)
 		);
-	// spec/diff-and-review#agent-review-members: the root may be checked too — by reviewers among its own agents (a task's review before the PR).
+	// spec/reviews#reviewer-sessions: the root may be checked too — by reviewers among its own agents (a task's review before the PR).
 	return (
 		root.checkedBy.every((checker) =>
 			root.agents.some((item) => item.id === checker && item.role === 'reviewer')

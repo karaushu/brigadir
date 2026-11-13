@@ -3,7 +3,7 @@ import { crewName, isCrewSpec, type CrewSpec, type CrewSpecAgent } from './crew'
 import { isRecord } from './workspace';
 
 /**
- * spec/diff-and-review#agent-review: a task's changes checked by reviewer agents before the PR, inside the task. The rounds are the crew's
+ * spec/reviews#points: a task's changes checked by reviewer agents before the PR, inside the task. The rounds are the crew's
  * check edge (spec/crew#reviewer) with the task itself as the checked author; this is the task-side record of the proposal and the review.
  */
 export type TaskReviewState =
@@ -38,7 +38,7 @@ export type TaskReviewDocument = {
 export const taskReviewSummaryLimit = 4000,
 	taskReviewInstructionsLimit = 20_000,
 	taskReviewGuidanceLimit = 60_000,
-	/** spec/diff-and-review#agent-review-members: the task's agent is the root of the review crew. */
+	/** spec/reviews#reviewer-sessions: the task's agent is the root of the review crew. */
 	taskReviewRootId = 'task-agent',
 	taskReviewRootName = 'Task agent';
 export const emptyTaskReviewDocument: TaskReviewDocument = {
@@ -104,7 +104,7 @@ export function isTaskReviewDocument(value: unknown): value is TaskReviewDocumen
 export const taskReviewLive = (review: TaskReview | null | undefined) =>
 	!!review && ['waiting', 'reviewing', 'comments'].includes(review.state);
 /**
- * spec/diff-and-review#agent-review-pr: the changes are covered when the last review approved exactly the trees the task has now.
+ * spec/reviews#before-pr: the changes are covered when the last review approved exactly the trees the task has now.
  * `current` holds the latest checkpoint tree of each repo of the task.
  */
 export function taskReviewCovers(
@@ -117,7 +117,7 @@ export function taskReviewCovers(
 	);
 }
 /**
- * spec/diff-and-review#agent-review-start: the reviewers as crew members. Every agent below a crew's root reviews (its own model and effort, no zone,
+ * spec/reviews#start: the reviewers as crew members. Every agent below a crew's root reviews (its own model and effort, no zone,
  * no children); the crew's foreman is not used. Names stay unique, as the host addresses members by name.
  */
 export function taskReviewers(
@@ -148,7 +148,7 @@ export function taskReviewers(
 		};
 	});
 }
-/** spec/diff-and-review#agent-review-members: the crew of a task's review — the task's agent at the root, checked by every reviewer. */
+/** spec/reviews#reviewer-sessions: the crew of a task's review — the task's agent at the root, checked by every reviewer. */
 export function taskReviewSpec(
 	provider: AgentProvider,
 	reviewers: readonly CrewSpecAgent[],
@@ -174,7 +174,7 @@ export function taskReviewSpec(
 		},
 	};
 }
-/** spec/diff-and-review#agent-review-start: the launch dialog's choice — one agent (null: the action's own, else the Default agent) or a crew. */
+/** spec/reviews#start: the launch dialog's choice — one agent (null: the action's own, else the Default agent) or a crew. */
 export type TaskReviewChoice = {
 	agent: { provider: AgentProvider; model: string; effort: string | null } | null;
 	crew: string | null;
@@ -197,7 +197,7 @@ export function isTaskReviewChoice(value: unknown): value is TaskReviewChoice {
 export const isTaskReviewSpec = (value: unknown): value is CrewSpec =>
 	isCrewSpec(value) && value.root.id === taskReviewRootId;
 
-/** spec/diff-and-review#agent-review-ui: what the strip, the button, the sidebar and the PR sheet read about a task's review. */
+/** spec/reviews#strip: what the strip, the button, the sidebar and the PR sheet read about a task's review. */
 export type TaskReviewMemberState =
 	'starting' | 'reading' | 'comments' | 'checking' | 'approved' | 'disputed' | 'stopped' | 'failed';
 export type TaskReviewMember = {
@@ -253,7 +253,7 @@ export function taskReviewCounts(view: Pick<TaskReviewView, 'comments'>) {
 		disputed: count('disputed'),
 	};
 }
-/** spec/diff-and-review#agent-review-rounds: a comment's state from its round, its thread and the review status of the diff. */
+/** spec/reviews#loop: a comment's state from its round, its thread and the review status of the diff. */
 export function taskReviewCommentState(comment: {
 	review?: { disputed?: boolean };
 	replies?: { agent: boolean }[];

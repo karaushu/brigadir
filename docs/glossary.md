@@ -434,6 +434,19 @@ leads a crew.
 | Outdated | Застарілий | | |
 | Viewed | Переглянуто | | |
 
+### Reviews by agents
+
+| English | Ukrainian | Meaning | Avoid |
+|---|---|---|---|
+| Review (the strip) | Ревʼю | The step the host runs on a task: one read, one fix, one closure check, then the person. | «Перевірка» |
+| Plan review · Mid-task review · Review before PR | Ревʼю плану · Ревʼю посеред задачі · Ревʼю перед PR | The three points; in a line `plan` · `mid-task` · `before PR` / `план` · `посеред задачі` · `перед PR`. | |
+| Finding | Зауваження | One item a reviewer lists. Plural `1 зауваження · 2 зауваження · 5 зауважень`. | «коментар» for a reviewer's item, «знахідка» |
+| sent · fixed · answered · open · new · accepted | надіслано · виправлено · відповів · відкрите · нове · прийнято | The tags of a finding. | |
+| Your call | Вирішуєш ти | The strip when open findings wait for the person. | |
+| Fix {n} · Accept | Виправити {n} · Прийняти | The person's two answers to open findings. | «Fix more», «Accept as is» |
+| Code reviews | Ревʼю коду | Customize per action: who reviews mid-task and before the PR. | |
+| Auto | Авто | Who reviews by default: another signed-in agent, else a fresh session of the task's own. | |
+
 ## Pull requests and CI
 
 | English | Ukrainian | Meaning | Avoid |

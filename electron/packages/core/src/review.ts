@@ -13,7 +13,7 @@ export type Anchor = {
 	symbolPath: string | null;
 };
 /** `author` names an agent reviewer (`<agent> · checks <agent>`, spec/crew#reviewer); human comments have none. */
-/** spec/diff-and-review#agent-review-rounds: a reviewer's comment of a task's review before the PR — its round, and whether a reviewer insisted in round 2. */
+/** spec/reviews#loop: a reviewer's comment of a task's review before the PR — its round, and whether a reviewer insisted in round 2. */
 export type ReviewCommentRound = {
 	reviewId: string;
 	round: number;

@@ -107,7 +107,7 @@ export type SessionEvent =
 			comments: number;
 			state: 'reviewing' | 'comments' | 'approved' | 'disputed';
 	  }
-	/** spec/diff-and-review#agent-review-start: the agent proposed a review (`propose_review`), the person dismissed it, a review started or ended. Its rounds are `crew.review`. */
+	/** spec/reviews#start: the agent proposed a review (`propose_review`), the person dismissed it, a review started or ended. Its rounds are `crew.review`. */
 	| { kind: 'review.proposed'; summary: string }
 	| { kind: 'review.dismissed' }
 	/** The task's agent answered a reviewer's comment (`review_reply`); the thread is in `review.json`. */
@@ -151,19 +151,19 @@ export type SessionCommand =
 	| { kind: 'resolveTaskProposal'; id: string; task: TaskProposalResult }
 	| { kind: 'decidePlan'; decision: CrewPlanDecision }
 	| { kind: 'answerCrewQuestion'; id: string; answer: string }
-	/** spec/diff-and-review#agent-review-start: main resolved the reviewers and the guidance; the host runs the rounds. */
+	/** spec/reviews#start: main resolved the reviewers and the guidance; the host runs the rounds. */
 	| {
 			kind: 'startReview';
 			reviewers: CrewSpecAgent[];
 			who: TaskReviewWho;
 			instructions: string;
 			guidance: string;
-			/** spec/diff-and-review#agent-review-start: `Since the last review`. */
+			/** spec/reviews#start: `Since the last review`. */
 			since?: 'start' | 'last';
 	  }
 	| { kind: 'stopReview' }
 	| { kind: 'dismissReviewProposal' }
-	/** `crew`: spec/diff-and-review#agent-review-rounds — the reviewers' batch of the task's own review, a service row instead of the person's message. */
+	/** `crew`: spec/reviews#loop — the reviewers' batch of the task's own review, a service row instead of the person's message. */
 	| { kind: 'submitReview'; text: string; review: ReviewBatch; crew?: CrewTurnMarker }
 	| { kind: 'removeQueuedPrompt'; id: string }
 	/** spec/composer-steering-queue-and-ghost#steering-hold: «Надіслати зараз» on a queued row — the host holds it for the running turn like a fresh Enter. */

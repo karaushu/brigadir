@@ -34,7 +34,7 @@ import styles from './TaskReview.module.css';
 import service from './Crew.module.css';
 
 /**
- * spec/diff-and-review#agent-review-ui: one view of a task's review before the PR for every surface of the window — the strip, the chat rows,
+ * spec/reviews#strip: one view of a task's review before the PR for every surface of the window — the strip, the chat rows,
  * the Changes button, the PR sheet and the sidebar. Read from main and read again when the task's journal says the review moved.
  */
 type ReviewStore = {
@@ -93,7 +93,7 @@ export function openReviewStrip(task: TaskKey, open = true) {
 	useReviewStore.setState((state) => ({ open: { ...state.open, [name(task)]: open } }));
 }
 const agentName = (task: AgentTask) => (task.provider ? providerName(task.provider) : 'Agent');
-/** The launch dialog of a task's review (spec/diff-and-review#agent-review-start). */
+/** The launch dialog of a task's review (spec/reviews#start). */
 export function openTaskReviewLaunch(task: AgentTask, view: TaskReviewView, locale: Locale) {
 	void locale;
 	openReviewLaunch({
@@ -127,7 +127,7 @@ async function startNow(task: AgentTask, locale: Locale) {
 		});
 	else void load(task);
 }
-/** spec/diff-and-review#agent-review-ui: who reviews unless the person chooses — the remembered crew or agent of `Review before PR`. */
+/** spec/reviews#strip: who reviews unless the person chooses — the remembered crew or agent of `Review before PR`. */
 function useRememberedWho(locale: Locale) {
 	const settings = useHelperSettings();
 	const crew = settings?.actionCrews.taskReview,
@@ -228,7 +228,7 @@ export function ReviewProposalRow({
 		</div>
 	);
 }
-/** A comment count that opens the strip on its comments (spec/diff-and-review#agent-review-ui). */
+/** A comment count that opens the strip on its comments (spec/reviews#strip). */
 function CountLink({ task, count, locale }: { task: TaskKey; count: number; locale: Locale }) {
 	return (
 		<button type="button" className={styles.count} onClick={() => openReviewStrip(task)}>
@@ -236,7 +236,7 @@ function CountLink({ task, count, locale }: { task: TaskKey; count: number; loca
 		</button>
 	);
 }
-/** spec/diff-and-review#agent-review-ui: the review's service rows in the chat — started, a round's verdicts, finished. */
+/** spec/reviews#strip: the review's service rows in the chat — started, a round's verdicts, finished. */
 export function ReviewEventRow({
 	task,
 	record,
@@ -323,7 +323,7 @@ function memberText(member: TaskReviewMember, locale: Locale, now: number) {
 	}
 }
 /**
- * spec/diff-and-review#agent-review-ui: the review strip in the composer deck — one row with the review's state and actions; open, its reviewers and
+ * spec/reviews#strip: the review strip in the composer deck — one row with the review's state and actions; open, its reviewers and
  * its comments. It lives while the review runs and after it until the next change, × or the archive.
  */
 export function ReviewStrip({
@@ -617,7 +617,7 @@ function ReviewDetails({
 		</div>
 	);
 }
-/** spec/diff-and-review#agent-review-rounds: `Back to the agent` — the disputed comment goes as the person's own review comment. */
+/** spec/reviews#loop: `Back to the agent` — the disputed comment goes as the person's own review comment. */
 async function sendBack(task: AgentTask, comment: TaskReviewCommentRow, locale: Locale) {
 	try {
 		await window.brigadir.sendTaskReviewComment(task, comment.id);
@@ -652,7 +652,7 @@ export function useReviewStripShown(task: TaskKey): boolean {
 
 // ── Changes and the PR sheet ──────────────────────────────────────────────────
 
-/** spec/diff-and-review#agent-review-surfaces: `Review…` beside `Commit`, telling the review's state. */
+/** spec/reviews#surfaces: `Review…` beside `Commit`, telling the review's state. */
 export function ReviewButton({ task, locale }: { task: AgentTask; locale: Locale }) {
 	const view = useTaskReview(task),
 		review = view.review,
@@ -686,7 +686,7 @@ export function ReviewButton({ task, locale }: { task: AgentTask; locale: Locale
 		</Button>
 	);
 }
-/** spec/diff-and-review#agent-review-pr: the row of the New pull request sheet; `Create PR` stays available. */
+/** spec/reviews#before-pr: the row of the New pull request sheet; `Create PR` stays available. */
 export function ReviewReminder({
 	task,
 	locale,

@@ -23,7 +23,7 @@ const send = async (page: Page, text: string) => {
 	await page.keyboard.press('Enter');
 };
 
-// spec/diff-and-review#agent-review: the agent proposes, the person starts the review from the card, the reviewer's comment goes to the agent, round 2
+// spec/reviews#points: the agent proposes, the person starts the review from the card, the reviewer's comment goes to the agent, round 2
 // passes; the strip, the chat rows, the Changes button and the sidebar's reviewer row follow it. Reviewer hosts are real processes.
 test('a task is reviewed inside it before the PR @area:review', async () => {
 	test.setTimeout(240_000);

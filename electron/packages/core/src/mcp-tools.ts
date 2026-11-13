@@ -716,7 +716,7 @@ export function mcpRow(
 			text = str(a.text);
 			break;
 		}
-		// spec/diff-and-review#agent-review-start: the summary the card shows.
+		// spec/reviews#start: the summary the card shows.
 		case 'propose_review': {
 			text = str(a.summary);
 			break;

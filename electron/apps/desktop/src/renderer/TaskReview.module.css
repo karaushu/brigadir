@@ -1,4 +1,4 @@
-/* spec/diff-and-review#agent-review-ui: the review's own pieces; the card is ui/ChatCard, the strip is a list of ui/Deck, the service rows are the
+/* spec/reviews#strip: the review's own pieces; the card is ui/ChatCard, the strip is a list of ui/Deck, the service rows are the
    crew's (Crew.module.css .service). */
 .summary {
 	align-self: stretch;
@@ -25,7 +25,7 @@
 .skipped > span {
 	flex: 1;
 }
-/* A comment count is a link: dotted at rest, solid on hover (spec/diff-and-review#agent-review-ui). */
+/* A comment count is a link: dotted at rest, solid on hover (spec/reviews#strip). */
 .count {
 	flex: none;
 	padding: 0;
@@ -230,7 +230,7 @@
 	border-radius: 50%;
 	background: var(--accent);
 }
-/* spec/diff-and-review#agent-review-pr: the row of the New pull request sheet. */
+/* spec/reviews#before-pr: the row of the New pull request sheet. */
 .reminder {
 	display: flex;
 	align-items: center;

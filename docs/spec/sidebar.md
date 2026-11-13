@@ -239,13 +239,14 @@ The «what is it doing now» line, derived in main and never written to `task.js
 | `plan` | `permission.requested` that is a plan approval | `Plan for approval` |
 | `question` | `question.requested` | `Question · {text}` |
 | `proposal` | `task.proposal.requested` | `New task · {title}` |
+| `review` | `task-review.verified` with open or new findings | `Review · {N findings} open` ([Reviews](reviews.md#surfaces)) |
 | none | — | `Waiting for the repo` when blocked by a lock, else the state label |
 
 - `TaskActivities` reads only tasks in `working`/`needs-you`: at most the last 64 KiB of `events.jsonl`, whole JSONL
   records only (the first partial line is dropped, symlinks are not followed), cached by file identity (≤ 1024 entries),
   4 parallel readers. The Live agents popup shares this reader.
 - Reset on `turn.started`, `turn.completed`, `session.failed`, `host.stopped`, `permission.resolved`, `question.resolved`,
-  `task.proposal.resolved`. A `needs-you` task drops a tool activity; a `working` task drops a non-tool one.
+  `task.proposal.resolved`, `task-review.decided`, `task-review.finished`. A `needs-you` task drops a tool activity; a `working` task drops a non-tool one.
 - Titles are capped at 240 characters, paths at 1024. Subagent events do not drive the foreman's line.
 - The renderer refreshes on a bounded throttle so a continuous tool stream cannot postpone the update forever.
 

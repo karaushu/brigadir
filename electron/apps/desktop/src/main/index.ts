@@ -5006,7 +5006,7 @@ void app.whenReady().then(async () => {
 	);
 	handle('review:positions', (key, id) => reviews.positions(key, id));
 	handle('review:read', (key, fileId) => reviews.read(key, fileId));
-	// spec/diff-and-review#agent-review: the task's review before the PR. Main resolves who reviews and the guidance; the task's host runs the rounds.
+	// spec/reviews#points: the task's review before the PR. Main resolves who reviews and the guidance; the task's host runs the rounds.
 	handle('task-review:read', async (key) =>
 		readTaskReview(await SessionStore.at(process.env.BRIGADIR_DATA_DIR), key, (task) =>
 			reviews.read(task, null)

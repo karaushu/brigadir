@@ -69,7 +69,7 @@ export function BackgroundDeck({
 	locale: Locale;
 	send(command: SessionCommand): Promise<boolean>;
 	/** The queue's own list, under the background one in the same deck. */ queue: React.ReactNode;
-	/** spec/diff-and-review#agent-review-ui: the review strip, the deck's first list. */ review?: React.ReactNode;
+	/** spec/reviews#strip: the review strip, the deck's first list. */ review?: React.ReactNode;
 	/** Scrolls the log to the subagent's block and opens it. */ onOpenSubagent(id: string): void;
 }) {
 	const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());

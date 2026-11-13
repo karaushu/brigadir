@@ -21,7 +21,7 @@ The Settings tab **Notifications** sits between Language and Agents. `settings.j
 
 - UI: section **Notifications** — `When` (`Never` · `When you are needed` · `When a turn ends`, each with a one-line description); section **Sound** — `When` with the same three bare labels, then three slots `Needs you`, `Turn ended`, `Error`, each with `None` first; switch `Mute the task being viewed`.
 - Choosing a sound plays it at once; a failed preview shows `The sound could not be played.` under the section.
-- `turn-ended` is the wider value: it also covers `needs-you`. "Turn ended" means the agent stopped talking and waits for a prompt; "needs you" means it is blocked on a permission, question, plan or proposal.
+- `turn-ended` is the wider value: it also covers `needs-you`. "Turn ended" means the agent stopped talking and waits for a prompt; "needs you" means it is blocked on a permission, question, plan, proposal or a review's open findings.
 - Old documents with `enabled`/`scope` are read as `mode` (`enabled: false` → `off`, else `scope`) without rewriting the file.
 
 <a id="notice-kinds"></a>
@@ -31,7 +31,7 @@ The Settings tab **Notifications** sits between Language and Agents. `settings.j
 
 | Notice kind | Source events | Shown when |
 | --- | --- | --- |
-| `needs-you` | `permission.requested`, `question.requested`, `task.proposal.requested`, `crew.plan.requested` (only if still open after 750 ms), a worker question once the foreman ends its turn without answering or `crew.question.escalated` | `mode` ≠ `off` |
+| `needs-you` | `permission.requested`, `question.requested`, `task.proposal.requested`, `crew.plan.requested` (only if still open after 750 ms), a worker question once the foreman ends its turn without answering or `crew.question.escalated`, `task-review.verified` with open or new findings ([Reviews](reviews.md#surfaces)) | `mode` ≠ `off` |
 | `turn-ended` | `turn.completed` (not `cancelled`); a finished background command when no new turn starts within 5 s | `mode` = `turn-ended` |
 | `failed` | `session.failed`, `background.changed` with `failed` | `mode` ≠ `off` |
 | `rate-limited` | `rate-limit.changed` with `rejected`, on the transition into a block | `mode` ≠ `off` |

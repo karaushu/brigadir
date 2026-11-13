@@ -348,12 +348,12 @@ export function CommentCard({
 	onEdit(): void;
 	onRemove(): void;
 	onResolve(): void;
-	/** spec/diff-and-review#agent-review-surfaces: `Back to the agent` on a disputed reviewer's comment. */
+	/** spec/reviews#surfaces: `Back to the agent` on a disputed reviewer's comment. */
 	onSendBack?(): void;
 	/** The task's agent by name, for its replies in the thread. */
 	agent?: string;
 }) {
-	// spec/diff-and-review#agent-review-surfaces: a reviewer's comment of the task's review shows the reviewer, its round and where it went.
+	// spec/reviews#surfaces: a reviewer's comment of the task's review shows the reviewer, its round and where it went.
 	const round = comment.review,
 		tag = round ? taskReviewCommentState(comment) : null;
 	return (

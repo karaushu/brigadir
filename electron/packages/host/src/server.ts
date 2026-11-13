@@ -208,7 +208,7 @@ export async function startHost(config: HostConfig) {
 	let assignmentDue = crew && task.transport !== 'terminal' ? compactionDue(records) : null;
 	const crewWorker = crew?.parentKey ? new CrewWorker(store, config.key, crew) : null;
 	let crewHost: CrewHost | null = null;
-	/** spec/diff-and-review#agent-review: the task's review before the PR; a solo task gets a crew host of its reviewers when one starts. */
+	/** spec/reviews#points: the task's review before the PR; a solo task gets a crew host of its reviewers when one starts. */
 	const foremanTask = !!crew && crew.role === 'foreman';
 	const taskReview: TaskReviewLife = new TaskReviewLife({
 		store,
@@ -1123,7 +1123,7 @@ export async function startHost(config: HostConfig) {
 			if (event.kind === 'session.failed') status = 'failed';
 			if (event.kind === 'host.stopped' && busy) status = 'interrupted';
 			if (event.kind === 'crew.accepted' && event.conflicts.length) status = 'needs-you';
-			// spec/diff-and-review#agent-review-rounds: the reviewers and the agent did not agree in two rounds; the person decides.
+			// spec/reviews#loop: the reviewers and the agent did not agree in two rounds; the person decides.
 			if (event.kind === 'review.finished' && event.state === 'disputed' && !busy)
 				status = 'needs-you';
 			// The persisted expiry event is the boundary for both metadata and FIFO dispatch.
@@ -2413,7 +2413,7 @@ export async function startHost(config: HostConfig) {
 				throw new Error('commentId and text are required');
 			return taskReview.reply(params.commentId, params.text);
 		}
-		// spec/diff-and-review#agent-review-start: the proposal card; the call does not wait for the person.
+		// spec/reviews#start: the proposal card; the call does not wait for the person.
 		if (method === 'propose_review') {
 			if (task.readOnlyAgent === true) throw new Error('This task changes no code to review.');
 			return taskReview.propose(

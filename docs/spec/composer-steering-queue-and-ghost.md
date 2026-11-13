@@ -47,6 +47,7 @@ The deck stands over the composer island in the shared `ui/Deck` component, toge
   - For a prompt, it appends the text and attachments to the current draft and focuses the composer. If the draft cannot hold the message (over 1,000,000 characters or more than 10 attachments), it fails with `The draft cannot hold this queued message.`
   - For a queued review, it reopens the Review sheet with the original comments instead of turning the generated batch into plain text.
 - Layout: the island overlaps the deck's bottom edge by 1 px (`margin-bottom: -9px` against the island's 8 px top inset), so the island's border is the seam between them. The first row's text sits 9 px below the deck's top. There are 16 px from the last row's text to the island. Rows are S 24.
+- A row that opens something hovers as one target, and a row with a tone (the [Review strip](reviews.md#strip)'s green and amber states) is filled: the fill runs edge to edge across the deck's side padding, and up to the deck's top edge when the row is the deck's first. The row's own buttons lie above it with their own hover.
 - Phone: the composer shows `Queued · N` with `Send now` for the first message.
 
 <a id="steering"></a>

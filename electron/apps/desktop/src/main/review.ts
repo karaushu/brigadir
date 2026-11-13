@@ -391,7 +391,7 @@ export class Reviews {
 		});
 	}
 	/**
-	 * spec/diff-and-review#agent-review-rounds: `Back to the agent` on a disputed reviewer's comment — a new version of it goes to the task's agent as the
+	 * spec/reviews#loop: `Back to the agent` on a disputed reviewer's comment — a new version of it goes to the task's agent as the
 	 * person's own; the thread keeps the reviewer and the round.
 	 */
 	async sendBack(key: TaskKey, id: string): Promise<SessionCommand> {

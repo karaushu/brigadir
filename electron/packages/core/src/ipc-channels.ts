@@ -3163,7 +3163,7 @@ export const ipcTable = {
 		arity: 2,
 		validate: (a) => a.length === 2 && isTaskKey(a[0]) && isAttachmentId(a[1]),
 	},
-	/** spec/diff-and-review#agent-review: a task's review before the PR — its state, start (the launch dialog's choice), stop, `Not now`. */
+	/** spec/reviews#points: a task's review before the PR — its state, start (the launch dialog's choice), stop, `Not now`. */
 	readTaskReview: {
 		kind: 'invoke',
 		channel: 'task-review:read',

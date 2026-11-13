@@ -1,4 +1,9 @@
 import {
+	defaultTaskBudgetSetting,
+	isTaskBudgetSetting,
+	type TaskBudgetSetting,
+} from './task-tokens';
+import {
 	defaultChatFont,
 	defaultInterfaceFont,
 	defaultTypography,
@@ -58,6 +63,7 @@ export type AgentDefaults = {
 		string | null;
 	/** spec/agents-and-providers#compaction-window: the context size in tokens at which a new session compacts; null — the agent's own default. */ compactionWindow:
 		number | null;
+	/** spec/agents-and-providers#task-budget: the token budget a new task takes, per provider; null — no limit. */ taskBudget: TaskBudgetSetting;
 };
 /** spec/agents-and-providers#compaction-window: the window a settings file without the key reads as, and the bounds a saved value keeps to. */
 export const defaultCompactionWindow = 200_000;
@@ -274,6 +280,7 @@ export const defaultAppSettings: AppSettings = {
 		prSummary: true,
 		claudeSubagentModel: null,
 		compactionWindow: defaultCompactionWindow,
+		taskBudget: defaultTaskBudgetSetting(),
 	},
 	notifications: defaultNotificationPreferences,
 	editor: {
@@ -304,6 +311,7 @@ export function isAgentDefaults(value: unknown): value is AgentDefaults {
 		isRecord(value) &&
 		Object.keys(value).length === 16 &&
 		(value.compactionWindow === null || isCompactionWindow(value.compactionWindow)) &&
+		isTaskBudgetSetting(value.taskBudget) &&
 		typeof value.prSummary === 'boolean' &&
 		(value.claudeSubagentModel === null ||
 			(typeof value.claudeSubagentModel === 'string' &&

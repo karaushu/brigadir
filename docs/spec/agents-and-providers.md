@@ -22,13 +22,13 @@ Brigadir talks to coding agents through their ACP adapters (`claude-agent-acp`, 
 <a id="domain-model"></a>
 ### Domain model
 
-- **Events** (`AgentEvent.kind`): `session.started`, `session.info`, `session.failed`, `message.delta` (roles `assistant`, `thought`, `user`), `tool.changed`, `plan.changed`, `plan.document`, `plan.removed`, `options.changed`, `mode.changed`, `commands.changed`, `usage.changed`, `context.compacted`, `turn.usage`, `rate-limit.changed`, `quota.observed`, `permission.requested`, `subagent.started`, `subagent.changed`, `background.started`, `background.changed`, `turn.completed`, `unhandled`. The host adds its own boundary records (`turn.started`, `host.stopped`, `rate-limit.expired`, …).
+- **Events** (`AgentEvent.kind`): `session.started`, `session.info`, `session.failed`, `message.delta` (roles `assistant`, `thought`, `user`), `tool.changed`, `plan.changed`, `plan.document`, `plan.removed`, `options.changed`, `mode.changed`, `commands.changed`, `usage.changed`, `context.compacted`, `turn.usage`, `rate-limit.changed`, `quota.observed`, `permission.requested`, `subagent.started`, `subagent.changed`, `background.started`, `background.changed`, `turn.completed`, `unhandled`. The host adds its own boundary records (`turn.started`, `host.stopped`, `rate-limit.expired`, …) and the [budget](#budget-reached) records `budget.reached` and `budget.decided`.
 - **Commands** (`AgentCommand.kind`): `prompt`, `cancel`, `setMode`, `setOption`, `stopBackground`. Host-level session commands include `retryTurn` (see [sign-in recovery](#sign-in-recovery)).
 - **Tool patches.** A patch with a missing field keeps the previous value; an empty array clears the field. Boolean options and grouped selects are kept as the agent sent them.
 - **Parentage.** `_meta.claudeCode.parentToolUseId` (also on a subagent's message chunks) lives on the event record envelope, not on the event.
 - `usage.changed` carries `used`, `capacity` and the adapter's `cost`; cost is never displayed (see [usage](#usage-principles)).
 - <a id="context-compacted"></a>`context.compacted` says the agent compacted its context: `before` and `after` are the context sizes in tokens around the compaction, each a non-negative integer or null when the adapter gave none. It comes once per compaction that the adapter reports as completed ([compaction signal](#compaction-signal)), and the chat shows it as a [service row](chat.md#context-compacted). For a crew member, the host then gives the member's current assignment back ([Crew](crew.md#assignment-after-compaction)).
-- <a id="turn-usage"></a>`turn.usage` carries the tokens of one finished turn as the adapter reported them in the `session/prompt` result: `input`, `output`, `cacheRead`, `cacheWrite` (non-negative integers; a missing counter is 0). It is journaled just before that turn's `turn.completed`, and not at all when the result has no `usage`. Nothing displays it; the crew report sums it (see [Crew](crew.md#reports)).
+- <a id="turn-usage"></a>`turn.usage` carries the tokens of one finished turn as the adapter reported them in the `session/prompt` result: `input`, `output`, `cacheRead`, `cacheWrite` (non-negative integers; a missing counter is 0). It is journaled just before that turn's `turn.completed`, and not at all when the result has no `usage`. The [token counter](#task-tokens) and the crew report ([Crew](crew.md#reports)) sum it.
 
 <a id="acp-connection"></a>
 ### Connection lifecycle
@@ -263,12 +263,53 @@ Rules that follow and are implemented:
 | --- | --- |
 | Remaining share of each subscription window + reset time | Quota button (sections rail foot and New task sheet) |
 | Context of the session, % | Composer context ring: amber > 70%, red > 90%; click shows figures and `Continue in a new task` ([composer](composer.md)) |
-| Tokens per turn / task | relative signal only (turn footer, card tooltip) |
+| Tokens a task used, per provider, against its budget | composer environment line, sidebar card, `Task usage` popover ([task tokens](#task-tokens)) |
+| What the account's remaining share did while a task ran | foot of the `Task usage` popover ([quota while a task ran](#task-quota-span)) |
 
 - **No dollars on a subscription.** The adapter's `cost` is synthetic; it is carried in `usage.changed` but never displayed.
 - **The number is always what is left** (`1 − utilization`); the bar shrinks with it.
-- **Quota is global**, per provider account — never per task or project.
-- **No data → no indicator.** A quota that lies is worse than none; no timer is ever derived from context usage or error text.
+- **Quota is global**, per provider account. No share of it is ever attributed to a task or a project: other tasks, other terminals and claude.ai draw on the same windows. What a task shows is the account's remaining share when the task started and now, labelled as the account's.
+- **Tokens are per task and exact only at a turn end.** A finished turn's `turn.usage` is exact; a running turn has only an estimate, always marked `≈`.
+- **No data → no indicator.** A quota that lies is worse than none; no timer is ever derived from context usage or error text. A task whose agents reported no usage shows no counter.
+
+<a id="task-tokens"></a>
+### Tokens of a task
+
+- **What is counted.** For each finished turn: `input + cacheWrite + output` of its `turn.usage` — the text the model took in for the first time and the text it wrote. **Cache reads are not counted.** Every model call re-reads the whole context from the prompt cache, so cache reads count the same text again on each call: on recorded crew journals they were 30 to 200 times everything else (one task: 418m cache reads against 1.96m counted). A budget of millions means something only for new text. Cache reads cost a subscription about a tenth of new input per token, so on a long session they can still be most of what the account is charged; the [account line](#task-quota-span) shows that cost as it is.
+- **The parts** stay available: the provider line's tooltip in `Task usage` says `New input {a} · written to cache {b} · output {c} · re-read from cache {d}, not counted`.
+- **Running turn: an estimate.** While a turn runs, the count adds the growth of the context during that turn: the sum of every rise of `used` between consecutive `usage.changed` records since its `turn.started` (a fall, a compaction, adds nothing; the first record of a session counts from zero). The turn's `turn.usage` replaces the estimate. On recorded journals the estimate was 55–100 % of the exact figure of the same turn (median 77 % for Claude, 93 % for Codex) and lower when a turn ran subagents (their context is not in `used`) or rewrote an expired cache; it can be above the exact figure when the first context was cached from another session. A count that holds an estimate is shown with `≈`.
+- **Whose tokens.** A task's count is the sum over its own agent and every task that carries its id as `crewTaskId`: a crew's foreman, leads, workers and reviewers, and the reviewers of a solo task's own review ([Reviews](reviews.md#reviewer-sessions)). It is kept per provider, from each member task's `provider`.
+- **Where it lives.** Each host keeps its own task's figure in `task.json` as `tokens` (`input`, `cacheWrite`, `output`, `cacheRead`, the running estimate, whether a turn runs, and its [account readings](#task-quota-span)); it writes it at turn boundaries and, during a turn, at most every 3 s and only when the short number changes. Summing over members is a pure function in `packages/core/src/task-tokens.ts`, used by the views and by the host that checks the budget, so a member's own figure is never summed twice. Old tasks without the field count from their journal the next time their host runs.
+- **Format.** `formatTokenCount` (`620k`, `1.2m`).
+
+<a id="task-budget"></a>
+### Task budget
+
+- **A budget is tokens per task, per provider.** Claude tokens on a subscription and Codex tokens on a key cost differently, so there is no common threshold. A provider without a budget has no limit.
+- **Default** in Settings ▸ Agents, `Task budget`: one popup per enabled provider with `No limit`, `500k`, `1m`, `2m`, `5m`, `10m`; `No limit` by default (`agents.taskBudget`, `{claude, codex}`, null for no limit). A task created after the change takes it into its `task.json` as `tokenBudget` (`{claude?, codex?}`); tasks that exist keep theirs. Old tasks have no `tokenBudget` and no limit.
+- **Per task** the same popup stands in the provider line of the `Task usage` popover. It changes this task's budget at once (`setTokenBudget`), never the default; the budget belongs to the crew's root task and covers every member. A member task's own `tokenBudget`, if any, is never used.
+- **Near** is 80 % of a provider's budget; **reached** is at or above it.
+
+<a id="budget-reached"></a>
+### Reaching the budget
+
+- **When.** The root task's host checks the count after each of its own `turn.usage` and `usage.changed` (at most once a second) and every 3 s while a budget is set (members' figures come from their `task.json`). When any provider's count reaches its budget, the host journals `budget.reached` (`id`, `provider`, `tokens`, `budget`, `estimated`) and the whole task pauses, whatever the other provider's count.
+- **Overshoot.** A count that passes the budget in the middle of a turn asks at once, from the estimate. Running turns are not stopped by the question, so the task can end above its budget by what those turns still use; an estimate that runs low (see above) asks later than the exact count would.
+- **What pauses.** Nothing new starts: the root's prompt queue and every member's queue hold their messages (a message sent meanwhile is queued, also one sent to a member); crew deliveries (reports up, parts, reviews down) wait in the receiving task's queue; new hires wait for their launch; steering is refused. Turns that run now finish. ACP can cancel a turn but not suspend it, so a pause is never a suspension of a running turn. Each member reads the root's hold from the root's `task.json` (`tokenHold`) before it starts anything and every 3 s while it works or is held. The person's manual queue pause ([queue](composer-steering-queue-and-ghost.md#queue-deck)) is separate and is not changed.
+- **The question** is one card in the chat and, while it waits, a strip above the composer ([question card](chat-turns-plans-and-questions.md#budget-card)). The task is `needs-you` with its own reason, `{Provider} budget reached` ([Sidebar](sidebar.md#activity-line)).
+- **Answers** (`decideBudget`), journaled as `budget.decided` (`id`, `decision`, `budget` for a raise):
+  - `raise` — `Raise to {n}`: the provider's budget becomes `n`, the next value above both the budget and the count (`1m`, `2m`, `3m`, `5m`, `10m`, `20m`, `50m`, `100m`); the split button's menu lists it and the next two, then `No limit for this task`. Everything held resumes.
+  - `unlimited` — `No limit for this task`: the provider's budget is removed. Everything held resumes.
+  - `finish` — `Finish turns, then stop`: running turns finish; the task stays paused at its budget.
+  - `stop` — `Stop now`: running turns of the root and of every member are cancelled; the task stays paused at its budget.
+- **Changing the budget in the popover** while the question waits answers it: a value above the count (or `No limit`) is a `raise` (`unlimited`), a value at or below it keeps the question with the new figures. After `finish` or `stop` the task stays paused until its budget for that provider changes; a change lifts the pause, and a count still at or above the new budget asks again.
+- **Resuming** runs everything that was held in its own order: the root's queue first in FIFO order, waiting hires in the order they waited, each member's queue in its FIFO order as the member sees the hold lift (within 3 s).
+- **After a restart** the hold is rebuilt from the journal and the budget: a `budget.reached` without a later `budget.decided` still waits, and a `finish` or `stop` still holds while the budget is unchanged. `budget.reached` is never journaled twice for one pause.
+
+<a id="task-quota-span"></a>
+### Quota while a task ran
+
+The foot of `Task usage` shows, for each provider whose sessions in the task journaled `quota.observed`, the account's remaining share of the 5-hour and the weekly window at the task's first reading and at its latest: `Claude · 5-hour limit 71% → 52%` under the caption `Account limits since the task started`. It is the whole account's share, not the task's: anything else on the account moved it too. When the window reset after the task's first reading, the first reading of the current window is used and the row says `since it reset`. Each host keeps its first reading, its first reading of the current window and its latest one in `tokens`; nothing new is fetched. Codex quota is read by the app, not by a task's session, so a Codex-only task has no such row.
 
 <a id="quota-sources"></a>
 ### Quota sources
@@ -457,6 +498,7 @@ Two read-only tools of the `brigadir` server, input schema `{}`. The agent pulls
 - Distributing builds to other people only after written confirmation from Anthropic; until then Claude over ACP for them would need an API key, and the intro wording about API keys is revisited with it.
 - Remote access limited to machines of the subscription owner (another person's access is account sharing).
 - Usage history by day, model and task.
+- A budget in time or money next to the token budget; a forecast of when a task reaches its budget.
 - `_session/goal` and `agentFileChangeReport` (advertised, unused).
 - Codex `session_info_update.title` as the task title.
 - Verify whether two Codex processes on one `~/.codex` race on token refresh; status line `rate_limits` on Team plans.

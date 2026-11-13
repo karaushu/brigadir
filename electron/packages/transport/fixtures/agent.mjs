@@ -12,6 +12,7 @@ const log = process.argv[3] ?? process.env.BRIGADIR_FIXTURE_LOG;
 const record = (event, params) => { if (log) appendFileSync(log, JSON.stringify({ event, params }) + '\n'); };
 let connection;
 let release;
+let fixtureUsed=0;
 let quotaRejected=false;let autoAccept=false;
 // spec/agents-and-providers#sign-in-recovery: signed out while BRIGADIR_TEST_AUTH_FILE does not exist — a prompt starting with `auth` (or `auth-startup`, the session itself) answers `authRequired` after the CLI's own text.
 const signedOut=()=>Boolean(process.env.BRIGADIR_TEST_AUTH_FILE)&&!existsSync(process.env.BRIGADIR_TEST_AUTH_FILE);if(process.env.BRIGADIR_TEST_AUTH_FILE)record('process',{pid:process.pid});
@@ -118,6 +119,9 @@ connection = agent({name:'fixture'})
   // The brief every session carries (spec/chat-turns-plans-and-questions#checklist-tools) is context, not the prompt the scenarios match on; `prompt-blocks` keeps it.
   const text=params.prompt.filter(item=>!(item.type==='text'&&item.text.startsWith('<attached_context name="Brigadir brief"'))).map(item=>item.type==='text'?item.text:'').join(''); record('prompt',text); record('prompt-blocks',params.prompt);
   if(text.startsWith('Quick question'))return quickQuestion(text,client);
+  // spec/agents-and-providers#budget-reached: `spend N` — the context grows by N and the result reports N new input tokens (10×N cache reads); `slow` waits 1.5 s
+  // mid-turn, `hold` waits for a cancel.
+  {const spend=/^spend (\d+)(?: (slow|hold))?$/.exec(text);if(spend){const n=Number(spend[1]);fixtureUsed+=n;await update(client,{sessionUpdate:'usage_update',used:fixtureUsed,size:10000000});if(spend[2]==='slow')await new Promise(r=>setTimeout(r,1500));if(spend[2]==='hold'){await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:`spent ${n}`}});return {stopReason:'end_turn',usage:{inputTokens:n,outputTokens:0,cachedReadTokens:n*10,cachedWriteTokens:0,totalTokens:n*11}};}}
   // spec/chat-turns-plans-and-questions#agent-started-turns: a prompt while the agent's own turn runs joins that turn; the turn answers it at its end.
   if(agentHold){const hold=agentHold;agentHold=null;return new Promise(answer=>hold({text,answer}));}
   if(agentTurns&&text==='background')return backgroundTurn(client);

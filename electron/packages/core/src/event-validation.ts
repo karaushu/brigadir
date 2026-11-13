@@ -1,3 +1,4 @@
+import { budgetDecisions, isTokenBudgetValue, type BudgetDecision } from './task-tokens';
 import { isRateReset } from './rate-limit';
 import { isQuotaReading } from './quota';
 import { isPRRef } from './forge';
@@ -309,6 +310,18 @@ const checks: Record<string, Check> = {
 	),
 	'crew.accepted': object({ taskId: isId, nodeId: isId, name: text, conflicts: array(text) }),
 	'crew.worker.stopped': object({ taskId: isId, nodeId: isId, name: text, reason: text }),
+	// spec/agents-and-providers#budget-reached
+	'budget.reached': object({
+		id: isId,
+		provider: (v) => v === 'claude' || v === 'codex',
+		tokens,
+		budget: isTokenBudgetValue,
+		estimated: bool,
+	}),
+	'budget.decided': object(
+		{ id: isId, decision: (v) => budgetDecisions.includes(v as BudgetDecision) },
+		{ budget: isTokenBudgetValue }
+	),
 	'turn.completed': object({ reason: text }),
 	'session.failed': object({ message: text }, { reason: (v) => v === 'auth' }),
 	'host.stopped': object({ reason: text }),

@@ -149,6 +149,7 @@ import {
 import { hiddenToolMessages, serveMcp, type HiddenToolSource } from './mcp';
 import { ModuleSettings } from './modules';
 import { claudeSubagentModel, compactionWindow } from './agent-settings';
+import { TaskBudget } from './task-budget';
 import { terminalColors } from './terminal-colors';
 import { idleBlocker, idleTimeout } from './idle';
 export type HostConfig = {
@@ -350,6 +351,8 @@ export async function startHost(config: HostConfig) {
 			prompt: (text, marker) =>
 				command({ kind: 'prompt', text, ...(marker ? { crew: marker } : {}) }),
 			self: taskReview.hooks(),
+			// spec/crew#budget-pause: waiting hires stay waiting while the task is held at its budget.
+			held: () => budget?.held() ?? false,
 		});
 		await host.start();
 		return host;
@@ -424,6 +427,26 @@ export async function startHost(config: HostConfig) {
 		promptTail: Promise<unknown> = Promise.resolve();
 	let rateTimer: ReturnType<typeof setTimeout> | undefined;
 	const quotaBlocked = () => Boolean(queue.rateLimits?.length);
+	/** spec/agents-and-providers#task-tokens, spec/agents-and-providers#budget-reached: the task's own tokens and, for a root task, its budget and hold. */
+	const budget: TaskBudget | null = task.provider
+		? new TaskBudget(
+				{
+					store,
+					key: config.key,
+					records: () => records,
+					emit: (event) => emit(event),
+					busy: () => busy,
+					cancel: () => command({ kind: 'cancel' }),
+					stopMembers: async () => {
+						await crewHost?.stopWorkers();
+					},
+					resume: () => kickPrompts(),
+				},
+				task
+			)
+		: null;
+	/** Nothing new starts while the task, or a member's root, is held at its budget. */
+	const budgetBlocks = async () => (budget ? budget.blocks() : false);
 	function scheduleRateReset() {
 		clearTimeout(rateTimer);
 		if (stopping) return;
@@ -477,7 +500,8 @@ export async function startHost(config: HostConfig) {
 				!transport ||
 				queue.paused ||
 				quotaBlocked() ||
-				!queue.prompts.length
+				!queue.prompts.length ||
+				(await budgetBlocks())
 			)
 				return;
 			const next = queue.prompts[0]!;
@@ -1151,14 +1175,16 @@ export async function startHost(config: HostConfig) {
 				event.kind === 'permission.requested' ||
 				event.kind === 'question.requested' ||
 				event.kind === 'task.proposal.requested' ||
-				event.kind === 'crew.plan.requested'
+				event.kind === 'crew.plan.requested' ||
+				event.kind === 'budget.reached'
 			)
 				status = 'needs-you';
 			if (
 				event.kind === 'permission.resolved' ||
 				event.kind === 'question.resolved' ||
 				event.kind === 'task.proposal.resolved' ||
-				event.kind === 'crew.plan.resolved'
+				event.kind === 'crew.plan.resolved' ||
+				event.kind === 'budget.decided'
 			) {
 				const left = pendingInputs([...records, record]);
 				status =
@@ -1174,6 +1200,7 @@ export async function startHost(config: HostConfig) {
 					event.reason === 'cancelled'
 						? 'interrupted'
 						: pendingInputs([...records, record]).crewQuestions.length ||
+							  pendingInputs([...records, record]).budget ||
 							  taskReview.document().review?.state === 'yours'
 							? 'needs-you'
 							: 'done';
@@ -1290,6 +1317,7 @@ export async function startHost(config: HostConfig) {
 			// Snapshots must not expose an event before its durable metadata and live delivery are ready.
 			records.push(record);
 			queue = reducePromptQueue(queue, event);
+			budget?.observe(record);
 			if (crew && task.transport !== 'terminal') {
 				if (event.kind === 'context.compacted') assignmentDue = record.seq;
 				if (
@@ -1864,6 +1892,17 @@ export async function startHost(config: HostConfig) {
 			await pending.finish(c.task);
 			return;
 		}
+		// spec/agents-and-providers#budget-reached, spec/agents-and-providers#task-budget
+		if (c.kind === 'decideBudget') {
+			if (!budget) throw new Error('This task has no agent');
+			await budget.decide(c.id, c.decision, c.budget);
+			return;
+		}
+		if (c.kind === 'setTokenBudget') {
+			if (!budget) throw new Error('This task has no agent');
+			await budget.setBudget(c.provider, c.budget);
+			return;
+		}
 		if (c.kind === 'decidePlan') {
 			if (!crewHost) throw new Error('This task has no crew');
 			await crewHost.decidePlan(c.decision);
@@ -2059,7 +2098,8 @@ export async function startHost(config: HostConfig) {
 					!busy ||
 					!transport?.steering ||
 					queue.paused ||
-					quotaBlocked()
+					quotaBlocked() ||
+					budget?.held()
 				)
 					throw new Error('This message cannot go into the running turn');
 				await emit({ kind: 'prompt.held', prompt: item });
@@ -2119,7 +2159,13 @@ export async function startHost(config: HostConfig) {
 					kickPrompts();
 					return;
 				}
-				if (!busy && !queue.prompts.length && !queue.paused && !quotaBlocked()) {
+				if (
+					!busy &&
+					!queue.prompts.length &&
+					!queue.paused &&
+					!quotaBlocked() &&
+					!(await budgetBlocks())
+				) {
 					await beginPrompt(c);
 					return;
 				}
@@ -2148,7 +2194,8 @@ export async function startHost(config: HostConfig) {
 					transport!.steering &&
 					!queue.prompts.length &&
 					!queue.paused &&
-					!quotaBlocked()
+					!quotaBlocked() &&
+					!budget?.held()
 				) {
 					await emit({ kind: 'prompt.held', prompt });
 					heldAt.set(prompt.id, Date.now());
@@ -2788,6 +2835,7 @@ export async function startHost(config: HostConfig) {
 			await Promise.all([...proposals.values()].map((p) => p.finish(null)));
 			await Promise.all([...permissions.values()].map((p) => p.finish(null)));
 			crewWorker?.stop();
+			budget?.stop();
 			await crewHost?.stop().catch(() => {});
 			terminals.closeAll();
 			transport?.close();
@@ -3121,6 +3169,8 @@ export async function startHost(config: HostConfig) {
 				state: 'stopped',
 				reason: 'restarted',
 			});
+		// spec/agents-and-providers#budget-reached: the figure and the hold are rebuilt from the journal before anything is drained.
+		await budget?.start();
 		contextPath = await safePath(await store.taskDir(config.key), 'cli-context.json');
 		try {
 			const doc = await readDocument(contextPath);

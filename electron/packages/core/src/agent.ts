@@ -151,6 +151,8 @@ export type AgentCommand =
 			attachmentIds?: string[];
 			crew?: import('./crew-runtime').CrewTurnMarker;
 			steer?: true;
+			/** spec/crew#assignment-after-compaction: the id of the crew assignment this prompt gives (a part, a check), set by the host that sends it. */
+			assignment?: string;
 	  }
 	| { kind: 'cancel' }
 	| { kind: 'stopBackground'; id: string }

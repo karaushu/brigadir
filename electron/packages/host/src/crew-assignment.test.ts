@@ -39,7 +39,7 @@ const reviewLoop: CrewTemplate = {
 const part: CrewAssignment = {
 	kind: 'part',
 	text: 'Part 1: Client details\n<part_prompt>\nPART-PROMPT-MARK\n</part_prompt>',
-	marker: 'PART-PROMPT-MARK',
+	id: 'part:t1:1',
 };
 /**
  * spec/crew#assignment-after-compaction: a real worker host over the fixture agent (`crew-compaction`), with the test as its parent on the crew
@@ -80,6 +80,10 @@ async function worker(node: 'developer' | 'reviewer' = 'developer') {
 	const state = {
 		answer: part as CrewAssignment | null,
 		asked: 0,
+		/** How long the parent takes to answer `assignment`. */
+		delay: 0,
+		/** The seqs of the reports the worker pushed. */
+		reports: [] as number[],
 		host: null as Awaited<ReturnType<typeof startHost>> | null,
 		parent: null as Peer | null,
 	};
@@ -88,12 +92,16 @@ async function worker(node: 'developer' | 'reviewer' = 'developer') {
 		const host = await startHost(config);
 		state.host = host;
 		cleanup.push(() => host.stop());
-		const parent = new Peer(createConnection(host.identity.socket), async (method) => {
+		const parent = new Peer(createConnection(host.identity.socket), async (method, params) => {
 			if (method === 'assignment') {
 				state.asked++;
+				if (state.delay) await new Promise((done) => setTimeout(done, state.delay));
 				return state.answer;
 			}
-			if (method === 'report') return { accepted: true };
+			if (method === 'report') {
+				state.reports.push((params as { seq: number }).seq);
+				return { accepted: true };
+			}
 			throw new Error(`Unknown method ${method}`);
 		});
 		state.parent = parent;
@@ -114,11 +122,30 @@ async function worker(node: 'developer' | 'reviewer' = 'developer') {
 	};
 	const records = () => state.host!.records as EventRecord[];
 	const ended = () => records().filter((record) => record.event.kind === 'turn.completed').length;
-	/** One prompt from the parent, to the end of its turn. */
-	const prompt = async (text: string) => {
+	/** One prompt from the parent, to the end of its turn (`turns`: and of the turns that follow it). */
+	const prompt = async (text: string, extra: { assignment?: string; turns?: number } = {}) => {
 		const before = ended();
+		await state.parent!.request('command', {
+			kind: 'prompt',
+			text,
+			...(extra.assignment ? { assignment: extra.assignment } : {}),
+		});
+		await expect.poll(ended, { timeout: 10_000 }).toBe(before + (extra.turns ?? 1));
+		await idle();
+	};
+	/** The host let go of the turn: what it journals once the agent took the prompt is written by then. */
+	const idle = () =>
+		expect
+			.poll(async () => ((await state.parent!.request('status', {})) as { busy?: boolean }).busy, {
+				timeout: 10_000,
+			})
+			.toBe(false);
+	/** One prompt the agent fails with an error. */
+	const fails = async (text: string) => {
+		const count = () => records().filter((record) => record.event.kind === 'session.failed').length;
+		const before = count();
 		await state.parent!.request('command', { kind: 'prompt', text });
-		await expect.poll(ended, { timeout: 10_000 }).toBe(before + 1);
+		await expect.poll(count, { timeout: 10_000 }).toBe(before + 1);
 	};
 	const entries = async () =>
 		(await readFile(log, 'utf8'))
@@ -151,6 +178,7 @@ async function worker(node: 'developer' | 'reviewer' = 'developer') {
 		stop: () => state.host!.stop(),
 		records,
 		prompt,
+		fails,
 		blocks,
 		steers,
 		restored,
@@ -243,10 +271,12 @@ it('gives nothing without an open part or when the prompt is the assignment itse
 	expect(w.restored()).toEqual([
 		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: [] },
 	]);
-	// The next part's prompt carries the assignment: no block rides on it.
+	// The next part's prompt is the assignment — the parent marks it with the part's id — so no block rides on it.
 	w.state.answer = part;
 	await w.prompt('compact-late');
-	await w.prompt('Part 2 of your work: Client details.\n\nPART-PROMPT-MARK');
+	await w.prompt('Part 1 of your work: Client details.\n\nPART-PROMPT-MARK', {
+		assignment: 'part:t1:1',
+	});
 	expect(await w.blocks()).toEqual([null, null, null]);
 	expect(w.restored().at(-1)).toEqual({
 		kind: 'crew.assignment.restored',
@@ -254,6 +284,11 @@ it('gives nothing without an open part or when the prompt is the assignment itse
 		assignment: [],
 	});
 	expect(w.state.asked).toBe(2);
+	// A prompt that only quotes the part's text is not the part: the block rides on it.
+	await w.prompt('compact-late');
+	await w.prompt('About PART-PROMPT-MARK: keep the old field.');
+	expect((await w.blocks()).at(-1)).toContain(part.text);
+	expect(w.restored().at(-1)!.assignment).toEqual(['part']);
 }, 60_000);
 
 it('keeps the assignment due while the parent does not answer, and gives it once the parent is back (spec/crew#assignment-after-compaction)', async () => {
@@ -322,18 +357,110 @@ it('gives a reviewer its open check back, but not with the check prompt itself (
 	const check: CrewAssignment = {
 		kind: 'check',
 		text: 'Check task t1 of `Developer` (reviewId r1, round 1 of 2).\nRead the report with read_report and the change with read_diff, passing this reviewId.',
-		marker: 'reviewId r1, round 1 ',
+		id: 'check:r1',
 	};
 	w.state.answer = check;
 	await w.start();
 	await w.prompt('compact-step');
 	expect((await w.steers())[0]).toContain(`${assignmentHeader}\n\n${check.text}`);
+	// A follow-up that quotes the check is not the check: it gets the block.
+	await w.prompt('compact-late');
+	await w.prompt('About reviewId r1, round 1 of 2: did you finish?');
+	// The check prompt the parent marked with the check's id gets none.
 	await w.prompt('compact-late');
 	await w.prompt(
-		'Check task t1 of `Developer` (reviewId r1, round 1 of 2).\nReport from `Developer`'
+		'Check task t1 of `Developer` (reviewId r1, round 1 of 2).\nReport from `Developer`',
+		{
+			assignment: 'check:r1',
+		}
 	);
+	expect((await w.blocks()).slice(1)).toEqual([
+		null,
+		expect.stringContaining(check.text),
+		null,
+		null,
+	]);
+	expect(w.restored().map((event) => event.assignment)).toEqual([['check'], ['check'], []]);
+}, 60_000);
+
+it('keeps the compaction due when the prompt that carried the block fails, also across a restart (spec/crew#assignment-after-compaction)', async () => {
+	const w = await worker();
+	await w.start();
 	await w.prompt('compact-late');
-	await w.prompt('Did you finish?');
-	expect((await w.blocks()).slice(2)).toEqual([null, null, expect.stringContaining(check.text)]);
-	expect(w.restored().map((event) => event.assignment)).toEqual([['check'], [], ['check']]);
+	await w.fails('fail: the request is refused');
+	expect((await w.blocks()).at(-1)).toContain(part.text);
+	// Nothing answered the compaction: the agent never took that prompt.
+	expect(w.restored()).toEqual([]);
+	await w.stop();
+	await w.start();
+	await w.prompt('Go on.');
+	await w.prompt('More.');
+	const blocks = await w.blocks();
+	expect(blocks.at(-2)).toContain(part.text);
+	expect(blocks.at(-1)).toBeNull();
+	expect(w.restored()).toEqual([
+		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
+	]);
+}, 90_000);
+
+it('answers a compaction that came while the parent was answering with the same block (spec/crew#assignment-after-compaction)', async () => {
+	const w = await worker();
+	w.state.delay = 600;
+	await w.start();
+	await w.prompt('compact-step-twice');
+	expect(w.compactions()).toHaveLength(2);
+	expect(await w.steers()).toHaveLength(1);
+	expect(w.restored()).toEqual([
+		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[1], assignment: ['part'] },
+	]);
+	await w.prompt('plain');
+	expect(await w.steers()).toHaveLength(1);
+	expect((await w.blocks()).at(-1)).toBeNull();
+}, 60_000);
+
+it('keeps the block for the next prompt when the turn ends while the steer is out (promptRequired) (spec/crew#assignment-after-compaction)', async () => {
+	const w = await worker();
+	await w.start();
+	await w.prompt('compact-step-decline');
+	expect(await w.steers()).toHaveLength(1);
+	expect(w.restored()).toEqual([]);
+	await w.prompt('Next.');
+	expect((await w.blocks()).at(-1)).toContain(part.text);
+	expect(w.restored()).toEqual([
+		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
+	]);
+}, 60_000);
+
+it('opens a hidden agent turn when the agent adopts the steer as a turn of its own, and reports each turn once (spec/crew#assignment-after-compaction)', async () => {
+	const w = await worker();
+	await w.start();
+	await w.prompt('compact-step-adopt', { turns: 2 });
+	const turns = w.records().filter((record) => record.event.kind === 'turn.started');
+	expect(turns.map((record) => record.event)).toEqual([
+		expect.objectContaining({ text: 'compact-step-adopt' }),
+		{ kind: 'turn.started', text: '', origin: 'agent' },
+	]);
+	// The adopted turn answered the block, and the block's text is in no record.
+	expect(
+		w
+			.records()
+			.some(
+				(record) =>
+					record.event.kind === 'message.delta' &&
+					record.event.content.kind === 'text' &&
+					record.event.content.text.startsWith(
+						'adopted: <attached_context name="Brigadir assignment">'
+					)
+			)
+	).toBe(true);
+	expect(w.restored()).toEqual([
+		{ kind: 'crew.assignment.restored', compactedSeq: w.compactions()[0], assignment: ['part'] },
+	]);
+	expect(w.records().filter((record) => record.event.kind === 'prompt.steered')).toEqual([]);
+	// One report per turn, at its own end.
+	const completed = w
+		.records()
+		.filter((record) => record.event.kind === 'turn.completed')
+		.map((record) => record.seq);
+	await expect.poll(() => w.state.reports, { timeout: 10_000 }).toEqual(completed);
 }, 60_000);

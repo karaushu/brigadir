@@ -306,6 +306,9 @@ const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 const transcriptLine = 2000,
 	transcriptBytes = 64 * 1024,
 	notePageBytes = 64 * 1024 - 256;
+/** spec/crew#assignment-after-compaction: the ids a host marks the prompt of a part or a check with. */
+const partId = (taskId: string, part: number) => `part:${taskId}:${part}`,
+	checkId = (reviewId: string) => `check:${reviewId}`;
 /** spec/crew#reviewer: a reviewer's prompt carries the part as the foreman gave it, so the scope comes with the check. */
 export function partBrief(
 	name: string,
@@ -1256,7 +1259,11 @@ export class CrewHost {
 		await link.peer.request('command', { kind: 'checkpoint' });
 		const base = (await readSnapshots(store, key))?.checkpoints.at(-1)?.id;
 		if (base !== undefined) await store.updateTask(key, { changeBase: base });
-		await link.peer.request('command', { kind: 'prompt', text: next.prompt });
+		await link.peer.request('command', {
+			kind: 'prompt',
+			text: next.prompt,
+			assignment: partId(worker.taskId, worker.part ?? 1),
+		});
 		await this.serial(async () => {
 			delete worker.next;
 			await this.saveWorkers();
@@ -1541,7 +1548,11 @@ export class CrewHost {
 			await this.saveWorkers();
 		});
 		await store.updateTask(key, { launchOptions: [] });
-		await link.peer.request('command', { kind: 'prompt', text: task.prompt ?? '' });
+		await link.peer.request('command', {
+			kind: 'prompt',
+			text: task.prompt ?? '',
+			assignment: partId(worker.taskId, worker.part ?? 1),
+		});
 	}
 	/** Spawns the worker host the same way the desktop does: config file, detached process, identity file, then a `crew` peer. */
 	private async spawn(key: TaskKey): Promise<Link> {
@@ -1868,13 +1879,12 @@ export class CrewHost {
 							? ''
 							: partBrief(target.name, await this.readPartBrief(target)),
 					}),
-					marker: `reviewId ${run.reviewId}, round ${run.round} `,
+					id: checkId(run.reviewId),
 				};
 		}
 		if (worker.acceptedAt) return null;
 		const brief = await this.readPartBrief(worker);
 		if (!brief) return null;
-		const marker = brief.prompt.trim().slice(0, 2000);
 		return {
 			kind: 'part',
 			text: partAssignment({
@@ -1885,7 +1895,7 @@ export class CrewHost {
 				...(brief.acceptance ? { acceptance: brief.acceptance } : {}),
 				comments: await this.openComments(worker),
 			}),
-			...(marker ? { marker } : {}),
+			id: partId(worker.taskId, worker.part ?? 1),
 		};
 	}
 	/** The comments the parent or the part's reviewers left on the member's part that are not resolved, oldest first. */
@@ -1938,10 +1948,9 @@ export class CrewHost {
 			plan = requested?.event.kind === 'crew.plan.requested' ? requested.event.plan : null,
 			parts = resolved.event.parts ?? plan?.parts ?? [];
 		if (!parts.length) return null;
-		const members = parts.map(
-			(part) =>
-				this.workers.find((worker) => worker.planPartId === part.id) ??
-				this.workers.find((worker) => worker.name === crewName(part.agent))
+		// The member that took this plan's part: an earlier part of the same agent, accepted or not, is not this one.
+		const members = parts.map((part) =>
+			this.workers.find((worker) => worker.planPartId === part.id)
 		);
 		if (members.every((worker) => worker?.acceptedAt && !worker.next)) return null;
 		const lines: DigestPart[] = [];
@@ -2209,6 +2218,7 @@ export class CrewHost {
 						? `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}\nThis is the review of the task's changes before its pull request. The files of your tree are the task's state for this round. Read with read_report and read_diff passing this reviewId. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). In round 2 the report ends with the agent's last message: read its reasons before you insist. Do not change files.${run.round > 1 ? await this.selfThreads(run.round) : ''}${this.deps.self?.guidance() ?? ''}`
 						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}${partBrief(worker.name, await this.readPartBrief(worker))}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId). Check the change against the part's prompt and acceptance criteria above; ask the foreman only what they leave open.`,
 					crew: { kind: 'report', report: report.summary },
+					assignment: checkId(run.reviewId),
 				})
 				.catch(async () => {
 					run.dispatched = run.dispatched.filter((id) => id !== reviewerId);

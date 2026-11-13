@@ -447,7 +447,7 @@ export async function startHost(config: HostConfig) {
 			context = manifest !== sentScopeContext ? manifest : '';
 		let attachments: Awaited<ReturnType<Attachments['resolve']>>;
 		let relay: Awaited<ReturnType<typeof relayContext>> = { attachmentIds: [], resources: [] };
-		let restored: Awaited<ReturnType<typeof dueAssignment>> = null;
+		let pieces: CrewAssignment[] | null = null;
 		try {
 			if (!records.some((record) => record.event.kind === 'turn.started'))
 				relay = await relayContext(store, config.key);
@@ -458,7 +458,7 @@ export async function startHost(config: HostConfig) {
 				]),
 			]);
 			transport.validateAttachments(attachments.map((value) => value.input));
-			restored = await dueAssignment(c.text);
+			pieces = await dueAssignment(c.kind === 'prompt' ? (c.assignment ?? null) : null);
 			await checkpoint('turn');
 			await emit({
 				kind: 'turn.started',
@@ -479,21 +479,13 @@ export async function startHost(config: HostConfig) {
 		const briefBlock =
 			briefPending && brief ? [{ kind: 'text' as const, name: 'Brigadir brief', text: brief }] : [];
 		briefPending = false;
-		// spec/crew#assignment-after-compaction: journaled before the request; a request that fails gives the block to the next prompt.
-		if (restored)
-			await emit({
-				kind: 'crew.assignment.restored',
-				compactedSeq: restored.seq,
-				assignment: restored.pieces.map((piece) => piece.kind),
-			}).catch(() => {});
-		const assignmentInput = restored?.pieces.length
-			? [
-					{
-						kind: 'text' as const,
-						name: 'Brigadir assignment',
-						text: assignmentBlock(restored.pieces),
-					},
-				]
+		// spec/crew#assignment-after-compaction: the prompt answers the newest compaction before it goes out; the answer is journaled once the agent took
+		// the turn, so a request that fails — also before a restart — leaves the compaction due for the next prompt.
+		const answered = pieces ? assignmentDue : null,
+			given = answered === null ? [] : (pieces ?? []);
+		if (answered !== null) assignmentDue = null;
+		const assignmentInput = given.length
+			? [{ kind: 'text' as const, name: 'Brigadir assignment', text: assignmentBlock(given) }]
 			: [];
 		const gen = ++turnGen;
 		starting = false;
@@ -510,10 +502,18 @@ export async function startHost(config: HostConfig) {
 				],
 				relay.resources
 			)
+			.then(async () => {
+				if (answered !== null)
+					await emit({
+						kind: 'crew.assignment.restored',
+						compactedSeq: answered,
+						assignment: given.map((piece) => piece.kind),
+					});
+			})
 			.catch(() => {
 				sentScopeContext = '';
 				if (briefBlock.length) briefPending = true;
-				if (restored?.pieces.length && assignmentDue === null) assignmentDue = restored.seq;
+				if (answered !== null && assignmentDue === null) assignmentDue = answered;
 			})
 			.finally(() => {
 				if (turnGen === gen && !steerPending) busy = false;
@@ -637,14 +637,12 @@ export async function startHost(config: HostConfig) {
 		return result.outcome === 'injected';
 	}
 	/**
-	 * spec/crew#assignment-after-compaction: the pieces of the member's current assignment that a prompt with `text` does not carry itself, for the
-	 * compaction still unanswered. Null — nothing is due, or the assignment could not be read (the parent is away): the block waits.
+	 * spec/crew#assignment-after-compaction: the pieces of the member's current assignment that a prompt does not give itself — `given` is the id
+	 * of the assignment the sending host marked the prompt with. Null — no compaction is due, or the assignment could not be read (the parent is
+	 * away): the block waits.
 	 */
-	async function dueAssignment(
-		text: string | null
-	): Promise<{ seq: number; pieces: CrewAssignment[] } | null> {
-		const seq = assignmentDue;
-		if (seq === null || !crew) return null;
+	async function dueAssignment(given: string | null): Promise<CrewAssignment[] | null> {
+		if (assignmentDue === null || !crew) return null;
 		try {
 			const pieces: CrewAssignment[] = [];
 			if (crewWorker) {
@@ -655,12 +653,7 @@ export async function startHost(config: HostConfig) {
 				const plan = await crewHost.planAssignment();
 				if (plan) pieces.push(plan);
 			}
-			return {
-				seq,
-				pieces: pieces.filter(
-					(piece) => text === null || !piece.marker || !text.includes(piece.marker)
-				),
-			};
+			return pieces.filter((piece) => given === null || piece.id !== given);
 		} catch {
 			return null;
 		}
@@ -669,24 +662,26 @@ export async function startHost(config: HostConfig) {
 	function flushAssignment() {
 		void serialPrompt(async () => {
 			if (assignmentDue === null || !busy || steerPending || !transport?.steering) return;
-			const restored = await dueAssignment(null);
-			if (!restored || !busy || !transport?.steering) return;
-			const record = (pieces: CrewAssignment[]) =>
+			const pieces = await dueAssignment(null),
+				// The newest compaction at dispatch: one that came while the parent answered is answered by this block too.
+				answered = assignmentDue;
+			if (!pieces || answered === null || !busy || !transport?.steering) return;
+			const record = (given: CrewAssignment[]) =>
 				emit({
 					kind: 'crew.assignment.restored',
-					compactedSeq: restored.seq,
-					assignment: pieces.map((piece) => piece.kind),
+					compactedSeq: answered,
+					assignment: given.map((piece) => piece.kind),
 				});
-			if (!restored.pieces.length) {
+			if (!pieces.length) {
 				await record([]);
 				return;
 			}
 			const given = await steerTurn(
 				'',
-				[{ kind: 'text', name: 'Brigadir assignment', text: assignmentBlock(restored.pieces) }],
+				[{ kind: 'text', name: 'Brigadir assignment', text: assignmentBlock(pieces) }],
 				{ kind: 'turn.started', text: '', origin: 'agent' }
 			);
-			if (given) await record(restored.pieces);
+			if (given) await record(pieces);
 		}).catch(() => {});
 	}
 	let saving = false;

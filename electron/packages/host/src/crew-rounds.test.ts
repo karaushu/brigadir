@@ -78,7 +78,7 @@ async function crew(
 		{ kind: 'crew.plan.resolved', id: 'plan', approved: true, parts: [] },
 	];
 	const prompts: { text: string; kind: string | undefined }[] = [];
-	const sent: { taskId: string; text: string }[] = [];
+	const sent: { taskId: string; text: string; assignment?: string }[] = [];
 	const context: CrewContext = {
 		role: 'foreman',
 		crewKey: task,
@@ -110,8 +110,16 @@ async function crew(
 	host['spawn'] = (async (key: TaskKey) => ({
 		key,
 		peer: {
-			request: async (_method: string, params: { kind: string; text?: string }) => {
-				if (params.kind === 'prompt') sent.push({ taskId: key.id, text: params.text ?? '' });
+			request: async (
+				_method: string,
+				params: { kind: string; text?: string; assignment?: string }
+			) => {
+				if (params.kind === 'prompt')
+					sent.push({
+						taskId: key.id,
+						text: params.text ?? '',
+						...(params.assignment ? { assignment: params.assignment } : {}),
+					});
 				return {};
 			},
 		},
@@ -384,7 +392,7 @@ it("builds a member's current assignment after a compaction: the open part with 
 	const prompt = 'Build the client details screen in out/. Prove it with pnpm test out.';
 	const part = (await host.memberAssignment(developer()))!;
 	expect(part.kind).toBe('part');
-	expect(part.marker).toBe(prompt);
+	expect(part.id).toBe(`part:${developer().taskId}:1`);
 	expect(part.text).toBe(
 		`Part 1: Client details\n<part_prompt>\n${prompt}\n</part_prompt>\nAcceptance criteria:\n<acceptance>\nThe screen shows the name, phone and notes; pnpm test out passes.\n</acceptance>`
 	);
@@ -458,8 +466,9 @@ it("builds a member's current assignment after a compaction: the open part with 
 	);
 	expect(check.text).toContain(`<part_prompt>\n${prompt}\n</part_prompt>`);
 	expect(check.text).toContain('<acceptance>');
-	// The check prompt itself carries the check: a prompt with the marker gets no block.
-	expect(sent.find((item) => item.taskId === reviewer().taskId)!.text).toContain(check.marker!);
+	// The check prompt is that check: the host marks it with the check's id, so it gets no block.
+	expect(check.id).toBe(`check:${run.reviewId}`);
+	expect(sent.find((item) => item.taskId === reviewer().taskId)!.assignment).toBe(check.id);
 	await verdict(false);
 	expect(await host.memberAssignment(reviewer())).toBeNull();
 	developer().acceptedAt = new Date().toISOString();
@@ -469,6 +478,8 @@ it("builds a member's current assignment after a compaction: the open part with 
 it("builds the foreman's plan digest from its approved plan, the members, open checks and questions; nothing once every part is accepted (spec/crew#assignment-after-compaction)", async () => {
 	const { store, host, key, events, developer, report } = await crew();
 	expect(await host.planAssignment()).toBeNull();
+	// The developer took the plan's first part (create_worker_task records the plan part it gives).
+	developer().planPartId = 'p1';
 	const parts = [
 		{
 			id: 'p1',
@@ -509,7 +520,7 @@ it("builds the foreman's plan digest from its approved plan, the members, open c
 	await store.setStatus(key, 'working');
 	let digest = (await host.planAssignment())!;
 	expect(digest.kind).toBe('plan');
-	expect(digest.marker).toBeUndefined();
+	expect(digest.id).toBeUndefined();
 	expect(digest.text).toBe(
 		[
 			'Your approved plan and where each part stands:',
@@ -532,4 +543,11 @@ it("builds the foreman's plan digest from its approved plan, the members, open c
 	expect((await host.planAssignment())!.text).toContain('Developer: accepted');
 	events.push({ kind: 'crew.plan.resolved', id: 'p', approved: true, parts: [parts[0]!] });
 	expect(await host.planAssignment()).toBeNull();
+	// A second plan gives the same developer a new part: its accepted earlier part does not make the new plan done.
+	const next = { ...parts[0]!, id: 'p3', title: 'Client notes' };
+	events.push(
+		{ kind: 'crew.plan.requested', plan: { id: 'q', summary: '', parts: [next] } },
+		{ kind: 'crew.plan.resolved', id: 'q', approved: true, parts: null }
+	);
+	expect((await host.planAssignment())!.text).toContain('1. Client notes — Developer: not started');
 });

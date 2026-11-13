@@ -138,18 +138,17 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		// Save as crew template, then Done: the sheet shows the one-off crew and the library has the new template.
 		await editor.getByRole('textbox', { name: 'Crew · Name' }).fill('Front + Design');
 		await editor.getByRole('button', { name: 'Save as crew template' }).click();
-		// The seeded crew and the new template.
+		// spec/crew-templates-and-editor#editor-header-footer: only a built-in source is saved under a new id, so the person's own crew is saved in
+		// place, under its id and with the new name.
+		const crewFile = join(root, 'data', 'templates', 'crews', `${ownCrew.id}.json`);
 		await expect
 			.poll(
-				async () => (await readdir(join(root, 'data', 'templates', 'crews')).catch(() => [])).length
+				async () =>
+					JSON.parse(await readFile(crewFile, 'utf8').catch(() => '{}')).template?.name ?? null
 			)
-			.toBe(2);
-		const crewFile = (await readdir(join(root, 'data', 'templates', 'crews'))).find(
-			(file) => file !== `${ownCrew.id}.json`
-		);
-		const saved = JSON.parse(
-			await readFile(join(root, 'data', 'templates', 'crews', crewFile!), 'utf8')
-		);
+			.toBe('Front + Design');
+		expect(await readdir(join(root, 'data', 'templates', 'crews'))).toEqual([`${ownCrew.id}.json`]);
+		const saved = JSON.parse(await readFile(crewFile, 'utf8'));
 		expect(
 			saved.template.root.agents.find((agent: { name: string }) => agent.name === 'Designer')
 				.summary
@@ -176,8 +175,8 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		const agents = settings.getByRole('radiogroup', { name: 'Agents' }),
 			crews = settings.getByRole('listbox', { name: 'Crews' });
 		await expect(agents.getByRole('radio')).toHaveCount(8);
-		// Review crew, the seeded own crew and the new template.
-		await expect(crews.getByRole('option')).toHaveCount(3);
+		// The built-in Review crew and the person's crew, saved in place as «Front + Design».
+		await expect(crews.getByRole('option')).toHaveCount(2);
 		await expect(crews.getByRole('option', { name: /Front \+ Design/ })).toContainText('4');
 		await agents
 			.locator('[data-option-card]')

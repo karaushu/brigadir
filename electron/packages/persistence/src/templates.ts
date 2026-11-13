@@ -1,4 +1,4 @@
-import { mkdir, readdir, unlink } from 'node:fs/promises';
+import { lstat, mkdir, readdir, unlink } from 'node:fs/promises';
 import {
 	isAgentTemplateDocument,
 	isCrewTemplateDocument,
@@ -9,6 +9,7 @@ import {
 	builtinAgentTemplates,
 	sameBuiltinChoices,
 	builtinCrewTemplates,
+	unshippedCrewTemplateIds,
 	withBuiltinCrew,
 	sameCrewTree,
 	crewIssues,
@@ -110,9 +111,8 @@ export class TemplateStore {
 		}
 		return crews;
 	}
-	/** spec/pull-requests-and-ci#review-crew: a missing file hides nothing; a broken one is an issue and hides nothing either. Ids of crews the app
-	 *  no longer ships are dropped. */
-	private async hidden(issues?: ReadIssue[]): Promise<string[]> {
+	/** The ids `hidden-crews.json` lists, as written. A missing file hides nothing; a broken one is an issue and hides nothing either. */
+	private async hiddenIds(issues?: ReadIssue[]): Promise<string[]> {
 		try {
 			const doc = await readDocument(await safePath(this.root, hiddenCrewsPath));
 			if (
@@ -121,9 +121,7 @@ export class TemplateStore {
 				!doc.crews.every((id) => typeof id === 'string' && isId(id))
 			)
 				throw new ReadFailure('invalid_document');
-			return builtinCrewTemplates
-				.map((item) => item.id)
-				.filter((id) => (doc.crews as string[]).includes(id));
+			return doc.crews as string[];
 		} catch (error) {
 			if (isRecord(error) && error.code === 'ENOENT') return [];
 			issues?.push({
@@ -131,6 +129,62 @@ export class TemplateStore {
 				code: error instanceof ReadFailure ? error.code : 'unreadable',
 			});
 			return [];
+		}
+	}
+	/** spec/pull-requests-and-ci#review-crew: the hidden built-in crews. Ids the app does not ship are dropped, except one whose edit still waits in
+	 *  `templates/builtin/` (spec/crew-templates-and-editor#unshipped-crew-ids): it keeps `Restore default crews` offered. */
+	private async hidden(issues?: ReadIssue[]): Promise<string[]> {
+		const listed = await this.hiddenIds(issues),
+			kept: string[] = [];
+		for (const id of listed)
+			if (
+				isBuiltinCrewId(id) ||
+				(unshippedCrewTemplateIds.includes(id) && (await this.exists('builtin', id)))
+			)
+				kept.push(id);
+		return kept;
+	}
+	private async exists(kind: 'builtin' | 'crews', id: string) {
+		try {
+			await lstat(await this.file(kind, id));
+			return true;
+		} catch (error) {
+			if (isRecord(error) && error.code === 'ENOENT') return false;
+			throw error;
+		}
+	}
+	/** spec/crew-templates-and-editor#unshipped-crew-ids: a person's edit of a crew the app does not ship becomes an own crew under the same id, so
+	 *  the launch default and schedules that name it keep it. An edit of a hidden crew waits for `Restore default crews`; an invalid file stays and
+	 *  is an issue; an own crew already under that id is never overwritten. The source goes only after the copy is written. */
+	private async adoptUnshippedCrews(issues: ReadIssue[]) {
+		const hidden = await this.hiddenIds();
+		for (const id of unshippedCrewTemplateIds) {
+			if (hidden.includes(id)) continue;
+			const source = await this.file('builtin', id);
+			let doc: Record<string, unknown>;
+			try {
+				doc = await readDocument(source);
+			} catch (error) {
+				if (isRecord(error) && error.code === 'ENOENT') continue;
+				issues.push({
+					path: `templates/builtin/${id}.json`,
+					code: error instanceof ReadFailure ? error.code : 'unreadable',
+				});
+				continue;
+			}
+			if (!isCrewTemplateDocument(doc) || doc.template.id !== id) {
+				issues.push({ path: `templates/builtin/${id}.json`, code: 'invalid_document' });
+				continue;
+			}
+			if (await this.exists('crews', id)) continue;
+			await mkdir(await this.dir('crews'), { recursive: true, mode: 0o700 });
+			await atomicJson(await this.file('crews', id), {
+				schemaVersion: 1,
+				template: { ...doc.template, builtin: false },
+			});
+			await unlink(source).catch((error) => {
+				if (!(isRecord(error) && error.code === 'ENOENT')) throw error;
+			});
 		}
 	}
 	private async list(kind: 'agents' | 'crews', issues: ReadIssue[]) {
@@ -164,8 +218,9 @@ export class TemplateStore {
 		return documents;
 	}
 	async read(): Promise<TemplateLibrary> {
-		const issues: ReadIssue[] = [],
-			agents: AgentTemplate[] = [],
+		const issues: ReadIssue[] = [];
+		await this.adoptUnshippedCrews(issues);
+		const agents: AgentTemplate[] = [],
 			crews: CrewTemplate[] = [],
 			choices = await this.builtinChoices(issues),
 			hiddenCrews = await this.hidden(issues),

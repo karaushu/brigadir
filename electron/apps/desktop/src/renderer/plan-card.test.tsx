@@ -1,21 +1,12 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import {
-	builtinCrewTemplates,
-	defaultCrewTemplateId,
-	resolveCrew,
-	templateLookup,
-	type CrewPlan,
-} from '@brigadir/core';
+import { starterCrewTemplate, resolveCrew, templateLookup, type CrewPlan } from '@brigadir/core';
 import { PlanCard } from './Crew';
-const spec = resolveCrew(
-	builtinCrewTemplates.find((item) => item.id === defaultCrewTemplateId)!,
-	{
-		lookup: templateLookup([]),
-		defaultProvider: 'claude',
-		now: '2026-01-01T00:00:00.000Z',
-	}
-);
+const spec = resolveCrew(starterCrewTemplate, {
+	lookup: templateLookup([]),
+	defaultProvider: 'claude',
+	now: '2026-01-01T00:00:00.000Z',
+});
 const plan: CrewPlan = {
 	id: 'plan',
 	summary: 'Two **independent** parts.',

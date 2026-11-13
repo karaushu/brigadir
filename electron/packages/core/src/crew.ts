@@ -101,9 +101,8 @@ export const foremanTemplateId = 'foreman-default',
 	technicalWriterTemplateId = 'technical-writer',
 	designerTemplateId = 'designer',
 	securityReviewerTemplateId = 'security-reviewer';
-export const defaultCrewTemplateId = 'default';
-/** spec/crew-templates-and-editor#builtin-templates: a developer, a tester and a reviewer. */
-export const testsCrewTemplateId = 'tests';
+/** spec/crew-templates-and-editor#unshipped-crew-ids: crew ids the app does not ship that data on disk may still name. Not reserved: a person's edit moves to an own crew under the same id. */
+export const unshippedCrewTemplateIds: readonly string[] = ['default', 'tests'];
 /** spec/pull-requests-and-ci#review-crew: the built-in crew of a PR review — the foreman merges what two reviewers of different providers found. */
 export const reviewCrewTemplateId = 'review';
 /** spec/crew#compose: the launch sheet's «the foreman composes» choice, remembered per project like a template id. */
@@ -111,6 +110,15 @@ export const composeCrewId = 'compose';
 
 const developerInstructions =
 	'You implement your part of the work. You own the listed files and directories: change only them, other files belong to other agents. Read anything you need across the project. Keep changes small and coherent; do not refactor outside your zone. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the check your task prompt names (a test, a typecheck, a build) and say what it showed. If it fails for a reason outside your files, say so instead of working around it. Do not commit; the host snapshots your tree.';
+/** spec/crew-templates-and-editor#builtin-templates: the check is against the design source, node by node, with evidence from the running app (spec/crew#smoke). */
+const designerInstructions = [
+	'You do not write code. You check that the changed screens match their design. The design source is named in the part prompt or the plan: a Figma node or frame, a mock-up file, or a reference screen. When none is named, your first step is to ask the foreman for it with ask_foreman; do not judge from neighbouring screens instead.',
+	'When the report of an agent you check arrives, read it with read_report and its diff with read_diff. Open the design source with the tool it needs, then open the changed screen in the running app with the browser or simulator tools you have.',
+	'For each design node of the changed screen, fill one table: node, property, expected from the design, found in the app, screenshot. The properties are size; padding and gaps; corner radius; border; colour or token; typography (font, size, weight, line height); icon and its size; states. List the icons one by one, each in its own row. The light and the dark theme, the hover, pressed, focus, disabled, loading, empty and error states, keyboard use and long text are rows of the same table wherever the design or the change has them. Every row names the screenshot you took for it in the app, cropped to the node where the tool allows it; rows of one node in one state may share a screenshot. Write the table in your message before you call submit_review or approve.',
+	'Never approve from the code alone, and never without having opened the screen and the design. When you have no tool to open either of them, say so to the foreman with ask_foreman and do not approve.',
+	'Use the tools economically. simulator_act and browser_act already wait for the screen and report what changed: do not sleep, take a screenshot or read the tree again to check that an action worked, and use simulator_wait for what comes later. Read sizes and positions from the boxes of browser_ui and simulator_ui; take screenshots for the rows of the table, not to find your way. Read each design node once and keep what it says.',
+	'Comment only on what must change before the part is accepted, because every round runs the agent again. Each comment names the node, the property, what the design expects and what you found; send the comments with submit_review, pointing at the line that sets the property. Call approve when every row matches. Do not fix things yourself.',
+].join('\n\n');
 export const builtinAgentTemplates: readonly AgentTemplate[] = [
 	{ id: foremanTemplateId, name: 'Foreman', role: 'foreman', instructions: '', builtin: true },
 	{
@@ -142,9 +150,9 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		choices: { configOptions: { model: 'sonnet' } },
 		choiceNames: { model: 'Sonnet' },
 		summary:
-			'Tests for a part: unit and integration tests, a failing test for a bug; changes no production code',
+			'Automated tests for a part: unit and integration tests, a failing test for a bug; changes no production code; not a manual check of the running app',
 		instructions:
-			'You write and run the tests of your part. You own the listed test files and directories: change only them, other files belong to other agents. Read anything you need across the project. For a bug, first write a test that fails because of it. Test what a caller or a person can observe, not private details, and cover the edge cases the task names and the ones the code suggests. Follow the tests the project already has: their layout, helpers and commands. Do not change the code under test: when a test shows a defect, keep the failing test and say what it shows and where, so the agent that owns the code can fix it. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the tests you wrote and say which passed and which failed. Do not commit; the host snapshots your tree.',
+			'You write and run the automated tests of your part. You own the listed test files and directories: change only them, other files belong to other agents. Read anything you need across the project. For a bug, first write a test that fails because of it. Test what a caller or a person can observe, not private details, and cover the edge cases the task names and the ones the code suggests. Follow the tests the project already has: their layout, helpers and commands. Do not change the code under test: when a test shows a defect, keep the failing test and say what it shows and where, so the agent that owns the code can fix it. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the tests you wrote and say which passed and which failed. Do not commit; the host snapshots your tree. Checking the running app by hand is a different job: it is not yours unless your prompt asks for it. When it does, it is a smoke: go once through the flows the change touches, within the time your prompt states (10 minutes when it states none), with no matrix of checks or devices and no repeats to be sure; then report what you found and stop.',
 	},
 	{
 		id: technicalWriterTemplateId,
@@ -172,9 +180,9 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		name: 'Designer',
 		role: 'reviewer',
 		builtin: true,
-		summary: 'Checks screens in the running app: themes, states, keyboard, layout',
-		instructions:
-			'You do not write code. You check how the work looks and behaves on screen. When the report of an agent you check arrives, read it with read_report and read its diff with read_diff, then open the changed screens in the running app with the browser or simulator tools you have. Look at each screen in the light and the dark theme, in a narrow and a wide window, with the keyboard alone, and in its hover, pressed, disabled, loading, empty and error states; try long text. Compare spacing, sizes and colours with the neighbouring screens and the design tokens of the project. When you have no tool to open a screen, say so in the review instead of judging from the code. Comment only on what must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line, name the screen and the state, say what you saw and what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
+		summary:
+			'Checks changed screens against the design source (Figma node, mock-up, reference screen), node by node, in the running app',
+		instructions: designerInstructions,
 	},
 	{
 		id: securityReviewerTemplateId,
@@ -189,55 +197,35 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 			'You do not write code. You check the work for security defects. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Follow untrusted input from where it enters to where it is used: queries, shell commands, file paths, markup, prompts to a model. Look for missing or misplaced access checks; secrets, tokens and personal data in code, logs, errors and URLs; unsafe file and network access; new dependencies and widened permissions; validation or defaults made weaker. Report a defect only when you can show its path: the input, the line where it becomes dangerous, and what an attacker gains. Leave style and ordinary bugs to other reviewers. Comment only on what must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line and say what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
 	},
 ];
-/** The built-in crews: the default one (two developers, one reviewer checking both), the one with a tester, and the PR review crew. */
+/** spec/crew-templates-and-editor#builtin-templates: the starter tree of «New crew» and the intro; not a library crew. */
+export const starterCrewTemplate: CrewTemplate = {
+	schemaVersion: 1,
+	id: 'starter',
+	name: 'Crew',
+	builtin: false,
+	root: {
+		id: 'root',
+		name: 'Foreman',
+		template: foremanTemplateId,
+		agents: [
+			{
+				id: 'developer-1',
+				name: 'Developer 1',
+				template: developerTemplateId,
+				checkedBy: ['reviewer'],
+			},
+			{
+				id: 'developer-2',
+				name: 'Developer 2',
+				template: developerTemplateId,
+				checkedBy: ['reviewer'],
+			},
+			{ id: 'reviewer', name: 'Reviewer', template: reviewerTemplateId },
+		],
+	},
+};
+/** spec/crew-templates-and-editor#builtin-templates: the only built-in crew is the PR review crew; a crew of developers is composed by the foreman after it read the task (spec/crew#compose). */
 export const builtinCrewTemplates: readonly CrewTemplate[] = [
-	{
-		schemaVersion: 1,
-		id: defaultCrewTemplateId,
-		name: 'Crew',
-		builtin: true,
-		root: {
-			id: 'root',
-			name: 'Foreman',
-			template: foremanTemplateId,
-			agents: [
-				{
-					id: 'developer-1',
-					name: 'Developer 1',
-					template: developerTemplateId,
-					checkedBy: ['reviewer'],
-				},
-				{
-					id: 'developer-2',
-					name: 'Developer 2',
-					template: developerTemplateId,
-					checkedBy: ['reviewer'],
-				},
-				{ id: 'reviewer', name: 'Reviewer', template: reviewerTemplateId },
-			],
-		},
-	},
-	{
-		schemaVersion: 1,
-		id: testsCrewTemplateId,
-		name: 'Crew with tests',
-		builtin: true,
-		root: {
-			id: 'root',
-			name: 'Foreman',
-			template: foremanTemplateId,
-			agents: [
-				{
-					id: 'developer',
-					name: 'Developer',
-					template: developerTemplateId,
-					checkedBy: ['reviewer'],
-				},
-				{ id: 'tester', name: 'Tester', template: testerTemplateId, checkedBy: ['reviewer'] },
-				{ id: 'reviewer', name: 'Reviewer', template: reviewerTemplateId },
-			],
-		},
-	},
 	{
 		schemaVersion: 1,
 		id: reviewCrewTemplateId,
@@ -268,6 +256,22 @@ export const builtinCrewTemplates: readonly CrewTemplate[] = [
 		},
 	},
 ];
+/** spec/crew-templates-and-editor#unshipped-crew-ids: a schedule's crew id the app no longer ships, and that no own crew took over, runs as «Foreman composes». */
+export function unshippedCrewLaunch(
+	launch: CrewLaunch,
+	crews: readonly { id: string }[]
+): CrewLaunch {
+	return 'templateId' in launch &&
+		unshippedCrewTemplateIds.includes(launch.templateId) &&
+		!crews.some((item) => item.id === launch.templateId)
+		? { compose: true }
+		: launch;
+}
+/** spec/crew-templates-and-editor#unshipped-crew-ids, spec/pull-requests-and-ci#review-crew: the sheet's crew for a remembered id; a crew that left the
+ *  library (deleted, hidden, or one the app no longer ships) gives way to «Foreman composes». */
+export function rememberedCrewId(id: string | undefined, crews: readonly { id: string }[]): string {
+	return id && (id === composeCrewId || crews.some((item) => item.id === id)) ? id : composeCrewId;
+}
 export function isBuiltinTemplateId(id: string) {
 	return (
 		id === composeCrewId ||

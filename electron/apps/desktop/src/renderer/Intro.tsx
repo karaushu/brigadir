@@ -29,8 +29,7 @@ import {
 	systemMonoFamily,
 	t,
 	builtinAgentTemplates,
-	builtinCrewTemplates,
-	defaultCrewTemplateId,
+	starterCrewTemplate,
 	resolveCrew,
 	templateLookup,
 	type AgentCheck,
@@ -1955,26 +1954,23 @@ type CrewProviders = {
 const sampleProject = 'intro-sample',
 	sampleAt = '2026-01-01T00:00:00.000Z';
 const noop = () => {};
-/** The built-in crew (spec/crew-templates-and-editor#builtin-templates) as a task snapshots it, with the providers the Crew step picked (spec/settings-modules-and-onboarding#intro-crew). */
+/** The starter tree (spec/crew-templates-and-editor#builtin-templates) as a task snapshots it, with the providers the Crew step picked (spec/settings-modules-and-onboarding#intro-crew). */
 function sampleSpec(providers: CrewProviders): CrewSpec {
 	const role: Record<string, AgentProviderId> = {
 		[foremanTemplateId]: providers.foreman,
 		[developerTemplateId]: providers.developer,
 		[reviewerTemplateId]: providers.reviewer,
 	};
-	return resolveCrew(
-		builtinCrewTemplates.find((item) => item.id === defaultCrewTemplateId)!,
-		{
-			lookup: templateLookup(
-				builtinAgentTemplates.map((item) => ({
-					...item,
-					provider: role[item.id] ?? providers.foreman,
-				}))
-			),
-			defaultProvider: providers.foreman,
-			now: sampleAt,
-		}
-	);
+	return resolveCrew(starterCrewTemplate, {
+		lookup: templateLookup(
+			builtinAgentTemplates.map((item) => ({
+				...item,
+				provider: role[item.id] ?? providers.foreman,
+			}))
+		),
+		defaultProvider: providers.foreman,
+		now: sampleAt,
+	});
 }
 /** The foreman's task with its plan waiting for the person, and its workers waiting for the plan (spec/settings-modules-and-onboarding#intro-crew). */
 function sampleCrew(providers: CrewProviders, tr: Tr) {

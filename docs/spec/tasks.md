@@ -145,7 +145,7 @@ Storage: for a task that does not exist yet, files go to `drafts/<projectId>/<dr
 <a id="fast-start"></a>
 ## Fast start
 
-`⌘N` (File ▸ New task) or `+` on a project opens the sheet with focus in the prompt; typing and `↩` starts with the project's defaults and type `Agent`. Nothing on the sheet lengthens this path: every rail value is pre-filled. A Brigadir task on the fast path takes the default crew. Prompt templates are not a feature: `/command` text is passed to the agent, which runs its own custom commands.
+`⌘N` (File ▸ New task) or `+` on a project opens the sheet with focus in the prompt; typing and `↩` starts with the project's defaults and type `Agent`. Nothing on the sheet lengthens this path: every rail value is pre-filled. A Brigadir task on the fast path takes the project's remembered crew, else **Foreman composes**. Prompt templates are not a feature: `/command` text is passed to the agent, which runs its own custom commands.
 
 <a id="branch-names"></a>
 ## Branch names

@@ -13,8 +13,8 @@ import type {
 import {
 	resolveCrew,
 	templateLookup,
-	defaultCrewTemplateId,
 	composeCrewId,
+	rememberedCrewId,
 	foremanTemplateId,
 } from '@brigadir/core';
 import { CrewRoster, crewLabel, crewTemplateTail, crewModel } from './Crew';
@@ -544,14 +544,11 @@ export function NewTask({
 				setProposalSeed({ provider: proposed.provider, launchOptions: proposed.options });
 			}
 			setLibrary(templates);
-			// spec/pull-requests-and-ci#review-crew: a remembered crew that left the library (a deleted or hidden built-in) starts without a crew.
-			const known = (id: string | undefined) =>
-				id === composeCrewId || templates.crews.some((item) => item.id === id);
+			// spec/crew-templates-and-editor#unshipped-crew-ids: a remembered crew that left the library starts with «Foreman composes».
 			const kept = editing?.crew?.templateId ?? duplicateSource?.crew?.templateId;
-			if (!editing?.crew && !duplicateSource?.crew) {
-				if (defaults.crewTemplateId && known(defaults.crewTemplateId))
-					setCrewTemplateId(defaults.crewTemplateId);
-			} else if (kept && !known(kept)) setCrewTemplateId(composeCrewId);
+			if (!editing?.crew && !duplicateSource?.crew)
+				setCrewTemplateId(rememberedCrewId(defaults.crewTemplateId, templates.crews));
+			else if (kept) setCrewTemplateId(rememberedCrewId(kept, templates.crews));
 			setLaunch(
 				proposed?.launch ??
 					draft?.launch ??
@@ -1587,7 +1584,8 @@ export function NewTask({
 					oneOff
 					close={() => setEditorOpen(false)}
 					done={(template) => {
-						if (composing && template.root.agents?.length) setCrewTemplateId(defaultCrewTemplateId);
+						// No library id: the one-off crew is what launches.
+						if (composing && template.root.agents?.length) setCrewTemplateId('');
 						setOneOff(template);
 						setEditorOpen(false);
 					}}

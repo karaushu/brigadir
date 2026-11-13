@@ -5,6 +5,7 @@ import { test, expect } from 'vitest';
 import {
 	builtinAgentTemplates,
 	builtinCrewTemplates,
+	starterCrewTemplate,
 	templateLookup,
 	type AgentTemplate,
 	type CrewTemplate,
@@ -59,12 +60,12 @@ test('stores own templates next to built-ins, refuses built-in writes and report
 			'security-reviewer',
 			'ux',
 		]);
-		expect(library.crews.map((item) => item.id)).toEqual(['default', 'tests', 'review', 'front']);
+		expect(library.crews.map((item) => item.id)).toEqual(['review', 'front']);
 		expect(library.issues).toEqual([]);
 		await expect(store.saveAgent({ ...builtinAgentTemplates[0]!, builtin: false })).rejects.toThrow(
 			'read-only'
 		);
-		await expect(store.saveCrew({ ...crew, id: 'default' })).rejects.toThrow('read-only');
+		await expect(store.saveCrew({ ...crew, id: 'review' })).rejects.toThrow('read-only');
 		await expect(
 			store.saveCrew({
 				...crew,
@@ -96,11 +97,11 @@ test('stores own templates next to built-ins, refuses built-in writes and report
 				{ path: 'templates/crews/newer.json', code: 'unsupported_schema' },
 			])
 		);
-		expect(library.crews.map((item) => item.id)).toEqual(['default', 'tests', 'review', 'front']);
+		expect(library.crews.map((item) => item.id)).toEqual(['review', 'front']);
 		// Deleting the agent template makes the crew that references it an issue; the file itself is untouched.
 		await store.deleteAgent('ux');
 		library = await store.read();
-		expect(library.crews.map((item) => item.id)).toEqual(['default', 'tests', 'review']);
+		expect(library.crews.map((item) => item.id)).toEqual(['review']);
 		expect(library.issues).toEqual(
 			expect.arrayContaining([{ path: 'templates/crews/front.json', code: 'invalid_document' }])
 		);
@@ -191,16 +192,12 @@ test('a built-in crew is hidden on delete and comes back on restore; built-in ag
 			crews: ['review'],
 		});
 		let library = await store.read();
-		expect(library.crews.map((item) => item.id)).toEqual(['default', 'tests', 'front']);
+		expect(library.crews.map((item) => item.id)).toEqual(['front']);
 		expect(library.hiddenCrews).toEqual(['review']);
 		expect(library.issues).toEqual([]);
-		// Hiding twice keeps one entry; the other built-in joins it.
+		// Hiding twice keeps one entry.
 		await store.deleteCrew('review');
-		await store.deleteCrew('default');
-		library = await store.read();
-		expect(library.crews.map((item) => item.id)).toEqual(['tests', 'front']);
-		expect(library.hiddenCrews).toEqual(['default', 'review']);
-		expect(JSON.parse(await readFile(file, 'utf8')).crews).toEqual(['review', 'default']);
+		expect(JSON.parse(await readFile(file, 'utf8')).crews).toEqual(['review']);
 		// Built-in agents and the compose slot are not deletable.
 		for (const agent of builtinAgentTemplates)
 			await expect(store.deleteAgent(agent.id)).rejects.toThrow('read-only');
@@ -219,14 +216,14 @@ test('a built-in crew is hidden on delete and comes back on restore; built-in ag
 		await store.restoreCrews();
 		await expect(readFile(file, 'utf8')).rejects.toThrow();
 		library = await store.read();
-		expect(library.crews.map((item) => item.id)).toEqual(['default', 'tests', 'review', 'front']);
+		expect(library.crews.map((item) => item.id)).toEqual(['review', 'front']);
 		expect(library.hiddenCrews).toEqual([]);
 		// Restoring with nothing hidden is a no-op.
 		await store.restoreCrews();
-		// A broken file is an issue and hides nothing; unknown ids in a valid file are dropped.
+		// A broken file is an issue and hides nothing; ids the app does not ship, with no edit waiting, are dropped.
 		await writeFile(file, '{"schemaVersion":1,"crews":"review"}');
 		library = await store.read();
-		expect(library.crews.map((item) => item.id)).toEqual(['default', 'tests', 'review', 'front']);
+		expect(library.crews.map((item) => item.id)).toEqual(['review', 'front']);
 		expect(library.hiddenCrews).toEqual([]);
 		expect(library.issues).toEqual([
 			{ path: 'templates/builtin/hidden-crews.json', code: 'invalid_document' },
@@ -235,15 +232,15 @@ test('a built-in crew is hidden on delete and comes back on restore; built-in ag
 		expect((await store.read()).issues).toEqual([
 			{ path: 'templates/builtin/hidden-crews.json', code: 'unreadable' },
 		]);
-		await writeFile(file, '{"schemaVersion":1,"crews":["gone","review"]}');
+		await writeFile(file, '{"schemaVersion":1,"crews":["gone","default","tests","review"]}');
 		library = await store.read();
 		expect(library.hiddenCrews).toEqual(['review']);
 		expect(library.issues).toEqual([]);
 		// Deleting over a broken file starts a fresh one.
 		await writeFile(file, '{"schemaVersion":2,"crews":[]}');
-		await store.deleteCrew('default');
+		await store.deleteCrew('review');
 		library = await store.read();
-		expect(library.hiddenCrews).toEqual(['default']);
+		expect(library.hiddenCrews).toEqual(['review']);
 		expect(library.issues).toEqual([]);
 	} finally {
 		await rm(root, { recursive: true, force: true });
@@ -251,22 +248,16 @@ test('a built-in crew is hidden on delete and comes back on restore; built-in ag
 });
 test("a built-in crew keeps a person's edit beside the app's id and name, and the app's own tree removes it (spec/crew-templates-and-editor#builtin-templates)", async () => {
 	const root = await mkdtemp(join(tmpdir(), 'templates-crew-edit-'));
-	const file = join(root, 'templates', 'builtin', 'default.json');
-	const base = builtinCrewTemplates.find((item) => item.id === 'default')!;
+	const file = join(root, 'templates', 'builtin', 'review.json');
+	const base = builtinCrewTemplates.find((item) => item.id === 'review')!;
 	const edited: CrewTemplate = {
 		...base,
 		name: 'Renamed',
 		root: {
 			...base.root,
 			agents: [
-				{
-					id: 'developer-1',
-					name: 'API',
-					template: 'senior-developer',
-					zone: ['api/**'],
-					checkedBy: ['reviewer'],
-				},
-				{ id: 'reviewer', name: 'Reviewer', template: 'reviewer' },
+				{ id: 'opus', name: 'Opus', template: 'security-reviewer' },
+				{ id: 'design', name: 'Design', template: 'designer' },
 			],
 		},
 	};
@@ -274,16 +265,14 @@ test("a built-in crew keeps a person's edit beside the app's id and name, and th
 		const store = new TemplateStore(root);
 		const saved = await store.saveCrew(edited);
 		// The id, the name and `builtin` stay the app's; the tree is the person's.
-		expect(saved).toEqual({ ...edited, name: 'Crew' });
+		expect(saved).toEqual({ ...edited, name: 'Review crew' });
 		expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ schemaVersion: 1, template: saved });
 		let library = await store.read();
-		expect(library.crews.map((item) => item.id)).toEqual(['default', 'tests', 'review']);
-		expect(library.crews[0]).toEqual(saved);
-		expect(library.crews.slice(1)).toEqual(builtinCrewTemplates.slice(1));
+		expect(library.crews).toEqual([saved]);
 		expect(library.issues).toEqual([]);
 		// Hiding keeps the edit; restoring brings the edited crew back.
-		await store.deleteCrew('default');
-		expect((await store.read()).crews.map((item) => item.id)).toEqual(['tests', 'review']);
+		await store.deleteCrew('review');
+		expect((await store.read()).crews).toEqual([]);
 		await store.restoreCrews();
 		expect((await store.read()).crews[0]).toEqual(saved);
 		// A tree that fails against the library is refused and changes nothing.
@@ -300,17 +289,99 @@ test("a built-in crew keeps a person's edit beside the app's id and name, and th
 		// A built-in id without `builtin` is still no own template.
 		await expect(store.saveCrew({ ...edited, builtin: false })).rejects.toThrow('read-only');
 		// A broken file is an issue and the app's crew stands in.
-		await writeFile(file, '{"schemaVersion":1,"template":{"id":"review"}}');
+		await writeFile(file, '{"schemaVersion":1,"template":{"id":"default"}}');
 		library = await store.read();
 		expect(library.crews[0]).toEqual(base);
 		expect(library.issues).toEqual([
-			{ path: 'templates/builtin/default.json', code: 'invalid_document' },
+			{ path: 'templates/builtin/review.json', code: 'invalid_document' },
 		]);
 		// The app's own tree, in any key order, removes the file.
 		await store.saveCrew(edited);
 		expect(await store.saveCrew(JSON.parse(JSON.stringify(base)) as CrewTemplate)).toEqual(base);
 		await expect(readFile(file, 'utf8')).rejects.toThrow();
 		expect(await store.read()).toMatchObject({ crews: [...builtinCrewTemplates], issues: [] });
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+test("a person's edit of a crew the app no longer ships becomes their own crew under the same id (spec/crew-templates-and-editor#unshipped-crew-ids)", async () => {
+	const root = await mkdtemp(join(tmpdir(), 'templates-unshipped-'));
+	const builtin = join(root, 'templates', 'builtin'),
+		hiddenFile = join(builtin, 'hidden-crews.json');
+	// What the app wrote for an edit of the crew it shipped as `default`: the app's id and name, `builtin: true`.
+	const edit: CrewTemplate = {
+		...starterCrewTemplate,
+		id: 'default',
+		name: 'Crew',
+		builtin: true,
+		root: {
+			...starterCrewTemplate.root,
+			agents: [
+				{ id: 'api', name: 'API', template: 'senior-developer', zone: ['api/**'] },
+				{ id: 'ui', name: 'UI', template: 'developer', checkedBy: ['design'] },
+				{ id: 'design', name: 'Design', template: 'designer' },
+			],
+		},
+	};
+	const write = async (id: string, template: unknown) => {
+		await mkdir(builtin, { recursive: true });
+		await writeFile(join(builtin, `${id}.json`), JSON.stringify({ schemaVersion: 1, template }));
+	};
+	try {
+		const store = new TemplateStore(root);
+		await write('default', edit);
+		// A hidden one waits, untouched, and keeps «Restore default crews» offered.
+		await write('tests', { ...edit, id: 'tests', name: 'Crew with tests' });
+		await writeFile(hiddenFile, JSON.stringify({ schemaVersion: 1, crews: ['tests'] }));
+		let library = await store.read();
+		const own = { ...edit, builtin: false };
+		expect(library.crews).toEqual([...builtinCrewTemplates, own]);
+		expect(library.hiddenCrews).toEqual(['tests']);
+		expect(library.issues).toEqual([]);
+		expect(
+			JSON.parse(await readFile(join(root, 'templates', 'crews', 'default.json'), 'utf8'))
+		).toEqual({ schemaVersion: 1, template: own });
+		await expect(readFile(join(builtin, 'default.json'), 'utf8')).rejects.toThrow();
+		expect(JSON.parse(await readFile(join(builtin, 'tests.json'), 'utf8')).template.id).toBe(
+			'tests'
+		);
+		// The moved crew is an own crew: saved in place, and deleted for real.
+		const renamed = await store.saveCrew({ ...own, name: 'My crew' });
+		expect((await store.read()).crews.at(-1)).toEqual(renamed);
+		// Restoring brings the hidden edit back as an own crew too.
+		await store.restoreCrews();
+		library = await store.read();
+		expect(library.crews.map((item) => [item.id, item.name, item.builtin])).toEqual([
+			['review', 'Review crew', true],
+			['tests', 'Crew with tests', false],
+			['default', 'My crew', false],
+		]);
+		expect(library.hiddenCrews).toEqual([]);
+		await store.deleteCrew('default');
+		expect((await store.read()).crews.map((item) => item.id)).toEqual(['review', 'tests']);
+		// An invalid file stays where it is and is listed; an own crew already under the id is never overwritten.
+		await write('default', { id: 'default' });
+		library = await store.read();
+		expect(library.issues).toEqual([
+			{ path: 'templates/builtin/default.json', code: 'invalid_document' },
+		]);
+		await write('tests', { ...edit, id: 'tests', name: 'Other' });
+		library = await store.read();
+		expect(library.crews.find((item) => item.id === 'tests')!.name).toBe('Crew with tests');
+		expect(JSON.parse(await readFile(join(builtin, 'tests.json'), 'utf8')).template.name).toBe(
+			'Other'
+		);
+		// An edit that fails against the agent library moves anyway and is listed like any own crew.
+		await rm(join(builtin, 'default.json'));
+		await write('default', {
+			...edit,
+			root: { ...edit.root, agents: [{ id: 'x', name: 'X', template: 'gone' }] },
+		});
+		library = await store.read();
+		expect(library.crews.some((item) => item.id === 'default')).toBe(false);
+		expect(library.issues).toEqual([
+			{ path: 'templates/crews/default.json', code: 'invalid_document' },
+		]);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

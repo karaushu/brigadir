@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm, readdir, readFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import { ownCrew, seedOwnCrew } from './fixtures/own-crew';
 const desktop = resolve('apps/desktop'),
 	executablePath = createRequire(join(desktop, 'package.json'))('electron') as string;
 /** The crew editor from «Set up…» (CrewTree, CrewAddAgent) and the Templates library tab (SettingsTemplates). */
@@ -17,6 +18,8 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		join(project, 'project.json'),
 		JSON.stringify({ schemaVersion: 1, project: { id: 'project', name: 'repo', path: repo } })
 	);
+	// The app ships no crew of developers: the person's own crew is the one to set up.
+	await seedOwnCrew(join(root, 'data'));
 	const env = Object.fromEntries(
 		Object.entries(process.env).filter(
 			(e): e is [string, string] => typeof e[1] === 'string' && e[0] !== 'ELECTRON_RUN_AS_NODE'
@@ -135,12 +138,15 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		// Save as crew template, then Done: the sheet shows the one-off crew and the library has the new template.
 		await editor.getByRole('textbox', { name: 'Crew · Name' }).fill('Front + Design');
 		await editor.getByRole('button', { name: 'Save as crew template' }).click();
+		// The seeded crew and the new template.
 		await expect
 			.poll(
 				async () => (await readdir(join(root, 'data', 'templates', 'crews')).catch(() => [])).length
 			)
-			.toBe(1);
-		const [crewFile] = await readdir(join(root, 'data', 'templates', 'crews'));
+			.toBe(2);
+		const crewFile = (await readdir(join(root, 'data', 'templates', 'crews'))).find(
+			(file) => file !== `${ownCrew.id}.json`
+		);
 		const saved = JSON.parse(
 			await readFile(join(root, 'data', 'templates', 'crews', crewFile!), 'utf8')
 		);
@@ -170,7 +176,8 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		const agents = settings.getByRole('radiogroup', { name: 'Agents' }),
 			crews = settings.getByRole('listbox', { name: 'Crews' });
 		await expect(agents.getByRole('radio')).toHaveCount(8);
-		await expect(crews.getByRole('option')).toHaveCount(4);
+		// Review crew, the seeded own crew and the new template.
+		await expect(crews.getByRole('option')).toHaveCount(3);
 		await expect(crews.getByRole('option', { name: /Front \+ Design/ })).toContainText('4');
 		await agents
 			.locator('[data-option-card]')

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile, mkdir, symlink, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, mkdir, symlink, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from 'vitest';
@@ -11,6 +11,7 @@ import {
 	type CrewTemplate,
 } from '@brigadir/core';
 import { TemplateStore } from './templates';
+import { newJson } from './session';
 const designer: AgentTemplate = {
 	id: 'ux',
 	name: 'Designer',
@@ -382,6 +383,94 @@ test("a person's edit of a crew the app no longer ships becomes their own crew u
 		expect(library.issues).toEqual([
 			{ path: 'templates/crews/default.json', code: 'invalid_document' },
 		]);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+test('moves an edit once under concurrent reads and never overwrites the moved crew or a later edit of it (spec/crew-templates-and-editor#unshipped-crew-ids)', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'templates-unshipped-race-'));
+	const builtin = join(root, 'templates', 'builtin'),
+		source = join(builtin, 'default.json'),
+		target = join(root, 'templates', 'crews', 'default.json');
+	const edit: CrewTemplate = { ...starterCrewTemplate, id: 'default', name: 'Crew', builtin: true };
+	const document = JSON.stringify({ schemaVersion: 1, template: edit });
+	try {
+		await mkdir(builtin, { recursive: true });
+		await writeFile(source, document);
+		// Main opens a store per call: readers on separate instances race for the same move.
+		const libraries = await Promise.all(
+			Array.from({ length: 6 }, () => new TemplateStore(root).read())
+		);
+		for (const library of libraries) {
+			expect(library.issues).toEqual([]);
+			expect(library.crews.filter((item) => item.id === 'default')).toEqual([
+				{ ...edit, builtin: false },
+			]);
+		}
+		await expect(readFile(source, 'utf8')).rejects.toThrow();
+		// The person edits the moved crew; a reader that still holds the old document (here: the file back in place) cannot replace that edit.
+		const mine = await new TemplateStore(root).saveCrew({
+			...edit,
+			builtin: false,
+			name: 'Mine',
+		});
+		await writeFile(source, document);
+		await Promise.all([new TemplateStore(root).read(), new TemplateStore(root).read()]);
+		expect(JSON.parse(await readFile(target, 'utf8')).template).toEqual(mine);
+		// The document that found its place taken stays where it was.
+		expect(await readFile(source, 'utf8')).toBe(document);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+test('reports an unsafe edit file of a crew the app does not ship instead of failing the library (spec/crew-templates-and-editor#unshipped-crew-ids)', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'templates-unshipped-link-'));
+	const builtin = join(root, 'templates', 'builtin');
+	try {
+		await mkdir(builtin, { recursive: true });
+		const elsewhere = join(root, 'elsewhere.json');
+		await writeFile(
+			elsewhere,
+			JSON.stringify({
+				schemaVersion: 1,
+				template: { ...starterCrewTemplate, id: 'default', builtin: true },
+			})
+		);
+		await symlink(elsewhere, join(builtin, 'default.json'));
+		await symlink(elsewhere, join(builtin, 'tests.json'));
+		await writeFile(
+			join(builtin, 'hidden-crews.json'),
+			JSON.stringify({ schemaVersion: 1, crews: ['tests'] })
+		);
+		const library = await new TemplateStore(root).read();
+		expect(library.crews).toEqual([...builtinCrewTemplates]);
+		// A symlink holds no edit: the hidden id offers nothing to restore.
+		expect(library.hiddenCrews).toEqual([]);
+		expect(library.issues).toEqual([
+			{ path: 'templates/builtin/default.json', code: 'unsafe_path' },
+		]);
+		await expect(
+			readFile(join(root, 'templates', 'crews', 'default.json'), 'utf8')
+		).rejects.toThrow();
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+test('creates a document only where nothing is, in one step, so a slower writer never replaces it', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'templates-new-json-'));
+	const path = join(root, 'crew.json');
+	try {
+		const first = await Promise.all(
+			Array.from({ length: 8 }, (_, index) => newJson(path, { schemaVersion: 1, index }))
+		);
+		expect(first.filter(Boolean)).toHaveLength(1);
+		const winner = first.indexOf(true);
+		expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ schemaVersion: 1, index: winner });
+		await writeFile(path, 'edited');
+		expect(await newJson(path, { schemaVersion: 1 })).toBe(false);
+		expect(await readFile(path, 'utf8')).toBe('edited');
+		// No temp file is left behind either way.
+		expect(await readdir(root)).toEqual(['crew.json']);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

@@ -243,11 +243,13 @@ export function UsageBreakdown({
 							)}
 						</header>
 						{budget !== undefined && (
-							<ProgressBar
-								value={item.tokens}
-								total={budget}
-								tone={tone === 'reached' ? 'red' : tone === 'near' ? 'amber' : 'accent'}
-							/>
+							<div className={s.bar}>
+								<ProgressBar
+									value={item.tokens}
+									total={budget}
+									tone={tone === 'reached' ? 'red' : tone === 'near' ? 'amber' : 'accent'}
+								/>
+							</div>
 						)}
 						{item.members.length > 0 && (
 							<ul>
@@ -325,6 +327,7 @@ export function TaskUsageCounterView({
 				width={340}
 				label={t(locale, 'Task usage')}
 				title={t(locale, 'Task usage')}
+				overflow="visible"
 				headerExtra={
 					<span className={s.total}>
 						{view.sum.estimated ? '≈' : ''}

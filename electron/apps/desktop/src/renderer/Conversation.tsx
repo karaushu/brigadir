@@ -2175,7 +2175,8 @@ export function Conversation({
 							<TaskUsageCounterView
 								view={tokens}
 								locale={locale}
-								disabled={!hostConnected || sending}
+								// spec/agents-and-providers#task-budget: without a host the budget is changed in task.json by main.
+								disabled={sending}
 								send={(c) => {
 									void send(c);
 								}}

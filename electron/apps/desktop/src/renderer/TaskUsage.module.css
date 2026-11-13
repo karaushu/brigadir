@@ -54,6 +54,9 @@
 	gap: 6px;
 	padding: 8px 0;
 }
+.bar {
+	display: flex;
+}
 .provider + .provider {
 	border-top: 1px solid var(--hair);
 }

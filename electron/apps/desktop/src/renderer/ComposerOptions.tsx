@@ -86,6 +86,8 @@ export type CapsuleModels = {
 	/** spec/appearance#evolution-redesign: a row of Customize per action — `Same as Default agent` on top of the list returns the action to
 	 *  inheriting; while it is chosen the capsule reads it in --fg2, without a glyph or effort. */ inherit?:
 		{ label: string; detail: string; active: boolean; onChoose(): void } | undefined;
+	/** spec/reviews#who: `Off` under the inherited entry — the action does not run by itself (`Plan review`). Reads like the inherited entry. */ off?:
+		{ label: string; active: boolean; onChoose(): void } | undefined;
 };
 
 /** spec/composer#island capsule, spec/composer#capsule-squeeze: segments in the order model · effort · mode · fast · the rest, labels squeezed from the end when the row
@@ -188,7 +190,7 @@ export function ComposerOptions({
 				: entry.label
 		)
 		.join(' · ');
-	const inherit = Boolean(models?.inherit?.active);
+	const inherit = Boolean(models?.inherit?.active || models?.off?.active);
 	const compact = models ? Boolean(models.narrow) && !inherit : compactChosen || level >= COMPACT;
 	// spec/composer#agent-capsule: a mode that changes while the capsule is on screen flashes the accent once (⇧Tab, the menu).
 	const modeEntry = entries.find((entry) => entry.kind === 'mode'),
@@ -606,6 +608,22 @@ export function ModelGroups({
 						<span className={styles.choice}>{inherit.label}</span>
 						{inherit.detail && <span className={styles.marker}>{inherit.detail}</span>}
 					</button>
+					{models.off && (
+						<button
+							type="button"
+							role="radio"
+							aria-checked={models.off.active}
+							tabIndex={0}
+							data-off
+							onClick={() => {
+								if (!models.off!.active) models.off!.onChoose();
+							}}>
+							<span className={styles.check} aria-hidden="true">
+								{models.off.active && <Glyph name="check-pass" size={11} />}
+							</span>
+							<span className={styles.choice}>{models.off.label}</span>
+						</button>
+					)}
 				</div>
 			)}
 			{models.groups.map((group) => (

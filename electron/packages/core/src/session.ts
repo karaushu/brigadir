@@ -130,6 +130,8 @@ export type SessionEvent =
 			point: ReviewPoint;
 			findings: number;
 			reviewers: string[];
+			/** spec/reviews#plan-verdict: a plan review's gaps in the ticket, for the person. */
+			gaps?: number;
 	  }
 	| {
 			kind: 'task-review.answered';
@@ -159,7 +161,12 @@ export type SessionEvent =
 			point: ReviewPoint;
 			state: 'passed' | 'accepted' | 'stopped' | 'failed' | 'outdated';
 			failure?: string;
+			/** spec/reviews#plan-loop: the plan's approval ended the review with this many findings open. */
+			approval?: boolean;
+			open?: number;
 	  }
+	/** spec/reviews#save-source: the author saved a ticket, spec or contract next to the plan. */
+	| { kind: 'source.saved'; id: string; title: string; url?: string; chars: number }
 	| { kind: 'crew.accepted'; taskId: string; nodeId: string; name: string; conflicts: string[] }
 	| { kind: 'crew.worker.stopped'; taskId: string; nodeId: string; name: string; reason: string }
 	/** `returnMode`: `Погодити` on a plan asked the host to bring this mode back once the agent leaves the plan (spec/chat-turns-plans-and-questions#plan-approval). */
@@ -184,7 +191,23 @@ export type SessionEvent =
 	| { kind: 'snapshot.failed'; message: string }
 	/** spec/browser-and-simulator#sim-chat-row: the task's lease moved to `device` (its name), or the person started it past low memory. */
 	| { kind: 'simulator.device'; device: string; metroPort: number | null; lowMemory: boolean }
-	| { kind: 'host.stopped'; reason: string };
+	| { kind: 'host.stopped'; reason: string }
+	/** spec/agents-and-providers#budget-reached: a provider's count reached the task's budget; the task pauses and asks. `tokens` and `estimated` — the count then. */
+	| {
+			kind: 'budget.reached';
+			id: string;
+			provider: import('./agent').AgentProvider;
+			tokens: number;
+			budget: number;
+			estimated: boolean;
+	  }
+	/** spec/agents-and-providers#budget-reached: the person's answer; `budget` — the new one of a `raise`. */
+	| {
+			kind: 'budget.decided';
+			id: string;
+			decision: import('./task-tokens').BudgetDecision;
+			budget?: number;
+	  };
 export type EventRecord = { schemaVersion: 1; seq: number; at: string; event: SessionEvent };
 export type SessionCommand =
 	| AgentCommand
@@ -232,6 +255,15 @@ export type SessionCommand =
 	| { kind: 'retryTurn'; reason?: 'auth' }
 	| { kind: 'resumePromptQueue' }
 	| { kind: 'pausePromptQueue' }
+	/** spec/agents-and-providers#task-budget: the budget of this task for one provider, from `Task usage`; null — no limit. */
+	| { kind: 'setTokenBudget'; provider: import('./agent').AgentProvider; budget: number | null }
+	/** spec/agents-and-providers#budget-reached: the answer to the budget question; `budget` — the value of `Raise to …`. */
+	| {
+			kind: 'decideBudget';
+			id: string;
+			decision: import('./task-tokens').BudgetDecision;
+			budget?: number;
+	  }
 	| { kind: 'checkpoint' }
 	/** spec/composer-steering-queue-and-ghost#quick-question: the checkpoint before (`quick-before`) and after (`quick-after`) a quick question; `after` journals its files. */
 	| { kind: 'quickAsk'; phase: 'before' }
@@ -513,6 +545,17 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 			);
 		case 'decideReview':
 			return v.decision === 'fix' || v.decision === 'accept';
+		case 'setTokenBudget':
+			return (
+				(v.provider === 'claude' || v.provider === 'codex') &&
+				(v.budget === null || isTokenBudgetValue(v.budget))
+			);
+		case 'decideBudget':
+			return (
+				isId(v.id) &&
+				budgetDecisions.includes(v.decision as BudgetDecision) &&
+				(v.decision === 'raise' ? isTokenBudgetValue(v.budget) : v.budget === undefined)
+			);
 		case 'stopReview':
 		case 'dismissReviewProposal':
 			return true;
@@ -530,14 +573,19 @@ export type PendingInputs = {
 	crewPlan: CrewPlan | null;
 	crewQuestions: CrewQuestion[];
 	proposals: TaskProposal[];
+	/** spec/agents-and-providers#budget-reached: the budget question that waits; a host stop does not answer it. */
+	budget: BudgetQuestion | null;
 };
 export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 	const permissions = new Map<string, PermissionRequest>();
 	const questions = new Map<string, UserQuestion>();
 	const crewQuestions = new Map<string, CrewQuestion>();
 	const proposals = new Map<string, TaskProposal>();
-	let crewPlan: CrewPlan | null = null;
-	for (const { event: e } of records) {
+	let crewPlan: CrewPlan | null = null,
+		budget = emptyBudgetJournal();
+	for (const record of records) {
+		const e = record.event;
+		budget = reduceBudgetJournal(budget, record);
 		if (e.kind === 'crew.plan.requested') crewPlan = e.plan;
 		if (e.kind === 'crew.plan.resolved' && crewPlan?.id === e.id) crewPlan = null;
 		if (e.kind === 'crew.question.requested') crewQuestions.set(e.question.id, e.question);
@@ -565,8 +613,17 @@ export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 		crewPlan,
 		crewQuestions: [...crewQuestions.values()],
 		proposals: [...proposals.values()],
+		budget: budget.pending,
 	};
 }
+import {
+	budgetDecisions,
+	emptyBudgetJournal,
+	isTokenBudgetValue,
+	reduceBudgetJournal,
+	type BudgetDecision,
+	type BudgetQuestion,
+} from './task-tokens';
 import { isScopeUpdate, type ScopeUpdate } from './scope-controls';
 import { isScopeChoice, type ScopeChoice } from './launch';
 import { isTaskProposalResult, type TaskProposal, type TaskProposalResult } from './task-proposal';
@@ -589,6 +646,7 @@ export function waitsForPerson(inputs: PendingInputs) {
 		inputs.questions.length > 0 ||
 		inputs.permissions.length > 0 ||
 		inputs.proposals.length > 0 ||
-		inputs.crewPlan !== null
+		inputs.crewPlan !== null ||
+		inputs.budget !== null
 	);
 }

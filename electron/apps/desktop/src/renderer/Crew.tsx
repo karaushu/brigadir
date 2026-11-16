@@ -4,6 +4,7 @@ import {
 	formatTime,
 	agentOptionKindOf,
 	composedSpec,
+	withoutTaskReviewers,
 	resolveCrew,
 	specAsTemplate,
 	templateLookup,
@@ -40,6 +41,7 @@ import { toastError } from './ui/Toast';
 import { CrewEditor } from './CrewEditor';
 import { markdown, MarkdownBlock, MarkdownStill } from './MarkdownBlock';
 import { primaryKey } from './ui/primary-key';
+import { PlanReviewLine } from './TaskReview';
 /** Built-in names are stored in English and shown in the interface language (spec/crew-templates-and-editor#builtin-templates); the phone shows them too. */
 export { crewLabel };
 export function crewModel(
@@ -144,7 +146,7 @@ export function PlanCard({
 	// spec/crew#compose: a composing foreman's crew comes with the plan; the person edits it in the crew editor before approving both.
 	const [crew, setCrew] = useState<CrewSpecAgent[] | null>(plan.crew ?? null),
 		[library, setLibrary] = useState<CrewLibrary | null>(null);
-	const spec = crew ? composedSpec(taskSpec, crew) : taskSpec,
+	const spec = withoutTaskReviewers(crew ? composedSpec(taskSpec, crew) : taskSpec),
 		crewEdited = !!plan.crew && JSON.stringify(crew) !== JSON.stringify(plan.crew);
 	const editCrew = () => {
 		void window.brigadir
@@ -372,6 +374,8 @@ export function PlanCard({
 					);
 				})}
 			</ol>
+			{/* spec/reviews#plan-surfaces: the saved sources and the plan review's state, above the footer. */}
+			{task && <PlanReviewLine task={task} locale={locale} />}
 			<footer data-size="m">
 				<span className={styles.differences} data-blocked={blockedParts.length > 0 || blocked}>
 					{footer}

@@ -10,6 +10,9 @@ import {
 	selectOption,
 	taskReviewAt,
 	taskReviewCommentState,
+	planFindingState,
+	type TaskReviewCommentRow,
+	isTaskSourcesDocument,
 	taskReviewCovers,
 	taskReviewLive,
 	taskReviewRunning,
@@ -150,7 +153,12 @@ export async function readTaskReview(
 			: !changes.files || taskReviewCovers(pre, now)
 				? 'covered'
 				: 'needed';
-	if (!doc) return { ...emptyTaskReviewView, changes, beforePR: gate(null) };
+	// spec/reviews#plan-surfaces: the sources show as chips on the plan and in the strip, with or without a review.
+	const index = await readDocument(
+			await safePath(await store.taskDir(key), 'sources', 'sources.json')
+		).catch(() => null),
+		sources = isTaskSourcesDocument(index) ? index.sources : [];
+	if (!doc) return { ...emptyTaskReviewView, changes, sources, beforePR: gate(null) };
 	const current = doc.review;
 	if (!current)
 		return {
@@ -158,6 +166,7 @@ export async function readTaskReview(
 			changes,
 			proposal: doc.proposal,
 			past: doc.past,
+			sources,
 			beforePR: gate(taskReviewAt(doc, 'pre-pr')),
 		};
 	const task = await store.task(key),
@@ -174,7 +183,7 @@ export async function readTaskReview(
 	const run = current.state === 'failed' ? null : (runs.at(-1) ?? null);
 	const snapshot = await review(key).catch(() => ({ comments: [] }) as ReviewSnapshot);
 	const ids = new Set([current.id, ...doc.past.map((item) => item.id)]);
-	const comments = snapshot.comments
+	const comments: TaskReviewCommentRow[] = snapshot.comments
 		.filter((comment) => comment.review && ids.has(comment.review.reviewId))
 		.map((comment) => ({
 			id: comment.id,
@@ -189,6 +198,24 @@ export async function readTaskReview(
 			answer: comment.replies?.findLast((reply) => reply.agent)?.text ?? null,
 			reason: comment.replies?.findLast((reply) => !reply.agent)?.text ?? null,
 		}));
+	// spec/reviews#plan-surfaces: a plan review's findings live in its record; they have no thread in the diff.
+	for (const item of [...doc.past, current])
+		for (const finding of item.findings ?? [])
+			comments.push({
+				id: finding.id,
+				reviewId: item.id,
+				text: finding.text,
+				path: '',
+				line: 0,
+				scopeId: '',
+				reviewer: finding.reviewer,
+				round: finding.round,
+				state: planFindingState(finding),
+				answer: finding.answer ?? null,
+				reason: finding.reason ?? null,
+				kind: finding.kind,
+				...(finding.where ? { where: finding.where } : {}),
+			});
 	const members: TaskReviewMember[] =
 		current.state === 'failed'
 			? []
@@ -209,7 +236,10 @@ export async function readTaskReview(
 								node.id,
 								worker?.status ?? null,
 								comments.filter(
-									(item) => item.reviewId === current.id && item.reviewer === node.name
+									(item) =>
+										item.reviewId === current.id &&
+										item.reviewer === node.name &&
+										item.kind !== 'gap'
 								).length
 							),
 							...(worker?.status === 'failed' && worker.failure ? { failure: worker.failure } : {}),
@@ -238,6 +268,7 @@ export async function readTaskReview(
 		members,
 		comments,
 		sinceLast,
+		sources,
 		beforePR: gate(taskReviewAt(doc, 'pre-pr')),
 	};
 }

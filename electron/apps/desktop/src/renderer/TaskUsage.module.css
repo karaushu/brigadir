@@ -1,0 +1,197 @@
+/* spec/composer#task-usage: the token counter at the right end of the composer's environment footer — mono 10.5, --fg2; its own target with the
+   --tint hover over its whole box (rule 15), underlined while its popover is open. Amber near a budget, red at it. */
+.counter {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	height: 26px;
+	margin-left: auto;
+	padding: 0 14px 0 10px;
+	border: 0;
+	border-radius: 0 0 13px 0;
+	background: none;
+	color: var(--fg2);
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	transition: background-color var(--motion-fast) ease;
+}
+.counter:hover {
+	background: var(--tint);
+}
+.counter:active {
+	background-image: linear-gradient(var(--segment-press), var(--segment-press));
+}
+.counter[aria-expanded='true'] {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+.counter:focus-visible {
+	outline: 1.5px solid var(--accent);
+	outline-offset: -2px;
+}
+.counter[data-tone='near'] {
+	color: var(--amber);
+}
+.counter[data-tone='reached'] {
+	color: var(--red);
+}
+.total {
+	margin-left: auto;
+	color: var(--fg2);
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+	font-variant-numeric: tabular-nums;
+}
+/* The popover's body: a group per provider, hairlines between them, the account lines at the foot. */
+.breakdown {
+	display: flex;
+	flex-direction: column;
+	font-size: var(--text-12);
+}
+.provider {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 0;
+}
+.bar {
+	display: flex;
+}
+.provider + .provider {
+	border-top: 1px solid var(--hair);
+}
+.provider > header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 24px;
+}
+.provider > header > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.provider > header > strong {
+	flex: 1;
+	font-weight: 600;
+	color: var(--fg);
+}
+.used,
+.count {
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+	font-variant-numeric: tabular-nums;
+	color: var(--fg);
+	white-space: nowrap;
+}
+.used[data-tone='near'] {
+	color: var(--amber);
+}
+.used[data-tone='reached'] {
+	color: var(--red);
+}
+.of {
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+.provider ul,
+.quota ul {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	margin: 0;
+	padding: 0 0 0 18px;
+	list-style: none;
+}
+.provider li,
+.quota li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 20px;
+	color: var(--fg2);
+}
+.provider li > span:first-child,
+.quota li > span:first-child {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.provider li > .count {
+	color: var(--fg2);
+}
+.quota {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 8px 0 2px;
+	border-top: 1px solid var(--hair);
+}
+.quota > small,
+.quota li > small {
+	color: var(--fg3);
+	font-size: var(--text-10);
+}
+.quota ul {
+	padding-left: 0;
+}
+/* spec/chat-turns-plans-and-questions#budget-card: the card's body — the state, then the muted rule. */
+.cardBody {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.cardBody > p {
+	margin: 0;
+	font-size: var(--text-13);
+	font-weight: 500;
+	color: var(--fg);
+}
+.cardBody > small {
+	font-size: var(--text-11);
+	line-height: 1.45;
+	color: var(--fg2);
+}
+/* spec/chat-turns-plans-and-questions#budget-strip: the pause glyph in the row's label column, and the breakdown under the row. */
+.stripGlyph {
+	display: inline-flex;
+	color: var(--amber);
+}
+.stripDetails {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 4px 0 2px;
+}
+.stripDetails > small {
+	color: var(--fg2);
+	font-size: var(--text-11);
+}
+/* spec/sidebar#card-tokens: the sum after the counts on a card's tree line, and a member's own in its worker row. */
+.card,
+.member {
+	flex: none;
+	color: var(--fg3);
+	font: calc(10.5px * var(--ui-scale)) var(--mono-family);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.card[data-tone='near'] {
+	color: var(--amber);
+}
+.card[data-tone='reached'] {
+	color: var(--red);
+}
+/* spec/settings-modules-and-onboarding#agents-tab: `Task budget` — a popup per provider, its name before it while two are on. */
+.settings {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 16px;
+}
+.settingsProvider {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--fg2);
+}

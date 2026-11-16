@@ -197,7 +197,8 @@ A plan the agent writes in plan mode, so the person can read it, edit it and app
    - Header: a "waiting for you" dot, the document glyph, `Plan for approval`, `<agent> is waiting for approval`, an `edited in the editor` badge when it applies, and `Open in editor` on the right.
    - Body: the chat's Markdown renderer, folded to about 210 px with a fade, plus `Whole plan · N lines` / `Collapse plan`.
    - From the second revision on, a bar over the body switches `Changes · Plan` (see [Changes between revisions](#plan-revisions)).
-   - Footer: the file name of the plan copy, `Plan further…` and a split `Approve plan` button whose chevron (`How to approve`) lists the agent's options.
+   - Above the footer, the [plan review](reviews.md#plan-surfaces) line: the saved sources as chips and the review's state (reading, findings and gaps as links that expand the strip, passed).
+   - Footer: the file name of the plan copy, `Plan further…` and a split `Approve plan` button whose chevron (`How to approve`) lists the agent's options. `Approve plan` stays available while the plan review runs or has open findings; approving ends the review ([The loop on a plan](reviews.md#plan-loop)).
 4. **Approve plan returns the mode the session had before the plan.**
    - The prior mode comes from the journal (`planPriorMode`). The mode sequence is built from `session.started` `modeId`, `mode.changed` and the value of the `mode` option category from `session.started` / `options.changed`, with repeats dropped. The last entry is the plan's mode and the entry before it is the prior mode. With no transition, there is no prior mode.
    - Option choice (`planApproveChoice`), with no per-agent table. Take the words of the prior mode's id and name (from `availableModes` or the mode option; camelCase is split, so `acceptEdits` → `accept edits`) and find the `allow_*` options whose `optionId` + name contain all words of the id or all words of the name. Of those, take the single minimal one: the one whose words are a subset of every other candidate's. So `auto` → `exit-plan-auto` (not `exit-plan-clear-auto`), `default` → `exit-plan-default`, `bypassPermissions` → `exit-plan-bypass`.
@@ -220,6 +221,7 @@ A plan the agent writes in plan mode, so the person can read it, edit it and app
     - The person's row shows only their own words (`planChatWords`). The folded card reads `Plan in revision` with no quote.
     - While the request waits, the composer placeholder reads `Ask about the plan or say what to change`.
     - Without a reject option, the message is held as before.
+12. **Plan review.** When the plan is presented, the host starts its [plan review](reviews.md#plan-review) by itself. The reviewer's findings reach the agent through the same path as plan chat: the waiting plan is answered with its reject option and the findings run right after the turn; the next presentation is the revision the reviewer checks against the [revision diff](#plan-revisions).
 
 There is no global `⌘↩` for `Approve plan`, because it would collide with the composer. Shortcuts exist only inside the `Plan further…` field.
 
@@ -249,6 +251,7 @@ The Foreman's proposed split appears as a card in its chat at the place of `crew
 - **Part = brief section.** A 20 pt numbered circle, a title that is always a field (`ui/TextInput`, row size S, max 80 characters), `assigned to` and the agent chip with a popover of the node's children. Below that are the files in monospace and the scope tags, then the worker **prompt** (12 pt / 1.55, secondary colour) folded to two lines, with `Whole prompt` / `Collapse prompt`.
 - **Editing a prompt in place.** Hovering shows `Edit prompt`, and a click turns the text into a field. `⌘↩` (shown as `Done ⌘↩`) closes the edit and `Esc` restores the text from before it.
 - **Differences next to their part.** Each difference with a `partId` shows in amber under its part with a warning glyph; the part number and the agent chip border turn amber too. The app builds the text from the difference's code and fields (`agent`, `part`, `zone`, `outside`) in the UI language; the English `message` is for the agent. Differences with no part (`idle_agent`, `empty`) go to the footer.
+- **Review.** Above the footer, the [plan review](reviews.md#plan-surfaces) line, as on the plan for approval.
 - **Footer.** It shows `N parts for M agents` and, with reviewers, `· <names> checks each`. When something blocks, it shows `Part {n}: differences with the crew. Start waits for a fix.` in amber. On the right are `Reject` and `Start workers`. `Start workers` is disabled while a blocking difference, an empty title or an empty prompt remains (`Every part needs a title and a prompt.`).
 - **After the decision** the card becomes a framed row: helmet, `Plan approved` or `Plan rejected`, `N parts`, then the agents with glyphs (approved) or `the foreman will make a new plan` (rejected), and the time and a chevron on the right. The chevron expands a read-only list of parts (number, title, agent). The source is `crew.plan.resolved`: its `parts`, or the request's parts when the person did not edit anything.
 
@@ -296,6 +299,25 @@ A question is a **tool call**, not text in the turn. The agent calls the Brigadi
 - **Markdown.** On desktop the question text renders with the chat's `MarkdownBlock` (`QuestionText`: code, bold, lists, links, code highlighting and task file links); `Question` takes a ready `body`, like `PermissionCard`, and falls back to plain text without one. The phone renders it with its card Markdown, in task questions and escalated worker questions. Blocks within one question are 6 px apart. Option labels and descriptions stay plain text.
 - **After resolution** the card collapses to the plain-text line `<question> · Resolved`. The `question.resolved` row shows the answer, `labels · text`, or `No answer`. One-line summaries (the resolved line, the sidebar activity, the crew question row) stay plain text.
 - On the phone the card uses touch sizes (52 px rows, 44 px buttons) and no key hint. A crew question on the phone has no `Skip`, because the worker waits for an answer.
+
+<a id="budget-card"></a>
+### Budget question card
+
+The question of a task that [reached its token budget](agents-and-providers.md#budget-reached), in the chat at the place of `budget.reached` while it waits. Same family as the question card (amber header strip and border; `ui/ChatCard` look):
+
+| Part | Look |
+| --- | --- |
+| Header | pause glyph, `{Provider} budget reached`, hint `{tokens} of {budget} tokens` (`≈` when the count was an estimate), `waiting {age}` after a minute |
+| Body | `The task is paused.`, or `The task and its {n} workers are paused.` for a crew (four `uk` forms); below, muted: `Turns that run now finish. Nothing new starts: no hires, no deliveries, no queued messages.` |
+| Actions | `Stop now` (ghost), `Finish turns, then stop` (soft), `Raise to {n}` — the primary split button; its menu (`ui/MenuPopover` with `Esc`) lists `Raise to {n}` and the next two values, then `No limit for this task` |
+
+- **After the answer** the card folds into the plain line `{Provider} budget reached · Resolved` with the answer under it: `Raise to {n}`, `No limit for this task`, `Finish turns, then stop` or `Stop now`. `budget.decided` draws nothing of its own.
+- A card whose question was already answered elsewhere (the strip, the popover) folds at once; one asked again with a new budget folds to `{Provider} budget reached · Resolved` without an answer line.
+
+<a id="budget-strip"></a>
+### Budget strip above the composer
+
+While the budget question waits, the same question stands as the first row of the [deck](composer.md#queue-deck) over the composer, `amber` tone: pause glyph, `Budget reached`, then `Stop now`, `Finish turns` (the short label), and the `Raise to {n}` split button with the same menu. The row's chevron expands the provider breakdown of `Task usage` with the account lines and the sentence `Turns that run now finish; nothing new starts.` An answer in the strip or in the card closes both; the strip leaves the deck when nothing waits.
 
 <a id="later"></a>
 ## Later

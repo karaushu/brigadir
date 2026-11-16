@@ -1055,6 +1055,8 @@ export type DesktopBridge = {
 		requestId: string,
 		text: string
 	): Promise<{ text: string | null; path: string }>;
+	/** spec/reviews#plan-surfaces: a source the task's agent saved, opened in the editor. */
+	openSourceFile(key: TaskKey, sourceId: string): Promise<EditorDocument>;
 	/** The open editor's disk poll: the document only when its version differs from `version`, else the lease state. */
 	checkEditorFile(
 		key: TaskKey,

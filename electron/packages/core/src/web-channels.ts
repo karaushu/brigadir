@@ -366,6 +366,7 @@ export const webChannels: Readonly<Record<IpcMethod, WebAccess>> = {
 	createEditorFile: 'deny',
 	openPlanFile: 'deny',
 	readPlanFile: 'allow',
+	openSourceFile: 'deny',
 	checkEditorFile: 'deny',
 	openDiffFile: 'deny',
 	saveEditorFile: 'deny',

@@ -86,9 +86,9 @@ describe('the Review strip (spec/reviews#strip)', () => {
 		expect(html).toContain('data-review-strip="reading"');
 		expect(text(html)).toContain('Review before PR · Codex reading');
 		expect(buttons(html)).toContain('Stop');
-		// Three steps: the plan drawn but off, the mid-task review passed (green), the current one.
+		// Three steps: the plan not started, the mid-task review passed (green), the current one — every step can be picked.
 		expect(html.match(/data-step="/g)).toHaveLength(3);
-		expect(html).toMatch(/data-step="plan" disabled=""/);
+		expect(html).not.toMatch(/data-step="plan" disabled=""/);
 		expect(html).toMatch(/aria-current="step"[^>]*data-step="pre-pr"/);
 		expect(html).toMatch(/data-tone="green" data-step="mid"/);
 		expect(html).not.toMatch(/<li[^>]*data-tone=/);

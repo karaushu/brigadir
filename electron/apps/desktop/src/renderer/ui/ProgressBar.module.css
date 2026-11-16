@@ -18,6 +18,12 @@
 .bar[data-done] > i {
 	background: var(--green);
 }
+.bar[data-tone='amber'] > i {
+	background: var(--amber);
+}
+.bar[data-tone='red'] > i {
+	background: var(--red);
+}
 @media (prefers-reduced-motion: reduce) {
 	.bar > i {
 		transition: none;

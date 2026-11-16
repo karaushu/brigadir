@@ -63,3 +63,19 @@ export function DeckRow({
 		</li>
 	);
 }
+/** spec/chat-turns-plans-and-questions#budget-strip: the row's main control — a bare button over the row's text that the row's hover covers (rule 15). */
+export function DeckRowButton({
+	expanded,
+	onClick,
+	children,
+}: {
+	expanded?: boolean;
+	onClick(): void;
+	children: ReactNode;
+}) {
+	return (
+		<button type="button" className={s.main} aria-expanded={expanded} onClick={onClick}>
+			{children}
+		</button>
+	);
+}

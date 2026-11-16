@@ -383,6 +383,23 @@ export class Sessions {
 	async command(key: TaskKey, command: SessionCommand) {
 		const client = await this.attach(key);
 		if (client) return client.command(command);
+		// spec/agents-and-providers#task-budget: without a host the budget is a field of task.json; a waiting question needs the host to answer it.
+		if (command.kind === 'setTokenBudget') {
+			const store = await SessionStore.at(this.dataDir),
+				current = await store.task(key);
+			if (current.tokenHold?.state === 'asked') throw new Error('Host is not connected');
+			const next = { ...(current.tokenBudget ?? {}) };
+			if (command.budget === null) delete next[command.provider];
+			else next[command.provider] = command.budget;
+			await store.updateTask(key, { tokenBudget: next });
+			if (
+				current.tokenHold &&
+				current.tokenHold.provider === command.provider &&
+				next[command.provider] !== current.tokenHold.budget
+			)
+				await store.updateTask(key, { tokenHold: null });
+			return;
+		}
 		if (
 			command.kind !== 'checkpoint' &&
 			command.kind !== 'setScope' &&

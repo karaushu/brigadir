@@ -30,6 +30,7 @@ import { Glyph } from './ui/Glyph';
 import { MenuItem, MenuPopover } from './ui/Popover';
 import { toastError } from './ui/Toast';
 import styles from './PlanApproval.module.css';
+import { PlanReviewLine } from './TaskReview';
 
 /** spec/notifications-slack-notes-and-schedules#message-classes: the plan copy that did not open is a toast with Retry. */
 function copyFailed(locale: Locale, retry: () => void) {
@@ -360,6 +361,8 @@ export function PlanApproval({
 					)}
 				</>
 			)}
+			{/* spec/reviews#plan-surfaces: the saved sources and the plan review's state, above the footer. */}
+			<PlanReviewLine task={task} locale={locale} />
 			{feedback !== null ? (
 				<form
 					className={styles.feedback}

@@ -82,6 +82,8 @@ const readOnlyTools = new Set([
 	'read_transcript',
 	'read_diff',
 	'read_notes',
+	'read_plan',
+	'read_sources',
 ]);
 /**
  * spec/agents-and-providers#tools-awareness: when to call each tool, added after what it does. One table, so the descriptions below stay as their
@@ -94,6 +96,13 @@ const whenToUse: Record<string, string> = {
 		'Call it only when the page has to be on screen for the step: a file upload, an OAuth or sign-in window, a passkey or a CAPTCHA; everything else works while the page is hidden.',
 	ask_user:
 		'Do not use it to ask the person to check a page, the app or a command you can check with your own tools.',
+	save_source:
+		'Call it when the task comes from a ticket, a spec or a contract you were given or fetched (for example from Notion, Jira or Linear), before you present a plan.',
+	read_plan: 'Call it first in a plan review, with the reviewId of the check you were asked to do.',
+	read_sources:
+		'Call it in a plan review after read_plan, to check the plan against the ticket and the contract.',
+	submit_plan_review:
+		'Call it once per check of a plan review; when nothing must change, call approve instead.',
 	create_task:
 		'Use it when the person asks for a separate task, or when you find work outside this task that another agent should do.',
 	tasks_list:
@@ -279,6 +288,18 @@ const humanTools: Tool[] = [
 			"Ask Brigadir for a mid-task review of this task's changes by another agent. Brigadir decides: it refuses while a review of the task runs, when nothing changed since the last review, or when no reviewer is available. A started review reads the task's state now, so keep working; its findings arrive later as a review batch: fix each one once, or object to it with review_reply. reason: what you just finished, e.g. 'the data layer'. Returns started: true with the reviewer, or started: false with the reason.",
 		shape: { reason: z.string().trim().min(1).max(500) },
 		run: async (args, call, signal) => text(await call('request_review', args, signal)),
+	},
+	// spec/reviews#save-source: the plan's author saves the ticket or contract text, so a reviewer on any provider reads the same version.
+	{
+		name: 'save_source',
+		description:
+			"Save the text of a source this task's plan is written from — a ticket, a spec, an API contract — into the task's folder, so the plan's reviewer reads the same version. title: its name (for example 'CRM-412 Client notes'); url: where it lives, if anywhere; text: the source as it reads, up to 200 000 characters. A source with the same title replaces the earlier one. Returns saved: true with its id.",
+		shape: {
+			title: z.string().trim().min(1).max(200),
+			url: z.string().trim().max(2000).optional(),
+			text: z.string().min(1).max(200_000),
+		},
+		run: async (args, call, signal) => text(await call('save_source', args, signal)),
 	},
 	{
 		name: 'review_reply',
@@ -746,6 +767,47 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 		description:
 			'Approve the checked work: nothing is left to fix. Requires the reviewId of the report you were asked to check.',
 		shape: { taskId, reviewId: z.string().min(1).max(128) },
+	},
+	// spec/reviews#plan-inputs, spec/reviews#plan-verdict: a plan review reads the plan and the sources through the host, on any provider.
+	read_plan: {
+		description:
+			"The plan of a plan review, as the author presented it (a foreman's split as Markdown with its parts and crew). In a closure check it also returns diff: the line diff from the revision you read before.",
+		shape: { taskId, reviewId: z.string().min(1).max(128) },
+	},
+	read_sources: {
+		description:
+			'The sources the plan was written from, as its author saved them: the ticket, a spec, an API contract. Texts are cut when one call passes 200 000 characters; pass sourceId to read one source whole.',
+		shape: {
+			taskId,
+			reviewId: z.string().min(1).max(128),
+			sourceId: z.string().max(128).optional(),
+		},
+	},
+	submit_plan_review: {
+		description:
+			"The verdict of a plan review. First read: findings [{kind, text, where?}] with kind missed, contradicts, out-of-scope (the plan against the ticket), assumption, left-open, unverifiable (against the repo and the contract), split (a foreman's split), and gaps [{text, where?}]: what the ticket itself leaves open, questions for the person. At most 12 items in all, the most severe first. Closure check: findings only, each {replyTo: <finding id>, text} for a finding still open or {kind, text, where?, introduced: true} for a problem the revision brought in.",
+		shape: {
+			taskId,
+			reviewId: z.string().min(1).max(128),
+			findings: z
+				.array(
+					z.object({
+						kind: z.string().max(40).optional(),
+						text: z.string().min(1).max(10_000),
+						where: z.string().max(200).optional(),
+						replyTo: z.string().min(1).max(100).optional(),
+						introduced: z.boolean().optional(),
+					})
+				)
+				.max(48)
+				.default([]),
+			gaps: z
+				.array(
+					z.object({ text: z.string().min(1).max(2000), where: z.string().max(200).optional() })
+				)
+				.max(12)
+				.default([]),
+		},
 	},
 	accept_task: {
 		description:

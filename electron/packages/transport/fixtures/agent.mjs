@@ -12,6 +12,7 @@ const log = process.argv[3] ?? process.env.BRIGADIR_FIXTURE_LOG;
 const record = (event, params) => { if (log) appendFileSync(log, JSON.stringify({ event, params }) + '\n'); };
 let connection;
 let release;
+let fixtureUsed=0;
 let quotaRejected=false;let autoAccept=false;
 // spec/agents-and-providers#sign-in-recovery: signed out while BRIGADIR_TEST_AUTH_FILE does not exist — a prompt starting with `auth` (or `auth-startup`, the session itself) answers `authRequired` after the CLI's own text.
 const signedOut=()=>Boolean(process.env.BRIGADIR_TEST_AUTH_FILE)&&!existsSync(process.env.BRIGADIR_TEST_AUTH_FILE);if(process.env.BRIGADIR_TEST_AUTH_FILE)record('process',{pid:process.pid});
@@ -118,6 +119,9 @@ connection = agent({name:'fixture'})
   // The brief every session carries (spec/chat-turns-plans-and-questions#checklist-tools) is context, not the prompt the scenarios match on; `prompt-blocks` keeps it.
   const text=params.prompt.filter(item=>!(item.type==='text'&&item.text.startsWith('<attached_context name="Brigadir brief"'))).map(item=>item.type==='text'?item.text:'').join(''); record('prompt',text); record('prompt-blocks',params.prompt);
   if(text.startsWith('Quick question'))return quickQuestion(text,client);
+  // spec/agents-and-providers#budget-reached: `spend N` — the context grows by N and the result reports N new input tokens (10×N cache reads). Modes: `slow` waits
+  // 1.5 s mid-turn, `hold` waits for a cancel, `over` reports 2×N at the end (the estimate ran low), `steer` waits up to 3 s for a steer, `fail` fails the turn.
+  {const spend=/^spend (\d+)((?: (?:slow|hold|over|steer|fail))*)$/.exec(text);if(spend){const n=Number(spend[1]),modes=spend[2].trim().split(' ');fixtureUsed+=n;await update(client,{sessionUpdate:'usage_update',used:fixtureUsed,size:10000000});if(modes.includes('slow'))await new Promise(r=>setTimeout(r,1500));if(modes.includes('fail'))throw new Error('Fixture turn failed');if(modes.includes('hold')){await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}let said=`spent ${n}`;if(modes.includes('steer')){const heard=await new Promise(resolve=>{steerWaiter=resolve;setTimeout(()=>resolve(null),3000);});steerWaiter=undefined;said=heard===null?said:`heard: ${heard}`;}await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:said}});const input=modes.includes('over')?n*2:n;return {stopReason:'end_turn',usage:{inputTokens:input,outputTokens:0,cachedReadTokens:n*10,cachedWriteTokens:0,totalTokens:input+n*10}};}}
   // spec/chat-turns-plans-and-questions#agent-started-turns: a prompt while the agent's own turn runs joins that turn; the turn answers it at its end.
   if(agentHold){const hold=agentHold;agentHold=null;return new Promise(answer=>hold({text,answer}));}
   if(agentTurns&&text==='background')return backgroundTurn(client);
@@ -314,10 +318,28 @@ connection = agent({name:'fixture'})
    if(result.outcome.outcome==='selected'&&exits[result.outcome.optionId]){await toMode(exits[result.outcome.optionId]);await new Promise(resolve=>setTimeout(resolve,400));await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Working on the plan.'}});}
    return {stopReason:'end_turn'};
   }
+  // spec/reviews#plan-loop: the scripted plan reviewer reads the plan and the sources through the host, leaves one finding and one gap, then
+  // approves the revision in its closure check.
+  const planCheck=/^Check (?:the plan|the foreman's split) of task (\S+) \(reviewId (\S+), (plan review, first read|closure check)\)/.exec(text);
+  if(planCheck){
+   const config=mcpServers.find(s=>s.name==='brigadir'),mcp=new Client({name:'fixture',version:'1.0.0'}),stdio=new StdioClientTransport({command:config.command,args:config.args,env:{...process.env,...Object.fromEntries(config.env.map(e=>[e.name,e.value]))}});
+   const ids={taskId:planCheck[1],reviewId:planCheck[2]};
+   try{await mcp.connect(stdio);
+    const call=async(name,args)=>{const result=await mcp.callTool({name,arguments:args});record('plan-review-call',{name,args,text:result.content?.[0]?.text??'',error:!!result.isError});};
+    await call('read_plan',ids);await call('read_sources',ids);
+    if(planCheck[3]==='closure check')await call('approve',ids);
+    else await call('submit_plan_review',{...ids,findings:[{kind:'missed',text:'Firefox is not covered',where:'plan.md:9'}],gaps:[{text:'Which browsers must keep the ring?'}]});}
+   finally{await mcp.close();}
+   await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'checked the plan'}});
+   return {stopReason:'end_turn'};
+  }
   // spec/chat-turns-plans-and-questions#plan-approval: a plan for approval, Claude-shaped (plan in the tool content) or Codex-shaped (plan_update, then a request without text).
-  if(text==='plan'||text==='plan-codex'||text.startsWith('I did not approve the plan.')||text.startsWith('I edited your plan.')) {
+  // spec/reviews#plan-loop: the plan review's findings come back as a batch; the revision covers Firefox.
+  const planReviewed=text.includes(' in the plan review. Revise the plan')||text.startsWith('The person asks you to fix');
+  if(text==='plan'||text==='plan-codex'||text.startsWith('I did not approve the plan.')||text.startsWith('I edited your plan.')||planReviewed) {
    record('plan-prompt',text);
-   const plan='# Keep the focus ring in Safari\n\n## Context\n`Button.module.css` sets `outline: none`.\n\n## Changes\n1. Add the `--focus-ring` token.\n2. Use `:focus-visible` in `Button.module.css`.\n3. Test that Tab keeps the ring.\n\n## Checks\n- `pnpm --filter kit test`\n- Safari: Tab through the story.\n- Firefox: the ring stays.\n- Chrome: the ring stays.';
+   const plan0='# Keep the focus ring in Safari\n\n## Context\n`Button.module.css` sets `outline: none`.\n\n## Changes\n1. Add the `--focus-ring` token.\n2. Use `:focus-visible` in `Button.module.css`.\n3. Test that Tab keeps the ring.\n\n## Checks\n- `pnpm --filter kit test`\n- Safari: Tab through the story.\n- Firefox: the ring stays.\n- Chrome: the ring stays.';
+   const plan=planReviewed?plan0.replace('3. Test that Tab keeps the ring.','3. Test that Tab keeps the ring.\n4. Firefox: Tab keeps the ring too.'):plan0;
    const codex=text==='plan-codex';
    if(codex)await update(client,{sessionUpdate:'plan_update',plan:{type:'markdown',planId:'plan-1',content:plan}});
    else await update(client,{sessionUpdate:'tool_call',toolCallId:'plan-tool',title:'Approve Plan',kind:'switch_mode',status:'pending',content:[{type:'content',content:{type:'text',text:plan}}]});

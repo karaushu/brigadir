@@ -38,4 +38,9 @@ export const workspaceEventKinds: ReadonlySet<string> = new Set([
 	'crew.worker.stopped',
 	'crew.question.requested',
 	'crew.question.resolved',
+	// spec/agents-and-providers#task-tokens: the card's token count and the budget's reason on the activity line.
+	'usage.changed',
+	'turn.usage',
+	'budget.reached',
+	'budget.decided',
 ]);

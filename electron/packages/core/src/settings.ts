@@ -1,4 +1,9 @@
 import {
+	defaultTaskBudgetSetting,
+	isTaskBudgetSetting,
+	type TaskBudgetSetting,
+} from './task-tokens';
+import {
 	defaultChatFont,
 	defaultInterfaceFont,
 	defaultTypography,
@@ -60,6 +65,7 @@ export type AgentDefaults = {
 	/** spec/agents-and-providers#compaction-window: the context size in tokens at which a new session compacts; null — the agent's own default. */ compactionWindow:
 		number | null;
 	/** spec/browser-and-simulator#sim-cap: how many local simulator devices may run at once. */ simulatorDevices: number;
+	/** spec/agents-and-providers#task-budget: the token budget a new task takes, per provider; null — no limit. */ taskBudget: TaskBudgetSetting;
 };
 /** spec/agents-and-providers#compaction-window: the window a settings file without the key reads as, and the bounds a saved value keeps to. */
 export const defaultCompactionWindow = 200_000;
@@ -210,6 +216,8 @@ export type AppSettings = {
 	actionAgents: ActionAgents;
 	/** spec/pull-requests-and-ci#review-crew: `Remember for …` on the Crew segment — a review action runs by a library crew; excludes its `actionAgents` entry. */
 	actionCrews: ActionCrews;
+	/** spec/reviews#who: `Off` in the menu of `Plan review` — no plan review starts by itself. */
+	planReviewOff: boolean;
 	modules: AppModules;
 	projects: ProjectDefaults;
 	keymap: KeymapSettings;
@@ -246,6 +254,7 @@ export const defaultAppSettings: AppSettings = {
 	helperAgent: null,
 	actionAgents: {},
 	actionCrews: {},
+	planReviewOff: false,
 	modules: { ...defaultModules },
 	projects: { defaultView: 'board' },
 	keymap: defaultKeymap,
@@ -277,6 +286,7 @@ export const defaultAppSettings: AppSettings = {
 		claudeSubagentModel: null,
 		compactionWindow: defaultCompactionWindow,
 		simulatorDevices: simulatorDeviceLimits.default,
+		taskBudget: defaultTaskBudgetSetting(),
 	},
 	notifications: defaultNotificationPreferences,
 	editor: {
@@ -305,9 +315,10 @@ export const defaultAppSettings: AppSettings = {
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 17 &&
+		Object.keys(value).length === 18 &&
 		isSimulatorDeviceLimit(value.simulatorDevices) &&
 		(value.compactionWindow === null || isCompactionWindow(value.compactionWindow)) &&
+		isTaskBudgetSetting(value.taskBudget) &&
 		typeof value.prSummary === 'boolean' &&
 		(value.claudeSubagentModel === null ||
 			(typeof value.claudeSubagentModel === 'string' &&
@@ -343,7 +354,8 @@ export function isAgentDefaults(value: unknown): value is AgentDefaults {
 export function isAppSettings(value: unknown): value is AppSettings {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 23 &&
+		Object.keys(value).length === 24 &&
+		typeof value.planReviewOff === 'boolean' &&
 		isSlackSettings(value.slack) &&
 		isUpdateSettings(value.updates) &&
 		isTaskColumns(value.taskColumns) &&

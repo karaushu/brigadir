@@ -68,6 +68,8 @@ export async function machine(
 			settings: {
 				appearance: 'dark',
 				language: 'en',
+				// spec/reviews#plan-start: a plan the phone asks for would start a plan review with a real reviewer.
+				planReviewOff: true,
 				modules: {
 					browser: true,
 					simulator: options.simulator ?? false,

@@ -1,5 +1,11 @@
-import { t, type AppModule, type AppSettings, type Locale } from '@brigadir/core';
-import { Choice, Switch } from './ui/Controls';
+import {
+	simulatorDeviceLimits,
+	t,
+	type AppModule,
+	type AppSettings,
+	type Locale,
+} from '@brigadir/core';
+import { Choice, Stepper, Switch } from './ui/Controls';
 import { ModalDialog } from './ui/ModalDialog';
 import { SettingsOption, SettingsRow, SettingsSection } from './SettingsForm';
 import { moduleNames } from './ModuleList';
@@ -11,6 +17,7 @@ import s from './ModuleSettings.module.css';
 /** spec/settings-modules-and-onboarding#module-settings-popup: the modules that have settings of their own; the others have no settings button. */
 export const modulesWithSettings: readonly AppModule[] = [
 	'browser',
+	'simulator',
 	'pullRequests',
 	'remoteAccess',
 	'slack',
@@ -69,6 +76,26 @@ export function ModuleSettingsDialog({
 								}}
 							/>
 						</SettingsOption>
+					</SettingsSection>
+				) : module === 'simulator' ? (
+					// spec/browser-and-simulator#sim-cap: how many local devices run at once; no way past it.
+					<SettingsSection label={t(locale, 'Simulator')} disabled={busy}>
+						<SettingsRow
+							label={t(locale, 'Local devices')}
+							hint={t(locale, 'How many simulators run at once.')}>
+							<Stepper
+								label={t(locale, 'Local devices')}
+								min={simulatorDeviceLimits.min}
+								max={simulatorDeviceLimits.max}
+								value={settings.agents.simulatorDevices}
+								disabled={busy}
+								onChange={(simulatorDevices) => {
+									update({ agents: { ...settings.agents, simulatorDevices } });
+								}}
+								increaseLabel={`${t(locale, 'Local devices')} · ${t(locale, 'Increase')}`}
+								decreaseLabel={`${t(locale, 'Local devices')} · ${t(locale, 'Decrease')}`}
+							/>
+						</SettingsRow>
 					</SettingsSection>
 				) : module === 'pullRequests' ? (
 					// spec/appearance#evolution-redesign: the review of a PR writes the agent summary by itself on its first open.

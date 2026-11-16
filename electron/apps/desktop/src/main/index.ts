@@ -249,7 +249,6 @@ import {
 import { Browsers, type ScreenOwner } from './browser';
 import { Simulators } from './simulator';
 import { SimulatorFrames } from './simulator-frames';
-import { SimulatorQueue } from './simulator-queue';
 import { Files, outsideTaskRepos } from './files';
 import { TextSearches } from './text-search';
 import { CodeIntelBridge } from './code-intel';
@@ -704,36 +703,62 @@ const simulatorFixture = process.env.BRIGADIR_TEST_SIMULATOR
 		})
 	: null;
 let fixtureOrientation = 'portrait';
-const simulators = new Simulators(
+const simulators: Simulators = new Simulators(
 	process.env.BRIGADIR_DATA_DIR,
 	simulatorFixture?.helper ?? join(servicesDir, 'sim-helper'),
 	(event) => {
 		clients.broadcast('simulator:event', event);
 	},
-	(projectId, frame) => {
-		simulatorFrames.frame(projectId, frame);
+	(device, frame) => {
+		simulatorFrames.frame(device, frame);
 	},
-	simulatorFixture
-		? {
-				run: async (_file, args) => {
-					if (args[0] === 'devicectl') {
-						if (args[3] === 'rotate') fixtureOrientation = 'landscapeLeft';
-						return `Current Device Orientation: ${fixtureOrientation}`;
-					}
-					return args[0] === 'xcodebuild'
-						? simulatorFixture.xcodebuild
-						: args[1] === 'list'
-							? JSON.stringify(simulatorFixture.simctl)
-							: '';
-				},
-				android: async () => null,
-				detach: () => {},
-			}
-		: undefined
+	{
+		// spec/browser-and-simulator#sim-cap: the cap comes from Settings at the moment of each boot.
+		cap: () => appliedSettings.agents.simulatorDevices,
+		// spec/agents-and-providers#tools-awareness: crew workers wait in a device's lane or at the gate; their sidebar line shows who waits.
+		waiting: (projectId: string, waiting: string[]): void => {
+			clients.broadcast('simulator:event', { projectId, waiting });
+		},
+		// spec/browser-and-simulator#sim-chat-row: the task's device row, journaled by its host (or by main when no host runs).
+		record: async (
+			key: TaskKey,
+			row: { device: string; metroPort: number | null; lowMemory: boolean }
+		): Promise<void> => {
+			await sessions.command(key, { kind: 'recordDevice', ...row });
+		},
+		// spec/browser-and-simulator#sim-own-device: a copy goes once its task is removed, archived or completed.
+		taskEnded: async (key: TaskKey): Promise<boolean> => {
+			const task = await (
+				await SessionStore.at(process.env.BRIGADIR_DATA_DIR)
+			)
+				.task(key)
+				.catch(() => null);
+			return !task || !!task.archived || task.status === 'completed';
+		},
+		...(simulatorFixture
+			? {
+					run: async (_file: string, args: string[]) => {
+						if (args[0] === 'devicectl') {
+							if (args[3] === 'rotate') fixtureOrientation = 'landscapeLeft';
+							return `Current Device Orientation: ${fixtureOrientation}`;
+						}
+						return args[0] === 'xcodebuild'
+							? simulatorFixture.xcodebuild
+							: args[1] === 'list'
+								? JSON.stringify(simulatorFixture.simctl)
+								: '';
+					},
+					android: async () => null,
+					detach: () => {},
+					// The e2e fixture's memory pressure: low only when the test asks for it.
+					lowMemory: async () => process.env.BRIGADIR_TEST_LOW_MEMORY === '1',
+				}
+			: {}),
+	}
 );
 // spec/remote-access-and-mobile#browser-from-device: frames each window may miss on its own; a device that missed one waits for a key frame.
-const simulatorFrames = new SimulatorFrames(clients, (projectId) => {
-	void simulators.keyframe(projectId).catch(() => {});
+const simulatorFrames = new SimulatorFrames(clients, (device) => {
+	simulators.keyframe(device);
 });
 /** spec/remote-access-and-mobile#phone-task-tools: terminal outputs each client watches; a device's go when its connection goes. */
 const terminalWatchers = new TerminalWatchers();
@@ -746,21 +771,15 @@ function releaseWindowWatches() {
 	sessions.unwatchAll((task, id) => terminalWatchers.watched(task, id));
 }
 /** spec/remote-access-and-mobile#browser-from-device: the simulator columns each device watches, released when its connection goes. */
-const simulatorWatches = new Map<string, Map<string, number>>();
+const simulatorWatches = new Map<string, Map<string, { key: TaskKey; count: number }>>();
 function forgetSimulatorWatches(client: Client) {
 	simulatorFrames.forget(client);
 	const watches = simulatorWatches.get(client.id);
 	simulatorWatches.delete(client.id);
-	for (const [projectId, count] of watches ?? [])
+	for (const [name, { key, count }] of watches ?? [])
 		for (let index = 0; index < count; index++)
-			void simulators.command(projectId, { kind: 'watch', on: false }).catch(() => {});
+			void simulators.command(key, { kind: 'watch', on: false }).catch(() => name);
 }
-// spec/agents-and-providers#tools-awareness: crew workers take the project's one device in turns; their sidebar line shows who waits.
-const simulatorQueue = new SimulatorQueue({
-	onWaiting: (projectId, waiting) => {
-		clients.broadcast('simulator:event', { projectId, waiting });
-	},
-});
 /** spec/browser-and-simulator#notifications: the pages' notices of the OS, so a page's `close()` removes its own. */
 const pageNotices = new Map<string, { close(): void }>();
 const browsers = new Browsers(
@@ -838,7 +857,9 @@ const sessions = new Sessions(
 		}
 		if (record) {
 			if (['turn.completed', 'session.failed', 'host.stopped'].includes(record.event.kind))
-				simulatorQueue.release(key);
+				simulators.release(key);
+			// spec/browser-and-simulator#sim-own-device: a task whose host stopped may have ended; its copy goes with it.
+			if (record.event.kind === 'host.stopped') void simulators.reconcile(key).catch(() => {});
 			quota.observe(key, record);
 			ghosts.observe(key, record);
 			if (record.event.kind === 'turn.completed')
@@ -944,7 +965,7 @@ const sessions = new Sessions(
 			if (!appliedSettings.modules.simulator) throw new Error(moduleOffMessages.simulator);
 			if (!isSimulatorAgentCommand(params)) throw new Error('Invalid simulator operation');
 			const { queued, ...command } = params as typeof params & { queued?: unknown };
-			return simulatorQueue.run(key, queued === true, () => simulators.agent(key, command));
+			return simulators.agent(key, command, queued === true);
 		}
 		if (method === 'browser' && isBrowserCommand(params)) return browsers.agent(key, params);
 		// spec/browser-and-simulator#background: «Show» on the agent's request opens its task with the browser column.
@@ -3117,6 +3138,12 @@ void app.whenReady().then(async () => {
 			: null,
 	]);
 	appliedSettings = initialSettings;
+	// spec/browser-and-simulator#sim-own-device: copies whose task is gone go at start, and every 30 s after: a task ends by more paths
+	// (the board, auto-archive, a crew acceptance) than any one hook sees.
+	if (initialSettings.modules.simulator) void simulators.reconcile().catch(() => {});
+	setInterval(() => {
+		if (appliedSettings.modules.simulator) void simulators.reconcile().catch(() => {});
+	}, 30_000).unref();
 	void slack.refresh();
 	changes.diffBase = taskDiffs.diffBase = initialSettings.editor.diffBase;
 	void codeIntel.setLanguageServers(initialSettings.editor.languageServers);
@@ -3239,8 +3266,11 @@ void app.whenReady().then(async () => {
 		if (modulesChanged) scheduleSettings?.();
 		if (keymapChanged || modulesChanged || authorChanged || columnsChanged) rebuildMenu?.();
 		if (!saved.modules.browser) browsers.close();
-		if (saved.modules.simulator) simulators.reopen();
-		else simulators.close();
+		if (saved.modules.simulator) {
+			simulators.reopen();
+			// spec/browser-and-simulator#sim-own-device: copies whose task is gone go when the module is on (at start, too).
+			void simulators.reconcile().catch(() => {});
+		} else simulators.close();
 		changes.diffBase = taskDiffs.diffBase = saved.editor.diffBase;
 		await codeIntel.setLanguageServers(saved.editor.languageServers);
 		if (!saved.suggestNextPrompt) ghosts.cancelAll();
@@ -3369,7 +3399,12 @@ void app.whenReady().then(async () => {
 	});
 	handleClient('task:menu', (client, key) => sidebarMenus.task(key, client));
 	// spec/tasks#archive: archive by hand (⌃⌘A, swipe, the Archive window), restore, delete from the Archive window, the sidebar sections.
-	handle('archive:task', (key) => taskArchives.archive(key));
+	// spec/browser-and-simulator#sim-own-device: the task's copy goes once the archive is written, also when its host had stopped already.
+	handle('archive:task', async (key) => {
+		const result = await taskArchives.archive(key);
+		if (appliedSettings.modules.simulator) void simulators.reconcile(key).catch(() => {});
+		return result;
+	});
 	handleClient('archive:completed', async (client, id) =>
 		sidebarMenus.archiveCompleted(
 			personTasks(
@@ -3434,7 +3469,9 @@ void app.whenReady().then(async () => {
 			'completed'
 		)
 			throw new Error('Task is no longer completed');
-		return sidebarMenus.removeTask(key, client);
+		const removed = await sidebarMenus.removeTask(key, client);
+		if (appliedSettings.modules.simulator) void simulators.reconcile(key).catch(() => {});
+		return removed;
 	});
 	// spec/projects-and-board#person-tasks: the column clears what it shows, the person's tasks; workers go only with their foreman (spec/tasks#delete-task).
 	handleClient('board:clear', async (client, id) =>
@@ -4989,7 +5026,7 @@ void app.whenReady().then(async () => {
 		return browsers.screen(screenOwner(client), key, command);
 	});
 	handleClient('browser:file', (client, id, name, bytes) => ui.pageFile(client, id, name, bytes));
-	handleClient('simulator:command', (client, projectId, command) => {
+	handleClient('simulator:command', (client, key, command) => {
 		if (!appliedSettings.modules.simulator) throw new Error(moduleOffMessages.simulator);
 		if (client.device && command.kind === 'devtools')
 			throw new Error('Not available from a remote device.');
@@ -4997,11 +5034,15 @@ void app.whenReady().then(async () => {
 		if (client.device && command.kind === 'paste' && command.text === undefined)
 			throw new Error('Not available from a remote device.');
 		if (client.device && command.kind === 'watch') {
-			const watches = simulatorWatches.get(client.id) ?? new Map<string, number>();
+			const watches = simulatorWatches.get(client.id) ?? new Map(),
+				name = `${key.projectId}/${key.id}`;
 			simulatorWatches.set(client.id, watches);
-			watches.set(projectId, Math.max(0, (watches.get(projectId) ?? 0) + (command.on ? 1 : -1)));
+			watches.set(name, {
+				key,
+				count: Math.max(0, (watches.get(name)?.count ?? 0) + (command.on ? 1 : -1)),
+			});
 		}
-		return simulators.command(projectId, command);
+		return simulators.command(key, command);
 	});
 	// A command run names its line and folder only through `commands:run`, which reads them from project.json (spec/search-menus-and-commands#project-commands).
 	// spec/remote-access-and-mobile#phone-task-tools: watchers count by client — one client's `unwatch` does not stop the output another still shows.

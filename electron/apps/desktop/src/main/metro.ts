@@ -1,16 +1,58 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 /**
  * spec/browser-and-simulator#simulator: React Native data through Metro's CDP proxy. Metro is found by `/status` and its
  * `X-React-Native-Project-Root`; the client speaks from main with `Origin: http://127.0.0.1:<port>` (Expo's Metro
  * closes `localhost`). Console, exceptions and requests land in ring buffers from the moment the client
  * attaches; text bodies up to 64 KiB are taken right after `loadingFinished`.
  */
-/** Metro takes the next free port when 8081 is busy: several task trees run 8081, 8082, 8083… */
+/** A Metro started by hand: 8081 and the next ports Metro moves to when it is busy, and Expo's old ports. The tasks' own ports come on top. */
 export const metroPorts = [
 	...Array.from({ length: 10 }, (_, index) => 8081 + index),
 	19000,
 	19001,
 	19002,
 ];
+// spec/browser-and-simulator#metro-port: allocation is shared with the hosts (packages/persistence).
+export { assignMetroPort, metroPortRange, portFree } from '@brigadir/persistence';
+/** The root of a project tree that is `root` or inside it. */
+export const inTree = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
+/**
+ * spec/browser-and-simulator#metro-connect: the app's URL scheme, from the task's tree first, then the project: `expo.scheme` of `app.json`
+ * (the first of a list), `scheme:` in `app.config.ts`/`.js`, else `exp+<slug>`, the dev client's own scheme.
+ */
+export async function appScheme(
+	roots: string[],
+	read: (path: string) => Promise<string> = (path) => readFile(path, 'utf8')
+): Promise<string | null> {
+	let slug: string | null = null;
+	for (const root of roots) {
+		const json = await read(join(root, 'app.json')).catch(() => null);
+		if (json) {
+			try {
+				const doc = JSON.parse(json) as { expo?: { scheme?: unknown; slug?: unknown } };
+				const scheme = Array.isArray(doc.expo?.scheme) ? doc.expo.scheme[0] : doc.expo?.scheme;
+				if (typeof scheme === 'string' && validScheme(scheme)) return scheme;
+				if (!slug && typeof doc.expo?.slug === 'string') slug = doc.expo.slug;
+			} catch {
+				/* not JSON */
+			}
+		}
+		for (const name of ['app.config.ts', 'app.config.js']) {
+			const code = await read(join(root, name)).catch(() => null);
+			if (!code) continue;
+			const scheme = /\bscheme:\s*\[?\s*['"`]([^'"`]+)['"`]/.exec(code)?.[1];
+			if (scheme && validScheme(scheme)) return scheme;
+			slug ??= /\bslug:\s*['"`]([^'"`]+)['"`]/.exec(code)?.[1] ?? null;
+		}
+	}
+	return slug && validScheme(`exp+${slug}`) ? `exp+${slug}` : null;
+}
+const validScheme = (scheme: string) => /^[A-Za-z][A-Za-z0-9+.-]{0,99}$/.test(scheme);
+/** The dev client's link that points the app at a Metro (`UrlCreator.constructDevClientUrl` in Expo's CLI). */
+export function devClientLink(scheme: string, port: number) {
+	return `${scheme}://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}`)}`;
+}
 export type MetroLog = {
 	at: number;
 	level: 'log' | 'info' | 'warn' | 'error' | 'debug';
@@ -33,8 +75,19 @@ export type MetroRequest = {
 	base64: boolean;
 };
 type Target = { port: number; root: string; appId: string; url: string };
-/** A Metro of the project seen on the last look: its root, whether this device's app is on it, whether we attached. */
-export type MetroFound = { port: number; root: string; device: boolean; attached: boolean };
+/** A Metro of the project seen on the last look: its root, whether this device's app is on it, whether it serves the task's own tree, whether we attached. */
+export type MetroFound = {
+	port: number;
+	root: string;
+	device: boolean;
+	own: boolean;
+	attached: boolean;
+};
+/** spec/browser-and-simulator#metro-connect: the port of the task's own Metro when it answers but does not serve the task's device. */
+export function connectPort(found: readonly MetroFound[]): number | null {
+	if (found.some((item) => item.own && item.device)) return null;
+	return found.find((item) => item.own)?.port ?? null;
+}
 type Fetcher = (
 	url: string,
 	init?: { signal?: AbortSignal }
@@ -67,7 +120,7 @@ const defaultDeps: MetroDeps = {
 const logLimit = 1000,
 	requestLimit = 500,
 	eagerBody = 64 * 1024;
-/** One project's Metro: found, attached and buffered; `stop` detaches. */
+/** One task's Metro: found, attached and buffered; `stop` detaches. */
 export class MetroSession {
 	logs: MetroLog[] = [];
 	requests = new Map<string, MetroRequest>();
@@ -79,17 +132,18 @@ export class MetroSession {
 	private stopped = false;
 	private seenLogs = new Set<string>();
 	found: MetroFound[] = [];
-	private preferred: string | null = null;
+	/**
+	 * `roots` — the task's own tree first, then the project's roots; `own` — the task's own tree (its worktree), or null for a task in the
+	 * project folder; `ports` — the ports given to the project's tasks, looked at besides the usual ones.
+	 */
 	constructor(
 		private roots: () => Promise<string[]>,
 		private changed: () => void,
 		private deps: MetroDeps = defaultDeps,
-		private deviceName: () => string | null = () => null
+		private deviceName: () => string | null = () => null,
+		private own: () => string | null = () => null,
+		private ports: () => readonly number[] = () => []
 	) {}
-	/** The task tree of the agent that last asked: it wins a tie between Metros. */
-	prefer(root: string) {
-		this.preferred = root;
-	}
 	/** Looks for Metro every 3 s until one of the project's roots answers, then attaches; again after it goes away. */
 	start() {
 		if (this.timer || this.socket) return;
@@ -125,24 +179,23 @@ export class MetroSession {
 		}
 	}
 	/**
-	 * Every Metro of the project's roots. The app on the device is connected to one of them: the Metro listing a target
-	 * of this device wins; then the preferred task tree, then the order of the roots (worktrees, the project).
+	 * spec/browser-and-simulator#metro: every Metro of the task's and the project's roots. The task's own tree serving its device wins; then any
+	 * Metro serving the device, then the task's own tree, then the order of the roots.
 	 */
 	async discover(): Promise<Target | null> {
 		const roots = await this.roots(),
 			device = this.deviceName(),
-			candidates: { target: Target; device: boolean; rank: number }[] = [];
+			own = this.own(),
+			candidates: { target: Target; device: boolean; own: boolean; rank: number }[] = [];
 		await Promise.all(
-			metroPorts.map(async (port) => {
+			[...new Set([...metroPorts, ...this.ports()])].map(async (port) => {
 				try {
 					const status = await this.deps.fetch(`http://127.0.0.1:${port}/status`, {
 						signal: AbortSignal.timeout(500),
 					});
 					const root = status.headers.get('x-react-native-project-root');
 					if (!status.ok || !root) return;
-					const index = roots.findIndex(
-						(prefix) => root === prefix || root.startsWith(`${prefix}/`)
-					);
+					const index = roots.findIndex((prefix) => inTree(root, prefix));
 					if (index < 0) return;
 					const list = await (
 						await this.deps.fetch(`http://127.0.0.1:${port}/json/list`, {
@@ -160,9 +213,18 @@ export class MetroSession {
 								)
 							: undefined,
 						target = mine ?? targets[0];
-					if (!target) return;
-					const preferred =
-						this.preferred && (root === this.preferred || root.startsWith(`${this.preferred}/`));
+					const ownTree = !!own && inTree(root, own);
+					// The task's own Metro counts even before the app is on it: connecting needs its port.
+					if (!target) {
+						if (ownTree)
+							candidates.push({
+								target: { port, root, appId: '', url: '' },
+								device: false,
+								own: true,
+								rank: Infinity,
+							});
+						return;
+					}
 					candidates.push({
 						target: {
 							port,
@@ -171,22 +233,25 @@ export class MetroSession {
 							url: target.webSocketDebuggerUrl,
 						},
 						device: !!mine,
-						rank: preferred ? -1 : index,
+						own: ownTree,
+						rank: index,
 					});
 				} catch {
 					/* nothing on this port */
 				}
 			})
 		);
+		const score = (item: (typeof candidates)[number]) =>
+			item.own && item.device ? 0 : item.device ? 1 : item.own ? 2 : 3;
 		candidates.sort(
-			(a, b) =>
-				Number(b.device) - Number(a.device) || a.rank - b.rank || a.target.port - b.target.port
+			(a, b) => score(a) - score(b) || a.rank - b.rank || a.target.port - b.target.port
 		);
-		const chosen = candidates[0]?.target ?? null;
+		const chosen = candidates.find((item) => item.target.url)?.target ?? null;
 		this.found = candidates.map((item) => ({
 			port: item.target.port,
 			root: item.target.root,
 			device: item.device,
+			own: item.own,
 			attached: item.target === chosen,
 		}));
 		return chosen;

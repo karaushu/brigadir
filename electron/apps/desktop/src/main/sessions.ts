@@ -405,6 +405,7 @@ export class Sessions {
 			command.kind !== 'setScope' &&
 			command.kind !== 'addScope' &&
 			command.kind !== 'recordPullRequest' &&
+			command.kind !== 'recordDevice' &&
 			command.kind !== 'quickAsk'
 		)
 			throw new Error('Host is not connected');
@@ -426,6 +427,16 @@ export class Sessions {
 					)?.event.kind === 'turn.started'
 				)
 					await writer.append({ kind: 'host.stopped', reason: 'recovered_before_refresh' });
+				if (command.kind === 'recordDevice') {
+					await writer.append({
+						kind: 'simulator.device',
+						device: command.device,
+						metroPort: command.metroPort,
+						lowMemory: command.lowMemory,
+					});
+					this.publish(key, null);
+					return;
+				}
 				if (command.kind === 'recordPullRequest') {
 					if (!snapshots.current.scopes.some((scope) => scope.id === command.scopeId))
 						throw new Error('Repo is unavailable');

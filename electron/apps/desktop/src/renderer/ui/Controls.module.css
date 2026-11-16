@@ -876,6 +876,35 @@
 [role='option'][data-active='true'] .optionLive > i {
 	box-shadow: 0 0 0 1.5px var(--accent-fill);
 }
+/* spec/browser-and-simulator#sim-tab: after a tail the action keeps its own gap instead of pushing to the edge. */
+.optionAction[data-after-tail] {
+	margin-left: 4px;
+}
+/* spec/browser-and-simulator#sim-tab: a line under the options — why some are off; one S action at its end. */
+.menu > .menuFooter {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px 4px;
+	font-size: var(--text-11);
+	line-height: 15px;
+	color: var(--fg2);
+}
+.menu > .menuFooter:has(button) {
+	padding: 5px 8px 3px 12px;
+}
+.menu > .menuFooter > span:first-child {
+	flex: 1;
+	min-width: 0;
+}
+.menu > .menuFooter[data-tone='warning'] {
+	color: var(--amber-text);
+}
+.menuFooterAction {
+	display: inline-flex;
+	flex: none;
+}
 /* The row's own action: 24 px, quiet at rest, its own hover and press over the row's fill. */
 .optionAction {
 	flex: none;

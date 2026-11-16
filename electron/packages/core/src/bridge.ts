@@ -964,10 +964,10 @@ export type DesktopBridge = {
 		id: string,
 		report: import('./context-state').ContextReport | null
 	): Promise<void>;
-	simulatorCommand(projectId: string, command: SimulatorCommand): Promise<unknown>;
+	simulatorCommand(key: TaskKey, command: SimulatorCommand): Promise<unknown>;
 	readSimulatorToolchain(): Promise<SimulatorToolchain>;
 	onSimulatorEvent(listener: (value: SimulatorEvent) => void): () => void;
-	onSimulatorFrame(listener: (value: SimulatorFrame & { projectId: string }) => void): () => void;
+	onSimulatorFrame(listener: (value: SimulatorFrame & { device: string }) => void): () => void;
 	terminalCommand(
 		key: TaskKey,
 		command: TerminalCommand

@@ -47,6 +47,7 @@ const moduleRows: Record<AppModule, { glyph: GlyphName; name: MessageKey; detail
 /** spec/settings-modules-and-onboarding#module-settings-popup: the ⚙ button's name and tooltip, for the modules that have settings. */
 const settingsLabels: Partial<Record<AppModule, MessageKey>> = {
 	browser: 'Browser settings',
+	simulator: 'Simulator settings',
 	pullRequests: 'Pull request settings',
 	remoteAccess: 'Remote access settings',
 	slack: 'Slack settings',

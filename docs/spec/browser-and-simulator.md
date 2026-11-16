@@ -268,18 +268,48 @@ Chromium's own permission handler always says no. The page script replaces `Noti
 <a id="simulator"></a>
 ## Simulator
 
-«Simulator» is the single UI word for both iOS Simulator and Android Emulator. A **device** is one specific simulator, e.g. `iPhone 17 Pro · iOS 27` or `Pixel 9 Pro · Android 16`. The main use case is debugging React Native (0.85+). Metro and the build are started by the agent or by [project commands](search-menus-and-commands.md#project-commands). The simulator tab only shows and drives the device.
+«Simulator» is the single UI word for both iOS Simulator and Android Emulator. A **device** is one specific simulator, e.g. `iPhone 17 Pro · iOS 27` or `Pixel 9 Pro · Android 16`. The main use case is debugging React Native (0.85+). Metro and the build are started by the agent or by [project commands](search-menus-and-commands.md#project-commands). The simulator tab only shows and drives the device. Devices are local: simulators of this machine, never a cloud device service.
 
 <a id="sim-device"></a>
-### Device belongs to the project
+### Project device
 
-- The chosen device is saved in `projects/<id>/project.json` as `simulator: { "platform": "ios" | "android", "device": "<udid | avd name>" }`. Every task of the project shows the same device and the same frame stream. A device takes 1–3 GB of RAM and seconds to tens of seconds to boot, and the app on it connects to one Metro.
+- The project's **default device** is saved in `projects/<id>/project.json` as `simulator: { "platform": "ios" | "android", "device": "<udid | avd name>" }`. A task without a device of its own uses it. A device takes 3–4 GB of memory when booted and seconds to tens of seconds to boot, and the app on it connects to one Metro.
 - If nothing is chosen, the person's tab falls back to the first iPhone of the newest runtime. **The agent never guesses**: for the agent, the project device is only the chosen one or a running iPhone.
-  - `simulator_open` without `device`, when nothing is chosen and nothing is running, starts nothing and refuses with: `No device is chosen for this project and none is running. Pass device: the one the app is built and installed on (simulator_state lists them).`
-  - `simulator_state` then starts with `No device is chosen for this project.`. A running iPhone that wasn't chosen shows as `<device> · booted · not chosen, simulator_open uses it` (or `running` once streaming).
-  - A device passed to `simulator_open`, or a running device it uses, becomes the project device.
+  - `simulator_open` without `device`, when the task has no device, nothing is chosen and nothing is running, starts nothing and refuses with: `No device is chosen for this project and none is running. Pass device: the one the app is built and installed on (simulator_state lists them).`
+  - `simulator_state` then says `No device is chosen for this project.`. A running iPhone that wasn't chosen shows as `<device> · booted · not chosen, simulator_open uses it` (or `running` once streaming).
+  - A device the person picks in the tab, or one the foreman or a solo agent passes as `device`, becomes the project device too. A worker's choice never changes it.
   - `simulator_state` and `simulator_open` re-read the device list, so `booted` is current. The toolchain is read once per launch.
-- Crew workers queue for the single device. A worker's first `simulator_*` call takes it, and it is released at the end of that worker's turn or after 60 s without a call. The foreman and solo agents go ahead of waiting workers. A waiting call gives up after 60 s with `The simulator is busy: another agent of the crew is using it. Do other work and retry later.`. Waiting tasks show «Waiting for the simulator».
+
+<a id="sim-lease"></a>
+### Devices and leases
+
+- A task holds a **lease** on one device: the device its tab shows, its agent's tools act on and its Metro serves. The lease is taken by the task's first use of a device (a `simulator_*` call that touches the device, **Start** in its tab, or a pick in its picker) and kept until the task picks another device or ends. A task without a lease shows and uses the project device.
+- Leases are saved per project in `projects/<id>/simulator-devices.json`: `{ schemaVersion: 1, tasks: { <taskId>: { platform, device, own? } } }` (`own`: the device was made for this task, see [A device of its own](#sim-own-device)). An entry that does not validate is dropped and the others stay. A project without the file, and an older `project.json`, load as before: every task uses the project device.
+- Several tasks may hold leases on one device (the person's tasks on the project iPhone, for example). They take turns in that device's **lane**: the first `simulator_*` call takes the device, and it is released at the end of that task's turn or after 60 s without a call. The person, the foreman and solo agents go ahead of waiting workers in the lane. A waiting call gives up after 60 s with `The simulator is busy: another agent of the crew is using it. Do other work and retry later.`. Waiting tasks show «Waiting for the simulator». Different devices are different lanes, so two tasks on two devices act at the same time. `simulator_state` never waits in a lane.
+- **`device` on every tool.** Each `simulator_*` tool takes an optional `device`: a kind (`iPhone`, `iPad`, `Android`), a model (`iPhone 17 Pro`, `Pixel 9`), or a name or id from `simulator_state`. Matching is exact id, then exact name, then a kind or a part of the name, ignoring case. Among the matches the task's own lease wins, then a device nobody else holds (running first), then a running device held by others. The match becomes the task's lease. Without `device` a call uses the task's lease, else the project device. No match: `No device matches "<device>". Call simulator_state for the list.`
+- **A crew worker gets its own device.** A worker never shares a device with another task while it can have its own. A worker's first call without a lease, or with a `device` held by another task, takes a matching device nobody holds; failing that, on iOS it gets a copy of the wanted device ([A device of its own](#sim-own-device)). When no copy can start (Android, the device cap, low memory), the worker leases the wanted device and waits in its lane, as before, and the reply's first line says why (`Sharing iPhone 17 Pro with another task: 2 of 2 local devices run.`).
+- The person never waits in a lane: a touch, a key or a button in the tab goes to the device at once.
+
+<a id="sim-own-device"></a>
+### A device of its own (iOS)
+
+- The copy is made from the wanted device (the project device, unless the worker named another) and is named `<device> · <task title>` (cut to 60 characters). When the source is shut down, `simctl clone` copies it with the apps and their data (about 3 s and 0.5 GB of disk). A booted source cannot be cloned, so `simctl create` makes a new device of the same model and runtime, without the source's app data.
+- The copy then boots like any device (the [cap and memory gate](#sim-cap) apply) and every app the person installed on the source is installed on it again (`simctl install`, from the source's own app bundles under `CoreSimulator/Devices/<udid>/data/Containers/Bundle/Application`). A fresh clone still runs its apps from the source's folders until this reinstall, so the reinstall happens before the copy is used, and the app keeps its data.
+- **Bookkeeping**: the lease of a copy carries `own: { source, reinstalled }`. A copy whose reinstall failed or was cut off (`reinstalled: false`) is booted and reinstalled before its next use. A device that is the source of a copy not yet reinstalled is never deleted. Copies are deleted (`simctl shutdown`, then `simctl delete`) when their task ends (removed, archived or completed). This is checked when a task's host stops, after an archive or a removal, every 30 s while the module is on, and on app start. A copy the task leaves for another device keeps its own entry, `<taskId>.<udid>`, and goes the same way. An entry stays until its copy is really deleted, and a copy freed by a deletion goes in the same pass. A copy is never offered as the project device.
+- **Android** has no copy: an AVD cannot be cloned while it runs, and two instances of one AVD need `-read-only`, which loses what the agent installs. A worker takes another AVD nobody holds when the person created one; otherwise it shares the wanted device by its lane. The agent installs the app on an AVD it took with `adb install` itself.
+
+<a id="sim-cap"></a>
+### Device cap and memory
+
+- **Local devices** (`agents.simulatorDevices`, Settings ▸ Modules ▸ Simulator settings, 1–8, default 2): how many devices may run at once. Every booted device of the list counts, also ones started outside the app.
+- Before a device boots, main reads the device list again (a simulator started or shut down outside the app counts), then checks the cap and the system's **memory pressure**; a boot that passes takes its slot in the same step, so two boots at once never take one free slot. The system's signal of memory pressure: on macOS `sysctl kern.memorystatus_vm_pressure_level` (`2` warn or `4` critical is low memory; free memory is not a signal there), on Linux `/proc/pressure/memory` (`some avg10` ≥ 10), or `MemAvailable` under 10 % of `MemTotal` where pressure stall information is missing. Windows has no signal and only the cap applies.
+- An agent's boot that meets the cap or low memory waits, checking every 2 s, up to 60 s; its task shows «Waiting for the simulator» and the tab of that task says why. Then it gives up with `Cannot start <device>: 2 of 2 local devices run (Settings ▸ Modules ▸ Simulator settings). Use a running device (simulator_state lists them) or retry later.` or `Cannot start <device>: memory is low. Retry later, or ask the person to start it.`
+- In the person's picker the devices that are off are disabled while the gate is closed, and the list's footer says why: `2 of 2 devices run.`, or `Memory is low. New devices are off.` with **Start anyway**. **Start anyway** lifts the memory block while the list stays open: the devices become available, the footer keeps `Memory is low.`, and the device then started records a chat row `started with low memory` ([chat row](#sim-chat-row)). The off-device screen of the tab offers the same: its **Start** is **Start anyway** under low memory. There is no way past the cap.
+
+<a id="sim-chat-row"></a>
+### Device row in the chat
+
+A task's chat gets a quiet service row (event `simulator.device`) when its lease moves to a device: `Device · iPhone 17 Pro · Metro :8083` (the port when the task has one), and `Device · iPhone Air · started with low memory · by you` for the person's start past low memory (an agent never starts past it). The row is not a control.
 
 <a id="sim-toolchain"></a>
 ### Toolchain and lifecycle
@@ -287,7 +317,8 @@ Chromium's own permission handler always says no. The page script replaces `Noti
 - **Discovery** uses tools the person already has, and the app installs nothing. iOS uses `xcrun simctl list -j devices available`, with Xcode found via `xcode-select -p`; macOS only. Android uses `emulator -list-avds` and `adb devices`. The SDK is looked up in `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `~/Library/Android/sdk`, `~/Android/Sdk`, and counts only if it contains `emulator/emulator`. The device name and OS come from the AVD's `config.ini`.
 - **Missing toolchain** gives one sentence: «Install Xcode from the App Store to run iOS simulators.», or on Linux «Install Android Studio to run Android simulators. iOS simulators need macOS.». With no devices: «No simulators» and «Create a simulator in Xcode or Android Studio, then check again.» with a **Check** button.
 - **Boot without a window**: iOS uses `simctl boot`. Android uses `emulator -avd <name> -no-window -no-audio -gpu host -no-boot-anim` and waits for `sys.boot_completed`. Without `-gpu host`, a windowless emulator renders in software at 1–5 fps. Simulator.app and Device Hub are never opened, and the emulator process never takes focus.
-- **Shutdown**: devices the app booted itself are shut down (`simctl shutdown`, `adb emu kill`) when the app quits or the module is turned off. Devices started by someone else are left running. The picker can also shut down any running device («Shut down {device}»).
+- **Shutdown**: devices the app booted itself are shut down (`simctl shutdown`, `adb emu kill`) when the app quits or the module is turned off. Devices started by someone else are left running. The picker can also shut down a running device nobody else holds («Shut down {device}»).
+- **Several at once**: each booted device has its own helper and its own frame stream; frames reach the tabs whose task shows that device.
 
 <a id="sim-stream"></a>
 ### Frames and input
@@ -306,10 +337,23 @@ Chromium's own permission handler always says no. The page script replaces `Noti
 <a id="sim-tab"></a>
 ### Simulator tab
 
-- **Strip 1**: device picker (platform glyph, `name · OS`, with iOS and Android groups, a running dot, ✓ on the chosen device, and **Shut down {device}** for running ones). On the right is the Metro chip: `Metro :8081`, with a tooltip giving app id · address · root. If Metro isn't found the chip reads **No Metro** in amber.
+- The tab of a task shows **that task's device**: its lease, else the project device. Two tasks on two devices show two different screens.
+- **Strip 1**: device picker (platform glyph, `name · OS`, with iOS and Android groups, a running dot, ✓ on the task's device). Each row ends with who holds the device:
+
+| Row tail | When |
+| --- | --- |
+| `this task` | The task's own device |
+| `queued` | The task's own device while its lane is held by another task |
+| `<role> · <title>` or `<title>` | Another task holds the device now, or owns it (a worker's copy), or is the only other lease on it |
+| `{n} tasks` | Several other tasks hold leases on it and none is using it now |
+| `iOS 27` (the OS) | Nobody holds it |
+
+  A running device that no other task is using now (holding its lane) and that is not another task's copy also has **Shut down {device}** after its tail; main refuses the same shutdown from anywhere else with `<device> is in use by another task.` Picking a device moves the task's lease to it; picking a device held by another task puts the task in that device's lane. While the task waits, the trigger reads `iPhone 17 · waits for Client flows`.
+- **List footer** (only while the gate is closed, see [Device cap and memory](#sim-cap)): `2 of 2 devices run.`, or `Memory is low. New devices are off.` with **Start anyway** (S, soft), then `Memory is low.` once lifted. Devices that are off are disabled meanwhile; running devices stay available.
+- On the right of strip 1 is the Metro chip: `Metro :8081`, with a tooltip giving app id · address · root. If Metro isn't found the chip reads **No Metro** in amber.
 - **Strip 2**: **Home**, **Back** (Android only), **Rotate**, a divider, **Reload app** and **DevTools** (both need Metro; DevTools opens React Native DevTools through Metro `/open-debugger`), and **Screenshot to chat** on the right (a JPEG re-encoded to PNG for the chat).
 - The screen sits inside a device frame on a tinted background and is scaled to fit the tab.
-- **States**: «{device} is off» + **Start**; «{device} is starting…» with a spinner; running; missing toolchain; no simulators; landscape. Without Metro, a warning row reads «Metro is not running in this task», with **Commands…** (opens project commands in search, when that module is on).
+- **States**: «{device} is off» + **Start** (under the cap: `2 of 2 devices run.` and no button; under low memory: `Memory is low. New devices are off.` and **Start anyway**); «{device} is starting…» with a spinner, also while the boot waits for the gate; running; missing toolchain; no simulators; landscape. Without Metro, a warning row reads «Metro is not running in this task», with **Commands…** (opens project commands in search, when that module is on).
 - An agent tap is marked by an accent ring of about 600 ms with a label like `tap · <testID>`.
 - No app console, network panel or DevTools of our own is built for the person. React Native DevTools covers these, in the same way the browser defers to Chromium DevTools.
 
@@ -327,12 +371,12 @@ Chromium's own permission handler always says no. The page script replaces `Noti
 <a id="sim-tools"></a>
 ### Simulator MCP tools
 
-These are served by the same `brigadir` server (`mcp__brigadir__simulator_*`). The tools work even when no simulator tab is open, because the device and stream live in main. `simulator_open` opens the tab in the agent's task.
+These are served by the same `brigadir` server (`mcp__brigadir__simulator_*`). The tools work even when no simulator tab is open, because the device and stream live in main. `simulator_open` opens the tab in the agent's task. Every tool takes an optional `device` ([Devices and leases](#sim-lease)).
 
 | Tool | Does |
 | --- | --- |
-| `simulator_state` | The chosen device, platform, OS, running state, the app on screen, screen size in points, the Metro link (every Metro found, with its root and an «attached» mark), and the available devices |
-| `simulator_open` | Boots the chosen or given `device` and waits until it runs. Optionally launches `app` (bundle id or package) or opens `url` (deep link). |
+| `simulator_state` | The task's device (or the project device it would use), platform, OS, running state, the app on screen, screen size in points, the local devices running and the cap, low memory, the task's Metro port, the Metro link (every Metro found, with its root and an «attached» mark), and the available devices, each with who holds it (`yours`, `used by <task>`, `free`) |
+| `simulator_open` | Boots the task's device (or the given `device`) and waits until it runs, connects it to the task's Metro ([Connect](#metro-connect)). Optionally launches `app` (bundle id or package) or opens `url` (deep link). |
 | `simulator_ui` | Accessibility tree, one element per line: role, label, `#testID`, frame in points. Paged with `offset`. `grid: true` adds a 32 pt hit-test sweep that finds children hidden by containers (iOS, slower). |
 | `simulator_act` | One action: `tap`, `longpress`, `swipe` (to `x2,y2`) at `x,y` points or at an element by `id` (testID) or `label`; `type`; `key` (a KeyboardEvent code); `button` (`home`, `lock`, `back` on Android); `rotate`. Answers once the screen has settled, with what changed in the tree ([settle and changes](#sim-act-settle)). |
 | `simulator_wait` | Waits in main until an element appears, or with `gone: true` disappears: `text` (in a label or value), `id` (testID) or `label` (as `simulator_act` finds it). `timeoutMs` up to 30 000, default 10 000 ([waiting](#sim-wait)). |
@@ -365,20 +409,29 @@ These are served by the same `brigadir` server (`mcp__brigadir__simulator_*`). T
 <a id="metro"></a>
 ### Metro and React Native data
 
-- **Discovery**: main polls `/status` on ports 8081–8090 and 19000–19002. Each Metro's `X-React-Native-Project-Root` is matched first against the agent's task tree (worktree), then against the project roots.
-- **Several Metros**: the project and each worktree can run their own. The client takes the Metro whose `/json/list` has a target for **this device** (`deviceName`). If several match, or none, the tree of the task whose agent last used the simulator wins, then the project root. When the app moves to another Metro, the old target disappears and the client searches again.
+The app never starts Metro: the agent or a project command does, in the task's folder.
+
+<a id="metro-port"></a>
+- **A port per worktree**: the host of a task with its own worktree takes a Metro port when it starts, before its agent and terminals, and sets `RCT_METRO_PORT` in its environment, so the agent's session and every terminal of the task have it (`expo start` and `react-native start` take `--port`, then `RCT_METRO_PORT`, then 8081). The host does this itself, so a crew worker's host, which its foreman's host starts, takes its own port rather than the foreman's. Ports are kept in `metro-ports.json` of the data root (`{ schemaVersion: 1, ports: { "<projectId>/<taskId>": port } }`), and a task reuses its port while it is free or held by a Metro of its worktree; otherwise it gets the lowest free port from 8082 up that no other task has. One allocator works at a time, under the lock file `metro-ports.lock` (a lock older than 15 s is stale), and writes its port before letting go, so two hosts starting together never get the same port. «Free» means the port could be listened on at both `127.0.0.1` and `::` just now: a busy port is never handed out, because Expo started without a terminal aborts on a busy port instead of moving on. A task in the project folder itself gets no port: its Metro is the project's, on 8081, and a port inherited from another task's host is dropped (one the person set stays). An ended task gives its port back.
+- **What a worktree needs**: its own installed dependencies (`node_modules` from the project's install command). A worktree without them cannot start Metro; `simulator_state` and `simulator_open` then say `This task's worktree has no node_modules, so its Metro cannot start: install the dependencies in the worktree (the project's install command), then start Metro there; it takes port <port> from RCT_METRO_PORT.`
+- **Discovery**: main polls `/status` on the ports given to the project's tasks, plus 8081–8090 and 19000–19002 for a Metro started by hand. Each Metro's `X-React-Native-Project-Root` is matched against the task's tree (worktree), then the project roots.
+- **Several Metros**: the project and each worktree can run their own. Each task's client takes the Metro of **its own tree** whose `/json/list` has a target for **its device** (`deviceName`), then any Metro serving its device, then its own tree's Metro, then the project root. When the app moves to another Metro, the old target disappears and the client searches again. When the task's lease moves to another device, its client is replaced, with empty logs and requests, and the new device is connected.
+
+<a id="metro-connect"></a>
+- **Connect**: the lease connects a device to its task's Metro, not the last agent to call. When the task's own Metro answers and has no target for the task's device, main opens the dev-client link on the device once per device and port: iOS `simctl openurl <udid> <scheme>://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A<port>`, Android `adb -s <serial> reverse tcp:<port> tcp:<port>` and then the same link through `am start -a android.intent.action.VIEW`. If iOS asks «Open in …?», main taps **Open** through the accessibility tree. The scheme is read from the task's tree, then the project: `expo.scheme` of `app.json` (the first one when it is a list), else `scheme:` in `app.config.ts`/`.js`, else `exp+<expo.slug>`. `simulator_open` reports `Connected <device> to Metro :<port>.`; with no scheme found it reports `Could not read the app's URL scheme from app.json: open <scheme>://expo-development-client/?url=… with simulator_open url.`.
 - **CDP client** runs in main, not the renderer. It connects over the WebSocket `/inspector/debug` with `Origin: http://127.0.0.1:<port>`, because Expo's Metro drops `localhost` origins. It enables `Runtime`, `Log` and `Network`. Ring buffers per target: 1000 log entries, 500 requests. Several debuggers can be attached at once, so React Native DevTools keeps working alongside it. Replayed old console entries after a reconnect are dropped by timestamp.
 - **Observed RN/Expo behavior the client depends on**:
   - Exceptions and unhandled rejections arrive as `console.error` with an Error object (there is no `Runtime.exceptionThrown`). They are shown as level `error` with the stack.
   - There are two network sources. Expo's interceptor (fetch, XHR, images) sends events without needing `Network.enable`. RN's own domain covers XHR only. Duplicates are merged on method + URL + start time, preferring Expo's record. A request with no response after 30 s is shown as `no response`.
   - Text bodies up to 64 KiB are fetched right after `loadingFinished`. Larger ones are fetched on demand, and if Metro doesn't return them the reply says so.
 - **Native logs**: on iOS, a steady `simctl spawn <udid> log stream --style compact` filtered to the app process (the executable comes from `simctl appinfo` for the Metro target's `appId`), kept in a 2000-line ring. It restarts when `appId` changes and stops with the device, the module or app quit. Until Metro names the app, `log show --last 2m` is used. On Android, `adb logcat -d --pid`.
-- **Dev client launch**: `simctl launch <udid> <bundle> --initialUrl http://127.0.0.1:<port>`. The `exp+…://expo-development-client` deep link opens a system «Open in …?» dialog that someone has to confirm.
 
 <a id="later"></a>
 ## Later
 
-- Creating simulator devices from the app (`simctl create`, `avdmanager`).
+- Creating simulator devices from the app for the person (`simctl create`, `avdmanager`); today only a worker's own copy is made.
+- A worker's own Android device: a second `-read-only` instance of an AVD, or a copy made with `avdmanager`.
+- Connecting a bare React Native app (no dev client) to a worktree's Metro port.
 - The tree diff of `simulator_act` on Android, once a tree source faster than `uiautomator dump` exists (a resident accessibility service on the device).
 - Physical Android devices in the picker.
 - EventSource, WebSocket and stream pages shown in the person's Network drawer.
@@ -400,3 +453,6 @@ These are served by the same `brigadir` server (`mcp__brigadir__simulator_*`). T
 - A «Build and run» button in the simulator: the agent or project commands build the app.
 - Installing Xcode, the Android SDK or devices from the app.
 - Embedding Simulator.app or Device Hub windows.
+- Remote or cloud devices: every device is a simulator of this machine.
+- Starting Metro from the app: the agent or a project command starts it in the task's folder.
+- A way past the device cap: only low memory can be overridden, by the person.

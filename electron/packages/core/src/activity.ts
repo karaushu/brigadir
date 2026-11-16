@@ -282,6 +282,7 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 				'crew.worker.stopped',
 				'quick-ask.changed',
 				'context.compacted',
+				'simulator.device',
 				'budget.reached',
 			].includes(e.kind)
 		) {

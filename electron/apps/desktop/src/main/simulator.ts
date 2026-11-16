@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -7,9 +7,12 @@ import {
 	devicePoint,
 	findElement,
 	formatUi,
+	gateOpen,
 	hidUsage,
 	isLandscape,
 	isRecord,
+	matchDevices,
+	simulatorLeases,
 	simulatorOrientations,
 	simulatorUi,
 	simulatorDeviceLabel,
@@ -17,7 +20,10 @@ import {
 	type ProjectSimulator,
 	type SimulatorAgentCommand,
 	type SimulatorActRequest,
+	type SimulatorGate,
+	type SimulatorLease,
 	type SimulatorUi,
+	type SimulatorUse,
 	diffUi,
 	formatUiDiff,
 	type TaskKey,
@@ -29,26 +35,40 @@ import {
 	type SimulatorToolchain,
 	type SimulatorVideoConfig,
 } from '@brigadir/core';
-import { SessionStore } from '@brigadir/persistence';
+import {
+	atomicJson,
+	forgetMetroPort,
+	readDocument,
+	readMetroPorts,
+	safePath,
+	SessionStore,
+} from '@brigadir/persistence';
 import {
 	MetroSession,
 	appRequests,
+	appScheme,
+	connectPort,
+	devClientLink,
 	formatLogs,
 	formatRequest,
 	formatRequests,
 	type MetroDeps,
 } from './metro';
 import { isChange, ScreenWatch, settleLine, waitForElement } from './simulator-settle';
+import { SimulatorQueue } from './simulator-queue';
+import { lowMemory, passGate, shareReason } from './simulator-gate';
 /** How long a tree read stays true on a screen that sends no frames (spec/browser-and-simulator#sim-act-settle). */
 const treeKeepMs = 10_000;
+/** How long a memory-pressure reading is reused (spec/browser-and-simulator#sim-cap). */
+const memoryKeepMs = 2000;
 const run = promisify(execFile);
 const metroMissing =
 	'Metro is not attached: start Metro in this task (a project command or the console), then open the app.';
 /**
- * spec/browser-and-simulator#simulator: devices, their lifecycle and the frames of the simulator column. A device belongs to the project; one
- * helper per booted device streams H.264 and takes input: `sim-helper` for iOS, `android.cjs` over
- * scrcpy-server for an Android emulator; both speak the same stdout/stdin protocol. Devices the app booted itself are shut
- * down when the app quits or the module is switched off; devices booted by someone else are left as they are.
+ * spec/browser-and-simulator#simulator: devices, their lifecycle and the frames of the simulator column. A task holds a lease on one device
+ * (spec/browser-and-simulator#sim-lease); one helper per booted device streams H.264 and takes input: `sim-helper` for iOS, `android.cjs`
+ * over scrcpy-server for an Android emulator; both speak the same stdout/stdin protocol. Devices the app booted itself are shut down
+ * when the app quits or the module is switched off; devices booted by someone else are left as they are.
  */
 type LogStream = { appId: string; lines: string[]; stop(): void };
 type Runtime = {
@@ -86,23 +106,71 @@ type Tools = {
 	platform: NodeJS.Platform;
 	/** The clock of the kept tree (spec/browser-and-simulator#sim-act-settle). */
 	now: () => number;
+	/** spec/browser-and-simulator#sim-cap: the cap of local devices (Settings), and whether the system reports memory pressure. */
+	cap: () => number;
+	lowMemory: () => Promise<boolean>;
+	/** Waits between two looks at the gate. */
+	sleep: (ms: number) => Promise<void>;
+	gateWaitMs: number;
+	readText: (path: string) => Promise<string>;
+	/** `CoreSimulator/Devices`: where a device keeps the bundles of the apps installed on it (spec/browser-and-simulator#sim-own-device). */
+	simulatorDevices: string;
+	/** The task's own worktree, or null for a task in the project folder (spec/browser-and-simulator#metro-port). */
+	worktree?: (key: TaskKey) => Promise<string | null>;
+	/** A task's name for the agent's text; its title. */
+	taskTitle: (key: TaskKey) => Promise<string>;
+	/** spec/browser-and-simulator#sim-own-device: the task is removed, archived or completed. */
+	taskEnded: (key: TaskKey) => Promise<boolean>;
+	/** spec/browser-and-simulator#sim-chat-row: journals the task's device row. */
+	record: (
+		key: TaskKey,
+		row: { device: string; metroPort: number | null; lowMemory: boolean }
+	) => Promise<void>;
+	/** spec/agents-and-providers#tools-awareness: the tasks of a project waiting for a device. */
+	waiting: (projectId: string, ids: string[]) => void;
+	/** The lane rules' timings (spec/browser-and-simulator#sim-lease). */
+	queue?: { waitMs?: number; idleMs?: number };
 };
+/** iOS model and runtime of a device: what a new device of the same kind is made from (spec/browser-and-simulator#sim-own-device). */
+type IosKind = { type: string; runtime: string };
+const nameOf = (key: TaskKey) => `${key.projectId}/${key.id}`;
+const same = (a: TaskKey | null | undefined, b: TaskKey) =>
+	!!a && a.projectId === b.projectId && a.id === b.id;
+const leaseFile = 'simulator-devices.json';
 export class Simulators {
 	private toolchain: SimulatorToolchain | null = null;
 	private devices: SimulatorDevice[] = [];
+	private kinds = new Map<string, IosKind>();
 	private runtimes = new Map<string, Runtime>();
+	/** project.json `simulator` of each project read so far: the project's default device. */
 	private selected = new Map<string, string | null>();
-	private resolved = new Map<string, string | null>();
-	private watchers = new Map<string, number>();
+	/** spec/browser-and-simulator#sim-lease: every task's record, by `projectId/taskId`, loaded from all projects at first use. */
+	private leases = new Map<string, { key: TaskKey; lease: SimulatorLease }>();
+	private leasesLoaded: Promise<void> | null = null;
+	private leaseWrites = new Map<string, Promise<unknown>>();
+	/** The tabs of tasks: how many watch, and the device each one shows now. */
+	private views = new Map<string, { key: TaskKey; watchers: number; device: string | null }>();
 	private closed = false;
 	private metros = new Map<string, MetroSession>();
+	/** spec/browser-and-simulator#metro-connect: the device and port a task's app was last pointed at. */
+	private connected = new Map<string, string>();
+	/** Tasks whose boot waits at the gate now (spec/browser-and-simulator#sim-cap). */
+	private gateWaits = new Set<string>();
+	/** One copy is made at a time, so two workers never pass the gate on the same free slot. */
+	private copying: Promise<unknown> = Promise.resolve();
+	private memory: { low: boolean; at: number } | null = null;
+	private portCache: { ports: Record<string, number>; at: number } | null = null;
+	/** Devices whose boot passed the gate and is not yet a booting runtime (spec/browser-and-simulator#sim-cap). */
+	private reserved = new Set<string>();
+	private queue: SimulatorQueue;
 	private tools: Tools;
 	private sdk: string | null = null;
+	private publishing = false;
 	constructor(
 		private dataDir: string | undefined,
 		helper: string,
 		private emit: (event: SimulatorEvent) => void,
-		private frame: (projectId: string, frame: SimulatorFrame) => void,
+		private frame: (device: string, frame: SimulatorFrame) => void,
 		tools?: Partial<Tools>
 	) {
 		this.tools = {
@@ -118,138 +186,191 @@ export class Simulators {
 			stream: lineStream,
 			platform: process.platform,
 			now: Date.now,
+			cap: () => 2,
+			lowMemory: () =>
+				lowMemory({
+					platform: this.tools.platform,
+					run: (file, args) => this.tools.run(file, args),
+					read: (path) => readFile(path, 'utf8'),
+				}),
+			sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+			gateWaitMs: 60_000,
+			readText: (path) => readFile(path, 'utf8'),
+			simulatorDevices: join(homedir(), 'Library/Developer/CoreSimulator/Devices'),
+			taskTitle: async (key) =>
+				(await (await SessionStore.at(this.dataDir)).task(key).catch(() => null))?.title ?? key.id,
+			taskEnded: async () => false,
+			record: async () => {},
+			waiting: () => {},
 			...tools,
 		};
+		this.queue = new SimulatorQueue({
+			...this.tools.queue,
+			onWaiting: (projectId, ids) => this.tools.waiting(projectId, ids),
+			onChange: () => this.publishAll(),
+		});
 	}
-	async command(projectId: string, command: SimulatorCommand): Promise<unknown> {
+	/** The person's commands from a task's simulator tab. */
+	async command(key: TaskKey, command: SimulatorCommand): Promise<unknown> {
 		if (this.closed) throw new Error('The simulator is off in Settings.');
 		switch (command.kind) {
 			case 'state':
-				return this.state(projectId);
+				this.view(key);
+				return this.state(key);
 			case 'refresh':
 				this.toolchain = null;
 				await this.refresh();
-				return this.publish(projectId);
+				return this.publish(key);
 			case 'select':
-				return this.select(projectId, command.device);
+				return this.select(key, command.device, true);
 			case 'boot':
-				return this.boot(projectId);
+				return this.start(key, command.anyway === true);
 			case 'shutdown':
-				return this.shutdown(projectId, command.device);
+				return this.shutdown(key, command.device);
 			case 'watch': {
-				const count = Math.max(0, (this.watchers.get(projectId) ?? 0) + (command.on ? 1 : -1));
-				this.watchers.set(projectId, count);
-				const runtime = await this.runtime(projectId);
+				const view = this.view(key);
+				view.watchers = Math.max(0, view.watchers + (command.on ? 1 : -1));
+				const runtime = await this.runtime(key);
 				if (command.on && runtime?.config) {
-					this.emit({ projectId, config: runtime.config });
+					this.emit({ device: runtime.device.id, config: runtime.config });
 					this.send(runtime, { cmd: 'keyframe' });
 				}
 				return null;
 			}
 			case 'keyframe': {
-				const runtime = await this.runtime(projectId);
+				const runtime = await this.runtime(key);
 				if (runtime?.config) {
-					this.emit({ projectId, config: runtime.config });
+					this.emit({ device: runtime.device.id, config: runtime.config });
 					this.send(runtime, { cmd: 'keyframe' });
 				}
 				return null;
 			}
 			case 'touch': {
-				const runtime = await this.live(projectId);
+				const runtime = await this.live(key);
 				this.send(runtime, { cmd: 'touch', phase: command.phase, x: command.x, y: command.y });
 				return null;
 			}
 			case 'key': {
-				const runtime = await this.live(projectId);
+				const runtime = await this.live(key);
 				this.send(runtime, { cmd: 'key', usage: command.usage, down: command.down });
 				return null;
 			}
 			case 'button':
-				return this.request(await this.live(projectId), { cmd: 'button', name: command.name });
+				return this.request(await this.live(key), { cmd: 'button', name: command.name });
 			case 'text':
-				return this.request(await this.live(projectId), { cmd: 'text', text: command.text });
+				return this.request(await this.live(key), { cmd: 'text', text: command.text });
 			case 'paste':
-				return this.paste(projectId, command.text);
+				return this.paste(await this.live(key), command.text);
 			case 'screenshot':
-				return this.screenshot(await this.live(projectId));
+				return this.screenshot(await this.live(key));
 			case 'reload':
-				return this.reload(projectId);
+				return this.reload(key);
 			case 'devtools':
-				return this.devtools(projectId);
-			case 'rotate':
-				await this.rotate(await this.live(projectId));
-				return this.publish(projectId);
+				return this.devtools(key);
+			case 'rotate': {
+				const runtime = await this.live(key);
+				await this.rotate(runtime);
+				this.publishDevice(runtime.device.id);
+				return null;
+			}
 		}
 	}
-	/** spec/browser-and-simulator#simulator: the agent's `simulator_*` tools, answered in compact text; the human sees every action in the column. */
-	async agent(key: TaskKey, command: SimulatorAgentCommand): Promise<unknown> {
+	/**
+	 * spec/browser-and-simulator#sim-tools: the agent's `simulator_*` tools, answered in compact text; the human sees every action in the column.
+	 * `queued` — a crew worker: it waits behind the person, the foreman and solo agents in a device's lane, and gets a device of its own.
+	 */
+	async agent(key: TaskKey, command: SimulatorAgentCommand, queued = false): Promise<unknown> {
 		if (this.closed) throw new Error('The simulator is off in Settings.');
-		const projectId = key.projectId;
-		// The agent's task tree wins when several Metros serve this device.
-		void SessionStore.at(this.dataDir).then((store) =>
-			this.metro(projectId).prefer(join(store.root, 'worktrees', projectId, key.id))
-		);
 		// spec/browser-and-simulator#sim-device: `booted` is read again, a device started in Xcode after launch counts.
-		if (command.tool === 'state' || command.tool === 'open')
+		if (command.tool === 'state' || command.tool === 'open' || command.device)
 			await (this.toolchain ? this.listDevices() : this.refresh());
-		if (command.tool === 'state') {
-			const state = await this.state(projectId),
-				running = state.status === 'on' || state.status === 'booting' || !!state.device?.booted,
-				guessed = !this.chosen(projectId),
-				lines = [
-					// spec/browser-and-simulator#sim-device: the column's fallback is not the agent's device.
-					state.device && !(guessed && !running)
-						? `${simulatorDeviceLabel(state.device)} · ${state.status === 'on' ? 'running' : state.status === 'off' && state.device.booted ? 'booted' : state.status}${state.screen ? ` · screen ${state.screen.width}×${state.screen.height} pt` : ''}${guessed ? ' · not chosen, simulator_open uses it' : ''}`
-						: 'No device is chosen for this project.',
-				];
-			if (state.error) lines.push(`Error: ${state.error}`);
-			if (state.orientation !== 'portrait')
-				lines.push(
-					`Orientation: ${state.orientation} (simulator_ui gives the interface as the app draws it)`
-				);
-			const metros = this.metros.get(projectId)?.found ?? [];
-			if (metros.length)
-				lines.push(
-					'Metro:',
-					...metros.map(
-						(item) =>
-							`- :${item.port} ${item.root}${item.attached ? ' · attached' : ''}${item.device ? ' · serves this device' : ''}`
-					)
-				);
+		// spec/browser-and-simulator#sim-lease: `simulator_state` never waits in a lane.
+		if (command.tool === 'state' && !command.device) return this.agentState(key);
+		const { device, note } = await this.agentDevice(key, command, queued);
+		const answer =
+			command.tool === 'state'
+				? await this.agentState(key)
+				: await this.queue.run(device.id, key, queued, () => this.agentOn(key, device, command));
+		return note && typeof answer === 'string' ? `${note}\n${answer}` : answer;
+	}
+	/** The turn of a task ended (or its session failed or stopped): the devices it holds go to the next task in their lanes. */
+	release(key: TaskKey) {
+		this.queue.release(key);
+	}
+	/** spec/browser-and-simulator#sim-tools: `simulator_state` in the agent's words. */
+	private async agentState(key: TaskKey) {
+		const state = await this.state(key),
+			lease = (await this.lease(key))?.lease,
+			running = state.status === 'on' || state.status === 'booting' || !!state.device?.booted,
+			guessed = !lease?.device && !this.chosen(key.projectId),
+			lines = [
+				// spec/browser-and-simulator#sim-device: the column's fallback is not the agent's device.
+				state.device && !(guessed && !running)
+					? `${lease?.device ? 'Your device' : 'Project device'}: ${simulatorDeviceLabel(state.device)} · ${state.status === 'on' ? 'running' : state.status === 'off' && state.device.booted ? 'booted' : state.status}${state.screen ? ` · screen ${state.screen.width}×${state.screen.height} pt` : ''}${guessed ? ' · not chosen, simulator_open uses it' : ''}`
+					: 'No device is chosen for this project.',
+			];
+		const waits = this.queue.waitsFor(key),
+			holder = waits ? this.queue.holder(waits) : null;
+		if (waits && holder)
 			lines.push(
-				`Toolchain: ${state.toolchain.xcode ?? 'no Xcode'} · ${state.toolchain.android ?? 'no Android SDK'}`,
-				'Simulators:',
-				...state.devices.map(
-					(device) =>
-						`- ${simulatorDeviceLabel(device)} (${device.id})${device.booted ? ' · booted' : ''}`
+				`Waiting: ${this.devices.find((item) => item.id === waits)?.name ?? waits} is used by «${await this.tools.taskTitle(holder)}»; your calls wait in its lane.`
+			);
+		if (state.error) lines.push(`Error: ${state.error}`);
+		if (state.orientation !== 'portrait')
+			lines.push(
+				`Orientation: ${state.orientation} (simulator_ui gives the interface as the app draws it)`
+			);
+		lines.push(
+			`Local devices: ${state.gate.running} of ${state.gate.max} run${state.gate.lowMemory ? '; memory is low, so new devices wait' : ''}.`
+		);
+		if (state.metroPort)
+			lines.push(
+				`Metro port of this task: ${state.metroPort} (RCT_METRO_PORT is set in your session and terminals).`
+			);
+		const modules = await this.missingModules(key);
+		if (modules) lines.push(modules);
+		const metros = this.metros.get(nameOf(key))?.found ?? [];
+		if (metros.length)
+			lines.push(
+				'Metro:',
+				...metros.map(
+					(item) =>
+						`- :${item.port} ${item.root}${item.own ? ' · your tree' : ''}${item.attached ? ' · attached' : ''}${item.device ? ' · serves your device' : ''}`
 				)
 			);
-			return lines.join('\n');
-		}
+		const holders = await Promise.all(
+			state.devices.map(async (device) => {
+				const use = state.uses[device.id];
+				return !use
+					? 'free'
+					: use.kind === 'mine'
+						? 'yours'
+						: use.kind === 'queued'
+							? `yours, waiting for «${await this.tools.taskTitle(use.holder)}»`
+							: use.kind === 'task'
+								? `used by «${await this.tools.taskTitle(use.task)}»`
+								: `used by ${use.count} tasks`;
+			})
+		);
+		lines.push(
+			`Toolchain: ${state.toolchain.xcode ?? 'no Xcode'} · ${state.toolchain.android ?? 'no Android SDK'}`,
+			'Simulators (pass device: a kind such as iPhone, iPad or Android, a model, or a name or id below):',
+			...state.devices.map(
+				(device, index) =>
+					`- ${simulatorDeviceLabel(device)} (${device.id})${device.booted ? ' · booted' : ''} · ${holders[index]}`
+			)
+		);
+		return lines.join('\n');
+	}
+	/** The agent's tools on its device, inside the device's lane. */
+	private async agentOn(key: TaskKey, device: SimulatorDevice, command: SimulatorAgentCommand) {
 		if (command.tool === 'open') {
-			if (command.device) {
-				if (!this.toolchain) await this.refresh();
-				const wanted = command.device.toLocaleLowerCase(),
-					device =
-						this.devices.find((item) => item.id === command.device) ??
-						this.devices.find((item) => item.name.toLocaleLowerCase() === wanted);
-				if (!device)
-					throw new Error(`No device named ${command.device}. Call simulator_state for the list.`);
-				await this.select(projectId, device.id);
-			} else {
-				// spec/browser-and-simulator#sim-device: without a choice only a running device is the project's; it becomes the choice.
-				const device = await this.device(projectId),
-					status = device ? this.runtimes.get(device.id)?.status : undefined;
-				if (!this.chosen(projectId)) {
-					if (!device || !(device.booted || status === 'on' || status === 'booting'))
-						throw new Error(
-							'No device is chosen for this project and none is running. Pass device: the one the app is built and installed on (simulator_state lists them).'
-						);
-					await this.select(projectId, device.id);
-				}
-			}
-			this.emit({ projectId, show: key });
-			const runtime = await this.ready(projectId);
+			this.emit({ show: key });
+			const runtime = await this.ready(key, device, false);
+			const connected = await this.connect(key, runtime).catch(
+				(error: unknown) =>
+					`Could not connect ${device.name} to this task's Metro: ${reason(error)}.`
+			);
 			if (command.app)
 				await (runtime.serial
 					? this.adb(runtime, [
@@ -279,15 +400,19 @@ export class Simulators {
 							runtime.device.id,
 							command.url,
 						]));
-			return `${simulatorDeviceLabel(runtime.device)} is running${command.app ? `; launched ${command.app}` : ''}${command.url ? `; opened ${command.url}` : ''}.`;
+			const modules = await this.missingModules(key);
+			return [
+				`${simulatorDeviceLabel(runtime.device)} is running${command.app ? `; launched ${command.app}` : ''}${command.url ? `; opened ${command.url}` : ''}.`,
+				...(connected ? [connected] : []),
+				...(modules ? [modules] : []),
+			].join('\n');
 		}
+		const metro = this.metros.get(nameOf(key));
 		if (command.tool === 'logs' && command.source !== 'native') {
-			const metro = this.metros.get(projectId);
 			if (!metro?.target) throw new Error(metroMissing);
 			return formatLogs(metro.logs, command.level, command.grep);
 		}
 		if (command.tool === 'network') {
-			const metro = this.metros.get(projectId);
 			if (!metro?.target && !metro?.requests.size) throw new Error(metroMissing);
 			if (command.requestId) {
 				const item = await metro.body(command.requestId);
@@ -297,11 +422,10 @@ export class Simulators {
 			}
 			return formatRequests(appRequests(metro), Date.now(), command.filter);
 		}
-		const runtime = await this.live(projectId).catch(() => {
+		const runtime = this.runtimes.get(device.id);
+		if (!runtime || runtime.status !== 'on' || !runtime.helper)
 			throw new Error('The device is not running. Call simulator_open first.');
-		});
-		if (command.tool === 'logs')
-			return this.nativeLogs(projectId, runtime, command.level, command.grep);
+		if (command.tool === 'logs') return this.nativeLogs(key, runtime, command.level, command.grep);
 		if (command.tool === 'screenshot') return this.screenshot(runtime);
 		if (command.tool === 'ui')
 			return formatUi(await this.ui(runtime, command.grid === true), command.offset ?? 0);
@@ -309,18 +433,473 @@ export class Simulators {
 			return this.withWatch(runtime, (watch) =>
 				waitForElement(command, () => this.ui(runtime, false, true), watch)
 			);
-		return this.withWatch(runtime, (watch) => this.act(projectId, runtime, command, watch));
+		if (command.tool !== 'act') throw new Error('Unknown simulator tool.');
+		return this.withWatch(runtime, (watch) => this.act(runtime, command, watch));
+	}
+	/**
+	 * spec/browser-and-simulator#sim-lease: the device an agent call works on. Its lease, else the project's device for the person, the foreman
+	 * and solo agents; a crew worker gets one nobody else holds or a copy of its own (spec/browser-and-simulator#sim-own-device). `note` — why a
+	 * worker shares a device.
+	 */
+	private async agentDevice(
+		key: TaskKey,
+		command: SimulatorAgentCommand,
+		queued: boolean
+	): Promise<{ device: SimulatorDevice; note?: string }> {
+		if (!this.toolchain) await this.refresh();
+		const current = (await this.lease(key))?.lease,
+			leased = current?.device
+				? this.devices.find((item) => item.id === current.device)
+				: undefined;
+		if (leased && current?.own && !current.own.reinstalled) await this.finishCopy(key, leased);
+		if (command.device) {
+			const matches = matchDevices(
+				this.devices.filter(
+					(item) => item.id === command.device || !this.ownedByOther(item.id, key)
+				),
+				command.device
+			);
+			if (!matches.length)
+				throw new Error(
+					`No device matches "${command.device}". Call simulator_state for the list.`
+				);
+			if (leased && matches.some((item) => item.id === leased.id)) return { device: leased };
+			const free = matches.find((item) => !this.heldByOther(item.id, key));
+			if (free) {
+				await this.setLease(key, free, !queued);
+				return { device: free };
+			}
+			if (queued) return this.workerDevice(key, matches[0]!);
+			await this.setLease(key, matches[0]!, true);
+			return { device: matches[0]! };
+		}
+		// A worker that had to share tries again for a device of its own: the gate may have opened since.
+		if (leased && queued && !current?.own && this.heldByOther(leased.id, key))
+			return this.workerDevice(key, leased);
+		if (leased) return { device: leased };
+		// spec/browser-and-simulator#sim-device: without a choice only a running device is the project's; it becomes the choice.
+		const device = await this.device(key.projectId),
+			status = device ? this.runtimes.get(device.id)?.status : undefined,
+			running = !!device && (device.booted || status === 'on' || status === 'booting');
+		if (!device || (!this.chosen(key.projectId) && !running)) {
+			if (command.tool === 'open')
+				throw new Error(
+					'No device is chosen for this project and none is running. Pass device: the one the app is built and installed on (simulator_state lists them).'
+				);
+			throw new Error('The device is not running. Call simulator_open first.');
+		}
+		if (!this.chosen(key.projectId) && !queued) await this.setDefault(key.projectId, device);
+		if (queued) return this.workerDevice(key, device);
+		// A call that only reads a device that is off takes no lease; `simulator_open` and a running device do.
+		if (command.tool === 'open' || running) await this.setLease(key, device, false);
+		return { device };
+	}
+	/** spec/browser-and-simulator#sim-lease: a crew worker never shares a device while it can have its own. */
+	private async workerDevice(
+		key: TaskKey,
+		wanted: SimulatorDevice
+	): Promise<{ device: SimulatorDevice; note?: string }> {
+		if (!this.heldByOther(wanted.id, key)) {
+			await this.setLease(key, wanted, false);
+			return { device: wanted };
+		}
+		if (wanted.platform === 'android') {
+			const other = matchDevices(this.devices, 'android').find(
+				(item) => !this.heldByOther(item.id, key)
+			);
+			if (other) {
+				await this.setLease(key, other, false);
+				return { device: other };
+			}
+			await this.setLease(key, wanted, false);
+			return {
+				device: wanted,
+				note: `Sharing ${wanted.name} with another task: an Android device cannot be copied, and no other is free.`,
+			};
+		}
+		// One copy at a time: the gate is read again inside, so two workers never take the same free slot.
+		const made = this.copying.then(async () => {
+			const gate = await this.gate();
+			if (!gateOpen(gate)) return { gate };
+			return { device: await this.makeCopy(key, wanted) };
+		});
+		this.copying = made.catch(() => {});
+		const result = await made;
+		if ('device' in result) return { device: result.device };
+		await this.setLease(key, wanted, false);
+		return {
+			device: wanted,
+			note: `Sharing ${wanted.name} with another task: ${shareReason(result.gate)}.`,
+		};
+	}
+	/**
+	 * spec/browser-and-simulator#sim-own-device: a device of the task's own, copied from `source`. A shut-down source is cloned with its apps
+	 * and their data; a booted one cannot be, so a new device of the same model and runtime is made. Either way the copy boots and the
+	 * person's apps are installed on it again from the source's bundles before it is used.
+	 */
+	private async makeCopy(key: TaskKey, source: SimulatorDevice): Promise<SimulatorDevice> {
+		const title = await this.tools.taskTitle(key),
+			name = `${source.name} · ${title}`.slice(0, 60),
+			sourceRuntime = this.runtimes.get(source.id),
+			booted =
+				source.booted || sourceRuntime?.status === 'on' || sourceRuntime?.status === 'booting';
+		let udid: string;
+		if (!booted)
+			udid = (await this.tools.run('/usr/bin/xcrun', ['simctl', 'clone', source.id, name])).trim();
+		else {
+			const kind = this.kinds.get(source.id);
+			if (!kind) throw new Error(`The model of ${source.name} is not known.`);
+			udid = (
+				await this.tools.run('/usr/bin/xcrun', ['simctl', 'create', name, kind.type, kind.runtime])
+			).trim();
+		}
+		if (!/^[A-Za-z0-9-]{1,64}$/.test(udid)) throw new Error('simctl did not make the device.');
+		// The record is written before the copy boots, so a crash in between still cleans it up.
+		await this.writeLease(key, {
+			...(await this.lease(key))?.lease,
+			platform: 'ios',
+			device: udid,
+			own: { source: source.id, reinstalled: false },
+		});
+		await this.listDevices();
+		let copy = this.devices.find((item) => item.id === udid);
+		if (!copy) {
+			copy = { id: udid, name, platform: 'ios', os: source.os, booted: false };
+			this.devices.push(copy);
+		}
+		await this.finishCopy(key, copy);
+		await this.tools
+			.record(key, {
+				device: copy.name,
+				metroPort: await this.portOf(key),
+				lowMemory: false,
+			})
+			.catch(() => {});
+		this.publishAll();
+		return copy;
+	}
+	/**
+	 * spec/browser-and-simulator#sim-own-device: boots a copy and installs the source's apps on it again, then marks it reinstalled. A copy
+	 * whose reinstall failed or was cut off (a crash, a failed `simctl install`) goes through this again before any use.
+	 */
+	private async finishCopy(key: TaskKey, copy: SimulatorDevice) {
+		const lease = (await this.lease(key))?.lease;
+		if (!lease?.own || lease.device !== copy.id || lease.own.reinstalled) return;
+		await this.ready(key, copy, false);
+		for (const app of await this.bundles(lease.own.source))
+			await this.tools.run('/usr/bin/xcrun', ['simctl', 'install', copy.id, app]);
+		await this.writeLease(key, { ...lease, own: { source: lease.own.source, reinstalled: true } });
+	}
+	/** The `.app` bundles the person installed on a device, read from its folder (works whether it runs or not). */
+	private async bundles(udid: string): Promise<string[]> {
+		const root = join(this.tools.simulatorDevices, udid, 'data/Containers/Bundle/Application');
+		const containers = await readdir(root).catch(() => [] as string[]);
+		const apps: string[] = [];
+		for (const container of containers) {
+			const entries = await readdir(join(root, container)).catch(() => [] as string[]);
+			for (const entry of entries)
+				if (entry.endsWith('.app')) apps.push(join(root, container, entry));
+		}
+		return apps;
+	}
+	/** spec/browser-and-simulator#sim-cap: booted devices against the cap, and the system's memory pressure (read at most every 2 s). */
+	private async gate(): Promise<SimulatorGate> {
+		const now = Date.now();
+		if (!this.memory || now - this.memory.at > memoryKeepMs)
+			this.memory = { low: await this.tools.lowMemory().catch(() => false), at: now };
+		return this.count();
+	}
+	/** Booted devices, ours booting, and slots taken by boots that passed the gate but have not registered yet. */
+	private count(): SimulatorGate {
+		const running = new Set(this.devices.filter((item) => item.booted).map((item) => item.id));
+		for (const [id, runtime] of this.runtimes)
+			if (runtime.status === 'on' || runtime.status === 'booting') running.add(id);
+		for (const id of this.reserved) running.add(id);
+		return { running: running.size, max: this.tools.cap(), lowMemory: this.memory?.low ?? false };
+	}
+	/**
+	 * spec/browser-and-simulator#sim-cap: one look at the gate for a boot. The device list is read again (a device started or shut down
+	 * outside the app counts), then the slot is counted and taken in one step, so two boots never take the same free slot.
+	 */
+	private async tryBoot(device: string, anyway: boolean) {
+		await this.listDevices().catch(() => {});
+		await this.gate();
+		const gate = this.count();
+		if (gateOpen(gate, anyway)) this.reserved.add(device);
+		return { open: gateOpen(gate, anyway), gate };
+	}
+	/** Another task holds the device's lane now, or holds a lease on it. */
+	private heldByOther(device: string, key: TaskKey) {
+		const holder = this.queue.holder(device);
+		if (holder && !same(holder, key)) return true;
+		for (const item of this.leases.values())
+			if (item.lease.device === device && !same(item.key, key)) return true;
+		return false;
+	}
+	/** A copy made for another task: never matched by a kind or a name for anyone else. */
+	private ownedByOther(device: string, key: TaskKey) {
+		for (const item of this.leases.values())
+			if (item.lease.device === device && item.lease.own && !same(item.key, key)) return true;
+		return false;
+	}
+	/** spec/browser-and-simulator#sim-tab: who holds each device, seen from one task. */
+	private uses(key: TaskKey, shown: string | null): Record<string, SimulatorUse> {
+		const uses: Record<string, SimulatorUse> = {},
+			own = this.leases.get(nameOf(key))?.lease.device;
+		for (const device of this.devices) {
+			const holder = this.queue.holder(device.id);
+			if (device.id === own) {
+				uses[device.id] =
+					holder && !same(holder, key)
+						? this.queue.waitsFor(key) === device.id
+							? { kind: 'queued', holder }
+							: { kind: 'mine', heldBy: holder }
+						: { kind: 'mine' };
+				continue;
+			}
+			if (holder && !same(holder, key)) {
+				uses[device.id] = { kind: 'task', task: holder };
+				continue;
+			}
+			const others = [...this.leases.values()].filter(
+				(item) => item.lease.device === device.id && !same(item.key, key)
+			);
+			const owner = others.find((item) => item.lease.own);
+			if (owner || others.length === 1)
+				uses[device.id] = { kind: 'task', task: (owner ?? others[0]!).key };
+			else if (others.length > 1) uses[device.id] = { kind: 'tasks', count: others.length };
+		}
+		void shown;
+		return uses;
+	}
+	/** spec/browser-and-simulator#sim-lease: every project's lease file, read once. */
+	private async loadLeases() {
+		this.leasesLoaded ??= (async () => {
+			const store = await SessionStore.at(this.dataDir);
+			const projects = await readdir(join(store.root, 'projects')).catch(() => [] as string[]);
+			for (const projectId of projects) {
+				const doc = await readDocument(
+					await safePath(store.root, 'projects', projectId, leaseFile)
+				).catch(() => null);
+				if (!doc) continue;
+				for (const [id, lease] of Object.entries(simulatorLeases(doc.tasks)))
+					this.leases.set(`${projectId}/${id}`, { key: { projectId, id }, lease });
+			}
+		})().catch(() => {});
+		await this.leasesLoaded;
+	}
+	private async lease(key: TaskKey) {
+		await this.loadLeases();
+		return this.leases.get(nameOf(key));
+	}
+	/** Writes one task's record (or removes it) and saves the project's file, one write at a time per project. */
+	private async writeLease(key: TaskKey, lease: SimulatorLease | null) {
+		await this.loadLeases();
+		if (lease) this.leases.set(nameOf(key), { key, lease });
+		else this.leases.delete(nameOf(key));
+		const tasks: Record<string, SimulatorLease> = {};
+		for (const item of this.leases.values())
+			if (item.key.projectId === key.projectId) tasks[item.key.id] = item.lease;
+		const write = (this.leaseWrites.get(key.projectId) ?? Promise.resolve()).then(async () => {
+			const store = await SessionStore.at(this.dataDir);
+			await atomicJson(await safePath(store.root, 'projects', key.projectId, leaseFile), {
+				schemaVersion: 1,
+				tasks,
+			});
+		});
+		this.leaseWrites.set(
+			key.projectId,
+			write.catch(() => {})
+		);
+		await write;
+	}
+	/**
+	 * spec/browser-and-simulator#sim-lease: the task's lease moves to `device`; its old lane lets it go. `asDefault` — the person's pick, or the
+	 * foreman's or a solo agent's `device`: it sets the project's device too (never to a copy). The chat gets the device row.
+	 */
+	private async setLease(key: TaskKey, device: SimulatorDevice, asDefault: boolean, quiet = false) {
+		const current = (await this.lease(key))?.lease;
+		if (asDefault && !this.ownedByOther(device.id, key) && !current?.own)
+			await this.setDefault(key.projectId, device);
+		if (current?.device === device.id) return;
+		if (current?.device) this.queue.leave(current.device, key);
+		// spec/browser-and-simulator#metro: the task's Metro client follows its device; the old one's buffers go with it.
+		this.metros.get(nameOf(key))?.stop();
+		this.metros.delete(nameOf(key));
+		this.connected.delete(nameOf(key));
+		// spec/browser-and-simulator#sim-own-device: a copy the task leaves keeps its own record (`<taskId>.<udid>`) until it is deleted.
+		if (current?.own)
+			await this.writeLease(
+				{ projectId: key.projectId, id: `${key.id}.${current.device}` },
+				current
+			);
+		await this.writeLease(key, { platform: device.platform, device: device.id });
+		if (current?.own) void this.reconcile().catch(() => {});
+		if (!quiet)
+			await this.tools
+				.record(key, { device: device.name, metroPort: await this.portOf(key), lowMemory: false })
+				.catch(() => {});
+		this.publishAll();
+	}
+	private async setDefault(projectId: string, device: SimulatorDevice) {
+		if (this.selected.get(projectId) === device.id) return;
+		this.selected.set(projectId, device.id);
+		const simulator: ProjectSimulator = { platform: device.platform, device: device.id };
+		await (await SessionStore.at(this.dataDir)).setProjectSimulator(projectId, simulator);
+	}
+	/**
+	 * spec/browser-and-simulator#metro-port: the Metro ports the hosts gave their tasks (`metro-ports.json`), read at most once a second.
+	 * A host takes its task's port itself when it starts, crew workers' hosts included.
+	 */
+	private async ports(): Promise<Record<string, number>> {
+		if (this.portCache && Date.now() - this.portCache.at < 1000) return this.portCache.ports;
+		const store = await SessionStore.at(this.dataDir);
+		this.portCache = { ports: await readMetroPorts(store.root), at: Date.now() };
+		return this.portCache.ports;
+	}
+	private async portOf(key: TaskKey) {
+		return (await this.ports())[nameOf(key)] ?? null;
+	}
+	/** The task's own worktree, or null for a task in the project folder. */
+	private async ownTree(key: TaskKey): Promise<string | null> {
+		if (this.tools.worktree) return this.tools.worktree(key).catch(() => null);
+		try {
+			const store = await SessionStore.at(this.dataDir),
+				[tree, project] = await Promise.all([
+					store.projectForTask(key),
+					store.project(key.projectId),
+				]);
+			return tree.path !== project.path ? tree.path : null;
+		} catch {
+			return null;
+		}
+	}
+	/** spec/browser-and-simulator#metro-port: a worktree without its own dependencies cannot start Metro. */
+	private async missingModules(key: TaskKey) {
+		const own = await this.ownTree(key);
+		if (!own) return null;
+		const has = (name: string) =>
+			access(join(own, name)).then(
+				() => true,
+				() => false
+			);
+		if (!(await has('package.json')) || (await has('node_modules'))) return null;
+		const port = await this.portOf(key);
+		return `This task's worktree has no node_modules, so its Metro cannot start: install the dependencies in the worktree (the project's install command), then start Metro there${port ? `; it takes port ${port} from RCT_METRO_PORT` : ''}.`;
+	}
+	/**
+	 * spec/browser-and-simulator#metro-connect: points the device's app at the task's own Metro when that Metro answers without a target for
+	 * the device: the dev client's link (iOS `simctl openurl`, Android `adb reverse` and `am start`), once per device and port.
+	 */
+	private async connect(key: TaskKey, runtime: Runtime): Promise<string | null> {
+		const metro = this.metro(key);
+		await metro.discover().catch(() => null);
+		const port = connectPort(metro.found);
+		if (port === null) return null;
+		const mark = `${runtime.device.id}:${port}`;
+		if (this.connected.get(nameOf(key)) === mark) return null;
+		const store = await SessionStore.at(this.dataDir),
+			own = await this.ownTree(key),
+			project = (await store.project(key.projectId).catch(() => null))?.path,
+			scheme = await appScheme(
+				[own, project].filter((root): root is string => !!root),
+				this.tools.readText
+			);
+		if (!scheme)
+			return `Could not read the app's URL scheme from app.json: open <scheme>://expo-development-client/?url=${encodeURIComponent(`http://127.0.0.1:${port}`)} with simulator_open url.`;
+		const link = devClientLink(scheme, port);
+		if (runtime.serial) {
+			await this.adb(runtime, ['reverse', `tcp:${port}`, `tcp:${port}`]);
+			await this.adb(runtime, [
+				'shell',
+				'am',
+				'start',
+				'-a',
+				'android.intent.action.VIEW',
+				'-d',
+				link,
+			]);
+		} else {
+			await this.tools.run('/usr/bin/xcrun', ['simctl', 'openurl', runtime.device.id, link]);
+			// iOS may ask «Open in …?» for a link from outside the app.
+			await this.tools.sleep(1500);
+			const ui = await this.ui(runtime, false, true).catch(() => null),
+				open = ui && findElement(ui, { label: 'Open' });
+			if (open && /button/i.test(open.role)) {
+				const [x, y, w, h] = open.frame,
+					screen = this.interface(runtime);
+				await this.request(runtime, {
+					cmd: 'tap',
+					x: (x + w / 2) / screen.width,
+					y: (y + h / 2) / screen.height,
+				}).catch(() => null);
+			}
+		}
+		this.connected.set(nameOf(key), mark);
+		return `Connected ${runtime.device.name} to Metro :${port}.`;
+	}
+	/**
+	 * spec/browser-and-simulator#sim-own-device: copies whose task ended go (`key` — only that task's). A device that is the source of a copy
+	 * not yet reinstalled is never deleted. Records of ended tasks go with them.
+	 */
+	async reconcile(key?: TaskKey) {
+		await this.loadLeases();
+		const store = await SessionStore.at(this.dataDir);
+		// A copy a later deletion frees (its clone was reinstalled or deleted) goes in the next pass of the same call.
+		for (let progress = true; progress;) {
+			progress = false;
+			for (const item of [...this.leases.values()]) {
+				// A copy its task left (`<taskId>.<udid>`) belongs to that task.
+				const owner = { projectId: item.key.projectId, id: item.key.id.split('.')[0]! };
+				if (key && !same(owner, key)) continue;
+				const left = item.key.id !== owner.id;
+				if (!left && !(await this.tools.taskEnded(owner).catch(() => false))) continue;
+				if (!left) {
+					this.queue.release(owner);
+					this.queue.leave(item.lease.device, owner);
+					this.metros.get(nameOf(owner))?.stop();
+					this.metros.delete(nameOf(owner));
+				}
+				// The record stays until its copy is really deleted.
+				if (item.lease.own && !(await this.removeCopy(item.lease.device))) continue;
+				await this.writeLease(item.key, null);
+				progress = true;
+			}
+		}
+		// spec/browser-and-simulator#metro-port: an ended task gives its port back.
+		for (const name of Object.keys(await readMetroPorts(store.root))) {
+			const [projectId, id] = name.split('/') as [string, string];
+			if (key && !same({ projectId, id }, key)) continue;
+			if (await this.tools.taskEnded({ projectId, id }).catch(() => false))
+				await forgetMetroPort(store.root, { projectId, id }).catch(() => {});
+		}
+		this.portCache = null;
+		this.publishAll();
+	}
+	/** Shuts down and deletes a copy, unless a copy not yet reinstalled still runs from it. */
+	private async removeCopy(udid: string): Promise<boolean> {
+		for (const item of this.leases.values())
+			if (item.lease.own?.source === udid && !item.lease.own.reinstalled) return false;
+		const runtime = this.runtimes.get(udid);
+		if (runtime) {
+			this.stopHelper(runtime);
+			runtime.logs?.stop();
+			this.runtimes.delete(udid);
+		}
+		await this.tools.run('/usr/bin/xcrun', ['simctl', 'shutdown', udid]).catch(() => {});
+		const deleted = await this.tools.run('/usr/bin/xcrun', ['simctl', 'delete', udid]).then(
+			() => true,
+			// A device that is gone already counts as deleted.
+			(error: unknown) => /Invalid device|not found/i.test(String(error))
+		);
+		if (deleted) this.devices = this.devices.filter((item) => item.id !== udid);
+		return deleted;
 	}
 	/**
 	 * spec/browser-and-simulator#sim-act-settle: one action, then the wait for a still screen and, on iOS, what changed in the tree. Android
 	 * gives no diff: `uiautomator dump` takes seconds and sometimes comes back empty.
 	 */
-	private async act(
-		projectId: string,
-		runtime: Runtime,
-		command: SimulatorActRequest,
-		watch: ScreenWatch
-	) {
+	private async act(runtime: Runtime, command: SimulatorActRequest, watch: ScreenWatch) {
 		// iOS: the tree before the action, which also tells taps by points the interface the app draws (`turned`).
 		const before = runtime.serial
 			? null
@@ -328,12 +907,7 @@ export class Simulators {
 					(ui) => ({ ui }),
 					(error: unknown) => ({ error: reason(error) })
 				);
-		const done = await this.perform(
-			projectId,
-			runtime,
-			command,
-			before && 'ui' in before ? before.ui : null
-		);
+		const done = await this.perform(runtime, command, before && 'ui' in before ? before.ui : null);
 		const settled = await watch.settle();
 		const lines = [`${done} ${settleLine(settled)}`];
 		let read = false;
@@ -361,14 +935,13 @@ export class Simulators {
 	}
 	/** The action itself; `ui` is the tree just read (iOS), so a target by id or label is not read twice. */
 	private async perform(
-		projectId: string,
 		runtime: Runtime,
 		command: SimulatorActRequest,
 		ui: SimulatorUi | null
 	): Promise<string> {
 		if (command.action === 'rotate') {
 			await this.rotate(runtime);
-			await this.publish(projectId);
+			this.publishDevice(runtime.device.id);
 			return `Rotated to ${runtime.orientation}. Call simulator_ui: it tells whether the app turned with the device.`;
 		}
 		// Agent points are interface points; the marker is drawn upright, the touch lands in the device frame.
@@ -404,7 +977,10 @@ export class Simulators {
 			case 'tap':
 			case 'longpress': {
 				const { point, label } = await target();
-				this.emit({ projectId, tap: { ...point, label: `${command.action} · ${label}` } });
+				this.emit({
+					device: runtime.device.id,
+					tap: { ...point, label: `${command.action} · ${label}` },
+				});
 				await this.request(runtime, { cmd: command.action, ...device(point) });
 				return `${command.action === 'tap' ? 'Tapped' : 'Long-pressed'} ${label}.`;
 			}
@@ -414,7 +990,7 @@ export class Simulators {
 					throw new Error('Give x2 and y2 in points for the end of the swipe.');
 				const end = device(unit(command.x2, command.y2)),
 					start = device(point);
-				this.emit({ projectId, tap: { ...point, label: 'swipe' } });
+				this.emit({ device: runtime.device.id, tap: { ...point, label: 'swipe' } });
 				await this.request(runtime, {
 					cmd: 'swipe',
 					x1: start.x,
@@ -464,25 +1040,41 @@ export class Simulators {
 			runtime.watches.delete(watch);
 		}
 	}
-	private metro(projectId: string) {
-		let metro = this.metros.get(projectId);
+	/** spec/browser-and-simulator#metro: the task's own Metro client — its tree first, its device's target, the project's task ports. */
+	private metro(key: TaskKey) {
+		let metro = this.metros.get(nameOf(key));
 		if (metro) return metro;
-		// The task trees of the project (worktrees) and the project itself: Metro started in either counts.
+		let own: string | null = null;
+		void this.ownTree(key).then((tree) => (own = tree));
 		metro = new MetroSession(
 			async () => {
 				const store = await SessionStore.at(this.dataDir);
-				return [join(store.root, 'worktrees', projectId), (await store.project(projectId)).path];
+				own = await this.ownTree(key);
+				return [
+					...(own ? [own] : []),
+					join(store.root, 'worktrees', key.projectId),
+					(await store.project(key.projectId)).path,
+				];
 			},
-			() => void this.publish(projectId),
+			() => this.publishTask(key),
 			this.tools.metro,
-			() => this.devices.find((device) => device.id === this.resolved.get(projectId))?.name ?? null
+			() => {
+				const id =
+					this.views.get(nameOf(key))?.device ?? this.leases.get(nameOf(key))?.lease.device;
+				return this.devices.find((device) => device.id === id)?.name ?? null;
+			},
+			() => own,
+			() =>
+				Object.entries(this.portCache?.ports ?? {})
+					.filter(([name]) => name.startsWith(`${key.projectId}/`))
+					.map(([, port]) => port)
 		);
-		this.metros.set(projectId, metro);
+		this.metros.set(nameOf(key), metro);
 		return metro;
 	}
 	/** Reload through Metro's message socket, the same as `r` in its terminal. */
-	private async reload(projectId: string) {
-		const target = this.metros.get(projectId)?.target;
+	private async reload(key: TaskKey) {
+		const target = this.metros.get(nameOf(key))?.target;
 		if (!target) throw new Error(metroMissing);
 		await new Promise<void>((resolve, reject) => {
 			const socket = new WebSocket(`ws://127.0.0.1:${target.port}/message`, {
@@ -498,8 +1090,8 @@ export class Simulators {
 		return null;
 	}
 	/** React Native DevTools of the app, opened by Metro itself (`/open-debugger`). */
-	private async devtools(projectId: string) {
-		const target = this.metros.get(projectId)?.target;
+	private async devtools(key: TaskKey) {
+		const target = this.metros.get(nameOf(key))?.target;
 		if (!target) throw new Error(metroMissing);
 		const response = await fetch(
 			`http://127.0.0.1:${target.port}/open-debugger?appId=${encodeURIComponent(target.appId)}`,
@@ -509,8 +1101,8 @@ export class Simulators {
 		return null;
 	}
 	/** The app's native log of the last two minutes: the process of the app Metro serves (`appId`). */
-	private async nativeLogs(projectId: string, runtime: Runtime, level?: string, grep?: string) {
-		const appId = this.metros.get(projectId)?.target?.appId;
+	private async nativeLogs(key: TaskKey, runtime: Runtime, level?: string, grep?: string) {
+		const appId = this.metros.get(nameOf(key))?.target?.appId;
 		if (!appId)
 			throw new Error('The app is not known yet: start Metro and open the app, or read js logs.');
 		if (runtime.serial) {
@@ -663,12 +1255,11 @@ export class Simulators {
 			!runtime.serial && isLandscape(runtime.orientation) && !!app && app.frame[2] > app.frame[3];
 		return { ...ui, ...this.interface(runtime) };
 	}
-
-	/** Boots the project's device when needed and waits for its stream, like the column's Start. */
-	private async ready(projectId: string) {
-		await this.boot(projectId);
+	/** Boots a device when needed (through the gate) and waits for its stream, like the column's Start. */
+	private async ready(key: TaskKey, device: SimulatorDevice, person: boolean, anyway = false) {
+		await this.bootDevice(key, device, person, anyway);
 		for (let waited = 0; waited < 60_000; waited += 250) {
-			const runtime = await this.runtime(projectId);
+			const runtime = this.runtimes.get(device.id);
 			if (runtime?.status === 'on' && runtime.helper) return runtime;
 			if (runtime?.status === 'error')
 				throw new Error(runtime.error ?? 'The device did not start.');
@@ -676,26 +1267,34 @@ export class Simulators {
 		}
 		throw new Error('The device did not start in a minute.');
 	}
-	/** The toolchain and the device list are read once per start, then on `refresh` (the picker reopens). */
-	async state(projectId: string): Promise<SimulatorState> {
+	/** One task's view: its device, who holds every device, the gate and its Metro (spec/browser-and-simulator#sim-tab). */
+	async state(key: TaskKey): Promise<SimulatorState> {
 		if (!this.toolchain) await this.refresh();
-		const device = await this.device(projectId),
+		await this.loadLeases();
+		const device = await this.deviceFor(key),
 			runtime = device ? this.runtimes.get(device.id) : undefined,
-			status = runtime?.status ?? 'off';
+			status = runtime?.status ?? 'off',
+			view = this.views.get(nameOf(key));
+		if (view) view.device = device?.id ?? null;
 		// Metro is looked for while the device runs, so the buffers hold what happened before the agent asks.
-		if (status === 'on') this.metro(projectId).start();
-		else this.metros.get(projectId)?.stop();
-		const target = this.metros.get(projectId)?.target;
+		if (status === 'on') this.metro(key).start();
+		else this.metros.get(nameOf(key))?.stop();
+		const target = this.metros.get(nameOf(key))?.target;
 		if (runtime && status === 'on' && target?.appId) void this.followLogs(runtime, target.appId);
+		const waiting = this.gateWaits.has(nameOf(key));
 		return {
 			toolchain: this.toolchain!,
 			devices: this.devices,
 			device: device ? { ...device, booted: device.booted || status === 'on' } : null,
-			status,
+			// A boot that waits at the gate shows as starting (spec/browser-and-simulator#sim-tab).
+			status: waiting && status === 'off' ? 'booting' : status,
 			error: runtime?.error ?? null,
 			screen: runtime?.screen ?? null,
 			orientation: runtime?.orientation ?? 'portrait',
 			metro: target ? { port: target.port, appId: target.appId, root: target.root } : null,
+			uses: this.uses(key, device?.id ?? null),
+			gate: await this.gate(),
+			metroPort: await this.portOf(key),
 		};
 	}
 	/** Quit and module off: helpers stop; devices this app booted shut down after it exits (detached simctl). */
@@ -768,6 +1367,12 @@ export class Simulators {
 							typeof device.name === 'string' &&
 							/^(iPhone|iPad)/.test(device.name)
 					)
+					.map((device) => {
+						// spec/browser-and-simulator#sim-own-device: a copy of a booted device is a new one of the same model and runtime.
+						if (typeof device.deviceTypeIdentifier === 'string')
+							this.kinds.set(String(device.udid), { type: device.deviceTypeIdentifier, runtime });
+						return device;
+					})
 					.map((device) => ({
 						id: String(device.udid),
 						name: String(device.name),
@@ -846,52 +1451,119 @@ export class Simulators {
 			return { image: shot.png, mimeType: 'image/png' };
 		throw new Error('The device sent no screenshot.');
 	}
-	/** The project's device: saved in project.json, else a booted iPhone, else the first iPhone of the newest runtime. */
+	/** The project's device: saved in project.json, else a booted iPhone, else the first iPhone of the newest runtime. Never a task's copy. */
 	private async device(projectId: string) {
 		if (!this.selected.has(projectId)) {
 			const saved = (await (await SessionStore.at(this.dataDir)).project(projectId)).simulator;
 			this.selected.set(projectId, saved?.device ?? null);
 		}
-		const id = this.selected.get(projectId);
-		const device =
+		await this.loadLeases();
+		const id = this.selected.get(projectId),
+			listed = this.devices.filter((device) => !this.isCopy(device.id));
+		return (
 			this.devices.find((device) => device.id === id) ??
-			this.devices.find((device) => device.booted && device.name.startsWith('iPhone')) ??
-			this.devices.find((device) => device.name.startsWith('iPhone')) ??
-			this.devices[0] ??
-			null;
-		this.resolved.set(projectId, device?.id ?? null);
-		return device;
+			listed.find((device) => device.booted && device.name.startsWith('iPhone')) ??
+			listed.find((device) => device.name.startsWith('iPhone')) ??
+			listed[0] ??
+			null
+		);
+	}
+	private isCopy(device: string) {
+		for (const item of this.leases.values())
+			if (item.lease.own && item.lease.device === device) return true;
+		return false;
+	}
+	/** spec/browser-and-simulator#sim-lease: the task's leased device, else the project's. */
+	private async deviceFor(key: TaskKey) {
+		const leased = (await this.lease(key))?.lease.device,
+			device = leased ? this.devices.find((item) => item.id === leased) : undefined;
+		return device ?? (await this.device(key.projectId));
 	}
 	/** A device saved in project.json and still listed; the fallbacks of `device` are not a choice (spec/browser-and-simulator#sim-device). */
 	private chosen(projectId: string) {
 		const id = this.selected.get(projectId);
 		return !!id && this.devices.some((device) => device.id === id);
 	}
-	private async runtime(projectId: string) {
-		const device = await this.device(projectId);
+	private async runtime(key: TaskKey) {
+		const device = await this.deviceFor(key);
 		return device ? (this.runtimes.get(device.id) ?? null) : null;
 	}
-	private async live(projectId: string) {
-		const runtime = await this.runtime(projectId);
+	private async live(key: TaskKey) {
+		const runtime = await this.runtime(key);
 		if (!runtime || runtime.status !== 'on' || !runtime.helper)
 			throw new Error('The device is not running.');
 		return runtime;
 	}
-	private async select(projectId: string, id: string) {
+	private view(key: TaskKey) {
+		let view = this.views.get(nameOf(key));
+		if (!view) {
+			view = { key, watchers: 0, device: null };
+			this.views.set(nameOf(key), view);
+		}
+		return view;
+	}
+	/** The person picks a device in the task's tab: the task's lease moves to it, and the project's device follows (spec/browser-and-simulator#sim-lease). */
+	private async select(key: TaskKey, id: string, person: boolean) {
 		if (!this.toolchain) await this.refresh();
 		const device = this.devices.find((item) => item.id === id);
 		if (!device) throw new Error('The device is not available.');
-		this.selected.set(projectId, id);
-		const simulator: ProjectSimulator = { platform: device.platform, device: id };
-		await (await SessionStore.at(this.dataDir)).setProjectSimulator(projectId, simulator);
-		return this.publish(projectId);
+		await this.setLease(key, device, person);
+		const runtime = this.runtimes.get(device.id);
+		if (runtime?.status === 'on') void this.connect(key, runtime).catch(() => null);
+		return this.publish(key);
 	}
-	private async boot(projectId: string) {
-		const device = await this.device(projectId);
+	/** The tab's Start: the task takes its device and boots it; `anyway` — the person lifted the low-memory block (spec/browser-and-simulator#sim-cap). */
+	private async start(key: TaskKey, anyway: boolean) {
+		const device = await this.deviceFor(key);
 		if (!device) throw new Error('No device is available.');
+		const runtime = this.runtimes.get(device.id),
+			off = !device.booted && runtime?.status !== 'on' && runtime?.status !== 'booting',
+			low = anyway && off && (await this.gate()).lowMemory;
+		// spec/browser-and-simulator#sim-chat-row: a start past low memory leaves its own row, once the gate let it through.
+		await this.setLease(key, device, false, low);
+		await this.bootDevice(key, device, true, anyway);
+		if (low)
+			await this.tools
+				.record(key, {
+					device: device.name,
+					metroPort: await this.portOf(key),
+					lowMemory: true,
+				})
+				.catch(() => {});
+		void this.ready(key, device, true, anyway)
+			.then((runtime) => this.connect(key, runtime))
+			.catch(() => null);
+		return this.state(key);
+	}
+	/**
+	 * Boots a device that is off, after the gate (spec/browser-and-simulator#sim-cap): an agent waits for it; the person is refused at once,
+	 * and `anyway` lifts only the low-memory block.
+	 */
+	private async bootDevice(key: TaskKey, device: SimulatorDevice, person: boolean, anyway = false) {
 		const existing = this.runtimes.get(device.id);
-		if (existing && (existing.status === 'on' || existing.status === 'booting'))
-			return this.state(projectId);
+		if (existing && (existing.status === 'on' || existing.status === 'booting')) return;
+		if (!device.booted) {
+			const name = nameOf(key);
+			await passGate({
+				attempt: () => this.tryBoot(device.id, anyway),
+				device: device.name,
+				waitMs: person ? 0 : this.tools.gateWaitMs,
+				sleep: this.tools.sleep,
+				waiting: (on) => {
+					if (on) this.gateWaits.add(name);
+					else this.gateWaits.delete(name);
+					this.tools.waiting(key.projectId, [
+						...new Set([
+							...this.queue.waiting(key.projectId),
+							...[...this.gateWaits]
+								.filter((item) => item.startsWith(`${key.projectId}/`))
+								.map((item) => item.slice(key.projectId.length + 1)),
+						]),
+					]);
+					this.publishTask(key);
+				},
+			});
+		}
 		const runtime: Runtime = existing ?? {
 			device,
 			serial: null,
@@ -913,13 +1585,15 @@ export class Simulators {
 		runtime.status = 'booting';
 		runtime.error = null;
 		this.runtimes.set(device.id, runtime);
+		// The booting runtime counts from here on: the slot taken at the gate is no longer needed.
+		this.reserved.delete(device.id);
 		this.publishDevice(device.id);
 		try {
 			if (device.platform === 'android') {
 				await this.bootAndroid(runtime);
-				if (this.closed) return this.state(projectId);
+				if (this.closed) return;
 				this.startHelper(runtime);
-				return this.state(projectId);
+				return;
 			}
 			if (!device.booted) {
 				await this.tools.run('/usr/bin/xcrun', ['simctl', 'boot', device.id]).catch((error) => {
@@ -929,14 +1603,13 @@ export class Simulators {
 			}
 			await this.tools.run('/usr/bin/xcrun', ['simctl', 'bootstatus', device.id, '-b']);
 			device.booted = true;
-			if (this.closed) return this.state(projectId);
+			if (this.closed) return;
 			this.startHelper(runtime);
 		} catch (error) {
 			runtime.status = 'error';
 			runtime.error = `${device.name} did not start: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`;
 			this.publishDevice(device.id);
 		}
-		return this.state(projectId);
 	}
 	/** The emulator without a window (`-gpu host`: headless otherwise renders in software, 1–5 fps), then boot_completed. */
 	private async bootAndroid(runtime: Runtime) {
@@ -973,11 +1646,15 @@ export class Simulators {
 		}
 		runtime.device.booted = true;
 	}
-	/** `id` — a running device of the picker (spec/task-window-workspace#tool-tab-look.1); the project's own device otherwise. */
-	private async shutdown(projectId: string, id?: string) {
+	/** `id` — a running device of the picker (spec/task-window-workspace#tool-tab-look.1); the task's own device otherwise. */
+	private async shutdown(key: TaskKey, id?: string) {
 		const device =
-			id === undefined ? await this.device(projectId) : this.devices.find((item) => item.id === id);
-		if (!device) return this.state(projectId);
+			id === undefined ? await this.deviceFor(key) : this.devices.find((item) => item.id === id);
+		if (!device) return this.state(key);
+		// spec/browser-and-simulator#sim-tab: a device another task is using now, or another task's own copy, is not shut down under it.
+		const holder = this.queue.holder(device.id);
+		if ((holder && !same(holder, key)) || this.ownedByOther(device.id, key))
+			throw new Error(`${device.name} is in use by another task.`);
 		const runtime = this.runtimes.get(device.id);
 		if (runtime) {
 			this.stopHelper(runtime);
@@ -996,15 +1673,14 @@ export class Simulators {
 			await this.tools.run('/usr/bin/xcrun', ['simctl', 'shutdown', device.id]).catch(() => {});
 		device.booted = false;
 		this.publishDevice(device.id);
-		return this.state(projectId);
+		return this.state(key);
 	}
 	/**
 	 * ASCII types as keys; anything else lands on the device pasteboard for the device's own «Paste». The text is
 	 * this Mac's clipboard, or the one a window of this machine on a device sent (spec/remote-access-and-mobile#browser-from-device).
 	 */
-	private async paste(projectId: string, given?: string) {
-		const runtime = await this.live(projectId),
-			text = given ?? (await this.tools.clipboard());
+	private async paste(runtime: Runtime, given?: string) {
+		const text = given ?? (await this.tools.clipboard());
 		if (!text) return null;
 		// The Android helper pastes any text through scrcpy's clipboard; sim-helper types ASCII only.
 		if (runtime.serial || /^[\x20-\x7e\n\t]*$/.test(text))
@@ -1025,8 +1701,8 @@ export class Simulators {
 		});
 	}
 	/** spec/remote-access-and-mobile#browser-from-device: a key frame for a device that missed frames; the decoder config stays as it was. */
-	async keyframe(projectId: string) {
-		const runtime = await this.runtime(projectId);
+	keyframe(device: string) {
+		const runtime = this.runtimes.get(device);
 		if (runtime?.config) this.send(runtime, { cmd: 'keyframe' });
 	}
 	private startHelper(runtime: Runtime) {
@@ -1097,7 +1773,7 @@ export class Simulators {
 				timestamp: Number(payload.readBigUInt64BE(1)),
 				data: new Uint8Array(payload.subarray(9)),
 			};
-			for (const projectId of this.watching(runtime.device.id)) this.frame(projectId, frame);
+			if (this.watched(runtime.device.id)) this.frame(runtime.device.id, frame);
 			if (isChange(runtime.device.platform, frame)) runtime.changes++;
 			for (const watch of runtime.watches) watch.frame(frame);
 			return;
@@ -1122,8 +1798,7 @@ export class Simulators {
 					width: Number(message.width),
 					height: Number(message.height),
 				};
-				for (const projectId of this.watching(runtime.device.id))
-					this.emit({ projectId, config: runtime.config });
+				this.emit({ device: runtime.device.id, config: runtime.config });
 			}
 			return;
 		}
@@ -1177,17 +1852,32 @@ export class Simulators {
 			this.send(runtime, { ...message, id });
 		});
 	}
-	private *watching(deviceId: string) {
-		for (const [projectId, count] of this.watchers)
-			if (count > 0 && this.resolved.get(projectId) === deviceId) yield projectId;
+	/** Whether a tab that watches shows this device: its frames flow only then. */
+	private watched(deviceId: string) {
+		for (const view of this.views.values())
+			if (view.watchers > 0 && view.device === deviceId) return true;
+		return false;
 	}
-	private async publish(projectId: string) {
-		const state = await this.state(projectId);
-		this.emit({ projectId, state });
+	private async publish(key: TaskKey) {
+		const state = await this.state(key);
+		this.emit({ key, state });
 		return state;
 	}
+	private publishTask(key: TaskKey) {
+		if (this.views.has(nameOf(key))) void this.publish(key).catch(() => {});
+	}
 	private publishDevice(deviceId: string) {
-		for (const [projectId, id] of this.resolved) if (id === deviceId) void this.publish(projectId);
+		for (const view of this.views.values())
+			if (view.device === deviceId || view.device === null) this.publishTask(view.key);
+	}
+	/** Leases or lanes changed: every open tab redraws who holds what, once per tick. */
+	private publishAll() {
+		if (this.publishing) return;
+		this.publishing = true;
+		queueMicrotask(() => {
+			this.publishing = false;
+			for (const view of this.views.values()) this.publishTask(view.key);
+		});
 	}
 }
 /** A child whose stdout is read line by line; the returned function stops it. */

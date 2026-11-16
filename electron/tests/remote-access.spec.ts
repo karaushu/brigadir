@@ -845,7 +845,11 @@ test('a device shows the simulator of the machine and pastes its own clipboard i
 			.toBe(true);
 		await expect(
 			remote.evaluate(
-				() => window.brigadir.simulatorCommand('project', { kind: 'paste' }) as Promise<unknown>
+				() =>
+					window.brigadir.simulatorCommand(
+						{ projectId: 'project', id: 'task' },
+						{ kind: 'paste' }
+					) as Promise<unknown>
 			)
 		).rejects.toThrow(/Not available from a remote device/);
 		expect(await screen()).toEqual([]);

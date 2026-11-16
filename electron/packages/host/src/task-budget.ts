@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
@@ -33,26 +33,56 @@ import {
 } from '@brigadir/core';
 import { atomicJson, safePath, type SessionStore } from '@brigadir/persistence';
 
-/** spec/agents-and-providers#opening-share: the app's file of what share of a new session's opening context each provider last paid. */
-export const openingSharesFile = 'token-openings.json';
-type OpeningShares = Partial<Record<AgentProvider, number>>;
-export async function readOpeningShares(root: string): Promise<OpeningShares> {
+/**
+ * spec/agents-and-providers#opening-share: what share of a new session's opening context a provider last paid — one document per provider in
+ * `token-openings/`, so hosts of different providers never overwrite each other's.
+ */
+export const openingSharesDir = 'token-openings';
+type OpeningShare =
+	| { state: 'missing' }
+	| { state: 'ok'; share: number }
+	| { state: 'unsupported' | 'invalid' | 'unreadable' };
+const sharePath = async (root: string, provider: AgentProvider) =>
+	safePath(root, openingSharesDir, `${provider}.json`);
+export async function readOpeningShare(
+	root: string,
+	provider: AgentProvider
+): Promise<OpeningShare> {
+	let text: string;
 	try {
-		const doc: unknown = JSON.parse(
-			await readFile(await safePath(root, openingSharesFile), 'utf8')
-		);
-		if (!isRecord(doc) || doc.schemaVersion !== 1 || !isRecord(doc.providers)) return {};
-		const shares: OpeningShares = {};
-		for (const provider of ['claude', 'codex'] as const)
-			if (isOpeningShare(doc.providers[provider])) shares[provider] = doc.providers[provider];
-		return shares;
+		text = await readFile(await sharePath(root, provider), 'utf8');
+	} catch (error) {
+		return (error as NodeJS.ErrnoException)?.code === 'ENOENT'
+			? { state: 'missing' }
+			: { state: 'unreadable' };
+	}
+	try {
+		const doc: unknown = JSON.parse(text);
+		if (isRecord(doc) && doc.schemaVersion !== 1 && typeof doc.schemaVersion === 'number')
+			return { state: 'unsupported' };
+		return isRecord(doc) && isOpeningShare(doc.share)
+			? { state: 'ok', share: doc.share }
+			: { state: 'invalid' };
 	} catch {
-		return {};
+		return { state: 'invalid' };
 	}
 }
-async function writeOpeningShare(root: string, provider: AgentProvider, share: number) {
-	const providers = { ...(await readOpeningShares(root)), [provider]: share };
-	await atomicJson(await safePath(root, openingSharesFile), { schemaVersion: 1, providers });
+/** Writes the share only over nothing or over a document of this schema: an unsupported, invalid or unreadable file is kept and reported. */
+export async function writeOpeningShare(
+	root: string,
+	provider: AgentProvider,
+	share: number
+): Promise<boolean> {
+	const current = await readOpeningShare(root, provider);
+	if (current.state !== 'missing' && current.state !== 'ok') {
+		console.warn(
+			`${openingSharesDir}/${provider}.json: ${current.state}; the learned share is not saved.`
+		);
+		return false;
+	}
+	await mkdir(join(root, openingSharesDir), { recursive: true });
+	await atomicJson(await sharePath(root, provider), { schemaVersion: 1, share });
+	return true;
 }
 
 /** spec/agents-and-providers#task-tokens: during a turn the figure is written at most this often, and only when its short number changes. */
@@ -118,11 +148,11 @@ export class TaskBudget {
 	async start() {
 		await this.serial(async () => {
 			// A share this task's own journal taught is the freshest; otherwise the one the app learned last for this provider.
-			const share = this.provider
-				? (await readOpeningShares(this.deps.store.root))[this.provider]
-				: undefined;
-			if (share !== undefined && this.tally.learnedShare === null)
-				this.tally = { ...this.tally, openingShare: share };
+			const saved = this.provider
+				? await readOpeningShare(this.deps.store.root, this.provider)
+				: null;
+			if (saved?.state === 'ok' && this.tally.learnedShare === null)
+				this.tally = { ...this.tally, openingShare: saved.share };
 			await this.writeTokens(true);
 			if (this.root) await this.writeHold();
 			else await this.readRootHold();
@@ -165,7 +195,10 @@ export class TaskBudget {
 			provider = this.provider;
 		if (share !== null && share !== learned && provider)
 			void this.serial(() =>
-				writeOpeningShare(this.deps.store.root, provider, share).catch(() => {})
+				writeOpeningShare(this.deps.store.root, provider, share).then(
+					() => {},
+					() => {}
+				)
 			);
 		if (event.kind === 'budget.reached' || event.kind === 'budget.decided') {
 			this.journal = reduceBudgetJournal(this.journal, record);

@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -13,7 +13,7 @@ import {
 	type TaskKey,
 } from '@brigadir/core';
 import { connectHost, readIdentity, type HostClient } from './index';
-import { TaskBudget } from './task-budget';
+import { TaskBudget, readOpeningShare, writeOpeningShare } from './task-budget';
 
 /** spec/agents-and-providers#budget-reached on a real host with the fixture agent: `spend N` reports N new tokens at its turn end. */
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -471,3 +471,71 @@ it('Stop now cancels a running member turn, and the member keeps its queue held 
 	expect((await records(again.client)).filter(kind('turn.started'))).toHaveLength(1);
 	expect((await store.task(root)).tokenHold).toMatchObject({ state: 'stop' });
 }, 60_000);
+
+// spec/agents-and-providers#opening-share
+const opening = (seq: number, event: EventRecord['event']): EventRecord => ({
+	schemaVersion: 1,
+	seq,
+	at: new Date(1_800_000_000_000 + seq * 1000).toISOString(),
+	event,
+});
+const budgetFor = (store: SessionStore, task: AgentTask) =>
+	new TaskBudget(
+		{
+			store,
+			key: task,
+			records: () => [],
+			emit: async () => {},
+			busy: () => false,
+			cancel: async () => {},
+			stopMembers: async () => {},
+			resume: () => {},
+		},
+		task
+	);
+it('a share learned at the turn end of one task is what the opening of the next task counts', async () => {
+	const { store, task } = await setup();
+	const first = budgetFor(store, await store.task(task));
+	await first.start();
+	[
+		{ kind: 'session.started', sessionId: 's', modes: [] },
+		{ kind: 'turn.started', text: '' },
+		{ kind: 'usage.changed', used: 48_973, capacity: 200_000, cost: null },
+		{ kind: 'usage.changed', used: 49_471, capacity: 200_000, cost: null },
+		{ kind: 'turn.usage', input: 6, output: 348, cacheRead: 122_074, cacheWrite: 25_327 },
+	].forEach((event, index) => first.observe(opening(index + 1, event as never)));
+	const saved = await until(async () => {
+		const read = await readOpeningShare(store.root, 'claude');
+		return read.state === 'ok' ? read.share : undefined;
+	});
+	expect(saved).toBeCloseTo(0.514, 3);
+	first.stop();
+	const other = await store.createTask(task.projectId, 'Next', 'claude');
+	const next = budgetFor(store, await store.task(other));
+	await next.start();
+	[
+		{ kind: 'session.started', sessionId: 't', modes: [] },
+		{ kind: 'turn.started', text: '' },
+		{ kind: 'usage.changed', used: 48_973, capacity: 200_000, cost: null },
+	].forEach((event, index) => next.observe(opening(index + 1, event as never)));
+	expect((await next.sum()).tokens).toBe(Math.round(48_973 * saved));
+	next.stop();
+});
+it('providers keep separate share documents, and one of another schema is never overwritten', async () => {
+	const { store } = await setup();
+	await Promise.all([
+		writeOpeningShare(store.root, 'claude', 0.5),
+		writeOpeningShare(store.root, 'codex', 1),
+	]);
+	expect(await readOpeningShare(store.root, 'claude')).toEqual({ state: 'ok', share: 0.5 });
+	expect(await readOpeningShare(store.root, 'codex')).toEqual({ state: 'ok', share: 1 });
+	const path = join(store.root, 'token-openings', 'codex.json'),
+		newer = '{"schemaVersion":2,"share":{"warm":0.4}}';
+	await writeFile(path, newer);
+	expect(await readOpeningShare(store.root, 'codex')).toEqual({ state: 'unsupported' });
+	expect(await writeOpeningShare(store.root, 'codex', 0.7)).toBe(false);
+	expect(await readFile(path, 'utf8')).toBe(newer);
+	await writeFile(path, '{not json');
+	expect(await writeOpeningShare(store.root, 'codex', 0.7)).toBe(false);
+	expect(await readOpeningShare(store.root, 'missing' as never)).toEqual({ state: 'missing' });
+});

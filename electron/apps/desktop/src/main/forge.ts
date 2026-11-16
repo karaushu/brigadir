@@ -170,8 +170,9 @@ export class ForgeActions {
 			task = await store.task(key),
 			project = await store.project(key.projectId),
 			previous = this.snapshots.get(keyName(key));
+		// spec/pull-requests-and-ci#github-status: nothing is read while the worktree is prepared, so nothing has failed — no notice.
 		if (task.launch?.isolation === 'worktree' && task.preparation?.state !== 'ready')
-			return { auth: previous?.auth ?? 'error', scopes: [], error: null };
+			return { auth: previous?.auth ?? 'ready', scopes: [], error: null };
 		const scopes = (await Snapshots.open(store, key)).current.scopes.filter(
 			(scope) => scope.available !== false
 		);

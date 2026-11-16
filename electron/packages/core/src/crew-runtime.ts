@@ -492,6 +492,8 @@ export type ReviewVerdict = {
 	approved: boolean;
 	comments: number;
 	at: string;
+	/** spec/reviews#remark: the reviewer's remark with an approval; never a finding. */
+	note?: string;
 };
 export type ReviewRunState =
 	'reviewing' | 'comments' | 'approved' | 'disputed' | 'superseded' | 'cancelled';
@@ -546,7 +548,8 @@ export function isReviewRun(value: unknown): value is ReviewRun {
 				isCrewName(item.reviewer) &&
 				typeof item.approved === 'boolean' &&
 				Number.isSafeInteger(item.comments) &&
-				typeof item.at === 'string'
+				typeof item.at === 'string' &&
+				(item.note === undefined || (typeof item.note === 'string' && item.note.length <= 2000))
 		) &&
 		['reviewing', 'comments', 'approved', 'disputed', 'superseded', 'cancelled'].includes(
 			String(value.state)

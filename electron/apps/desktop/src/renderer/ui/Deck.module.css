@@ -29,6 +29,44 @@
 	-webkit-backdrop-filter: blur(18px) saturate(1.6);
 	backdrop-filter: blur(18px) saturate(1.6);
 }
+/* spec/composer-steering-queue-and-ghost#queue-deck: a deck with a fill (DeckFill) is bounded by the window instead: its lists keep their height and
+   place, the fill takes what is left and scrolls under them. The fill never shrinks below 120 px (or its content, if less); when the lists leave
+   it less than that, the deck scrolls as a whole, as any deck does. */
+.deck:has(> .fill) {
+	display: flex;
+	flex-direction: column;
+	max-height: max(190px, min(60vh, calc(100vh - 320px)));
+}
+.deck:has(> .fill) > * {
+	flex: none;
+}
+@property --deck-fade {
+	syntax: '<length>';
+	inherits: false;
+	initial-value: 0px;
+}
+/* The fill runs across the deck's side padding so its scrollbar stands at the deck's edge. While more lies below, its foot fades out (a mask,
+   not a colour, as in ui/TabStrip): a scroll-driven value, so a fill with nothing to scroll has no fade, and the fade goes at the end. */
+.deck > .fill {
+	flex: 0 1 auto;
+	min-height: calc-size(max-content, min(size, 120px));
+	margin: 0 calc(-1 * var(--deck-pad-x));
+	padding: 0 var(--deck-pad-x);
+	overflow: auto;
+	overscroll-behavior: contain;
+	mask-image: linear-gradient(to bottom, #000 calc(100% - var(--deck-fade)), transparent);
+	animation: deck-fill-fade linear both;
+	animation-timeline: scroll(self);
+}
+@keyframes deck-fill-fade {
+	0%,
+	92% {
+		--deck-fade: 28px;
+	}
+	100% {
+		--deck-fade: 0px;
+	}
+}
 @media (prefers-reduced-transparency: reduce) {
 	.deck {
 		background: var(--card);

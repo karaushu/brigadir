@@ -201,6 +201,32 @@ describe('the Review strip (spec/reviews#strip)', () => {
 		expect(text(html)).toContain('Codex · Codex');
 		expect(buttons(html)).toContain('Log');
 	});
+	it('open: the details are the deck fill under the strip row, and an approval remark stands under its reviewer', () => {
+		const html = strip(
+			view(
+				{ state: 'passed' },
+				{
+					members: [
+						{
+							name: 'Codex',
+							provider: 'codex',
+							taskId: 'w',
+							state: 'approved',
+							findings: 0,
+							since: '2026-01-01T00:00:00.000Z',
+							note: 'Ran the greet script: it prints HELLO, ANN.',
+						},
+					],
+				}
+			),
+			true
+		);
+		// The strip's row stays outside the fill, which scrolls (spec/reviews#strip).
+		expect(html.indexOf('data-review-strip')).toBeLessThan(html.indexOf('data-deck-fill'));
+		expect(html.indexOf('data-deck-fill')).toBeLessThan(html.indexOf('data-review-details'));
+		expect(text(html)).toContain('Ran the greet script: it prints HELLO, ANN.');
+		expect(strip(view({ state: 'passed' }), false)).not.toContain('data-deck-fill');
+	});
 });
 
 describe('Retry (spec/reviews#strip)', () => {

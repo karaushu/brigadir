@@ -527,3 +527,24 @@ it('spec/pull-requests-and-ci#from-into: a PR from another branch into a chosen 
 		await rm(dir, { recursive: true, force: true });
 	}
 });
+it('a task whose worktree is being prepared reads no GitHub status and reports no failure', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'brigadir-pr-prep-')),
+		repo = join(dir, 'repo');
+	try {
+		await mkdir(repo);
+		await gitText(repo, ['init', '-b', 'main']);
+		const store = await SessionStore.at(join(dir, 'data')),
+			project = await store.addProject(repo),
+			task = await store.createTask(project.id, 'No remote', 'claude');
+		await store.updateTask(task, {
+			launch: { isolation: 'worktree', branch: 'b', baseRef: 'HEAD', setupCommand: '', scopes: [] },
+			preparation: { state: 'preparing', step: 'worktree' },
+		} as never);
+		const runner = vi.fn<GhRunner>(async () => ({ code: 1, stdout: '', stderr: 'unreachable' })),
+			read = await new ForgeActions(store.root, {} as Sessions, new Forge(runner)).read(task, true);
+		expect(read).toEqual({ auth: 'ready', scopes: [], error: null });
+		expect(runner).not.toHaveBeenCalled();
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});

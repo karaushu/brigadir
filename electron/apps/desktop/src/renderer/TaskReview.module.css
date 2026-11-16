@@ -194,6 +194,12 @@
 	color: var(--fg2);
 	white-space: normal;
 }
+/* spec/reviews#remark: a reviewer's remark with its approval, on its own line under the reviewer, past the glyph. */
+.note {
+	flex-basis: 100%;
+	margin: -4px 0 4px;
+	padding-left: 19px;
+}
 /* `Review…` beside Commit takes the review's tone; a dot says the tree changed after the review. */
 .button {
 	position: relative;

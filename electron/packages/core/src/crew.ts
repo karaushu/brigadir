@@ -175,7 +175,7 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		role: 'reviewer',
 		builtin: true,
 		instructions:
-			'You do not write code. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Look for what a check cannot show: wrong behaviour, a contract changed under other agents, work outside the assigned files. The report ends with the last message of the agent: it must name the check it ran and what the check showed; when it does not, ask for it. Comment only on what must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line, say what is wrong and what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
+			'You do not write code. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Look for what a check cannot show: wrong behaviour, a contract changed under other agents, work outside the assigned files. The report ends with the last message of the agent; a report that names no check is not a defect by itself: when you doubt, check it yourself the way each check prompt says. Comment only on something wrong in the change, with its evidence, that must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line, say what is wrong and what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
 	},
 	{
 		id: designerTemplateId,

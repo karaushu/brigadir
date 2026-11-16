@@ -26,10 +26,19 @@ export type TaskOwnTokens = TokenParts & {
 	running: boolean;
 	quota?: TaskQuotaMarks;
 };
-/** The reducer's state: the stored figure plus the last context size it saw. */
-export type TokenTally = TaskOwnTokens & { used: number | null };
+/**
+ * The reducer's state: the stored figure plus the last context size it saw and the session opening (spec/agents-and-providers#opening-share):
+ * `opening` — the opening size the running turn counted (0 when none), `openingShare` — the part of an opening it counts, `learnedShare` — the
+ * part the last finished turn with an opening turned out to pay.
+ */
+export type TokenTally = TaskOwnTokens & {
+	used: number | null;
+	opening: number;
+	openingShare: number;
+	learnedShare: number | null;
+};
 
-export const emptyTokenTally = (): TokenTally => ({
+export const emptyTokenTally = (openingShare = 1): TokenTally => ({
 	input: 0,
 	cacheWrite: 0,
 	output: 0,
@@ -37,7 +46,13 @@ export const emptyTokenTally = (): TokenTally => ({
 	estimate: 0,
 	running: false,
 	used: null,
+	opening: 0,
+	openingShare: isOpeningShare(openingShare) ? openingShare : 1,
+	learnedShare: null,
 });
+/** spec/agents-and-providers#opening-share: a share of a session's opening context, 0 to 1. */
+export const isOpeningShare = (value: unknown): value is number =>
+	typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 /** Two readings belong to one window when their reset times are within ten minutes (a provider may round them). */
 const sameWindow = (a: QuotaMark, b: QuotaMark) =>
 	a.resetsAt === null || b.resetsAt === null
@@ -68,25 +83,43 @@ function markQuota(
 }
 /**
  * spec/agents-and-providers#task-tokens: one journal event folded into the task's own figure. A finished turn's `turn.usage` is exact; while a turn runs,
- * every rise of the context size (`usage.changed.used`) adds to the estimate, which the turn's `turn.usage` replaces.
+ * every rise of the context size (`usage.changed.used`) adds to the estimate, which the turn's `turn.usage` replaces. A session's first size inside a
+ * turn (its opening: system prompt, tools, a loaded history) adds only `openingShare` of itself, since a provider's cache often already holds most of
+ * it; that turn's `turn.usage` then tells the share it paid (spec/agents-and-providers#opening-share).
  */
 export function reduceTokenTally(tally: TokenTally, event: SessionEvent, at = ''): TokenTally {
 	switch (event.kind) {
 		case 'session.started':
-			// A new session's context starts from nothing: its first size counts whole.
 			return { ...tally, used: null };
 		case 'turn.started':
-			return { ...tally, running: true, estimate: 0 };
+			return { ...tally, running: true, estimate: 0, opening: 0 };
 		case 'usage.changed': {
 			if (!Number.isFinite(event.used) || event.used < 0) return tally;
-			const rise = tally.used === null ? event.used : Math.max(0, event.used - tally.used);
+			if (tally.used === null) {
+				if (!tally.running) return { ...tally, used: event.used };
+				return {
+					...tally,
+					used: event.used,
+					opening: event.used,
+					estimate: tally.estimate + Math.round(event.used * tally.openingShare),
+				};
+			}
+			const rise = Math.max(0, event.used - tally.used);
 			return {
 				...tally,
 				used: event.used,
 				estimate: tally.running ? tally.estimate + rise : tally.estimate,
 			};
 		}
-		case 'turn.usage':
+		case 'turn.usage': {
+			let { openingShare, learnedShare } = tally;
+			if (tally.opening > 0) {
+				// What the turn paid past its growth after the opening is what the opening cost.
+				const growth = tally.estimate - Math.round(tally.opening * tally.openingShare),
+					paid = event.input + event.cacheWrite + event.output - growth;
+				learnedShare = Math.round(Math.min(1, Math.max(0, paid / tally.opening)) * 1000) / 1000;
+				openingShare = learnedShare;
+			}
 			return {
 				...tally,
 				input: tally.input + event.input,
@@ -95,11 +128,17 @@ export function reduceTokenTally(tally: TokenTally, event: SessionEvent, at = ''
 				cacheRead: tally.cacheRead + event.cacheRead,
 				estimate: 0,
 				running: false,
+				opening: 0,
+				openingShare,
+				learnedShare,
 			};
+		}
 		case 'turn.completed':
 		case 'session.failed':
 		case 'host.stopped':
-			return tally.running || tally.estimate ? { ...tally, running: false, estimate: 0 } : tally;
+			return tally.running || tally.estimate || tally.opening
+				? { ...tally, running: false, estimate: 0, opening: 0 }
+				: tally;
 		case 'quota.observed': {
 			const quota = markQuota(tally.quota, event, at);
 			return quota ? { ...tally, quota } : tally;
@@ -108,15 +147,21 @@ export function reduceTokenTally(tally: TokenTally, event: SessionEvent, at = ''
 			return tally;
 	}
 }
-export function tokenTally(records: readonly EventRecord[]): TokenTally {
+export function tokenTally(records: readonly EventRecord[], openingShare = 1): TokenTally {
 	return records.reduce(
 		(tally, record) => reduceTokenTally(tally, record.event, record.at),
-		emptyTokenTally()
+		emptyTokenTally(openingShare)
 	);
 }
 /** The figure as `task.json` keeps it. */
 export function ownTokens(tally: TokenTally): TaskOwnTokens {
-	const { used: _used, ...own } = tally;
+	const {
+		used: _used,
+		opening: _opening,
+		openingShare: _share,
+		learnedShare: _learned,
+		...own
+	} = tally;
 	return own;
 }
 /** Nothing reported yet: no counter (spec/agents-and-providers#usage-principles). */

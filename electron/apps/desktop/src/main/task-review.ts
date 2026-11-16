@@ -272,19 +272,25 @@ export async function readTaskReview(
 		beforePR: gate(taskReviewAt(doc, 'pre-pr')),
 	};
 }
-function memberState(
+export function memberState(
 	review: TaskReview,
 	run: ReviewRun | null,
 	nodeId: string,
 	status: string | null,
 	findings: number
-): Pick<TaskReviewMember, 'state' | 'findings' | 'since'> {
+): Pick<TaskReviewMember, 'state' | 'findings' | 'since' | 'note'> {
 	const verdict = run?.verdicts.find((item) => item.reviewerNodeId === nodeId);
 	if (status === 'failed') return { state: 'failed', findings, since: null };
 	if (review.state === 'stopped') return { state: 'stopped', findings, since: null };
 	if (review.state === 'yours' && verdict && !verdict.approved)
 		return { state: 'open', findings, since: verdict.at };
-	if (verdict?.approved) return { state: 'approved', findings, since: verdict.at };
+	if (verdict?.approved)
+		return {
+			state: 'approved',
+			findings,
+			since: verdict.at,
+			...(verdict.note ? { note: verdict.note } : {}),
+		};
 	if (verdict) return { state: 'findings', findings, since: verdict.at };
 	if (run && run.state === 'reviewing' && run.dispatched.includes(nodeId))
 		return { state: run.round > 1 ? 'checking' : 'reading', findings, since: run.createdAt };

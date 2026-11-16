@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionStore, atomicJson } from '@brigadir/persistence';
 import type { AgentCheck, ProviderCatalog } from '@brigadir/core';
-import { readTaskReview, rememberedReviewCrew, reviewerFor } from './task-review';
+import { memberState, readTaskReview, rememberedReviewCrew, reviewerFor } from './task-review';
 
 const run = promisify(execFile);
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -143,6 +143,28 @@ describe('what the window reads (spec/reviews#strip, spec/reviews#before-pr)', (
 		]);
 		expect(view.comments[1]!.reason).toBe('Still there.');
 		expect(view.beforePR).toBe('running');
+	});
+	it('a reviewer that approved with a remark shows it; a remark is never a finding (spec/reviews#remark)', () => {
+		const verdict = (approved: boolean, note?: string) => ({
+			reviewerNodeId: 'n1',
+			reviewer: 'Codex',
+			approved,
+			comments: approved ? 0 : 1,
+			at: '2026-01-01T00:00:00.000Z',
+			...(note ? { note } : {}),
+		});
+		const run = (item: ReturnType<typeof verdict>) =>
+			({ verdicts: [item], state: 'approved', round: 1, dispatched: ['n1'] }) as never;
+		const review = { state: 'passed' } as never;
+		expect(
+			memberState(review, run(verdict(true, 'Ran shout("Ann"): HELLO, ANN.')), 'n1', null, 0)
+		).toEqual({
+			state: 'approved',
+			findings: 0,
+			since: '2026-01-01T00:00:00.000Z',
+			note: 'Ran shout("Ann"): HELLO, ANN.',
+		});
+		expect(memberState(review, run(verdict(true)), 'n1', null, 0)).not.toHaveProperty('note');
 	});
 	it('Create PR during a mid-task review expands that review instead of starting one', async () => {
 		const { store, key } = await task();

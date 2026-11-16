@@ -194,6 +194,39 @@ it('reviews a task inside it: one read, the agent fixes once, the closure check 
 	expect((await git(repo, 'status', '--porcelain')).stdout).toContain('out/');
 }, 240_000);
 
+it('an approval with a remark passes at once and keeps the remark with its verdict (spec/reviews#remark)', async () => {
+	const { store, task } = await setup('Clean remark');
+	const client = await launch(store, task);
+	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(client, (r) => r.event.kind === 'turn.completed');
+	await client.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const started = await find(client, (r) => r.event.kind === 'task-review.started');
+	const finished = await find(client, (r) => r.event.kind === 'task-review.finished', 90_000);
+	expect(finished.event).toMatchObject({ state: 'passed', point: 'pre-pr' });
+	// No finding, no fixing round: the read lists none, and nothing reached the task's agent.
+	const records = (await client.snapshot()).records;
+	expect(
+		records.find((r) => r.seq > started.seq && r.event.kind === 'task-review.findings')?.event
+	).toMatchObject({ findings: 0 });
+	expect(
+		records.some((r) => r.seq > started.seq && r.event.kind === 'turn.started' && !!r.event.review)
+	).toBe(false);
+	// The remark is stored with the verdict on disk, where the strip reads it after a restart.
+	const saved = JSON.parse(
+		await readFile(join(await store.taskDir(task), 'crew-reviews.json'), 'utf8')
+	);
+	const verdicts = saved.reviews.flatMap((item: { verdicts: unknown[] }) => item.verdicts);
+	expect(verdicts).toEqual([
+		expect.objectContaining({ approved: true, note: 'Ran the output check: it prints done.' }),
+	]);
+}, 180_000);
+
 it('stops a review: the open round ends, nothing more reaches the agent (spec/reviews#loop)', async () => {
 	const { store, task } = await setup('Write the output');
 	const client = await launch(store, task);

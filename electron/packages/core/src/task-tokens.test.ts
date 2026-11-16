@@ -79,7 +79,7 @@ describe('tokens of a task (spec/agents-and-providers#task-tokens)', () => {
 		const used = records
 			.slice(start, middle + 1)
 			.flatMap((item) => (item.event.kind === 'usage.changed' ? [item.event.used] : []));
-		// The first size of a new session counts whole; the rest is every rise.
+		// Without a learned share the first size of a new session counts whole; the rest is every rise.
 		const growth = used.reduce(
 			(sum, value, index) => sum + (index === 0 ? value : Math.max(0, value - used[index - 1]!)),
 			0
@@ -91,6 +91,67 @@ describe('tokens of a task (spec/agents-and-providers#task-tokens)', () => {
 		expect(countedTokens(done)).toBe(
 			countedTokens(before) + turn.input + turn.cacheWrite + turn.output
 		);
+	});
+	describe('the opening of a session (spec/agents-and-providers#opening-share)', () => {
+		// The shape of a recorded walkthrough: a fresh Claude task whose opening context (48 973) was half read from the provider's cache, then its fix
+		// turn; and a fresh Codex reviewer that paid its whole opening.
+		const turn = (used: number[], usage: [number, number, number, number]): SessionEvent[] => [
+			{ kind: 'turn.started', text: '' },
+			...used.map((value): SessionEvent => ({
+				kind: 'usage.changed',
+				used: value,
+				capacity: 200_000,
+				cost: null,
+			})),
+			{
+				kind: 'turn.usage',
+				input: usage[0],
+				output: usage[1],
+				cacheRead: usage[2],
+				cacheWrite: usage[3],
+			},
+			{ kind: 'turn.completed', reason: 'end_turn' },
+		];
+		const started: SessionEvent = { kind: 'session.started', sessionId: 's1', modes: [] } as never;
+		const claude = [
+			started,
+			...turn([48_973, 49_043, 49_135, 49_241, 49_334, 49_471, 49_471], [6, 348, 122_074, 25_327]),
+			...turn([49_887, 50_346, 50_588, 50_588], [4, 569, 99_198, 1163]),
+		].map(record);
+		const codex = [
+			started,
+			...turn([20_845], [20_819, 26, 0, 0]),
+			...turn([21_336, 23_637, 24_234, 24_345], [3851, 485, 89_216, 0]),
+		].map(record);
+		const lastEstimate = (records: EventRecord[], share: number) => {
+			const end = records.findIndex((item) => item.event.kind === 'turn.usage');
+			return tokenTally(records.slice(0, end), share).estimate;
+		};
+		it('learns from the turn end what share of the opening the provider charged', () => {
+			expect(tokenTally(claude).learnedShare).toBeCloseTo(0.514, 3);
+			expect(tokenTally(codex).learnedShare).toBe(1);
+			// The learned share stays inside the reducer: task.json keeps the figure only.
+			expect(Object.keys(ownTokens(tokenTally(claude))).sort()).toEqual(
+				['cacheRead', 'cacheWrite', 'estimate', 'input', 'output', 'running'].sort()
+			);
+		});
+		it('with the share learned before, a fresh task estimate lands on its exact count, never double', () => {
+			const exact = 6 + 348 + 25_327,
+				estimate = lastEstimate(claude, tokenTally(claude).learnedShare!);
+			expect(Math.abs(estimate - exact) / exact).toBeLessThan(0.03);
+			expect(lastEstimate(codex, tokenTally(codex).learnedShare!)).toBe(20_845);
+			// Before anything is learned the opening counts whole: the overshoot the walkthrough saw.
+			expect(lastEstimate(claude, 1)).toBe(49_471);
+		});
+		it('a later turn of the same session counts only the growth, and the count is exact when it ends', () => {
+			const second = claude.findLastIndex((item) => item.event.kind === 'turn.usage'),
+				running = tokenTally(claude.slice(0, second), 0.514);
+			expect(running.estimate).toBe(50_588 - 49_471);
+			expect(running.running).toBe(true);
+			const done = tokenTally(claude, 0.514);
+			expect(done).toMatchObject({ estimate: 0, running: false });
+			expect(countedTokens(done)).toBe(6 + 348 + 25_327 + 4 + 569 + 1163);
+		});
 	});
 	it('a fall of the context (a compaction) adds nothing, and a stop drops the estimate', () => {
 		let tally = reduceTokenTally(emptyTokenTally(), { kind: 'turn.started', text: '' });

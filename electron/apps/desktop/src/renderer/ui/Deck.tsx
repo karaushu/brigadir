@@ -17,6 +17,17 @@ export function Deck({
 		</div>
 	);
 }
+/**
+ * spec/composer-steering-queue-and-ghost#queue-deck: a part of the deck that grows to what it shows and scrolls when the window has no more room
+ * (the Review strip's details, spec/reviews#strip). The lists around it keep their place; a fade at its foot says there is more below.
+ */
+export function DeckFill({ children }: { children: ReactNode }) {
+	return (
+		<div className={s.fill} data-deck-fill>
+			{children}
+		</div>
+	);
+}
 export function DeckList({
 	label,
 	header,

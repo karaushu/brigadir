@@ -119,7 +119,10 @@ deliveries, stale verdicts (`stale_review`), restart recovery and the rule that 
    `Check task <id> of \`Task agent\` (reviewId …, first read)` with the task's prompt, the report, the notes and
    instructions, then: read with `read_report` / `read_diff`, leave only real, demonstrable findings with
    `submit_review(taskId, reviewId, comments)`, or `approve(taskId, reviewId)` when nothing must change; this is the
-   only full read, nothing new can be raised later.
+   only full read, nothing new can be raised later. The prompt says what a finding is ([Findings](#findings)), that a
+   doubt is checked by the reviewer itself — it reads the files of its tree and runs commands that change no files: the
+   project's tests or type check, a short script that calls the changed code — and ends in a defect it found or an
+   approval, and that what needs no fix goes in the approval's [remark](#remark).
    - No findings → the review **passes**.
 2. **Fix once or object.** The findings go to the task's agent as one batch (marker `review`, the
    [Sending a review](diff-and-review.md#send-review) format with each finding's id), headed `<reviewer> left N
@@ -163,7 +166,17 @@ deliveries, stale verdicts (`stale_review`), restart recovery and the rule that 
 ### Findings
 
 A finding is a reviewer's comment of the review: a review thread in Changes attributed to the reviewer and the round
-([Review from the foreman](crew.md#foreman-review)).
+([Review from the foreman](crew.md#foreman-review)). It names something wrong in the change — wrong behaviour, a broken
+contract, a missed requirement, work outside the task — with its evidence: the lines and what goes wrong. A wish for
+more checks, tests or a fuller report is not a finding: one round of fixing costs more than the check it asks for. The
+same rule stands in a crew reviewer's prompt, except how it checks a doubt: its own tree is not the worker's change, so it
+reads the whole diff and the report instead of running commands. The [plan review](#plan-review) keeps its own rules.
+
+<a id="remark"></a>
+**A remark.** `approve(taskId, reviewId, note?)` takes an optional `note` (up to 2000 characters): something the person
+should know that needs no fix — a risk to watch, the check the reviewer ran. It is stored with the approval, starts no
+fix and no round, has no thread, no tag and no count, and never becomes a finding. The expanded strip shows it under the
+reviewer's row.
 
 | State | Meaning | Tag |
 | --- | --- | --- |
@@ -213,10 +226,13 @@ the state in muted text, the **step track**, actions, chevron.
 - `Create PR` has no ellipsis although it opens the New PR dialog: the strip names the step, not the dialog — an
   exception to the `…` rule of [UI copy](../ui-copy.md) that holds only here.
 - **Expanded** (chevron or a click on the row): a full-width segment `Plan · Mid-task · Before PR` that picks whose review the sections show; `Reviewer` — a row per reviewer: provider glyph,
-  `name · provider`, its state and time (`reading · 1m 12s`, `N findings`, `checking`, `approved`), `Log`; and
+  `name · provider`, its state and time (`reading · 1m 12s`, `N findings`, `checking`, `approved`), `Log`, and under it
+  the [remark](#remark) of an approval, if any; and
   `Findings N` — a row per finding: its text, `file:line · reviewer` (mono, muted) and its tag. Open and new findings
   stand first with the reviewer's reason under them. A click on a finding opens its thread in the diff. The plan's sections differ ([Plan review
-  surfaces](#plan-surfaces)).
+  surfaces](#plan-surfaces)). The sections are the deck's fill ([Queue deck](composer-steering-queue-and-ghost.md#queue-deck)):
+  they get the room they need up to a bound set by the window, the strip's row stays in place over them, and they scroll
+  under it with a fading foot while more lies below.
 - `Log` (strip, sidebar row, thread) opens the reviewer's task, which shows its log read-only.
 - **Chat rows** (service rows, not cards): `review · <point> · <reviewer> · started` (a `mid` review adds `after
   <reason>`); `review · <point> · <reviewer> → <agent> · <N findings>` or `review · <point> · <reviewer> · passed`;

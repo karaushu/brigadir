@@ -36,7 +36,7 @@ import { openTaskEditor } from './task-state';
 import { openReviewLaunch } from './ReviewLaunch';
 import { useHelperSettings } from './HelperAgent';
 import { useForge } from './Forge';
-import { DeckList, DeckRow } from './ui/Deck';
+import { DeckFill, DeckList, DeckRow } from './ui/Deck';
 import { Button, IconButton, Segments } from './ui/Controls';
 import { Glyph, type GlyphName } from './ui/Glyph';
 import { StepTrack } from './ui/StepTrack';
@@ -834,16 +834,18 @@ export function ReviewStripView({
 				</DeckRow>
 			</DeckList>
 			{shown && (
-				<ReviewDetails
-					view={view}
-					locale={locale}
-					now={now}
-					point={point ?? review.point}
-					onStep={onStep}
-					onComment={onComment}
-					onReviewer={onReviewer}
-					{...(onSource ? { onSource } : {})}
-				/>
+				<DeckFill>
+					<ReviewDetails
+						view={view}
+						locale={locale}
+						now={now}
+						point={point ?? review.point}
+						onStep={onStep}
+						onComment={onComment}
+						onReviewer={onReviewer}
+						{...(onSource ? { onSource } : {})}
+					/>
+				</DeckFill>
 			)}
 		</>
 	);
@@ -995,6 +997,7 @@ function ReviewDetails({
 										{t(locale, 'Log')}
 									</Button>
 								)}
+								{member.note && <p className={`${styles.reason} ${styles.note}`}>{member.note}</p>}
 							</li>
 						))}
 					</ul>

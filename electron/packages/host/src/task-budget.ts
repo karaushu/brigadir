@@ -8,6 +8,7 @@ import {
 	formatTokenCount,
 	hasTokens,
 	isAgentTask,
+	isOpeningShare,
 	isRecord,
 	ownTokens,
 	popoverAnswer,
@@ -30,7 +31,29 @@ import {
 	type TokenHold,
 	type TokenTally,
 } from '@brigadir/core';
-import { safePath, type SessionStore } from '@brigadir/persistence';
+import { atomicJson, safePath, type SessionStore } from '@brigadir/persistence';
+
+/** spec/agents-and-providers#opening-share: the app's file of what share of a new session's opening context each provider last paid. */
+export const openingSharesFile = 'token-openings.json';
+type OpeningShares = Partial<Record<AgentProvider, number>>;
+export async function readOpeningShares(root: string): Promise<OpeningShares> {
+	try {
+		const doc: unknown = JSON.parse(
+			await readFile(await safePath(root, openingSharesFile), 'utf8')
+		);
+		if (!isRecord(doc) || doc.schemaVersion !== 1 || !isRecord(doc.providers)) return {};
+		const shares: OpeningShares = {};
+		for (const provider of ['claude', 'codex'] as const)
+			if (isOpeningShare(doc.providers[provider])) shares[provider] = doc.providers[provider];
+		return shares;
+	} catch {
+		return {};
+	}
+}
+async function writeOpeningShare(root: string, provider: AgentProvider, share: number) {
+	const providers = { ...(await readOpeningShares(root)), [provider]: share };
+	await atomicJson(await safePath(root, openingSharesFile), { schemaVersion: 1, providers });
+}
 
 /** spec/agents-and-providers#task-tokens: during a turn the figure is written at most this often, and only when its short number changes. */
 export const tokenWriteMs = 3000;
@@ -94,6 +117,12 @@ export class TaskBudget {
 	/** Writes the figure and, for the root, the hold rebuilt from the journal (a restart while paused keeps the pause). */
 	async start() {
 		await this.serial(async () => {
+			// A share this task's own journal taught is the freshest; otherwise the one the app learned last for this provider.
+			const share = this.provider
+				? (await readOpeningShares(this.deps.store.root))[this.provider]
+				: undefined;
+			if (share !== undefined && this.tally.learnedShare === null)
+				this.tally = { ...this.tally, openingShare: share };
 			await this.writeTokens(true);
 			if (this.root) await this.writeHold();
 			else await this.readRootHold();
@@ -129,8 +158,15 @@ export class TaskBudget {
 	}
 	/** Called for every journaled record of this task, in order. Never waits on the journal: what it emits goes through `serial`. */
 	observe(record: EventRecord) {
-		const event = record.event;
+		const event = record.event,
+			learned = this.tally.learnedShare;
 		this.tally = reduceTokenTally(this.tally, event, record.at);
+		const share = this.tally.learnedShare,
+			provider = this.provider;
+		if (share !== null && share !== learned && provider)
+			void this.serial(() =>
+				writeOpeningShare(this.deps.store.root, provider, share).catch(() => {})
+			);
 		if (event.kind === 'budget.reached' || event.kind === 'budget.decided') {
 			this.journal = reduceBudgetJournal(this.journal, record);
 			void this.serial(() => this.settleHold());

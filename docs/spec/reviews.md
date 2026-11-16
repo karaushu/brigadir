@@ -191,7 +191,7 @@ the state in muted text, the **step track**, actions, chevron.
   fill; a hovered step `--tint`. Each step has the tooltip `Plan review`, `Mid-task review`, `Review before PR`
   (with its state). A click opens the strip on that step's findings.
 - **A toned or hovered row fills the deck edge to edge** — horizontally across the deck's padding, and up to the deck's
-  top edge when it is the deck's first row ([Queue deck placement](composer.md#queue-deck)).
+  top edge when it is the deck's first row and down to the island's top border when it is the deck's last ([Queue deck placement](composer.md#queue-deck)).
 
 | State | Glyph | Title · line | Actions | Tone |
 | --- | --- | --- | --- | --- |

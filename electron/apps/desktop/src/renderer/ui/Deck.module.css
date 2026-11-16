@@ -7,13 +7,16 @@
 .deck {
 	--deck-pad-x: 14px;
 	--deck-pad-top: 3.5px;
+	--deck-pad-bottom: 12.5px;
+	/* The foot a person sees under the last row: the bottom padding less the pixel the island lies over (−9 px here against the dock's 8 px gap). */
+	--deck-foot: 11.5px;
 	flex: none;
 	position: relative;
 	box-sizing: border-box;
 	margin: 0 auto -9px;
 	width: calc(100% - 60px);
 	max-width: calc(var(--conversation-column-width) - 60px);
-	padding: var(--deck-pad-top) var(--deck-pad-x) 12.5px;
+	padding: var(--deck-pad-top) var(--deck-pad-x) var(--deck-pad-bottom);
 	border: 1px solid var(--sep);
 	border-bottom: 0;
 	border-radius: 12px 12px 0 0;
@@ -86,8 +89,8 @@
 	margin-right: -4px;
 }
 /* spec/chat-turns-plans-and-questions#background-commands, spec/composer-steering-queue-and-ghost#queue-deck: a row that opens something takes the hover
-   on its whole width (rule 15), and a toned row its fill: the fill runs edge to edge across the deck's side padding, and up to the deck's top
-   edge in its first row. The row's own buttons lie above it with their own hover. */
+   on its whole width (rule 15), and a toned row its fill: the fill runs edge to edge across the deck's side padding, up to the deck's top
+   edge in its first row and down to the island in its last. The row's own buttons lie above it with their own hover. */
 .list li[data-hover],
 .list li[data-tone] {
 	position: relative;
@@ -105,6 +108,10 @@
 }
 .deck > .list:first-child > ol:first-child > li:first-child::before {
 	top: calc(-1 * var(--deck-pad-top));
+}
+/* …and down to the island's top border in the deck's last row: through the foot a person sees, not under the island's glass. */
+.deck > .list:last-child > ol:last-child > li:last-child::before {
+	bottom: calc(-1 * var(--deck-foot));
 }
 .list li[data-tone='green']::before {
 	background-color: var(--green-soft);

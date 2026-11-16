@@ -927,15 +927,19 @@ const sessions = new Sessions(
 		if (method.startsWith('browser') && !appliedSettings.modules.browser)
 			throw new Error(moduleOffMessages.browser);
 		// spec/reviews#who: the host asks who reviews a start of its own (the agent's `request_review`).
-		if (method === 'review_reviewer' && isRecord(params) && isReviewPoint(params.point))
+		if (method === 'review_reviewer' && isRecord(params) && isReviewPoint(params.point)) {
+			// spec/reviews#who: `Plan review` set to `Off` — no plan review starts by itself.
+			if (params.point === 'plan' && params.auto === true && appliedSettings.planReviewOff)
+				return { off: true };
 			return reviewStart(key, {
 				agent: null,
 				crew: null,
 				notes: '',
 				since: 'start',
 				point: params.point,
-				startedBy: 'agent',
+				startedBy: params.auto === true ? 'host' : 'agent',
 			});
+		}
 		if (method === 'simulator') {
 			if (!appliedSettings.modules.simulator) throw new Error(moduleOffMessages.simulator);
 			if (!isSimulatorAgentCommand(params)) throw new Error('Invalid simulator operation');
@@ -4963,6 +4967,7 @@ void app.whenReady().then(async () => {
 	handle('files:create', (key, path) => files.create(key, path));
 	handle('plans:open', (key, requestId, text) => files.plan(key, requestId, text));
 	handle('plans:text', (key, requestId, text) => files.planText(key, requestId, text));
+	handle('sources:open', (key, sourceId) => files.source(key, sourceId));
 	handle('files:check', (key, id, version) => files.check(key, id, version));
 	handle('files:diff', (key, id) => files.fromDiff(key, id));
 	// spec/remote-access-and-mobile#client-ui-seam: the system browser and DevTools of this machine never open for a device.

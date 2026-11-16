@@ -10,7 +10,7 @@ files link here.
 
 | Point | `point` | Started by | Step name |
 | --- | --- | --- | --- |
-| The plan, before approval | `plan` | — (drawn, inactive; see [Later](#later)) | `Plan review` |
+| The plan, before approval | `plan` | the host, when the plan is presented ([The plan review](#plan-start)); the person again from the strip | `Plan review` |
 | Mid-task | `mid` | the agent ([`request_review`](#request-tool)); the host API also takes a host start | `Mid-task review` |
 | Before the pull request | `pre-pr` | the person (the strip, `Review…`, the proposal), or the host when the person presses `Create PR` ([gate](#before-pr)) | `Review before PR` |
 
@@ -30,7 +30,9 @@ One reviewer per review by default, resolved when the review starts. No knowledg
 provider's own option catalog.
 
 1. **The setting**, when set: Settings ▸ Agents ▸ Customize per action ▸ `Reviews` — `Plan review` (action
-   `planReview`) for the plan, `Code reviews` (action `taskReview`) for mid-task and before-PR reviews. A remembered
+   `planReview`) for the plan, `Code reviews` (action `taskReview`) for mid-task and before-PR reviews. The menu
+   of `Plan review` has `Off` under `Auto` (`settings.planReviewOff`): no plan review starts by itself, and the
+   strip's `Review again` still starts one. A remembered
    crew of `Code reviews` (from the launch dialog's `Remember for code reviews`) makes every agent below the crew's root
    a reviewer; a remembered crew the library no longer offers (deleted or hidden) counts as none, and the next rules
    decide.
@@ -77,14 +79,16 @@ provider's own option catalog.
   (`Agent · Crew`; the agent capsule's inherited entry is `Auto` with the resolved reviewer as its detail) and
   `Remember for code reviews` (action `taskReview`). `Starting…` on the button; a failure keeps the dialog with `Could
   not start the review: …` and `Retry`.
-- **The host** starts a `pre-pr` review when the person presses `Create PR` ([gate](#before-pr)), and its API takes
+- **The host** starts a `pre-pr` review when the person presses `Create PR` ([gate](#before-pr)), a `plan` review when a plan is
+  presented ([The plan review](#plan-start)), and its API takes
   `{point, startedBy: 'host', reason}` for a later threshold start.
 - **The agent proposes** a review before the PR with MCP `propose_review(summary?)` (person tool, `whenToUse`: after
   the task's work and the agent's own checks are done, before the person creates a PR; never while a review runs). It
   returns at once with `proposed: true`; the proposal stays until the person starts the review or dismisses it with
   `Not now`. Refused while a review runs: `A review of this task is already running.`
 - A review the person or the host starts while the task's agent is in a turn waits for that turn to end and reads its
-  snapshot. A review the agent asks for reads at once (the host takes a checkpoint first) while the agent works on.
+  snapshot. A review the agent asks for reads at once (the host takes a checkpoint first) while the agent works on. A
+  plan review reads at once: the agent's turn waits for the plan's answer.
 
 <a id="request-tool"></a>
 ### `request_review`
@@ -184,7 +188,7 @@ the state in muted text, the **step track**, actions, chevron.
   (`agent-backlog`, `--fg3`), live (spinner), waiting for the person (`agent-question`, `--amber`), passed or accepted
   (`check-pass`, `--green`), stopped, failed or outdated (`stop`, `--fg3`). The current review's step has the `--tint2`
   fill; a hovered step `--tint`. Each step has the tooltip `Plan review`, `Mid-task review`, `Review before PR`
-  (with its state). A click opens the strip on that step's findings. The plan step is drawn but disabled.
+  (with its state). A click opens the strip on that step's findings.
 - **A toned or hovered row fills the deck edge to edge** — horizontally across the deck's padding, and up to the deck's
   top edge when it is the deck's first row ([Queue deck placement](composer.md#queue-deck)).
 
@@ -192,12 +196,12 @@ the state in muted text, the **step track**, actions, chevron.
 | --- | --- | --- | --- | --- |
 | Not started (the strip shows no row) | — | — | — | — |
 | Waiting for the turn, reviewer reading | spinner | `Review` · `<point> · <reviewer> reading` | `Stop` | — |
-| Author fixing | spinner | `Review` · `<agent> fixes <N findings>` | `Stop` | — |
+| Author fixing | spinner | `Review` · `<agent> fixes <N findings>`; the plan: `<agent> revises the plan` | `Stop` | — |
 | Reviewer verifying | spinner | `Review` · `<reviewer> checks the fixes` | `Stop` | — |
-| Open findings handed to the person | `agent-question` | `Your call` · `<N findings> open` | `Fix {n}`, `Accept`; the list opens by itself | `--amber-soft` |
-| Passed | `check-pass` | `Review passed` · `<N findings>` or `no findings` | before PR: `Create PR` (primary), `×`; mid-task: `×` | `--green-soft` |
-| Accepted | `check-pass` (`--fg2`) | `Review closed` · `N accepted` | before PR: `Create PR`, `×`; mid-task: `×` | — |
-| Stopped | `stop` | `Review stopped` · `<N findings>` or `no findings` | `Start again…`, `×` | — |
+| Open findings handed to the person | `agent-question` | `Your call` · `<N findings> open`; the plan adds `· <N gaps>` | `Fix {n}`, `Accept`; the list opens by itself | `--amber-soft` |
+| Passed | `check-pass` | `Review passed` · `<N findings>` or `no findings`; the plan adds `· <N gaps>` | before PR: `Create PR` (primary), `×`; mid-task and plan: `×` | `--green-soft` |
+| Accepted | `check-pass` (`--fg2`) | `Review closed` · `N accepted` | before PR: `Create PR`, `×`; mid-task and plan: `×` | — |
+| Stopped | `stop` | `Review stopped` · `<N findings>` or `no findings` | `Start again…` (the plan: `Review again` while a plan waits), `×` | — |
 | Could not start | `agent-failed` (`--red`) | `Review did not start` · `<reviewer>: <reason>` or `No reviewer is available: …` | `Retry` (primary), `×` | — |
 
 - `<point>` is `plan`, `mid-task` or `before PR`. **The findings count is a link** wherever it stands — the strip row
@@ -207,15 +211,16 @@ the state in muted text, the **step track**, actions, chevron.
   a new one.
 - `Create PR` has no ellipsis although it opens the New PR dialog: the strip names the step, not the dialog — an
   exception to the `…` rule of [UI copy](../ui-copy.md) that holds only here.
-- **Expanded** (chevron or a click on the row): a full-width segment `Plan · Mid-task · Before PR` (the plan segment
-  disabled) that picks whose review the sections show; `Reviewer` — a row per reviewer: provider glyph,
+- **Expanded** (chevron or a click on the row): a full-width segment `Plan · Mid-task · Before PR` that picks whose review the sections show; `Reviewer` — a row per reviewer: provider glyph,
   `name · provider`, its state and time (`reading · 1m 12s`, `N findings`, `checking`, `approved`), `Log`; and
   `Findings N` — a row per finding: its text, `file:line · reviewer` (mono, muted) and its tag. Open and new findings
-  stand first with the reviewer's reason under them. A click on a finding opens its thread in the diff.
+  stand first with the reviewer's reason under them. A click on a finding opens its thread in the diff. The plan's sections differ ([Plan review
+  surfaces](#plan-surfaces)).
 - `Log` (strip, sidebar row, thread) opens the reviewer's task, which shows its log read-only.
 - **Chat rows** (service rows, not cards): `review · <point> · <reviewer> · started` (a `mid` review adds `after
   <reason>`); `review · <point> · <reviewer> → <agent> · <N findings>` or `review · <point> · <reviewer> · passed`;
-  `review · <point> · <agent> · N fixed · N answered`; `review · <point> · <N findings> open` (amber) or `passed`
+  `review · <point> · <agent> · N fixed · N answered`; for the plan the findings row adds `· <N gaps>`, and a review
+  that the plan's approval ended reads `review · plan · ended by the approval · <N findings> open`; `review · <point> · <N findings> open` (amber) or `passed`
   (green); `review · <point> · Fix N · by you`; `review · <point> · accepted · by you`; `review · <point> · stopped by
   you`; `review · <point> · did not start`; `review · <point> · changed after the review`. Journals written before these rows keep their older rows (`review · <who> · round 1 of 2 started` and the round rows).
 
@@ -260,6 +265,138 @@ the state in muted text, the **step track**, actions, chevron.
 `Review first` / `Review again` close the sheet and open the launch dialog; `Open the review` closes it and expands
 the strip.
 
+<a id="plan-review"></a>
+## The plan review
+
+The same loop on a plan that waits for the person's approval, before they approve: a plan for approval of a solo task
+([Plan for approval](chat-turns-plans-and-questions.md#plan-approval)) or the root foreman's split
+([Crew](crew.md#plan)). The reviewer reads the plan once, the author revises it once or objects, the reviewer checks
+the revision, and what is still open waits next to the plan with `Fix {n}` / `Accept`. `Approve plan` (and `Start
+workers`) stays available all the time.
+
+<a id="plan-start"></a>
+### When it starts
+
+- **By itself, when the plan is presented**: a plan for approval with text (`permission.requested` with `switch_mode`)
+  or the root foreman's `propose_plan` (a lead's plan is approved by the host and has none). Not when `Plan review` is
+  `Off` ([Who reviews](#who)), not when no app is attached to the task's host or the app does not answer who reviews (the
+  host cannot read the setting), not in the
+  main tree, and not while another review of the task lives.
+- **One full read per plan.** A plan is every presentation from the first one after the last approved plan (an approved
+  plan for approval, or `Start workers`) up to its approval. A plan that already had a plan review gets no new read by
+  itself: a revision presented while the author answers the findings, or while the person decides, gets the
+  [closure check](#plan-loop); after a review that passed, was accepted or stopped, nothing. The person asks for a new
+  read with `Review again` in the strip while a plan waits.
+- The review reads at once: the agent's turn waits for the plan's answer. The reviewer's tree is the task's latest
+  checkpoint, as in a code review ([Reviewer sessions](#reviewer-sessions)).
+
+<a id="plan-inputs"></a>
+### What the reviewer reads
+
+A reviewer on any provider reads everything through host tools; it needs no connector of its own.
+
+- **The task's prompt** (and, for a crew, nothing of the workers: they have not started).
+- **The plan**: `read_plan(taskId, reviewId)` → `{revision, text}`: the plan's Markdown as presented (a split is
+  rendered as Markdown: the summary, then per part its number, title, executor with its role, provider and model, files,
+  scopes and prompt, then the crew's roster). In a closure check it adds `read` (the revision the first read had), `previous` (the
+  revision the previous round read) and `diff`: a line diff of the plan between `previous` and this one. The text is cut at 200 000
+  characters with a note.
+- **The sources**: `read_sources(taskId, reviewId, sourceId?)` → the saved sources as `{id, title, url?, chars, text}`;
+  texts are cut when the call passes 200 000 characters, and `sourceId` reads one source whole.
+- **The repo**: the files of its worktree, read-only — the backend contract in the repo included.
+
+<a id="save-source"></a>
+#### `save_source`
+
+MCP `save_source(title, url?, text)` — a person tool of a solo task's agent and the root foreman. It saves the text of a
+source the plan is written from — a ticket, a spec, an API contract — into the task's folder, so a reviewer on another
+provider reads the same version the plan was written from.
+
+- `whenToUse` (English, rule 12): the task comes from a ticket, a spec or a contract the agent was given or fetched (for
+  example from Notion, Jira or Linear); save it before presenting a plan. The session brief of a solo task and of the
+  root foreman says the same (`sourcesBrief`).
+- Limits: `title` 1–200 characters, `url` an `http(s)` address of at most 2000, `text` 1–200 000 characters; at most 20
+  sources and 1 000 000 characters per task. A source with the same title (case ignored) replaces the earlier one: its text is written whole
+  (an atomic replace) before the index names it.
+- Files: `sources/<slug>-<hash8>.md` (the slug of the title as for plan copies, the hash of the source's id) and the
+  index `sources/sources.json` ([Data](#data)). Returns `{saved: true, id, chars}`; an error names the limit.
+- The journal gets `source.saved` (`id`, `title`, `url?`, `chars`).
+
+<a id="plan-verdict"></a>
+### The verdict
+
+MCP `submit_plan_review(taskId, reviewId, findings, gaps)` (a reviewer's tool; `approve(taskId, reviewId)` when nothing
+must change and the ticket has no gaps). At most 12 items in all (a closure check adds at most 12 `introduced` ones, and a review
+holds at most 48 findings: past that the host takes replies only — `This review holds at most 48 findings…`), ranked: the most severe first.
+
+| List | `kind` | Tag | Goes to |
+| --- | --- | --- | --- |
+| Plan vs ticket | `missed` (a requirement the plan misses), `contradicts` (the plan contradicts the ticket or the contract), `out-of-scope` (the plan does what the ticket does not ask) | `missed`, `contradicts`, `out of scope` (`--amber`) | the author |
+| Plan vs code | `assumption` (a wrong assumption about existing code), `left-open` (a decision left open that will produce defects: concurrency, failures and retries, data loss, empty and error states), `unverifiable` (a check that cannot be verified as written), `split` (the foreman's split, [below](#plan-split)) | `wrong assumption`, `left open`, `cannot verify`, `split` (`--amber`) | the author |
+| Gaps in the ticket | `gaps[]` — what the ticket itself leaves open | `gap` (`--tint`, `--fg2`) | the person |
+
+- A finding is `{kind, text, where?}`; a gap `{text, where?}`. Gaps never count as findings: not in the strip's counts, a
+  reviewer's row or the chat rows. `text` ≤ 2000 characters; `where` ≤ 200, the place in the
+  ticket, the contract or the plan (`CRM-412 · Notes`, `api-contract.yaml:88`, `plan.md:41`).
+- A first read without findings and gaps is an `approve`. Gaps alone pass the review: they are questions for the
+  person, not for the author, and they never keep the review open.
+
+<a id="plan-loop"></a>
+### The loop on a plan
+
+1. **Read once**: `Check the plan of task <id> (reviewId …, plan review, first read)` with the task's prompt and the
+   instruction to read the plan, the sources and the repo once, and to answer with the verdict above.
+2. **Revise once or object.** The findings go to the author as one batch: `<reviewer> left N findings in the plan
+   review. Revise the plan once: fix each finding in the plan, or object to it with review_reply(commentId, reason) where
+   commentId is the finding's id; then present the plan for approval again with ExitPlanMode, unchanged if you object to every
+   finding` (a foreman: `then call propose_plan again with the revised split, …`) `. <reviewer> then checks only whether each finding is closed.` with each
+   finding's id, kind, place and text (`- id p1 [missed] (CRM-412 · Notes): …`). `Fix {n}` sends `The person asks you
+   to fix N findings of the plan review that are still open…` with the reviewer's reasons. A solo task's waiting plan is answered with its first `reject_once` (else the first
+   `reject_*`, else the request is cancelled), as in [plan chat](chat-turns-plans-and-questions.md#plan-chat), and the batch runs right after the
+   turn; a foreman's waiting `propose_plan` returns `approved: false` with the batch as `review` (after its turn ended,
+   the batch comes as the decision prompt). With no plan waiting (the person answered it meanwhile, a foreman's split too), the batch only queues, and the turn
+   that takes it is the author's pass; if the author presents the plan before that turn, that plan is answered with the
+   batch and the queued copy is taken out.
+3. **Check closure once.** The next presentation of the plan opens the closure check on that revision:
+   `Check the plan of task <id> (reviewId …, closure check)` with the reviewer's findings, the author's objections and
+   `read_plan` with the revision diff. The reviewer answers `approve`, or `submit_plan_review` with
+   `{replyTo: <findingId>, text}` per finding still open and `{kind, text, where?, introduced: true}` only for a
+   problem the revision brought in; gaps are not asked again. The host refuses other items with the messages of the code
+   loop. When the author's turn ends without presenting the plan again, the check runs on the plan as it was.
+4. **The person decides** while the plan waits: the open findings stand in the strip with `Fix {n}` / `Accept`.
+   `Fix {n}` answers the waiting plan and sends the batch again (step 2), then one more closure check. `Accept` closes
+   the review as `accepted`; the plan keeps waiting for approval. A revision presented while the person decides (from
+   chat, `Plan further…` or edits) gets a closure check of the open findings.
+
+- **Approval ends it, also mid-delivery.** A batch not yet sent is not sent, and one waiting in the author's queue is
+  taken out. `Approve plan`, `Start workers` or any approving option ends a live plan review: an open round is
+  cancelled; findings still open are recorded as `accepted` and the review ends `accepted`, or `stopped` when it had no
+  findings yet. The chat row says `ended by the approval`.
+- A rejection by the person (`Plan further…`, `Send edits`, a message in chat, `Reject`) does not stop the review.
+- A plan review never becomes `outdated`; the next plan after an approval gets a review of its own.
+
+<a id="plan-split"></a>
+### The foreman's split
+
+For a split the reviewer also checks the split itself and files each problem as `split`: parts that are not independent,
+a part that depends on another part's files while both run in parallel, and an executor that does not fit its part
+(its role, provider or model). Every other list applies to the split as to a plan.
+
+<a id="plan-surfaces"></a>
+### Plan review surfaces
+
+- **The strip.** The plan step lives like the others. Expanded on the plan, it shows the sources as chips (`note`
+  glyph, the title; a click opens the saved text in the editor), the `Reviewer` rows, then `Plan vs ticket N`, `Plan vs
+  code N` and `Gaps in the ticket N`. A finding row: its text, `<where> · <reviewer>` (muted), and a tag — its kind
+  while it waits for the author, then its state ([Findings](#findings)); open ones stand first with the reviewer's reason.
+  A gap row has no reviewer and the tag `gap`. Plan findings have no thread in the diff. A finished plan review (passed,
+  closed or stopped) offers `Review again` while a plan waits.
+- **The plan card** (plan for approval and the foreman's split card): a line above the footer — the sources as the same
+  chips, then the review's state: spinner and `Review · <reviewer> reading` (or `<reviewer> checks the fixes`, `<agent>
+  revises the plan`), or
+  `<N findings>` and `<N gaps>` as links (open findings in `--amber`, `· N open`), or `Review passed` with
+  `check-pass`. A click on the state expands the strip on the plan step.
+
 <a id="data"></a>
 ## Data
 
@@ -270,16 +407,26 @@ the strip.
   `startedAt`, `state` ∈ `waiting | reading | fixing | verifying | yours | passed | accepted | stopped | failed |
   outdated`, `round` (runs opened: 1 = the read, then closure checks), `passes` (author passes), `reviewers`,
   `trees` (the result tree per repo of the last run), `base?`, `batch?` (the last batch sent to the agent: the turn
-  that takes it opens the closure check, also after a restart), `failure?`, `finishedAt?`. A version-1 document reads as
+  that takes it opens the closure check, also after a restart), `failure?`, `finishedAt?`. A plan review adds `plan`
+  (`kind` ∈ `approval | split`; `id`, `revision`, `text` — the permission request or the crew plan presented last, its
+  revision and its plan; `read` — the revision of the first read; `seen`, `seenText?` — the revision the current round
+  reads; `base?`, `baseText?` — the one the previous round read, the closure check's diff base; `sentAt?` — the journal
+  seq of the last batch; `queued?` — that batch waits in the author's queue; `approved?` — the plan was approved, so the next presentation is a new plan) and `findings` (`id`, `kind`, `text`, `where?`,
+  `reviewer`, `round`, and the marks `open?`, `closed?`, `introduced?`, `accepted?`, `answer?`, `reason?`). Both
+  are optional: earlier documents load as they are. A review that goes to `past` keeps its plan's revisions and `approved`,
+  not its texts; readers take the document up to 16 MiB. A version-1 document reads as
   a `pre-pr` review started by the person; a review that was fixing takes its batch from the journal (the turn that
   took it, else the queued prompt); it is written back as version 2 on the next change.
-- Findings are review comments in the task's `review.json` with `review` = `{reviewId, round, reviewer, open?, closed?,
+- Sources: `sources/sources.json`, `schemaVersion: 1`, `sources` (`id`, `title`, `url?`, `file`, `chars`,
+  `savedAt`), and one Markdown file per source.
+- Code findings are review comments in the task's `review.json` with `review` = `{reviewId, round, reviewer, open?, closed?,
   introduced?, accepted?}` (`disputed` of older files reads as `open`).
 - Journal events (rule 2), each with `id` and `point`: `task-review.started` (`startedBy`, `reviewers`, `reason?`),
-  `task-review.findings` (`findings`, `reviewers`), `task-review.answered` (`fixed`, `answered`: the findings of the
+  `task-review.findings` (`findings`, `reviewers`, `gaps?` for a plan), `task-review.answered` (`fixed`, `answered`: the findings of the
   pass the agent answered with `review_reply`, the rest count as fixed until the closure check),
   `task-review.verified` (`closed`, `open`, `introduced`), `task-review.decided` (`decision` ∈ `fix | accept`,
-  `findings`), `task-review.finished` (`state` ∈ `passed | accepted | stopped | failed | outdated`, `failure?`). The proposal keeps `review.proposed`, `review.dismissed` and `review.replied`. The kinds of older
+  `findings`), `task-review.finished` (`state` ∈ `passed | accepted | stopped | failed | outdated`, `failure?`, `open?` and
+  `approval?` when the plan's approval ended it). `source.saved` (`id`, `title`, `url?`, `chars`). The proposal keeps `review.proposed`, `review.dismissed` and `review.replied`. The kinds of older
   journals — `review.started`, `review.finished` and the task's own `crew.review` rows — stay valid and replay as they
   were drawn.
 - Host commands: `startReview` (the resolved reviewers, `who`, `reviewer`, `point`, `instructions`, `guidance`,
@@ -289,8 +436,6 @@ the strip.
 <a id="later"></a>
 ## Later
 
-- The plan review: the plan checked against the source ticket, the backend contract and the repo, with two lists (plan
-  vs ticket, gaps in the ticket), before approval.
 - A threshold start of the mid-task review by the host (changed lines or files since the last review).
 - A review strip on the phone.
 

@@ -275,12 +275,15 @@ const checks: Record<string, Check> = {
 		{ id: isId, point: isReviewPoint, startedBy: starter, reviewers: array(text) },
 		{ reason: text }
 	),
-	'task-review.findings': object({
-		id: isId,
-		point: isReviewPoint,
-		findings: number,
-		reviewers: array(text),
-	}),
+	'task-review.findings': object(
+		{
+			id: isId,
+			point: isReviewPoint,
+			findings: number,
+			reviewers: array(text),
+		},
+		{ gaps: number }
+	),
 	'task-review.answered': object({
 		id: isId,
 		point: isReviewPoint,
@@ -306,8 +309,9 @@ const checks: Record<string, Check> = {
 			point: isReviewPoint,
 			state: (v) => ['passed', 'accepted', 'stopped', 'failed', 'outdated'].includes(String(v)),
 		},
-		{ failure: text }
+		{ failure: text, approval: (v) => v === true, open: number }
 	),
+	'source.saved': object({ id: isId, title: text, chars: number }, { url: text }),
 	'crew.accepted': object({ taskId: isId, nodeId: isId, name: text, conflicts: array(text) }),
 	'crew.worker.stopped': object({ taskId: isId, nodeId: isId, name: text, reason: text }),
 	// spec/agents-and-providers#budget-reached

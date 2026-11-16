@@ -118,7 +118,27 @@ export function ActionAgentsRows({
 					? settings.agents.provider
 					: (helperDefault?.provider ?? 'claude')
 			}
-			save={(agent) => save(action, agent)}
+			save={(agent) =>
+				action === 'planReview'
+					? update({
+							actionAgents: withActionAgent(settings.actionAgents, action, agent),
+							planReviewOff: false,
+						})
+					: save(action, agent)
+			}
+			// spec/reviews#who: `Plan review` can be turned off; a choice of an agent or `Auto` turns it on again.
+			{...(action === 'planReview'
+				? {
+						off: {
+							active: settings.planReviewOff,
+							set: () =>
+								update({
+									actionAgents: withActionAgent(settings.actionAgents, action, null),
+									planReviewOff: true,
+								}),
+						},
+					}
+				: {})}
 		/>
 	);
 	return (
@@ -189,6 +209,7 @@ function ActionRow({
 	defaultName,
 	defaultProvider,
 	save,
+	off,
 }: {
 	action: AgentAction;
 	locale: Locale;
@@ -203,6 +224,8 @@ function ActionRow({
 	defaultName: string;
 	defaultProvider: AgentProviderId;
 	save(agent: HelperAgent | null): void;
+	/** spec/reviews#who: `Off` in the menu — the action does not run by itself. */
+	off?: { active: boolean; set(): void };
 }) {
 	const task = inheritsDefaultAgent(action),
 		reviewer = isReviewerAction(action),
@@ -266,12 +289,18 @@ function ActionRow({
 			}),
 		provider: agent?.provider ?? defaultProvider,
 		value: agent?.model ?? '',
-		label: modelName ?? sameAs,
+		label: off?.active ? t(locale, 'Off') : (modelName ?? sameAs),
 		note: '',
 		title: t(locale, actionNames[action]),
 		side: 'bottom',
 		narrow: narrow && Boolean(agent),
-		inherit: { label: sameAs, detail: defaultName, active: !agent, onChoose: () => save(null) },
+		inherit: {
+			label: sameAs,
+			detail: defaultName,
+			active: !agent && !off?.active,
+			onChoose: () => save(null),
+		},
+		...(off ? { off: { label: t(locale, 'Off'), active: off.active, onChoose: off.set } } : {}),
 		onChoose: choose,
 		...(agent && efforts.length
 			? {

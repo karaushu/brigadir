@@ -444,6 +444,10 @@ leads a crew.
 | sent · fixed · answered · open · new · accepted | надіслано · виправлено · відповів · відкрите · нове · прийнято | The tags of a finding. | |
 | Your call | Вирішуєш ти | The strip when open findings wait for the person. | |
 | Fix {n} · Accept | Виправити {n} · Прийняти | The person's two answers to open findings. | «Fix more», «Accept as is» |
+| Plan vs ticket · Plan vs code · Gaps in the ticket | План і тикет · План і код · Прогалини в тикеті | The three lists of a plan review: what the author fixes (the first two) and the ticket's own gaps, which are questions for the person. | |
+| missed · contradicts · out of scope · wrong assumption · left open · cannot verify · split | пропущено · суперечить · поза задачею · хибне припущення · не вирішено · не перевірити · поділ | The kinds of a plan finding. | |
+| Gap | Прогалина | What the ticket itself leaves open; goes to the person, not to the author. Plural `1 прогалина · 2 прогалини · 5 прогалин`. | «питання» |
+| Source | Джерело | A ticket, spec or contract the agent saved next to the plan with `save_source`; shown as a chip. | «вкладення» |
 | Code reviews | Ревʼю коду | Customize per action: who reviews mid-task and before the PR. | |
 | Auto | Авто | Who reviews by default: another signed-in agent, else a fresh session of the task's own. | |
 

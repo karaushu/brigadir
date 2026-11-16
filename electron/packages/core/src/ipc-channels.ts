@@ -2716,6 +2716,19 @@ export const ipcTable = {
 		arity: 3,
 		validate: isPlanArgs,
 	},
+	// spec/reviews#plan-surfaces: a saved source opens in the editor like a plan copy.
+	openSourceFile: {
+		kind: 'invoke',
+		channel: 'sources:open',
+		class: 'remote',
+		arity: 2,
+		validate: (a: unknown[]) =>
+			a.length === 2 &&
+			isTaskKey(a[0]) &&
+			typeof a[1] === 'string' &&
+			a[1].length > 0 &&
+			a[1].length <= 200,
+	},
 	checkEditorFile: {
 		kind: 'invoke',
 		channel: 'files:check',

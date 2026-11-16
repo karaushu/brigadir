@@ -1945,6 +1945,10 @@ export function Conversation({
 										task={task}
 										locale={locale}
 										disabled={!hostConnected}
+										planWaiting={
+											pending.permissions.some((request) => isPlanApproval(request)) ||
+											!!pending.crewPlan
+										}
 										onComment={(comment) =>
 											setTask({
 												panel: 'changes',

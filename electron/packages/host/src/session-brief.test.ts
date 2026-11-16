@@ -4,6 +4,7 @@ import {
 	checklistBrief,
 	commandsBrief,
 	contextBrief,
+	sourcesBrief,
 	crewBrief,
 	planApprovalBrief,
 	subagentBrief,
@@ -53,21 +54,25 @@ const worker: CrewContext = {
 
 it('gives a session without a crew the checklist sentence, Claude the plan sentence, and both the context sentence (spec/chat-turns-plans-and-questions#checklist-tools, spec/chat-turns-plans-and-questions#plan-approval, spec/agents-and-providers#context-tools)', () => {
 	expect(sessionBrief(null, 'codex')).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}`
+		`${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}`
 	);
 	expect(sessionBrief(null, 'claude')).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${planApprovalBrief}\n\n${contextBrief}`
+		`${checklistBrief}\n\n${worktreeBrief}\n\n${planApprovalBrief}\n\n${contextBrief}\n\n${sourcesBrief}`
 	);
 });
 
 it('puts the checklist and context sentences after the role brief of the foreman, without the plan-mode sentence: it plans through propose_plan (spec/chat-turns-plans-and-questions#plan-approval, spec/crew#plan, spec/agents-and-providers#context-tools)', () => {
 	const brief = sessionBrief(foreman, 'claude');
 	expect(brief.startsWith(crewBrief(foreman))).toBe(true);
-	expect(brief.endsWith(`\n\n${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}`)).toBe(true);
+	expect(
+		brief.endsWith(
+			`\n\n${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}`
+		)
+	).toBe(true);
 	expect(brief).not.toContain('EnterPlanMode');
 	expect(
 		sessionBrief(foreman, 'codex').endsWith(
-			`\n\n${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}`
+			`\n\n${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}`
 		)
 	).toBe(true);
 });
@@ -82,11 +87,11 @@ it('gives a crew worker neither the plan nor the context sentence (spec/chat-tur
 
 it('points every session at the saved project commands, a crew worker too (spec/search-menus-and-commands#agent-command-tools, spec/agents-and-providers#tools-awareness)', () => {
 	expect(sessionBrief(null, 'claude', { commands: true })).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${planApprovalBrief}\n\n${contextBrief}\n\n${commandsBrief}`
+		`${checklistBrief}\n\n${worktreeBrief}\n\n${planApprovalBrief}\n\n${contextBrief}\n\n${sourcesBrief}\n\n${commandsBrief}`
 	);
 	expect(
 		sessionBrief(foreman, 'claude', { commands: true }).endsWith(
-			`\n\n${contextBrief}\n\n${commandsBrief}`
+			`\n\n${contextBrief}\n\n${sourcesBrief}\n\n${commandsBrief}`
 		)
 	).toBe(true);
 	expect(sessionBrief(worker, 'claude', { commands: true })).toBe(
@@ -106,7 +111,7 @@ const allOn = { browser: true, simulator: true, commands: true };
 it('names the tools in the brief of Codex and the CLI only, built from the modules that are on (spec/agents-and-providers#tools-awareness)', () => {
 	expect(sessionBrief(null, 'claude', { tools: allOn })).not.toContain('browser_open');
 	expect(sessionBrief(null, 'codex', { tools: allOn })).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${toolsBrief(null, allOn)}`
+		`${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}\n\n${toolsBrief(null, allOn)}`
 	);
 	expect(sessionBrief(null, 'claude', { tools: allOn, cli: true })).toContain(
 		toolsBrief(null, allOn)
@@ -119,7 +124,7 @@ it('names the tools in the brief of Codex and the CLI only, built from the modul
 	// spec/terminal-and-cli-agents#agent-console-tools: with every module off the brief still names the console.
 	const none = { browser: false, simulator: false, commands: false };
 	expect(sessionBrief(null, 'codex', { tools: none })).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${toolsBrief(null, none)}`
+		`${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}\n\n${toolsBrief(null, none)}`
 	);
 	expect(toolsBrief(null, none)).toBe(
 		'This app gives you the console of this task (console_list, console_read).'

@@ -130,6 +130,8 @@ export type SessionEvent =
 			point: ReviewPoint;
 			findings: number;
 			reviewers: string[];
+			/** spec/reviews#plan-verdict: a plan review's gaps in the ticket, for the person. */
+			gaps?: number;
 	  }
 	| {
 			kind: 'task-review.answered';
@@ -159,7 +161,12 @@ export type SessionEvent =
 			point: ReviewPoint;
 			state: 'passed' | 'accepted' | 'stopped' | 'failed' | 'outdated';
 			failure?: string;
+			/** spec/reviews#plan-loop: the plan's approval ended the review with this many findings open. */
+			approval?: boolean;
+			open?: number;
 	  }
+	/** spec/reviews#save-source: the author saved a ticket, spec or contract next to the plan. */
+	| { kind: 'source.saved'; id: string; title: string; url?: string; chars: number }
 	| { kind: 'crew.accepted'; taskId: string; nodeId: string; name: string; conflicts: string[] }
 	| { kind: 'crew.worker.stopped'; taskId: string; nodeId: string; name: string; reason: string }
 	/** `returnMode`: `Погодити` on a plan asked the host to bring this mode back once the agent leaves the plan (spec/chat-turns-plans-and-questions#plan-approval). */

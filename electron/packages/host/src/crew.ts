@@ -194,6 +194,9 @@ export const commandsBrief =
 /** spec/chat-turns-plans-and-questions#plan-approval: English by rule 12; `ExitPlanMode` reaches the chat as the plan for approval (spec/chat-turns-plans-and-questions#plan-approval), `EnterPlanMode` gets there from any mode. */
 export const planApprovalBrief =
 	'When the person asks for a plan before the work starts (for example "make a plan first" or "I want a full plan before you do anything"), enter plan mode with EnterPlanMode, research without changing anything, and present the plan with ExitPlanMode so the person can read, edit and approve it; do not give such a plan only as a message.';
+/** spec/reviews#save-source: the plan's author saves the ticket it plans from, so the plan's reviewer reads the same version (English, rule 12). */
+export const sourcesBrief =
+	'When the task comes from a ticket, a spec or an API contract you were given or fetched (for example from Notion, Jira or Linear), save its text with save_source before you present a plan, so the reviewer of your plan reads the same version.';
 /** spec/agents-and-providers#subagent-model: a session whose subagents got a model of their own learns what to hand them. No word about the model's size: the person chose it. */
 export const subagentBrief =
 	"Your subagents run on their own model, chosen for searching and reading. Give them work whose mistakes are cheap to spot: finding files, reading logs and long output, running tests. Keep code edits and decisions yourself, and check a subagent's answer against the code before you act on it.";
@@ -222,6 +225,7 @@ export function sessionBrief(
 		worktreeBrief,
 		provider === 'claude' && !context ? planApprovalBrief : '',
 		human ? contextBrief : '',
+		human ? sourcesBrief : '',
 		provider === 'claude' && options.subagents && !options.cli ? subagentBrief : '',
 		options.tools && (provider === 'codex' || options.cli)
 			? toolsBrief(context?.role ?? null, options.tools)
@@ -304,6 +308,16 @@ export type SelfReviewHooks = {
 	submitReview(text: string, review: ReviewBatch): Promise<void>;
 	/** spec/reviews#loop: a run opened (`reviewing`), the first read listed findings (`comments`), a run approved, or a closure check left findings open (`disputed`). */
 	round(run: ReviewRun, state: 'reviewing' | 'comments' | 'approved' | 'disputed'): Promise<void>;
+	/** spec/reviews#plan-inputs: `read_plan` of the plan review's round. */
+	planRead(round: number): Promise<Record<string, unknown>>;
+	/** spec/reviews#plan-verdict: `submit_plan_review`, checked and stored; the number of items. */
+	planVerdict(reviewer: string, round: number, input: Record<string, unknown>): Promise<number>;
+	/** spec/reviews#plan-loop: a closure check's approval closes the reviewer's plan findings. */
+	planApprove(reviewer: string, round: number): Promise<void>;
+	/** spec/reviews#plan-inputs: `read_sources`. */
+	sources(sourceId: unknown): Promise<Record<string, unknown>>;
+	/** spec/reviews#plan-loop: the reviewer's prompt of a plan review round — the first read or the closure check. */
+	planPrompt(taskId: string, reviewId: string, round: number, reviewer: string): Promise<string>;
 };
 /** spec/reviews#loop: a file of one repo — the same path in two repos of a project is two files. */
 export const scopedPath = (scopeId: string, path: string) => `${scopeId}\0${path}`;
@@ -465,7 +479,7 @@ export class CrewHost {
 	private connecting = new Map<string, Promise<Link | null>>();
 	private planWaiter: {
 		plan: CrewPlan;
-		resolve(decision: CrewPlanDecision): void;
+		resolve(decision: CrewPlanDecision & { review?: string }): void;
 		reject(error: Error): void;
 	} | null = null;
 	private questions: CrewQuestion[] = [];
@@ -735,19 +749,24 @@ export class CrewHost {
 		}
 		await atomicJson(await this.file('crew-plan.json'), { schemaVersion: 1, plan, decision: null });
 		await this.deps.emit({ kind: 'crew.plan.requested', plan });
-		const decision = await new Promise<CrewPlanDecision>((resolve, reject) => {
-			this.planWaiter = { plan, resolve, reject };
-			const abort = () => {
-				if (this.planWaiter?.plan.id === plan.id) {
-					this.planWaiter = null;
-					reject(new Error('Plan proposal was cancelled'));
-				}
-			};
-			signal.addEventListener('abort', abort, { once: true });
-			if (signal.aborted) abort();
-		});
+		const decision = await new Promise<CrewPlanDecision & { review?: string }>(
+			(resolve, reject) => {
+				this.planWaiter = { plan, resolve, reject };
+				const abort = () => {
+					if (this.planWaiter?.plan.id === plan.id) {
+						this.planWaiter = null;
+						reject(new Error('Plan proposal was cancelled'));
+					}
+				};
+				signal.addEventListener('abort', abort, { once: true });
+				if (signal.aborted) abort();
+			}
+		);
 		return {
 			approved: decision.approved,
+			...('review' in decision && typeof decision.review === 'string'
+				? { review: decision.review }
+				: {}),
 			...planReply(plan.parts, decision.parts),
 			...(plan.crew && decision.approved
 				? {
@@ -758,7 +777,21 @@ export class CrewHost {
 		};
 	}
 	/** Human decision (spec/crew#task-type rule 2, spec/crew#plan). A completed proposing turn needs a prompt even if its MCP call survived. */
-	async decidePlan(decision: CrewPlanDecision) {
+	/**
+	 * spec/crew#plan, spec/reviews#plan-loop: the plan review's findings answer the waiting split — `propose_plan` returns `approved: false` with
+	 * them as `review`, or they come as the decision prompt when the turn already ended. Nothing waits: nothing to answer.
+	 */
+	async rejectPlanForReview(review: string) {
+		const pending = this.planWaiter?.plan ?? (await this.pendingPlan());
+		if (!pending) return false;
+		await this.decidePlan({ id: pending.id, approved: false, parts: null }, review);
+		return true;
+	}
+	/** spec/reviews#plan-review: the split that waits for the person, if any. */
+	async waitingPlan(): Promise<CrewPlan | null> {
+		return this.planWaiter?.plan ?? (await this.pendingPlan());
+	}
+	async decidePlan(decision: CrewPlanDecision, review?: string) {
 		if (!isCrewPlanDecision(decision)) throw new Error('Invalid plan decision');
 		const pending = this.planWaiter?.plan ?? (await this.pendingPlan());
 		if (!pending || pending.id !== decision.id) throw new Error('The plan is no longer pending');
@@ -794,7 +827,7 @@ export class CrewHost {
 		if (this.planWaiter?.plan.id === decision.id) {
 			const waiter = this.planWaiter;
 			this.planWaiter = null;
-			waiter.resolve(decision);
+			waiter.resolve(review ? { ...decision, review } : decision);
 			// Codex may finish a turn with an MCP call still pending. Returning its result alone cannot wake that turn.
 			const records = this.deps.records();
 			const requested = records.findLastIndex(
@@ -820,7 +853,8 @@ export class CrewHost {
 		await this.deps.prompt(
 			decision.approved
 				? `The human approved your plan${decision.parts ? ' with edits' : ''}.${approvedCrew} Create the worker tasks now with create_worker_task, one per part, using these agent names and prompts:\n${JSON.stringify(parts, null, 2)}`
-				: 'The human rejected your plan. Ask what to change or propose a different split.',
+				: (review ??
+						'The human rejected your plan. Ask what to change or propose a different split.'),
 			{ kind: 'plan-decision', planId: decision.id, approved: decision.approved }
 		);
 	}
@@ -1777,7 +1811,10 @@ export class CrewHost {
 			method === 'read_report' ||
 			method === 'read_diff' ||
 			method === 'submit_review' ||
-			method === 'approve'
+			method === 'approve' ||
+			method === 'read_plan' ||
+			method === 'read_sources' ||
+			method === 'submit_plan_review'
 		)
 			return this.reviewerTool(worker, method, input);
 		// spec/crew#assignment-after-compaction: outside `serial` — the member asks while its prompt from this host may still be in flight.
@@ -2138,13 +2175,17 @@ export class CrewHost {
 			snapshots,
 			(await this.deps.store.task(key).catch(() => null))?.changeBase
 		);
-		const since = this.isSelf(worker) ? (this.deps.self?.base() ?? null) : null;
+		const since = this.isSelf(worker) ? (this.deps.self?.base() ?? null) : null,
+			// spec/reviews#plan-start: a plan review reads the repo as it is; there is no change to diff.
+			planOnly = self && this.deps.self?.point() === 'plan';
 		const scopeSnapshots = (snapshots?.scopes ?? [])
 			.filter((scope) => inTask(scope) && scope.available !== false)
 			.flatMap((scope) => {
 				const last = since?.find((tree) => tree.scopeId === scope.id),
 					base = last ? { tree: last.tree } : baseTree(snapshots!, scope.id, from),
 					result = snapshots!.checkpoints.at(-1)?.trees.find((tree) => tree.scopeId === scope.id);
+				if (planOnly && result)
+					return [{ scopeId: scope.id, base: result.tree, result: result.tree }];
 				return base && result ? [{ scopeId: scope.id, base: base.tree, result: result.tree }] : [];
 			});
 		const report = await this.buildWorkerReport(worker, 'pending', round);
@@ -2285,15 +2326,43 @@ export class CrewHost {
 			const run = this.openRun(reviewer, input);
 			return this.readDiff(input, run);
 		}
+		// spec/reviews#plan-inputs: a plan review reads the plan and the sources through the host; the verdict has its own tool.
+		const planReview = (run: ReviewRun) => this.isSelf(run) && this.deps.self?.point() === 'plan';
+		if (method === 'read_plan' || method === 'read_sources') {
+			const run = this.openRun(reviewer, input);
+			if (!planReview(run))
+				throw new Error(`${method} is for a plan review; this check reads code`);
+			return method === 'read_plan'
+				? this.deps.self!.planRead(run.round)
+				: this.deps.self!.sources(input.sourceId);
+		}
 		const run = this.openRun(reviewer, input);
 		if (run.verdicts.some((verdict) => verdict.reviewerNodeId === reviewer.nodeId))
 			throw new Error('You already gave a verdict for this reviewId');
 		const target = this.worker(run.taskId);
 		const self = this.isSelf(target),
 			closure = self && run.round > 1;
+		if (method === 'submit_plan_review' || (method === 'submit_review' && planReview(run))) {
+			if (method === 'submit_review')
+				throw new Error('This is a plan review: answer with submit_plan_review or approve.');
+			if (!planReview(run))
+				throw new Error('submit_plan_review is for a plan review; use submit_review');
+			const items = await this.deps.self!.planVerdict(reviewer.name, run.round, input);
+			run.verdicts.push({
+				reviewerNodeId: reviewer.nodeId,
+				reviewer: reviewer.name,
+				approved: false,
+				comments: items,
+				at: new Date().toISOString(),
+			});
+			await this.saveReviews();
+			await this.settleRun(run);
+			return { sent: items, reviewId: run.reviewId };
+		}
 		if (method === 'approve') {
 			// spec/reviews#loop: an approval of a closure check closes every finding of this reviewer.
-			if (closure) await this.markClosure(reviewer.name, run.round, []);
+			if (closure && planReview(run)) await this.deps.self!.planApprove(reviewer.name, run.round);
+			else if (closure) await this.markClosure(reviewer.name, run.round, []);
 			run.verdicts.push({
 				reviewerNodeId: reviewer.nodeId,
 				reviewer: reviewer.name,
@@ -3176,6 +3245,8 @@ export class CrewHost {
 		const point = reviewPointPrompt[this.deps.self?.point() ?? 'pre-pr'],
 			brief = (await this.deps.self?.brief().catch(() => '')) ?? '',
 			guidance = this.deps.self?.guidance() ?? '';
+		if (this.deps.self?.point() === 'plan')
+			return this.deps.self.planPrompt(run.taskId, run.reviewId, run.round, reviewer.name);
 		if (run.round <= 1)
 			return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, first read).\n${report}${brief}\nThis is the ${point} of the task's changes. The files of your tree are the task's state now. Read with read_report and read_diff passing this reviewId, once and in full: this is the only read, and nothing new can be raised later. Check the change against the task above. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). Do not change files.${guidance}`;
 		const path = await safePath(await this.deps.store.taskDir(this.deps.key), 'review.json');
@@ -3658,6 +3729,9 @@ export class CrewWorker {
 				'read_diff',
 				'submit_review',
 				'approve',
+				'read_plan',
+				'read_sources',
+				'submit_plan_review',
 			].includes(tool)
 		)
 			throw new Error(`Tool ${tool} is handled elsewhere`);

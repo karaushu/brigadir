@@ -66,6 +66,17 @@ it('ends each row with who holds the device, and offers Shut down only for a dev
 	]);
 	expect(model.trigger).toBe('iPhone 17 Pro · iOS 27');
 	expect(model.footer).toBe(null);
+	// Another task with a lease on it is using it now: no Shut down.
+	expect(
+		pickerModel(
+			state({
+				uses: { 'iPhone 17 Pro': { kind: 'mine', heldBy: { projectId: 'p', id: 'flows' } } },
+			}),
+			'en',
+			tasks,
+			false
+		).rows[0]!.canShutDown
+	).toBe(false);
 	// Ukrainian: the same tails in its own words.
 	expect(pickerModel(state({}), 'uk', tasks, false).rows.map((row) => row.tail)).toEqual([
 		'ця задача',

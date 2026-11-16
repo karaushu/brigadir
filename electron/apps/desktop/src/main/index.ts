@@ -982,12 +982,6 @@ const sessions = new Sessions(
 		throw new Error('Invalid browser request');
 	}
 );
-// spec/browser-and-simulator#metro-port: a task with its own worktree gets its Metro port in its host's environment (simulator module on).
-sessions.hostEnv = async (key: TaskKey): Promise<Record<string, string>> => {
-	if (!appliedSettings.modules.simulator) return {};
-	const port = await simulators.metroPort(key).catch(() => null);
-	return port ? { RCT_METRO_PORT: String(port) } : {};
-};
 // spec/architecture-and-platform#auto-update: a packaged app replaces hosts started from another version's bundle at their next turn boundary.
 sessions.appVersion = app.isPackaged ? app.getVersion() : null;
 // spec/architecture-and-platform#keep-awake: the Mac does not idle-sleep while an agent works (`workingAgents`); events in `keepAwakeKinds` recount.
@@ -3140,8 +3134,12 @@ void app.whenReady().then(async () => {
 			: null,
 	]);
 	appliedSettings = initialSettings;
-	// spec/browser-and-simulator#sim-own-device: copies whose task is gone go at start.
+	// spec/browser-and-simulator#sim-own-device: copies whose task is gone go at start, and every 30 s after: a task ends by more paths
+	// (the board, auto-archive, a crew acceptance) than any one hook sees.
 	if (initialSettings.modules.simulator) void simulators.reconcile().catch(() => {});
+	setInterval(() => {
+		if (appliedSettings.modules.simulator) void simulators.reconcile().catch(() => {});
+	}, 30_000).unref();
 	void slack.refresh();
 	changes.diffBase = taskDiffs.diffBase = initialSettings.editor.diffBase;
 	void codeIntel.setLanguageServers(initialSettings.editor.languageServers);
@@ -3397,7 +3395,12 @@ void app.whenReady().then(async () => {
 	});
 	handleClient('task:menu', (client, key) => sidebarMenus.task(key, client));
 	// spec/tasks#archive: archive by hand (⌃⌘A, swipe, the Archive window), restore, delete from the Archive window, the sidebar sections.
-	handle('archive:task', (key) => taskArchives.archive(key));
+	// spec/browser-and-simulator#sim-own-device: the task's copy goes once the archive is written, also when its host had stopped already.
+	handle('archive:task', async (key) => {
+		const result = await taskArchives.archive(key);
+		if (appliedSettings.modules.simulator) void simulators.reconcile(key).catch(() => {});
+		return result;
+	});
 	handleClient('archive:completed', async (client, id) =>
 		sidebarMenus.archiveCompleted(
 			personTasks(
@@ -3462,7 +3465,9 @@ void app.whenReady().then(async () => {
 			'completed'
 		)
 			throw new Error('Task is no longer completed');
-		return sidebarMenus.removeTask(key, client);
+		const removed = await sidebarMenus.removeTask(key, client);
+		if (appliedSettings.modules.simulator) void simulators.reconcile(key).catch(() => {});
+		return removed;
 	});
 	// spec/projects-and-board#person-tasks: the column clears what it shows, the person's tasks; workers go only with their foreman (spec/tasks#delete-task).
 	handleClient('board:clear', async (client, id) =>

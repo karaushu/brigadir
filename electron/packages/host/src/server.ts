@@ -106,6 +106,7 @@ import {
 	atomicJson,
 	safePath,
 	readDocument,
+	applyMetroPort,
 } from '@brigadir/persistence';
 import {
 	AgentTransport,
@@ -356,6 +357,10 @@ export async function startHost(config: HostConfig) {
 	}
 	// spec/settings-modules-and-onboarding#modules: the modules on in Settings decide which human tools the MCP sessions list; a switch reaches open sessions.
 	const modules = new ModuleSettings(store.root);
+	// spec/browser-and-simulator#metro-port: a task with its own worktree takes its Metro port before its agent and terminals start — a crew
+	// worker's host too, which its foreman's host starts with the foreman's environment.
+	if (modules.current().simulator)
+		await applyMetroPort(store, config.key, process.env).catch(() => null);
 	// spec/crew#roles: the root foreman's `create_task` is hidden while its crew plan exists; open MCP sessions hear the change.
 	const hiddenListeners = new Set<() => void>();
 	const hiddenTools: HiddenToolSource = {

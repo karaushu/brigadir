@@ -1,4 +1,4 @@
-import { gateOpen, type SimulatorGate } from '@brigadir/core';
+import type { SimulatorGate } from '@brigadir/core';
 /**
  * spec/browser-and-simulator#sim-cap: before a device boots, the cap of local devices and the system's own memory-pressure signal.
  * Free memory is not a signal on macOS (the file cache fills it), so the kernel's pressure level is read instead.
@@ -46,13 +46,13 @@ export function shareReason(gate: SimulatorGate) {
 		: 'memory is low';
 }
 /**
- * Waits until a device may start: every `stepMs` the gate is read again, up to `waitMs`. `waiting` is called once when the wait
- * begins (the task's card and tab say why) and once with `false` when it ends.
+ * Waits until a device may start: every `stepMs` the gate is tried again, up to `waitMs`. `attempt` looks at the gate and, when it is open,
+ * takes the slot in the same step. `waiting` is called once when the wait begins (the task's card and tab say why) and once with `false`
+ * when it ends.
  */
 export async function passGate(options: {
-	read(): Promise<SimulatorGate>;
+	attempt(): Promise<{ open: boolean; gate: SimulatorGate }>;
 	device: string;
-	anyway?: boolean;
 	waitMs?: number;
 	stepMs?: number;
 	sleep?: (ms: number) => Promise<void>;
@@ -61,17 +61,17 @@ export async function passGate(options: {
 	const waitMs = options.waitMs ?? 60_000,
 		stepMs = options.stepMs ?? 2000,
 		sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
-	let gate = await options.read();
-	if (gateOpen(gate, options.anyway)) return gate;
-	options.waiting?.(true, gate);
+	let tried = await options.attempt();
+	if (tried.open) return tried.gate;
+	options.waiting?.(true, tried.gate);
 	try {
 		for (let waited = 0; waited < waitMs; waited += stepMs) {
 			await sleep(stepMs);
-			gate = await options.read();
-			if (gateOpen(gate, options.anyway)) return gate;
+			tried = await options.attempt();
+			if (tried.open) return tried.gate;
 		}
 	} finally {
-		options.waiting?.(false, gate);
+		options.waiting?.(false, tried.gate);
 	}
-	throw new Error(gateRefusal(options.device, gate));
+	throw new Error(gateRefusal(options.device, tried.gate));
 }

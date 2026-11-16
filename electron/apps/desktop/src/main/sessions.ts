@@ -92,8 +92,6 @@ export class Sessions {
 			throw new Error('Browser is unavailable');
 		}
 	) {}
-	/** spec/browser-and-simulator#metro-port: variables a task's host, its agent and its terminals get on top of main's (`RCT_METRO_PORT`). */
-	hostEnv: (key: TaskKey) => Promise<Record<string, string>> = async () => ({});
 	private async attach(key: TaskKey): Promise<HostClient | null> {
 		const current = this.clients.get(name(key));
 		if (current) return current;
@@ -350,12 +348,11 @@ export class Sessions {
 				? { adapter: { command: process.execPath, args: [process.env.BRIGADIR_TEST_AGENT] } }
 				: {}),
 		});
-		const extra = await this.hostEnv(key).catch(() => ({}));
 		const log = await open(await safePath(dir, 'host.log'), 'a', 0o600);
 		const child = spawn(process.execPath, [join(this.services, 'host.cjs'), configPath], {
 			detached: true,
 			stdio: ['ignore', log.fd, log.fd],
-			env: { ...process.env, ...extra, ELECTRON_RUN_AS_NODE: '1' },
+			env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
 		});
 		await log.close();
 		child.unref();

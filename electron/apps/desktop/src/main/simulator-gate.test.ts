@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { gateOpen } from '@brigadir/core';
 import { gateRefusal, lowMemory, passGate, shareReason } from './simulator-gate';
 it('reads memory pressure from the system signal, not free memory (spec/browser-and-simulator#sim-cap)', async () => {
 	const mac = (level: string) =>
@@ -46,10 +47,14 @@ it('reads memory pressure from the system signal, not free memory (spec/browser-
 });
 it('waits at the gate until a device may start, says why while it waits, and gives up with a sentence (spec/browser-and-simulator#sim-cap)', async () => {
 	const seen: boolean[] = [];
-	let reads = 0;
+	const at = (running: number, max: number, lowMemory: boolean, anyway = false) => {
+		const gate = { running, max, lowMemory };
+		return { open: gateOpen(gate, anyway), gate };
+	};
+	let tries = 0;
 	const gate = await passGate({
 		device: 'iPad',
-		read: async () => ({ running: ++reads < 3 ? 2 : 1, max: 2, lowMemory: false }),
+		attempt: async () => at(++tries < 3 ? 2 : 1, 2, false),
 		sleep: async () => {},
 		waiting: (on) => seen.push(on),
 	});
@@ -58,7 +63,7 @@ it('waits at the gate until a device may start, says why while it waits, and giv
 	await expect(
 		passGate({
 			device: 'iPad',
-			read: async () => ({ running: 1, max: 2, lowMemory: true }),
+			attempt: async () => at(1, 2, true),
 			sleep: async () => {},
 			waitMs: 10,
 			stepMs: 2,
@@ -68,21 +73,10 @@ it('waits at the gate until a device may start, says why while it waits, and giv
 	);
 	// The person's «Start anyway» passes low memory, never the cap.
 	expect(
-		(
-			await passGate({
-				device: 'iPad',
-				anyway: true,
-				read: async () => ({ running: 1, max: 2, lowMemory: true }),
-			})
-		).lowMemory
+		(await passGate({ device: 'iPad', attempt: async () => at(1, 2, true, true) })).lowMemory
 	).toBe(true);
 	await expect(
-		passGate({
-			device: 'iPad',
-			anyway: true,
-			waitMs: 0,
-			read: async () => ({ running: 2, max: 2, lowMemory: true }),
-		})
+		passGate({ device: 'iPad', waitMs: 0, attempt: async () => at(2, 2, true, true) })
 	).rejects.toThrow('2 of 2 local devices run');
 	expect(gateRefusal('iPad', { running: 2, max: 2, lowMemory: false })).toContain(
 		'Use a running device'

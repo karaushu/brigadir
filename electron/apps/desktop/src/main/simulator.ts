@@ -35,18 +35,23 @@ import {
 	type SimulatorToolchain,
 	type SimulatorVideoConfig,
 } from '@brigadir/core';
-import { atomicJson, readDocument, safePath, SessionStore } from '@brigadir/persistence';
+import {
+	atomicJson,
+	forgetMetroPort,
+	readDocument,
+	readMetroPorts,
+	safePath,
+	SessionStore,
+} from '@brigadir/persistence';
 import {
 	MetroSession,
 	appRequests,
 	appScheme,
-	assignMetroPort,
 	connectPort,
 	devClientLink,
 	formatLogs,
 	formatRequest,
 	formatRequests,
-	portFree,
 	type MetroDeps,
 } from './metro';
 import { isChange, ScreenWatch, settleLine, waitForElement } from './simulator-settle';
@@ -107,8 +112,6 @@ type Tools = {
 	/** Waits between two looks at the gate. */
 	sleep: (ms: number) => Promise<void>;
 	gateWaitMs: number;
-	/** spec/browser-and-simulator#metro-port: whether nothing listens on a port. */
-	portFree: (port: number) => Promise<boolean>;
 	readText: (path: string) => Promise<string>;
 	/** `CoreSimulator/Devices`: where a device keeps the bundles of the apps installed on it (spec/browser-and-simulator#sim-own-device). */
 	simulatorDevices: string;
@@ -156,6 +159,9 @@ export class Simulators {
 	/** One copy is made at a time, so two workers never pass the gate on the same free slot. */
 	private copying: Promise<unknown> = Promise.resolve();
 	private memory: { low: boolean; at: number } | null = null;
+	private portCache: { ports: Record<string, number>; at: number } | null = null;
+	/** Devices whose boot passed the gate and is not yet a booting runtime (spec/browser-and-simulator#sim-cap). */
+	private reserved = new Set<string>();
 	private queue: SimulatorQueue;
 	private tools: Tools;
 	private sdk: string | null = null;
@@ -189,7 +195,6 @@ export class Simulators {
 				}),
 			sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 			gateWaitMs: 60_000,
-			portFree,
 			readText: (path) => readFile(path, 'utf8'),
 			simulatorDevices: join(homedir(), 'Library/Developer/CoreSimulator/Devices'),
 			taskTitle: async (key) =>
@@ -446,6 +451,7 @@ export class Simulators {
 			leased = current?.device
 				? this.devices.find((item) => item.id === current.device)
 				: undefined;
+		if (leased && current?.own && !current.own.reinstalled) await this.finishCopy(key, leased);
 		if (command.device) {
 			const matches = matchDevices(
 				this.devices.filter(
@@ -561,22 +567,28 @@ export class Simulators {
 			copy = { id: udid, name, platform: 'ios', os: source.os, booted: false };
 			this.devices.push(copy);
 		}
-		await this.ready(key, copy, false);
-		for (const app of await this.bundles(source.id))
-			await this.tools.run('/usr/bin/xcrun', ['simctl', 'install', udid, app]);
-		await this.writeLease(key, {
-			...(await this.lease(key))!.lease,
-			own: { source: source.id, reinstalled: true },
-		});
+		await this.finishCopy(key, copy);
 		await this.tools
 			.record(key, {
 				device: copy.name,
-				metroPort: (await this.lease(key))?.lease.metroPort ?? null,
+				metroPort: await this.portOf(key),
 				lowMemory: false,
 			})
 			.catch(() => {});
 		this.publishAll();
 		return copy;
+	}
+	/**
+	 * spec/browser-and-simulator#sim-own-device: boots a copy and installs the source's apps on it again, then marks it reinstalled. A copy
+	 * whose reinstall failed or was cut off (a crash, a failed `simctl install`) goes through this again before any use.
+	 */
+	private async finishCopy(key: TaskKey, copy: SimulatorDevice) {
+		const lease = (await this.lease(key))?.lease;
+		if (!lease?.own || lease.device !== copy.id || lease.own.reinstalled) return;
+		await this.ready(key, copy, false);
+		for (const app of await this.bundles(lease.own.source))
+			await this.tools.run('/usr/bin/xcrun', ['simctl', 'install', copy.id, app]);
+		await this.writeLease(key, { ...lease, own: { source: lease.own.source, reinstalled: true } });
 	}
 	/** The `.app` bundles the person installed on a device, read from its folder (works whether it runs or not). */
 	private async bundles(udid: string): Promise<string[]> {
@@ -595,10 +607,26 @@ export class Simulators {
 		const now = Date.now();
 		if (!this.memory || now - this.memory.at > memoryKeepMs)
 			this.memory = { low: await this.tools.lowMemory().catch(() => false), at: now };
+		return this.count();
+	}
+	/** Booted devices, ours booting, and slots taken by boots that passed the gate but have not registered yet. */
+	private count(): SimulatorGate {
 		const running = new Set(this.devices.filter((item) => item.booted).map((item) => item.id));
 		for (const [id, runtime] of this.runtimes)
 			if (runtime.status === 'on' || runtime.status === 'booting') running.add(id);
-		return { running: running.size, max: this.tools.cap(), lowMemory: this.memory.low };
+		for (const id of this.reserved) running.add(id);
+		return { running: running.size, max: this.tools.cap(), lowMemory: this.memory?.low ?? false };
+	}
+	/**
+	 * spec/browser-and-simulator#sim-cap: one look at the gate for a boot. The device list is read again (a device started or shut down
+	 * outside the app counts), then the slot is counted and taken in one step, so two boots never take the same free slot.
+	 */
+	private async tryBoot(device: string, anyway: boolean) {
+		await this.listDevices().catch(() => {});
+		await this.gate();
+		const gate = this.count();
+		if (gateOpen(gate, anyway)) this.reserved.add(device);
+		return { open: gateOpen(gate, anyway), gate };
 	}
 	/** Another task holds the device's lane now, or holds a lease on it. */
 	private heldByOther(device: string, key: TaskKey) {
@@ -622,8 +650,10 @@ export class Simulators {
 			const holder = this.queue.holder(device.id);
 			if (device.id === own) {
 				uses[device.id] =
-					holder && !same(holder, key) && this.queue.waitsFor(key) === device.id
-						? { kind: 'queued', holder }
+					holder && !same(holder, key)
+						? this.queue.waitsFor(key) === device.id
+							? { kind: 'queued', holder }
+							: { kind: 'mine', heldBy: holder }
 						: { kind: 'mine' };
 				continue;
 			}
@@ -692,19 +722,22 @@ export class Simulators {
 		if (asDefault && !this.ownedByOther(device.id, key) && !current?.own)
 			await this.setDefault(key.projectId, device);
 		if (current?.device === device.id) return;
-		if (current?.device && current.device !== device.id) this.queue.leave(current.device, key);
-		const { own: _own, ...rest } = current ?? {};
-		// A task leaving its own copy keeps the copy's record only while the copy is its lease; the copy goes when the task ends.
-		const next: SimulatorLease =
-			current?.own && current.device !== device.id
-				? { ...rest, platform: device.platform, device: device.id }
-				: { ...(current ?? {}), platform: device.platform, device: device.id };
-		if (current?.own && current.device && current.device !== device.id)
-			void this.removeCopy(current.device);
-		await this.writeLease(key, next);
+		if (current?.device) this.queue.leave(current.device, key);
+		// spec/browser-and-simulator#metro: the task's Metro client follows its device; the old one's buffers go with it.
+		this.metros.get(nameOf(key))?.stop();
+		this.metros.delete(nameOf(key));
+		this.connected.delete(nameOf(key));
+		// spec/browser-and-simulator#sim-own-device: a copy the task leaves keeps its own record (`<taskId>.<udid>`) until it is deleted.
+		if (current?.own)
+			await this.writeLease(
+				{ projectId: key.projectId, id: `${key.id}.${current.device}` },
+				current
+			);
+		await this.writeLease(key, { platform: device.platform, device: device.id });
+		if (current?.own) void this.reconcile().catch(() => {});
 		if (!quiet)
 			await this.tools
-				.record(key, { device: device.name, metroPort: next.metroPort ?? null, lowMemory: false })
+				.record(key, { device: device.name, metroPort: await this.portOf(key), lowMemory: false })
 				.catch(() => {});
 		this.publishAll();
 	}
@@ -715,31 +748,17 @@ export class Simulators {
 		await (await SessionStore.at(this.dataDir)).setProjectSimulator(projectId, simulator);
 	}
 	/**
-	 * spec/browser-and-simulator#metro-port: the Metro port of a task with its own worktree, kept in its record; null for a task in the project
-	 * folder. Main puts it in the host's environment as `RCT_METRO_PORT`.
+	 * spec/browser-and-simulator#metro-port: the Metro ports the hosts gave their tasks (`metro-ports.json`), read at most once a second.
+	 * A host takes its task's port itself when it starts, crew workers' hosts included.
 	 */
-	async metroPort(key: TaskKey): Promise<number | null> {
-		const own = await this.ownTree(key);
-		if (!own) return null;
-		const current = (await this.lease(key))?.lease,
-			taken = new Set<number>();
-		for (const item of this.leases.values())
-			if (!same(item.key, key) && item.lease.metroPort) taken.add(item.lease.metroPort);
-		const port = await assignMetroPort({
-			saved: current?.metroPort,
-			taken,
-			free: this.tools.portFree,
-			ownMetro: async (port) => {
-				const response = await fetch(`http://127.0.0.1:${port}/status`, {
-					signal: AbortSignal.timeout(500),
-				}).catch(() => null);
-				const root = response?.headers.get('x-react-native-project-root');
-				return !!root && (root === own || root.startsWith(`${own}/`));
-			},
-		});
-		if (port !== current?.metroPort)
-			await this.writeLease(key, { ...(current ?? {}), metroPort: port } as SimulatorLease);
-		return port;
+	private async ports(): Promise<Record<string, number>> {
+		if (this.portCache && Date.now() - this.portCache.at < 1000) return this.portCache.ports;
+		const store = await SessionStore.at(this.dataDir);
+		this.portCache = { ports: await readMetroPorts(store.root), at: Date.now() };
+		return this.portCache.ports;
+	}
+	private async portOf(key: TaskKey) {
+		return (await this.ports())[nameOf(key)] ?? null;
 	}
 	/** The task's own worktree, or null for a task in the project folder. */
 	private async ownTree(key: TaskKey): Promise<string | null> {
@@ -765,7 +784,7 @@ export class Simulators {
 				() => false
 			);
 		if (!(await has('package.json')) || (await has('node_modules'))) return null;
-		const port = (await this.lease(key))?.lease.metroPort;
+		const port = await this.portOf(key);
 		return `This task's worktree has no node_modules, so its Metro cannot start: install the dependencies in the worktree (the project's install command), then start Metro there${port ? `; it takes port ${port} from RCT_METRO_PORT` : ''}.`;
 	}
 	/**
@@ -825,22 +844,42 @@ export class Simulators {
 	 */
 	async reconcile(key?: TaskKey) {
 		await this.loadLeases();
-		for (const item of [...this.leases.values()]) {
-			if (key && !same(item.key, key)) continue;
-			if (!(await this.tools.taskEnded(item.key).catch(() => false))) continue;
-			this.queue.release(item.key);
-			if (item.lease.device) this.queue.leave(item.lease.device, item.key);
-			if (item.lease.own && item.lease.device) await this.removeCopy(item.lease.device);
-			await this.writeLease(item.key, null);
-			this.metros.get(nameOf(item.key))?.stop();
-			this.metros.delete(nameOf(item.key));
+		const store = await SessionStore.at(this.dataDir);
+		// A copy a later deletion frees (its clone was reinstalled or deleted) goes in the next pass of the same call.
+		for (let progress = true; progress;) {
+			progress = false;
+			for (const item of [...this.leases.values()]) {
+				// A copy its task left (`<taskId>.<udid>`) belongs to that task.
+				const owner = { projectId: item.key.projectId, id: item.key.id.split('.')[0]! };
+				if (key && !same(owner, key)) continue;
+				const left = item.key.id !== owner.id;
+				if (!left && !(await this.tools.taskEnded(owner).catch(() => false))) continue;
+				if (!left) {
+					this.queue.release(owner);
+					this.queue.leave(item.lease.device, owner);
+					this.metros.get(nameOf(owner))?.stop();
+					this.metros.delete(nameOf(owner));
+				}
+				// The record stays until its copy is really deleted.
+				if (item.lease.own && !(await this.removeCopy(item.lease.device))) continue;
+				await this.writeLease(item.key, null);
+				progress = true;
+			}
 		}
+		// spec/browser-and-simulator#metro-port: an ended task gives its port back.
+		for (const name of Object.keys(await readMetroPorts(store.root))) {
+			const [projectId, id] = name.split('/') as [string, string];
+			if (key && !same({ projectId, id }, key)) continue;
+			if (await this.tools.taskEnded({ projectId, id }).catch(() => false))
+				await forgetMetroPort(store.root, { projectId, id }).catch(() => {});
+		}
+		this.portCache = null;
 		this.publishAll();
 	}
 	/** Shuts down and deletes a copy, unless a copy not yet reinstalled still runs from it. */
-	private async removeCopy(udid: string) {
+	private async removeCopy(udid: string): Promise<boolean> {
 		for (const item of this.leases.values())
-			if (item.lease.own?.source === udid && !item.lease.own.reinstalled) return;
+			if (item.lease.own?.source === udid && !item.lease.own.reinstalled) return false;
 		const runtime = this.runtimes.get(udid);
 		if (runtime) {
 			this.stopHelper(runtime);
@@ -848,8 +887,13 @@ export class Simulators {
 			this.runtimes.delete(udid);
 		}
 		await this.tools.run('/usr/bin/xcrun', ['simctl', 'shutdown', udid]).catch(() => {});
-		await this.tools.run('/usr/bin/xcrun', ['simctl', 'delete', udid]).catch(() => {});
-		this.devices = this.devices.filter((item) => item.id !== udid);
+		const deleted = await this.tools.run('/usr/bin/xcrun', ['simctl', 'delete', udid]).then(
+			() => true,
+			// A device that is gone already counts as deleted.
+			(error: unknown) => /Invalid device|not found/i.test(String(error))
+		);
+		if (deleted) this.devices = this.devices.filter((item) => item.id !== udid);
+		return deleted;
 	}
 	/**
 	 * spec/browser-and-simulator#sim-act-settle: one action, then the wait for a still screen and, on iOS, what changed in the tree. Android
@@ -1021,9 +1065,9 @@ export class Simulators {
 			},
 			() => own,
 			() =>
-				[...this.leases.values()]
-					.filter((item) => item.key.projectId === key.projectId && item.lease.metroPort)
-					.map((item) => item.lease.metroPort!)
+				Object.entries(this.portCache?.ports ?? {})
+					.filter(([name]) => name.startsWith(`${key.projectId}/`))
+					.map(([, port]) => port)
 		);
 		this.metros.set(nameOf(key), metro);
 		return metro;
@@ -1250,7 +1294,7 @@ export class Simulators {
 			metro: target ? { port: target.port, appId: target.appId, root: target.root } : null,
 			uses: this.uses(key, device?.id ?? null),
 			gate: await this.gate(),
-			metroPort: this.leases.get(nameOf(key))?.lease.metroPort ?? null,
+			metroPort: await this.portOf(key),
 		};
 	}
 	/** Quit and module off: helpers stop; devices this app booted shut down after it exits (detached simctl). */
@@ -1482,7 +1526,7 @@ export class Simulators {
 			await this.tools
 				.record(key, {
 					device: device.name,
-					metroPort: (await this.lease(key))?.lease.metroPort ?? null,
+					metroPort: await this.portOf(key),
 					lowMemory: true,
 				})
 				.catch(() => {});
@@ -1501,9 +1545,8 @@ export class Simulators {
 		if (!device.booted) {
 			const name = nameOf(key);
 			await passGate({
-				read: () => this.gate(),
+				attempt: () => this.tryBoot(device.id, anyway),
 				device: device.name,
-				anyway,
 				waitMs: person ? 0 : this.tools.gateWaitMs,
 				sleep: this.tools.sleep,
 				waiting: (on) => {
@@ -1542,6 +1585,8 @@ export class Simulators {
 		runtime.status = 'booting';
 		runtime.error = null;
 		this.runtimes.set(device.id, runtime);
+		// The booting runtime counts from here on: the slot taken at the gate is no longer needed.
+		this.reserved.delete(device.id);
 		this.publishDevice(device.id);
 		try {
 			if (device.platform === 'android') {
@@ -1606,6 +1651,10 @@ export class Simulators {
 		const device =
 			id === undefined ? await this.deviceFor(key) : this.devices.find((item) => item.id === id);
 		if (!device) return this.state(key);
+		// spec/browser-and-simulator#sim-tab: a device another task is using now, or another task's own copy, is not shut down under it.
+		const holder = this.queue.holder(device.id);
+		if ((holder && !same(holder, key)) || this.ownedByOther(device.id, key))
+			throw new Error(`${device.name} is in use by another task.`);
 		const runtime = this.runtimes.get(device.id);
 		if (runtime) {
 			this.stopHelper(runtime);

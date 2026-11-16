@@ -1,4 +1,3 @@
-import { createServer } from 'node:net';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 /**
@@ -14,43 +13,8 @@ export const metroPorts = [
 	19001,
 	19002,
 ];
-/** spec/browser-and-simulator#metro-port: the ports main hands out to task worktrees, lowest first. */
-export const metroPortRange = { first: 8082, last: 8999 } as const;
-/** Whether nothing listens on `port` now: main could listen on it on both `127.0.0.1` and `::`. */
-export async function portFree(port: number): Promise<boolean> {
-	const listen = (host: string) =>
-		new Promise<boolean>((resolve) => {
-			const server = createServer();
-			server.once('error', (error: NodeJS.ErrnoException) =>
-				// A machine without IPv6 has no `::` to be busy on.
-				resolve(host === '::' && error.code === 'EAFNOSUPPORT')
-			);
-			server.listen({ port, host, exclusive: true }, () => server.close(() => resolve(true)));
-		});
-	return (await listen('127.0.0.1')) && (await listen('::'));
-}
-/**
- * spec/browser-and-simulator#metro-port: the task keeps its saved port while it is free or its own Metro holds it; otherwise the lowest free
- * port not given to another task. A busy port is never handed out: Expo without a terminal aborts on it.
- */
-export async function assignMetroPort(options: {
-	saved: number | undefined;
-	taken: ReadonlySet<number>;
-	free?: (port: number) => Promise<boolean>;
-	ownMetro?: (port: number) => Promise<boolean>;
-}): Promise<number> {
-	const free = options.free ?? portFree;
-	const { saved, taken } = options;
-	if (
-		saved !== undefined &&
-		!taken.has(saved) &&
-		((await free(saved)) || (await (options.ownMetro?.(saved) ?? false)))
-	)
-		return saved;
-	for (let port = metroPortRange.first; port <= metroPortRange.last; port++)
-		if (!taken.has(port) && port !== saved && (await free(port))) return port;
-	throw new Error('No free port for Metro.');
-}
+// spec/browser-and-simulator#metro-port: allocation is shared with the hosts (packages/persistence).
+export { assignMetroPort, metroPortRange, portFree } from '@brigadir/persistence';
 /** The root of a project tree that is `root` or inside it. */
 export const inTree = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
 /**

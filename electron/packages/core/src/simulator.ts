@@ -10,36 +10,27 @@ export type SimulatorPlatform = (typeof simulatorPlatforms)[number];
 export type ProjectSimulator = { platform: SimulatorPlatform; device: string };
 /**
  * spec/browser-and-simulator#sim-lease: one task's record in `projects/<id>/simulator-devices.json`: its lease (`platform`, `device`). `own` — a copy made for this task
- * (spec/browser-and-simulator#sim-own-device), `reinstalled` once its apps run from its own folders; `metroPort` — spec/browser-and-simulator#metro-port.
+ * (spec/browser-and-simulator#sim-own-device), `reinstalled` once its apps run from its own folders.
  */
 export type SimulatorLease = {
-	platform?: SimulatorPlatform;
-	device?: string;
+	platform: SimulatorPlatform;
+	device: string;
 	own?: { source: string; reinstalled: boolean };
-	metroPort?: number;
 };
 export type SimulatorLeases = Record<string, SimulatorLease>;
 const deviceId = (value: unknown) =>
 	typeof value === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(value);
-export const metroPortRange = { min: 1024, max: 65_535 } as const;
 export function isSimulatorLease(value: unknown): value is SimulatorLease {
 	if (!isRecord(value)) return false;
-	const keys = Object.keys(value);
 	return (
-		keys.every((key) => ['platform', 'device', 'own', 'metroPort'].includes(key)) &&
-		// A record of a task that has a Metro port but no device yet has neither.
-		((value.platform === undefined && value.device === undefined && value.own === undefined) ||
-			(simulatorPlatforms.includes(value.platform as SimulatorPlatform) &&
-				deviceId(value.device))) &&
+		Object.keys(value).every((key) => ['platform', 'device', 'own'].includes(key)) &&
+		simulatorPlatforms.includes(value.platform as SimulatorPlatform) &&
+		deviceId(value.device) &&
 		(value.own === undefined ||
 			(isRecord(value.own) &&
 				Object.keys(value.own).length === 2 &&
 				deviceId(value.own.source) &&
-				typeof value.own.reinstalled === 'boolean')) &&
-		(value.metroPort === undefined ||
-			(Number.isSafeInteger(value.metroPort) &&
-				Number(value.metroPort) >= metroPortRange.min &&
-				Number(value.metroPort) <= metroPortRange.max))
+				typeof value.own.reinstalled === 'boolean'))
 	);
 }
 /** Leases of a document read from disk; an entry that does not validate is dropped, the others stay. */
@@ -47,7 +38,9 @@ export function simulatorLeases(value: unknown): SimulatorLeases {
 	const leases: SimulatorLeases = {};
 	if (!isRecord(value)) return leases;
 	for (const [taskId, lease] of Object.entries(value))
-		if (/^[A-Za-z0-9_-]{1,128}$/.test(taskId) && isSimulatorLease(lease)) leases[taskId] = lease;
+		// `<taskId>.<udid>`: a copy its task left, kept until it is deleted (spec/browser-and-simulator#sim-own-device).
+		if (/^[A-Za-z0-9_-]{1,128}(\.[A-Za-z0-9-]{1,64})?$/.test(taskId) && isSimulatorLease(lease))
+			leases[taskId] = lease;
 	return leases;
 }
 /**
@@ -56,7 +49,8 @@ export function simulatorLeases(value: unknown): SimulatorLeases {
  * A device missing from `uses` is free.
  */
 export type SimulatorUse =
-	| { kind: 'mine' }
+	/** `heldBy` — another task with a lease on it is using it now: its tab offers no Shut down. */
+	| { kind: 'mine'; heldBy?: TaskKey }
 	| { kind: 'queued'; holder: TaskKey }
 	| { kind: 'task'; task: TaskKey }
 	| { kind: 'tasks'; count: number };

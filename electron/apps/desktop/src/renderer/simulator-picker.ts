@@ -64,7 +64,7 @@ export function pickerModel(
 			running,
 			tail,
 			disabled: !running && !open,
-			canShutDown: running && (!use || use.kind === 'mine'),
+			canShutDown: running && (!use || (use.kind === 'mine' && !use.heldBy)),
 		};
 	});
 	const own = state.device ? state.uses[state.device.id] : undefined;

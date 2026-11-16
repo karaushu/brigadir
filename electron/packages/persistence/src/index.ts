@@ -209,6 +209,7 @@ export * from './files';
 
 export * from './attachments';
 export * from './process-owner';
+export * from './metro-ports';
 export * from './relay';
 
 export * from './knowledge';

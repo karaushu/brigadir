@@ -78,28 +78,27 @@ it('reads lease records leniently: a bad entry goes, the others and old document
 	expect(
 		simulatorLeases({
 			solo: { platform: 'ios', device: 'AAAA-1' },
-			worker: {
+			worker: { platform: 'ios', device: 'COPY', own: { source: 'AAAA-1', reinstalled: false } },
+			// A copy its task left, kept until it is deleted.
+			'worker.OLD-COPY-1': {
 				platform: 'ios',
-				device: 'COPY',
-				own: { source: 'AAAA-1', reinstalled: false },
-				metroPort: 8083,
+				device: 'OLD-COPY-1',
+				own: { source: 'AAAA-1', reinstalled: true },
 			},
 			port: { metroPort: 8084 },
 			half: { platform: 'ios' },
 			path: { platform: 'ios', device: '../etc' },
 			extra: { platform: 'ios', device: 'X', color: 'red' },
-			low: { metroPort: 80 },
 			'bad id!': { platform: 'ios', device: 'X' },
 		})
 	).toEqual({
 		solo: { platform: 'ios', device: 'AAAA-1' },
-		worker: {
+		worker: { platform: 'ios', device: 'COPY', own: { source: 'AAAA-1', reinstalled: false } },
+		'worker.OLD-COPY-1': {
 			platform: 'ios',
-			device: 'COPY',
-			own: { source: 'AAAA-1', reinstalled: false },
-			metroPort: 8083,
+			device: 'OLD-COPY-1',
+			own: { source: 'AAAA-1', reinstalled: true },
 		},
-		port: { metroPort: 8084 },
 	});
 	expect(simulatorLeases(undefined)).toEqual({});
 	// project.json keeps its old `simulator` shape: the project's device.

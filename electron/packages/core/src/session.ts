@@ -143,6 +143,8 @@ export type SessionEvent =
 			point: ReviewPoint;
 			findings: number;
 			reviewers: string[];
+			/** spec/reviews#plan-verdict: a plan review's gaps in the ticket, for the person. */
+			gaps?: number;
 	  }
 	| {
 			kind: 'task-review.answered';
@@ -172,7 +174,12 @@ export type SessionEvent =
 			point: ReviewPoint;
 			state: 'passed' | 'accepted' | 'stopped' | 'failed' | 'outdated';
 			failure?: string;
+			/** spec/reviews#plan-loop: the plan's approval ended the review with this many findings open. */
+			approval?: boolean;
+			open?: number;
 	  }
+	/** spec/reviews#save-source: the author saved a ticket, spec or contract next to the plan. */
+	| { kind: 'source.saved'; id: string; title: string; url?: string; chars: number }
 	| { kind: 'crew.accepted'; taskId: string; nodeId: string; name: string; conflicts: string[] }
 	| { kind: 'crew.worker.stopped'; taskId: string; nodeId: string; name: string; reason: string }
 	/** spec/crew#auto-hire: the Auto agent asked to hire; the card waits for the person (`needs-you`) and survives a restart. */
@@ -243,11 +250,31 @@ export type SessionEvent =
 	| { kind: 'scope.violation'; scopeId: string; name: string; paths: string[]; checkpoint: number }
 	| { kind: 'checkpoint.created'; checkpoint: number }
 	| { kind: 'snapshot.failed'; message: string }
-	| { kind: 'host.stopped'; reason: string };
+	/** spec/browser-and-simulator#sim-chat-row: the task's lease moved to `device` (its name), or the person started it past low memory. */
+	| { kind: 'simulator.device'; device: string; metroPort: number | null; lowMemory: boolean }
+	| { kind: 'host.stopped'; reason: string }
+	/** spec/agents-and-providers#budget-reached: a provider's count reached the task's budget; the task pauses and asks. `tokens` and `estimated` — the count then. */
+	| {
+			kind: 'budget.reached';
+			id: string;
+			provider: import('./agent').AgentProvider;
+			tokens: number;
+			budget: number;
+			estimated: boolean;
+	  }
+	/** spec/agents-and-providers#budget-reached: the person's answer; `budget` — the new one of a `raise`. */
+	| {
+			kind: 'budget.decided';
+			id: string;
+			decision: import('./task-tokens').BudgetDecision;
+			budget?: number;
+	  };
 export type EventRecord = { schemaVersion: 1; seq: number; at: string; event: SessionEvent };
 export type SessionCommand =
 	| AgentCommand
 	| { kind: 'recordPullRequest'; scopeId: string; pr: PRRef }
+	/** spec/browser-and-simulator#sim-chat-row: main journals the task's device row; never sent by a window. */
+	| { kind: 'recordDevice'; device: string; metroPort: number | null; lowMemory: boolean }
 	| { kind: 'setScope'; update: ScopeUpdate }
 	/** spec/projects-and-board#folders-mid-task: a folder from outside the root joins the task chosen, also while its agent runs. */
 	| { kind: 'addScope'; choice: ScopeChoice }
@@ -302,6 +329,15 @@ export type SessionCommand =
 	| { kind: 'retryTurn'; reason?: 'auth' }
 	| { kind: 'resumePromptQueue' }
 	| { kind: 'pausePromptQueue' }
+	/** spec/agents-and-providers#task-budget: the budget of this task for one provider, from `Task usage`; null — no limit. */
+	| { kind: 'setTokenBudget'; provider: import('./agent').AgentProvider; budget: number | null }
+	/** spec/agents-and-providers#budget-reached: the answer to the budget question; `budget` — the value of `Raise to …`. */
+	| {
+			kind: 'decideBudget';
+			id: string;
+			decision: import('./task-tokens').BudgetDecision;
+			budget?: number;
+	  }
 	| { kind: 'checkpoint' }
 	/** spec/composer-steering-queue-and-ghost#quick-question: the checkpoint before (`quick-before`) and after (`quick-after`) a quick question; `after` journals its files. */
 	| { kind: 'quickAsk'; phase: 'before' }
@@ -470,6 +506,18 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 	switch (v.kind) {
 		case 'recordPullRequest':
 			return typeof v.scopeId === 'string' && /^[a-f0-9]{16}$/.test(v.scopeId) && isPRRef(v.pr);
+		case 'recordDevice':
+			return (
+				Object.keys(v).length === 4 &&
+				typeof v.device === 'string' &&
+				v.device.length > 0 &&
+				v.device.length <= 200 &&
+				(v.metroPort === null ||
+					(Number.isSafeInteger(v.metroPort) &&
+						Number(v.metroPort) > 0 &&
+						Number(v.metroPort) <= 65_535)) &&
+				typeof v.lowMemory === 'boolean'
+			);
 		case 'setScope':
 			return isScopeUpdate(v.update);
 		case 'addScope':
@@ -586,6 +634,17 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 			);
 		case 'decideReview':
 			return v.decision === 'fix' || v.decision === 'accept';
+		case 'setTokenBudget':
+			return (
+				(v.provider === 'claude' || v.provider === 'codex') &&
+				(v.budget === null || isTokenBudgetValue(v.budget))
+			);
+		case 'decideBudget':
+			return (
+				isId(v.id) &&
+				budgetDecisions.includes(v.decision as BudgetDecision) &&
+				(v.decision === 'raise' ? isTokenBudgetValue(v.budget) : v.budget === undefined)
+			);
 		case 'stopReview':
 		case 'dismissReviewProposal':
 			return true;
@@ -607,6 +666,8 @@ export type PendingInputs = {
 	crewHire: AutoHire | null;
 	/** spec/crew#auto-model: model questions waiting for the person. */
 	crewModels: AutoModelRequest[];
+	/** spec/agents-and-providers#budget-reached: the budget question that waits; a host stop does not answer it. */
+	budget: BudgetQuestion | null;
 };
 export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 	const permissions = new Map<string, PermissionRequest>();
@@ -614,9 +675,12 @@ export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 	const crewQuestions = new Map<string, CrewQuestion>();
 	const proposals = new Map<string, TaskProposal>();
 	let crewPlan: CrewPlan | null = null,
-		crewHire: AutoHire | null = null;
+		crewHire: AutoHire | null = null,
+		budget = emptyBudgetJournal();
 	const crewModels = new Map<string, AutoModelRequest>();
-	for (const { event: e } of records) {
+	for (const record of records) {
+		const e = record.event;
+		budget = reduceBudgetJournal(budget, record);
 		if (e.kind === 'crew.hire.requested') crewHire = e.hire;
 		if (e.kind === 'crew.hire.resolved' && crewHire?.id === e.id) crewHire = null;
 		if (e.kind === 'crew.model.requested') crewModels.set(e.request.id, e.request);
@@ -651,8 +715,17 @@ export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 		proposals: [...proposals.values()],
 		crewHire,
 		crewModels: [...crewModels.values()],
+		budget: budget.pending,
 	};
 }
+import {
+	budgetDecisions,
+	emptyBudgetJournal,
+	isTokenBudgetValue,
+	reduceBudgetJournal,
+	type BudgetDecision,
+	type BudgetQuestion,
+} from './task-tokens';
 import { isScopeUpdate, type ScopeUpdate } from './scope-controls';
 import { isScopeChoice, type ScopeChoice } from './launch';
 import { isTaskProposalResult, type TaskProposal, type TaskProposalResult } from './task-proposal';
@@ -677,6 +750,7 @@ export function waitsForPerson(inputs: PendingInputs) {
 		inputs.proposals.length > 0 ||
 		inputs.crewPlan !== null ||
 		inputs.crewHire !== null ||
-		inputs.crewModels.length > 0
+		inputs.crewModels.length > 0 ||
+		inputs.budget !== null
 	);
 }

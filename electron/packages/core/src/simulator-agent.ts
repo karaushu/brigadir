@@ -45,9 +45,10 @@ export type SimulatorWaitRequest = {
 /** spec/browser-and-simulator#sim-wait: the longest and the default wait. */
 export const simulatorWaitMaxMs = 30_000;
 export const simulatorWaitDefaultMs = 10_000;
-export type SimulatorAgentCommand =
+/** spec/browser-and-simulator#sim-lease: every tool may name a device — a kind, a model, or a name or id from `simulator_state`. */
+export type SimulatorAgentCommand = { device?: string } & (
 	| { tool: 'state' }
-	| { tool: 'open'; device?: string; app?: string; url?: string }
+	| { tool: 'open'; app?: string; url?: string }
 	| { tool: 'ui'; grid?: boolean; offset?: number }
 	| ({ tool: 'act' } & SimulatorActRequest)
 	| ({ tool: 'wait' } & SimulatorWaitRequest)
@@ -58,21 +59,21 @@ export type SimulatorAgentCommand =
 			level?: 'debug' | 'log' | 'info' | 'warn' | 'error';
 			grep?: string;
 	  }
-	| { tool: 'network'; requestId?: string; filter?: string };
+	| { tool: 'network'; requestId?: string; filter?: string }
+);
 const text = (value: unknown, max: number) =>
 	typeof value === 'string' && value.length > 0 && value.length <= max;
 const coordinate = (value: unknown) =>
 	value === undefined ||
 	(typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 10_000);
 export function isSimulatorAgentCommand(value: unknown): value is SimulatorAgentCommand {
-	if (!isRecord(value)) return false;
+	if (!isRecord(value) || (value.device !== undefined && !text(value.device, 128))) return false;
 	switch (value.tool) {
 		case 'state':
 		case 'screenshot':
 			return true;
 		case 'open':
 			return (
-				(value.device === undefined || text(value.device, 128)) &&
 				(value.app === undefined ||
 					(typeof value.app === 'string' && /^[A-Za-z0-9._-]{1,255}$/.test(value.app))) &&
 				(value.url === undefined ||

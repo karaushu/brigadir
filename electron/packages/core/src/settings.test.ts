@@ -272,3 +272,23 @@ describe('compaction window', () => {
 			).toBe(false);
 	});
 });
+// spec/browser-and-simulator#sim-cap
+describe('local devices', () => {
+	it('defaults to 2 and takes a whole number from 1 to 8', () => {
+		expect(defaultAppSettings.agents.simulatorDevices).toBe(2);
+		for (const simulatorDevices of [1, 4, 8])
+			expect(
+				isAppSettings({
+					...defaultAppSettings,
+					agents: { ...defaultAppSettings.agents, simulatorDevices },
+				})
+			).toBe(true);
+		for (const simulatorDevices of [0, 9, 1.5, '2', undefined])
+			expect(
+				isAppSettings({
+					...defaultAppSettings,
+					agents: { ...defaultAppSettings.agents, simulatorDevices },
+				})
+			).toBe(false);
+	});
+});

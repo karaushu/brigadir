@@ -82,6 +82,8 @@ const readOnlyTools = new Set([
 	'read_transcript',
 	'read_diff',
 	'read_notes',
+	'read_plan',
+	'read_sources',
 ]);
 /**
  * spec/agents-and-providers#tools-awareness: when to call each tool, added after what it does. One table, so the descriptions below stay as their
@@ -94,6 +96,13 @@ const whenToUse: Record<string, string> = {
 		'Call it only when the page has to be on screen for the step: a file upload, an OAuth or sign-in window, a passkey or a CAPTCHA; everything else works while the page is hidden.',
 	ask_user:
 		'Do not use it to ask the person to check a page, the app or a command you can check with your own tools.',
+	save_source:
+		'Call it when the task comes from a ticket, a spec or a contract you were given or fetched (for example from Notion, Jira or Linear), before you present a plan.',
+	read_plan: 'Call it first in a plan review, with the reviewId of the check you were asked to do.',
+	read_sources:
+		'Call it in a plan review after read_plan, to check the plan against the ticket and the contract.',
+	submit_plan_review:
+		'Call it once per check of a plan review; when nothing must change, call approve instead.',
 	create_task:
 		'Use it when the person asks for a separate task, or when you find work outside this task that another agent should do.',
 	tasks_list:
@@ -133,7 +142,8 @@ const whenToUse: Record<string, string> = {
 		'Call it when the person speaks of the console, a terminal, a log or a server they started, before you ask them for its output.',
 	console_read:
 		'Call it to read an error or a log the person sees in the console, and again after a change to see the new lines.',
-	simulator_state: 'Call it before simulator_open to see the selected device and whether it runs.',
+	simulator_state:
+		'Call it before simulator_open to see your device, whether it runs, and which devices are free; pass device to any simulator tool to take another kind.',
 	simulator_open: 'Call it before you check a React Native or mobile change on the device.',
 	simulator_ui:
 		'Call it to find what to tap. After simulator_act you do not need it: the answer already lists what changed.',
@@ -282,6 +292,18 @@ const humanTools: Tool[] = [
 			"Ask Brigadir for a mid-task review of this task's changes by another agent. Brigadir decides: it refuses while a review of the task runs, when nothing changed since the last review, or when no reviewer is available. A started review reads the task's state now, so keep working; its findings arrive later as a review batch: fix each one once, or object to it with review_reply. reason: what you just finished, e.g. 'the data layer'. Returns started: true with the reviewer, or started: false with the reason.",
 		shape: { reason: z.string().trim().min(1).max(500) },
 		run: async (args, call, signal) => text(await call('request_review', args, signal)),
+	},
+	// spec/reviews#save-source: the plan's author saves the ticket or contract text, so a reviewer on any provider reads the same version.
+	{
+		name: 'save_source',
+		description:
+			"Save the text of a source this task's plan is written from — a ticket, a spec, an API contract — into the task's folder, so the plan's reviewer reads the same version. title: its name (for example 'CRM-412 Client notes'); url: where it lives, if anywhere; text: the source as it reads, up to 200 000 characters. A source with the same title replaces the earlier one. Returns saved: true with its id.",
+		shape: {
+			title: z.string().trim().min(1).max(200),
+			url: z.string().trim().max(2000).optional(),
+			text: z.string().min(1).max(200_000),
+		},
+		run: async (args, call, signal) => text(await call('save_source', args, signal)),
 	},
 	{
 		name: 'review_reply',
@@ -489,27 +511,28 @@ const humanTools: Tool[] = [
 	},
 ];
 // spec/browser-and-simulator#sim-tools: eight simulator tools — six see and drive the screen (points, not pixels), two read the app through Metro.
-// The device is not an argument yet: every tool works on the project device.
+// spec/browser-and-simulator#sim-lease: every tool takes `device`; without it the task's own device, else the project's.
 const point = z.number().min(0).max(10_000);
+const device = z
+	.string()
+	.min(1)
+	.max(128)
+	.optional()
+	.describe(
+		"The device to use: a kind (iPhone, iPad, Android), a model (iPhone 17 Pro, Pixel 9), or a name or id from simulator_state. It becomes your task's device. Leave it out to keep your task's device, else the project's. A crew worker gets a device of its own (an iOS copy with the app installed) when one can start, and its own Metro port."
+	);
 const simulatorTools: Tool[] = (
 	[
 		[
 			'state',
-			'State of the project simulator: the selected device, whether it runs, its screen size in points, the devices available.',
-			{},
+			"State of your task's simulator device (or the project's, until you use one): whether it runs, its screen size in points, the local devices running against the cap, low memory, your task's Metro port, and every device with who holds it.",
+			{ device },
 		],
 		[
 			'open',
-			'Start the project simulator device (or the one named by device: a name or id from simulator_state) and wait until it runs; optionally launch an app by bundle id or open a URL or deep link on it. The human sees the device in the task window.',
+			"Start your task's simulator device (or the one named by device) and wait until it runs, then point the app at your task's Metro when it runs in your worktree; optionally launch an app by bundle id or open a URL or deep link on it. The human sees the device in the task window. When simulator_state says no device is chosen, pass the device the app is built and installed on.",
 			{
-				device: z
-					.string()
-					.min(1)
-					.max(128)
-					.optional()
-					.describe(
-						'Pass the device the app is built and installed on when simulator_state says no device is chosen; the device you pass becomes the project device.'
-					),
+				device,
 				app: z
 					.string()
 					.regex(/^[A-Za-z0-9._-]{1,255}$/)
@@ -520,12 +543,13 @@ const simulatorTools: Tool[] = (
 		[
 			'ui',
 			'The accessibility tree of the device screen, one element a line: role, label, #testID and frame in points. Use it before simulator_screenshot: it is cheaper and gives exact targets. Long screens come in pages: pass offset.',
-			{ grid: z.boolean().optional(), offset: z.number().int().min(0).optional() },
+			{ device, grid: z.boolean().optional(), offset: z.number().int().min(0).optional() },
 		],
 		[
 			'act',
 			'One action on the device: tap, longpress or swipe at x,y (points) or at an element by id (testID) or label; swipe ends at x2,y2; type text into the focused field; key presses a KeyboardEvent code (Enter, Backspace, ArrowDown); button presses home, lock or (Android) back; rotate turns the device right. Answers once the screen has been still for 0.4 s (5 s at most, and it says so when the screen was still moving), with what changed in the accessibility tree: elements that appeared (+), disappeared (-) or changed label or value (~); on Android it gives no tree changes. The human sees each touch marked on the screen.',
 			{
+				device,
 				action: z.enum(['tap', 'longpress', 'swipe', 'type', 'key', 'button', 'rotate']),
 				x: point.optional(),
 				y: point.optional(),
@@ -542,6 +566,7 @@ const simulatorTools: Tool[] = (
 			'wait',
 			'Waits on the device until an element appears, or with gone: true disappears: text (in a label or value, ignoring case), id (testID) or label, exactly one. Reads the accessibility tree each time the screen changes, up to timeoutMs (default 10000, at most 30000). Answers with the element found, or a timeout and the screen as it was last read.',
 			{
+				device,
 				text: z.string().min(1).max(500).optional(),
 				id: z.string().min(1).max(500).optional(),
 				label: z.string().min(1).max(500).optional(),
@@ -552,12 +577,13 @@ const simulatorTools: Tool[] = (
 		[
 			'screenshot',
 			'A JPEG of the device screen as the human sees it, the longer side up to 1000 px: for looking at pixels. Prefer simulator_ui for finding elements; simulator_act already says whether an action worked.',
-			{},
+			{ device },
 		],
 		[
 			'logs',
 			'Logs of the React Native app on the device, newest last (up to 100): source js (console and errors with stacks, through Metro; default) or native (the app process, last 2 minutes). Filter by the lowest level and by text.',
 			{
+				device,
 				source: z.enum(['js', 'native']).optional(),
 				level: z.enum(['debug', 'log', 'info', 'warn', 'error']).optional(),
 				grep: z.string().min(1).max(500).optional(),
@@ -567,6 +593,7 @@ const simulatorTools: Tool[] = (
 			'network',
 			'Requests of the React Native app through Metro, one a line (id, method, status, time, size, URL), newest last; filter by URL text. With requestId: headers and the body (text up to 16 KiB).',
 			{
+				device,
 				requestId: z
 					.string()
 					.regex(/^[A-Za-z0-9._-]{1,128}$/)
@@ -744,6 +771,47 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 		description:
 			'Approve the checked work: nothing is left to fix. Requires the reviewId of the report you were asked to check.',
 		shape: { taskId, reviewId: z.string().min(1).max(128) },
+	},
+	// spec/reviews#plan-inputs, spec/reviews#plan-verdict: a plan review reads the plan and the sources through the host, on any provider.
+	read_plan: {
+		description:
+			"The plan of a plan review, as the author presented it (a foreman's split as Markdown with its parts and crew). In a closure check it also returns diff: the line diff from the revision you read before.",
+		shape: { taskId, reviewId: z.string().min(1).max(128) },
+	},
+	read_sources: {
+		description:
+			'The sources the plan was written from, as its author saved them: the ticket, a spec, an API contract. Texts are cut when one call passes 200 000 characters; pass sourceId to read one source whole.',
+		shape: {
+			taskId,
+			reviewId: z.string().min(1).max(128),
+			sourceId: z.string().max(128).optional(),
+		},
+	},
+	submit_plan_review: {
+		description:
+			"The verdict of a plan review. First read: findings [{kind, text, where?}] with kind missed, contradicts, out-of-scope (the plan against the ticket), assumption, left-open, unverifiable (against the repo and the contract), split (a foreman's split), and gaps [{text, where?}]: what the ticket itself leaves open, questions for the person. At most 12 items in all, the most severe first. Closure check: findings only, each {replyTo: <finding id>, text} for a finding still open or {kind, text, where?, introduced: true} for a problem the revision brought in.",
+		shape: {
+			taskId,
+			reviewId: z.string().min(1).max(128),
+			findings: z
+				.array(
+					z.object({
+						kind: z.string().max(40).optional(),
+						text: z.string().min(1).max(10_000),
+						where: z.string().max(200).optional(),
+						replyTo: z.string().min(1).max(100).optional(),
+						introduced: z.boolean().optional(),
+					})
+				)
+				.max(48)
+				.default([]),
+			gaps: z
+				.array(
+					z.object({ text: z.string().min(1).max(2000), where: z.string().max(200).optional() })
+				)
+				.max(12)
+				.default([]),
+		},
 	},
 	accept_task: {
 		description:

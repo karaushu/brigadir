@@ -49,10 +49,23 @@ export function ChatCardChips({ children }: { children: ReactNode }) {
 }
 export function ChatCardChip({
 	children,
+	onClick,
 	...rest
-}: { children: ReactNode } & HTMLAttributes<HTMLSpanElement> & {
+}: { children: ReactNode; onClick?: (() => void) | undefined } & HTMLAttributes<HTMLSpanElement> & {
 		[key: `data-${string}`]: string | boolean | undefined;
 	}) {
+	// spec/reviews#plan-surfaces: a chip that opens something (a saved source) is a button with the chip's look and a hover.
+	if (onClick)
+		return (
+			<button
+				type="button"
+				{...(rest as HTMLAttributes<HTMLButtonElement>)}
+				className={s.chip}
+				data-action
+				onClick={onClick}>
+				{children}
+			</button>
+		);
 	return (
 		<span {...rest} className={s.chip}>
 			{children}

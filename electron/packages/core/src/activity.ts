@@ -290,6 +290,8 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 				'crew.worker.stopped',
 				'quick-ask.changed',
 				'context.compacted',
+				'simulator.device',
+				'budget.reached',
 			].includes(e.kind)
 		) {
 			// spec/agents-and-providers#sign-in-recovery: an assistant message that was the failed turn's only output is the CLI's own sign-in text; it shows as the card's detail.

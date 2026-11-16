@@ -82,7 +82,7 @@ A settings row (`SettingsRow`, and the `Rights` row in Templates) whose control 
 | Card | Rows |
 | --- | --- |
 | `Providers` | `Claude Code`, `Codex`: switch + `AgentStatus` (found / sign-in state, `Sign in…`, `Check`, `How to install`); `CliUpdatesRow` |
-| `Agents` | `Default agent` (Claude / Codex segments), `Helper agent` capsule, `Subagent model` (Claude catalog models, first item `Same as the agent`; shown while Claude is on; caption "Claude's own subagents search and read on this model."), `Compaction window` (`Agent's default`, `100k`, `200k`, `400k`; caption "New sessions compact their context when it reaches this many tokens."), `Customize per action` rows (groups `Tasks`, `Reviews`, `One-off texts`, `Slack`; `Reviews` holds `Plan review` and `Code reviews`, whose inherited entry is `Auto` — [who reviews](reviews.md#who)), `Launch in` (`GUI` / `Terminal`), `Isolation for CLI tasks` (`No isolation` / `Worktree`), `Max concurrent` (0 = `Unlimited`, up to 99), `Keep awake` and `Display` rows, `Prompt suggestion` |
+| `Agents` | `Default agent` (Claude / Codex segments), `Helper agent` capsule, `Subagent model` (Claude catalog models, first item `Same as the agent`; shown while Claude is on; caption "Claude's own subagents search and read on this model."), `Compaction window` (`Agent's default`, `100k`, `200k`, `400k`; caption "New sessions compact their context when it reaches this many tokens."), `Task budget` (one popup per enabled provider, each named by its provider when two are on: `No limit`, `500k`, `1m`, `2m`, `5m`, `10m`; caption "A task pauses and asks when its agents use this many tokens. New tasks only."; [task budget](agents-and-providers.md#task-budget)), `Customize per action` rows (groups `Tasks`, `Reviews`, `One-off texts`, `Slack`; `Reviews` holds `Plan review` and `Code reviews`, whose inherited entry is `Auto` — [who reviews](reviews.md#who); `Plan review` also has `Off`), `Launch in` (`GUI` / `Terminal`), `Isolation for CLI tasks` (`No isolation` / `Worktree`), `Max concurrent` (0 = `Unlimited`, up to 99), `Keep awake` and `Display` rows, `Prompt suggestion` |
 | `Auto` | `Models` ▸ `Any catalog model` (switch; caption `Off: for a model outside the roles the agent asks first.` / `On: the agent picks a model for a part without asking.`), `Part budget` (minutes and thousands of tokens, steppers; caption `A worker over its budget stops and asks.`) — [Auto](crew.md#auto) |
 | `Tasks` | `Archive completed` (`Never`, after 1 / 3 / 7 / 30 days) |
 
@@ -129,7 +129,7 @@ A module is a part of the app that switches off whole: its column or section, to
 | Key | Row name | Second line | Default | Has settings |
 | --- | --- | --- | --- | --- |
 | `browser` | `Browser` | Pages in the task window, for you and the agent. | on | yes |
-| `simulator` | `Simulator` | iOS and Android · found tools, or `Xcode not found` / `Android SDK not found` in amber | off | no |
+| `simulator` | `Simulator` | iOS and Android · found tools, or `Xcode not found` / `Android SDK not found` in amber | off | yes |
 | `pullRequests` | `Pull requests` | PR list and review from GitHub. | on | yes |
 | `commands` | `Commands` | A button that runs project commands. | on | no |
 | `remoteAccess` | `Remote access` | Control this machine from another computer. | on (access itself stays off) | yes |
@@ -168,7 +168,7 @@ Why one switch per module: every MCP tool goes into the context of every session
 - Each row shows the module's glyph, name, second line and a switch on the right. The whole row toggles and hovers (rule 15). A module that is off is dimmed.
 - The simulator row reads the toolchain (`readSimulatorToolchain`) when it mounts, and its second line shows what was found (`Xcode 27 · Android SDK`).
 - `locked` keeps a switch still. In a device's window, `remoteAccess` is locked so a device never turns off the working machine's access.
-- In Settings, a module that is **on and has settings** shows a ⚙ button before the switch: `IconButton` M 28 × 28, ghost, glyph `search-setting`, `--fg2`, hover `--tint` + `--fg`. Its name and tooltip (system `title`) are `Browser settings`, `Pull request settings`, `Remote access settings` and `Slack settings`. The button sits on top of the row, has its own hover and never toggles the row. A module that is off has no ⚙, and its open popup closes. The intro passes no settings handlers, so it has no ⚙.
+- In Settings, a module that is **on and has settings** shows a ⚙ button before the switch: `IconButton` M 28 × 28, ghost, glyph `search-setting`, `--fg2`, hover `--tint` + `--fg`. Its name and tooltip (system `title`) are `Browser settings`, `Simulator settings`, `Pull request settings`, `Remote access settings` and `Slack settings`. The button sits on top of the row, has its own hover and never toggles the row. A module that is off has no ⚙, and its open popup closes. The intro passes no settings handlers, so it has no ⚙.
 - The intro passes `onHover` so the spotlight can follow the hovered row.
 
 <a id="module-settings-popup"></a>
@@ -181,6 +181,7 @@ Why one switch per module: every MCP tool goes into the context of every session
 | `Browser` | `Agents can act on any site without confirmation` (`agents.browserActAnywhere`, off) — "No permission card for actions. Local pages never ask." |
 | `Pull requests` | `PR summary`: `Summarize a PR when its review opens` (`agents.prSummary`, on) |
 | `Remote access` | the whole remote access settings: `This machine · Connect to another` part switch (`Segments` in `tabs` style), overview scheme and facts, switch and password, name, phone, devices, log, `Change password…`, machines, `Forget`. See [Remote access](remote-access-and-mobile.md). |
+| `Simulator` | `Local devices` (`agents.simulatorDevices`, 2, `Stepper` 1–8) — "How many simulators run at once." A settings file without the key reads as 2. See [Device cap and memory](browser-and-simulator.md#sim-cap). |
 | `Slack` | see [Slack](notifications-slack-notes-and-schedules.md); section `Agents`: `Agents can post without confirmation` (`agents.slackPostWithoutAsking`, off) — [Agents post as the bot](notifications-slack-notes-and-schedules.md#slack-agent-post) |
 
 - Settings that stay where they are: a command's `agentRuns` (command editor), where Review with an agent runs (chosen in its launch dialog), project review notes (the project menu) and `Customize per action` (that is a choice of agent, not a module setting).

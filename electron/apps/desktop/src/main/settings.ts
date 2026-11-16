@@ -79,6 +79,14 @@ export class Settings {
 								...(!('compactionWindow' in value.agents)
 									? { compactionWindow: defaultAppSettings.agents.compactionWindow }
 									: {}),
+								// spec/browser-and-simulator#sim-cap: a file written before the setting reads as the default cap.
+								...(!('simulatorDevices' in value.agents)
+									? { simulatorDevices: defaultAppSettings.agents.simulatorDevices }
+									: {}),
+								// spec/agents-and-providers#task-budget: a file written before the setting has no budget.
+								...(!('taskBudget' in value.agents)
+									? { taskBudget: defaultAppSettings.agents.taskBudget }
+									: {}),
 							},
 						}
 					: {};
@@ -168,8 +176,12 @@ export class Settings {
 			// spec/appearance#evolution-redesign: `suggestModel` became `helperAgent`; the choice carries over with the lowest effort.
 			// spec/appearance#evolution-redesign: no `actionAgents` (or an entry that is not one) — that action inherits.
 			// spec/pull-requests-and-ci#review-crew: no `actionCrews` — every review action runs one agent.
+			// spec/reviews#who: no `planReviewOff` — plan reviews start by themselves.
 			const migrated = isRecord(normalized)
-				? migrateActionCrews(migrateActionAgents(migrateHelperAgent(normalized)))
+				? {
+						planReviewOff: false,
+						...migrateActionCrews(migrateActionAgents(migrateHelperAgent(normalized))),
+					}
 				: normalized;
 			if (!isAppSettings(migrated)) throw new Error('Invalid settings');
 			return migrated;

@@ -285,6 +285,7 @@ Workers never start before the person approves the root foreman's plan.
 - The host validates parts against the crew (`planDifferences`): `unknown_agent`, `reviewer_part`, `duplicate_agent` (one part per agent at a time), `outside_zone`, `empty`, and the non-blocking `idle_agent`. Any blocking difference is a tool error listing the messages (`The plan does not match the crew: …`), not a card. `crew` without composing → `Your crew is already set; call propose_plan without crew.` Only one plan may wait at a time.
 - The card lets the person edit part titles, prompts, agents and files; differences introduced by edits are shown on the card and block `Start workers` (`planBlocked`; idle agents only show). Agent names arrive pre-filled in editable fields.
 - `Start workers` approves; `Reject` rejects (the foreman revises or asks). The tool result returns `approved`, the possibly edited parts and the difference messages.
+- **Plan review.** The root foreman's plan gets the [plan review](reviews.md#plan-review) when it is presented; the reviewer also checks the split ([The foreman's split](reviews.md#plan-split)). Findings come back as a rejection whose tool result carries `review` (the findings and the instruction to revise once or object, then call `propose_plan` again), or as the decision prompt when the turn already ended. `Start workers` stays available and ends the review.
 - **Decision after the turn ended:** when the proposing turn has already completed (or the session failed / host stopped) while the MCP call stayed open, the decision is also sent as a separate prompt through the queue — approval lists the current (edited) parts and tells the foreman to create the worker tasks now; rejection asks for a new split. A live turn gets only the tool result.
 - **One plan mechanism.** The foreman plans only with `propose_plan`, and the plan runs in the foreman's own task: from the proposal on, `create_task` is hidden from it (see [Process roles](#roles)), and its session never gets the plan-mode sentence of a solo Claude session.
 - **Lead plans** are approved immediately by the host: the plan shows in the lead's activity, only the root plan waits for the person, and the root foreman can return the branch.
@@ -358,7 +359,7 @@ When a worker's turn ends, the worker host pushes a report to the parent with th
 - files (up to 200) with status and counts, project-relative paths;
 - `Changes outside the assigned files (n)` (up to 20 names);
 - checks with verdicts and round, and the disputed note when reviewers did not agree;
-- `Usage: N turns, X in, Y out, Z cached` — tokens of the member's task so far, summed from its `turn.usage` records: `in` is input plus cache writes, `cached` is cache reads (see [Agents and providers](agents-and-providers.md#turn-usage)); the line is left out when the provider reported none. No model and no money: reviewers read the same report, and the foreman has the model in its roster;
+- `Usage: N turns, X in, Y out, Z cached` — tokens of the member's task so far, summed from its `turn.usage` records: `in` is input plus cache writes, `cached` is cache reads (see [Agents and providers](agents-and-providers.md#turn-usage)); unlike the [task's counter](agents-and-providers.md#task-tokens) it keeps cache reads, and only finished turns; the line is left out when the provider reported none. No model and no money: reviewers read the same report, and the foreman has the model in its roster;
 - `Notes: N new` (never a separate push);
 - the question the worker ended with;
 - the worker's last message (≤ 4000 chars);
@@ -520,6 +521,17 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | `crew-part.json` | worker | the current part for its reviewers: `part`, `prompt` (≤ 100 000 chars), `acceptance?`, `clipped?` |
 | `git-merge.json` | any | open merge/squash per repo (`from`, `into`, conflicts) |
 
+<a id="budget-pause"></a>
+## Token budget and pause
+
+The crew is one task for the [token budget](agents-and-providers.md#task-budget): the count is the sum over the foreman, leads, workers and reviewers (all carry the root `crewTaskId`), per provider, and the budget is the root task's. When one provider's count reaches its budget the whole crew pauses ([reaching the budget](agents-and-providers.md#budget-reached)):
+
+- turns that run now — the foreman's and every member's — finish; nothing new starts;
+- the foreman's queue holds reports and the person's messages; every member's queue holds its parts, reviews and messages; the crew host holds waiting hires (`watchSlots` launches none);
+- the foreman is `needs-you` with `{Provider} budget reached`; members keep their own states;
+- `Stop now` cancels the foreman's turn and every member's running turn; `Finish turns, then stop` lets them end;
+- raising the budget resumes the foreman's queue, the waiting hires in their order and each member's queue in its own order.
+
 <a id="limits"></a>
 ## Limits
 
@@ -552,7 +564,7 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 - Task classes (small, medium, large) stated by the agent, and the host's threshold that starts a mid-task review on its own.
 - A token counter per task with a pause at a threshold.
 - Asking on `Stop` of a foreman whether to stop its workers too (default yes).
-- Foreman indicators (tokens, worst context, quota) aggregated over its workers; tokens per accepted part on the plan card.
+- Foreman indicators (worst context) aggregated over its workers; tokens per accepted part on the plan card.
 - Raising a worker's effort automatically after a disputed check.
 - The design check as a host step: the contract table per design node, with the host verifying that each row's screenshot exists.
 - The smoke as a host step with a time box the host enforces: at the limit it stops the run and asks for the report.

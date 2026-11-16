@@ -4,6 +4,7 @@ import {
 	filePathCandidates,
 	syntaxLanguage,
 	planSlug,
+	isTaskSourcesDocument,
 	type FilePathText,
 	type FilePathLink,
 	type FilePathCandidate,
@@ -30,6 +31,7 @@ import {
 	readProjectFile,
 	projectFile,
 	writeProjectFile,
+	readDocument,
 } from '@brigadir/persistence';
 import { Changes } from './changes';
 import { Sessions } from './sessions';
@@ -44,6 +46,8 @@ type Resource = {
 	kind: 'file' | 'directory';
 	external?: string;
 	plan?: true;
+	/** spec/reviews#plan-surfaces: a saved source opens like a plan copy, from the task's `sources` folder. */
+	folder?: 'plans' | 'sources';
 };
 /** Runs `work` over `items` with at most `limit` in flight, keeping the input order. */
 async function mapLimit<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>) {
@@ -154,7 +158,10 @@ export class Files {
 		const store = await SessionStore.at(this.changes.dataDir);
 		await store.task(key);
 		if (resource.plan) {
-			if ((await realpath(join(await store.taskDir(key), 'plans'))) !== resource.root)
+			if (
+				(await realpath(join(await store.taskDir(key), resource.folder ?? 'plans'))) !==
+				resource.root
+			)
 				throw new Error('Task location changed');
 			return resource;
 		}
@@ -187,6 +194,22 @@ export class Files {
 			if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
 		}
 		return this.read(key, this.register({ key, root, path, kind: 'file', plan: true }));
+	}
+	/** spec/reviews#plan-surfaces: a source the task's agent saved (`save_source`), opened as an ordinary editor tab like a plan copy. */
+	async source(key: TaskKey, sourceId: string): Promise<EditorDocument> {
+		const store = await SessionStore.at(this.changes.dataDir);
+		await store.task(key);
+		const dir = join(await store.taskDir(key), 'sources'),
+			index = await readDocument(join(dir, 'sources.json')).catch(() => null),
+			entry = isTaskSourcesDocument(index)
+				? index.sources.find((item) => item.id === sourceId)
+				: undefined;
+		if (!entry) throw new Error('The source is gone');
+		const root = await realpath(dir);
+		return this.read(
+			key,
+			this.register({ key, root, path: entry.file, kind: 'file', plan: true, folder: 'sources' })
+		);
 	}
 	/** spec/chat-turns-plans-and-questions#plan-approval: the copy's text while the request lives (`null` before anybody opens it) and where it lives. */
 	async planText(

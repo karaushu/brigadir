@@ -146,6 +146,36 @@ const uk = {
 		'На цій моделі власні субагенти Claude шукають і читають.',
 	// spec/agents-and-providers#compaction-window, spec/chat#context-compacted
 	'Compaction window': 'Вікно стиснення',
+	// spec/agents-and-providers#task-budget, spec/composer#task-usage, spec/chat-turns-plans-and-questions#budget-card
+	'Task budget': 'Бюджет задачі',
+	'A task pauses and asks when its agents use this many tokens. New tasks only.':
+		'Задача стає на паузу й питає, коли її агенти використають стільки токенів. Лише для нових задач.',
+	'No limit': 'Без ліміту',
+	'{provider} budget': 'Бюджет {provider}',
+	'Task usage': 'Токени задачі',
+	'{provider} {used} of {budget}': '{provider} {used} з {budget}',
+	'{text} · paused': '{text} · на паузі',
+	'New input {a} · written to cache {b} · output {c} · re-read from cache {d}, not counted':
+		'Новий вхід {a} · записано в кеш {b} · вихід {c} · перечитано з кешу {d}, не враховано',
+	'Account limits since the task started': 'Ліміти акаунта від початку задачі',
+	'since it reset': 'після скидання',
+	'Counted in the budget of {task}.': 'Враховано в бюджеті задачі «{task}».',
+	'{provider} budget reached': 'Бюджет {provider} вичерпано',
+	'{used} of {budget} tokens': '{used} з {budget} токенів',
+	'The task is paused.': 'Задача на паузі.',
+	'Turns that run now finish. Nothing new starts: no hires, no deliveries, no queued messages.':
+		'Турни, що вже йдуть, завершаться. Нового нічого не почнеться: ні найму, ні доставок, ні повідомлень із черги.',
+	'Turns that run now finish; nothing new starts.':
+		'Турни, що йдуть, завершаться; нового нічого не почнеться.',
+	'Stop now': 'Зупинити зараз',
+	'Finish turns, then stop': 'Дати турнам завершитись і зупинити',
+	'Finish turns': 'Завершити турни',
+	'Raise to {n}': 'Підняти до {n}',
+	'More budgets': 'Інші бюджети',
+	'No limit for this task': 'Без ліміту для цієї задачі',
+	'Budget reached': 'Бюджет вичерпано',
+	'Budget question': 'Питання бюджету',
+	'Could not change the budget.': 'Не вдалося змінити бюджет.',
 	"Agent's default": 'Як задано в агенті',
 	'New sessions compact their context when it reaches this many tokens.':
 		'Нові сесії стискають контекст, коли він сягає стількох токенів.',
@@ -1241,6 +1271,15 @@ const uk = {
 	'{device} is off': '{device} вимкнений',
 	'{device} is starting…': '{device} стартує…',
 	'Shut down {device}': 'Вимкнути {device}',
+	queued: 'у черзі',
+	'{device} · waits for {task}': '{device} · чекає на {task}',
+	'Memory is low. New devices are off.': 'Мало памʼяті. Нові пристрої не запускаються.',
+	'Memory is low.': 'Мало памʼяті.',
+	'Start anyway': 'Усе одно запустити',
+	'Local devices': 'Локальні пристрої',
+	'How many simulators run at once.': 'Скільки симуляторів працює одночасно.',
+	'Simulator settings': 'Налаштування симулятора',
+	'started with low memory': 'запущено попри брак памʼяті',
 	'Hide simulator': 'Сховати симулятор',
 	Rotate: 'Повернути',
 	'No simulators': 'Немає симуляторів',
@@ -2397,6 +2436,32 @@ const uk = {
 	'Review closed': 'Ревʼю закрито',
 	'{reviewer} reading': '{reviewer} читає',
 	'{reviewer} checks the fixes': '{reviewer} звіряє правки',
+	'{agent} revises the plan': '{agent} переписує план',
+	'Plan vs ticket': 'План і тикет',
+	'Plan vs code': 'План і код',
+	'Gaps in the ticket': 'Прогалини в тикеті',
+	missed: 'пропущено',
+	contradicts: 'суперечить',
+	'out of scope': 'поза задачею',
+	'wrong assumption': 'хибне припущення',
+	'left open': 'не вирішено',
+	'cannot verify': 'не перевірити',
+	split: 'поділ',
+	gap: 'прогалина',
+	'ended by the approval': 'завершено погодженням',
+	'Open the source': 'Відкрити джерело',
+	'Saving a source': 'Зберігає джерело',
+	'Saved a source': 'Зберіг джерело',
+	'Could not save the source': 'Не вдалося зберегти джерело',
+	'Reading the plan': 'Читає план',
+	'Read the plan': 'Прочитав план',
+	'Could not read the plan': 'Не вдалося прочитати план',
+	'Reading the sources': 'Читає джерела',
+	'Read the sources': 'Прочитав джерела',
+	'Could not read the sources': 'Не вдалося прочитати джерела',
+	'Sending the plan review': 'Надсилає ревʼю плану',
+	'Sent the plan review': 'Надіслав ревʼю плану',
+	'Could not send the plan review': 'Не вдалося надіслати ревʼю плану',
 	'{count} open': 'відкрито {count}',
 	'{n} accepted': 'прийнято {n}',
 	'no findings': 'без зауважень',
@@ -4924,6 +4989,16 @@ export function noteLineCount(locale: Locale, count: number): string {
 			: { one: 'line', few: 'lines', many: 'lines', other: 'lines' };
 	return `${new Intl.NumberFormat(locale).format(count)} ${forms[form as keyof typeof forms] ?? forms.other}`;
 }
+/** spec/browser-and-simulator#sim-cap: «2 of 2 devices run.» — the list footer at the cap; four forms for uk (rule 9). */
+export function devicesRunning(locale: Locale, running: number, max: number): string {
+	const form = new Intl.PluralRules(locale).select(max) as 'one' | 'few' | 'many' | 'other';
+	const number = new Intl.NumberFormat(locale);
+	if (locale === 'uk') {
+		const forms = { one: 'пристрою', few: 'пристроїв', many: 'пристроїв', other: 'пристрою' };
+		return `Працює ${number.format(running)} з ${number.format(max)} ${forms[form]}.`;
+	}
+	return `${number.format(running)} of ${number.format(max)} ${max === 1 ? 'device runs' : 'devices run'}.`;
+}
 export function taskCount(locale: Locale, count: number): string {
 	const form = new Intl.PluralRules(locale).select(count);
 	const forms =
@@ -5068,6 +5143,20 @@ export function tokenCount(locale: Locale, count: number): string {
 			: { one: 'token', few: 'tokens', many: 'tokens', other: 'tokens' };
 	return `${short ? formatTokenCount(count) : new Intl.NumberFormat(locale).format(count)} ${forms[form as keyof typeof forms] ?? forms.other}`;
 }
+/** spec/chat-turns-plans-and-questions#budget-card: «The task and its 3 workers are paused.» — «Задача і 3 воркери на паузі.» (four `uk` forms, rule 9). */
+export function pausedWorkersText(locale: Locale, count: number): string {
+	const number = new Intl.NumberFormat(locale).format(count);
+	if (locale !== 'uk')
+		return `The task and its ${number} ${count === 1 ? 'worker' : 'workers'} are paused.`;
+	const word =
+		(
+			{ one: 'воркер', few: 'воркери', many: 'воркерів', other: 'воркера' } as Record<
+				string,
+				string
+			>
+		)[new Intl.PluralRules('uk').select(count)] ?? 'воркерів';
+	return `Задача і ${number} ${word} на паузі.`;
+}
 /** spec/chat#tool-groups: changed files past the header's chips — «ще 1 файл», «ще 3 файли», «ще 23 файли», «ще 5 файлів». */
 export function moreFileCount(locale: Locale, count: number): string {
 	const form = new Intl.PluralRules(locale).select(count),
@@ -5098,6 +5187,17 @@ export function findingCount(locale: Locale, count: number): string {
 		{ one: 'зауваження', few: 'зауваження', many: 'зауважень', other: 'зауваження' }[
 			form as 'one' | 'few' | 'many' | 'other'
 		] ?? 'зауваження';
+	return `${new Intl.NumberFormat('uk').format(count)} ${word}`;
+}
+
+/** spec/reviews#plan-verdict: gaps in the ticket — «1 прогалина», «3 прогалини», «5 прогалин» (rule 9). */
+export function gapCount(locale: Locale, count: number): string {
+	if (locale === 'en') return `${count} ${count === 1 ? 'gap' : 'gaps'}`;
+	const form = new Intl.PluralRules('uk').select(count);
+	const word =
+		{ one: 'прогалина', few: 'прогалини', many: 'прогалин', other: 'прогалини' }[
+			form as 'one' | 'few' | 'many' | 'other'
+		] ?? 'прогалини';
 	return `${new Intl.NumberFormat('uk').format(count)} ${word}`;
 }
 

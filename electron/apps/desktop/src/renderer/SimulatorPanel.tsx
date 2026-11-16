@@ -20,7 +20,7 @@ import { notify } from './ui/Toast';
 import { remoteMachine, useRemote } from './remote-store';
 import { MachineTag } from './ui/MachineTag';
 import { fill } from './remote-text';
-import { pickerDevices } from './simulator-picker';
+import { pickerModel } from './simulator-picker';
 import styles from './SimulatorPanel.module.css';
 /** spec/notifications-slack-notes-and-schedules#message-classes: what a failed simulator command was, for its own toast; reads of the column itself are warnings. */
 const commandFailures: Record<SimulatorCommand['kind'], MessageKey> = {
@@ -52,10 +52,14 @@ const backgroundCommands: ReadonlySet<SimulatorCommand['kind']> = new Set([
  * the screen sits in a device frame on a tinted stage. Frames are H.264 decoded by WebCodecs into a canvas; the pointer
  * and the keyboard of a focused screen go back to the device.
  */
-/** spec/task-window-workspace#work-area: the simulator is a tab of the work area; it fills its group (one device per project, any task shows it). */
+/** spec/task-window-workspace#work-area: the simulator is a tab of the work area; it fills its group and shows the task's own device (spec/browser-and-simulator#sim-lease). */
 export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Locale }) {
 	const commandsOn = useWorkspace((state) => state.appearance.modules.commands);
+	const tasks = useWorkspace((state) => state.workspace?.tasks) ?? [];
 	const [state, setState] = useState<SimulatorState | null>(null);
+	// spec/browser-and-simulator#sim-cap: «Start anyway» lifts the low-memory block while the list stays open.
+	const [anyway, setAnyway] = useState(false);
+	const shown = useRef<string | null>(null);
 	const canvas = useRef<HTMLCanvasElement>(null),
 		stage = useRef<HTMLDivElement>(null),
 		decoder = useRef<VideoDecoder | null>(null),
@@ -63,10 +67,12 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 		pointer = useRef<number | null>(null);
 	const [box, setBox] = useState({ width: 0, height: 0 });
 	const [taps, setTaps] = useState<{ x: number; y: number; label: string; key: number }[]>([]);
-	const projectId = task.projectId;
+	const projectId = task.projectId,
+		taskId = task.id;
+	const key = { projectId, id: taskId };
 	async function command(value: SimulatorCommand): Promise<unknown> {
 		try {
-			return await window.brigadir.simulatorCommand(projectId, value);
+			return await window.brigadir.simulatorCommand(key, value);
 		} catch {
 			const background = backgroundCommands.has(value.kind),
 				retry = value.kind === 'state' || value.kind === 'boot';
@@ -94,7 +100,9 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 			recovering = window.setTimeout(() => {
 				recovering = 0;
 				if (!disposed)
-					void window.brigadir.simulatorCommand(projectId, { kind: 'keyframe' }).catch(() => {});
+					void window.brigadir
+						.simulatorCommand({ projectId, id: taskId }, { kind: 'keyframe' })
+						.catch(() => {});
 			}, 1000);
 		};
 		const configure = (config: SimulatorVideoConfig) => {
@@ -131,11 +139,14 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 			});
 			decoder.current = next;
 		};
+		// spec/browser-and-simulator#sim-tab: the task's own view, and the frames of the device it shows.
 		const offEvent = window.brigadir.onSimulatorEvent((event) => {
-			if (disposed || event.projectId !== projectId) return;
-			if ('state' in event) setState(event.state);
-			else if ('config' in event) configure(event.config);
-			else if ('tap' in event) {
+			if (disposed) return;
+			if ('state' in event) {
+				if (event.key.projectId === projectId && event.key.id === taskId) setState(event.state);
+			} else if ('config' in event) {
+				if (event.device === shown.current) configure(event.config);
+			} else if ('tap' in event && event.device === shown.current) {
 				const tap = { ...event.tap, key: Date.now() + Math.random() };
 				setTaps((list) => [...list, tap]);
 				window.setTimeout(() => setTaps((list) => list.filter((item) => item !== tap)), 600);
@@ -143,7 +154,7 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 		});
 		const offFrame = window.brigadir.onSimulatorFrame((frame) => {
 			const active = decoder.current;
-			if (disposed || frame.projectId !== projectId || !active || active.state !== 'configured')
+			if (disposed || frame.device !== shown.current || !active || active.state !== 'configured')
 				return;
 			if (waitingKey.current && !frame.key) return;
 			waitingKey.current = false;
@@ -172,17 +183,25 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 			if (decoder.current && decoder.current.state !== 'closed') decoder.current.close();
 			decoder.current = null;
 			void window.brigadir
-				.simulatorCommand(projectId, { kind: 'watch', on: false })
+				.simulatorCommand({ projectId, id: taskId }, { kind: 'watch', on: false })
 				.catch(() => {});
 		};
-	}, [projectId]);
+	}, [projectId, taskId]);
+	// Another device on screen (the task's lease moved): its config and a key frame.
+	const deviceId = state?.device?.id ?? null;
+	useEffect(() => {
+		shown.current = deviceId;
+		if (deviceId) void command({ kind: 'keyframe' });
+	}, [deviceId]);
 	// spec/remote-access-and-mobile#networking: a window of another machine that reconnected is a new client there — it watches again and gets the
 	// config and a key frame, as when it opened.
 	const remoteEpoch = useRemote((store) => store.epoch);
 	useEffect(() => {
 		if (!remoteMachine || !remoteEpoch) return;
 		waitingKey.current = true;
-		void window.brigadir.simulatorCommand(projectId, { kind: 'watch', on: true }).catch(() => {});
+		void window.brigadir
+			.simulatorCommand({ projectId, id: taskId }, { kind: 'watch', on: true })
+			.catch(() => {});
 	}, [remoteEpoch]);
 	useEffect(
 		() =>
@@ -195,7 +214,7 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 				if (action === 'simulator-shutdown') void command({ kind: 'shutdown' });
 				if (action === 'simulator-screenshot') void sendScreenshot();
 			}),
-		[projectId, locale]
+		[projectId, taskId, locale]
 	);
 	// The screen keeps the device's aspect inside the stage: the frame, not the column, decides the shape.
 	useEffect(() => {
@@ -245,38 +264,48 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 						(box.height - 48 - bezel * 2) / upright.height
 					)
 				: 0;
-	// spec/browser-and-simulator#simulator: the picker groups devices by platform, iOS first; one platform needs no header.
-	const { devices, grouped: mixed } = pickerDevices(state?.devices ?? []);
-	const deviceGroups = mixed
+	// spec/browser-and-simulator#sim-tab: the picker groups devices by platform, iOS first, and ends each row with who holds the device.
+	const picker = state ? pickerModel(state, locale, tasks, anyway) : null;
+	const deviceGroups = picker?.grouped
 		? {
 				ios: { label: 'iOS', icon: <Glyph name="platform-apple" size={11} /> },
 				android: { label: 'Android', icon: <Glyph name="platform-android" size={11} /> },
 			}
 		: undefined;
 	// spec/task-window-workspace#tool-tab-look: a running device has a green dot on its glyph and its own
-	// shut-down button in place of «Booted»; no «Shut down …» row under the list.
-	const deviceOptions = devices.map((item) => {
-		const running = item.booted || (item.id === device?.id && state?.status === 'on');
-		const shutDown = t(locale, 'Shut down {device}').replace('{device}', item.name);
-		return {
-			value: item.id,
-			label: item.name,
-			...(running
-				? {
-						live: true,
-						action: {
-							label: shutDown,
-							icon: <Glyph name="quit" size={13} />,
-							run: () => void command({ kind: 'shutdown', device: item.id }),
-						},
-					}
-				: { tail: item.os }),
-			...(mixed ? { group: item.platform } : {}),
-			icon: (
-				<Glyph name={item.platform === 'ios' ? 'platform-apple' : 'platform-android'} size={12} />
-			),
-		};
-	});
+	// shut-down button after its tail; no «Shut down …» row under the list.
+	const deviceOptions = (picker?.rows ?? []).map((row) => ({
+		value: row.device.id,
+		label: row.device.name,
+		tail: row.tail,
+		disabled: row.disabled,
+		...(row.running ? { live: true } : {}),
+		...(row.canShutDown
+			? {
+					action: {
+						label: t(locale, 'Shut down {device}').replace('{device}', row.device.name),
+						icon: <Glyph name="quit" size={13} />,
+						run: () => void command({ kind: 'shutdown', device: row.device.id }),
+					},
+				}
+			: {}),
+		...(picker?.grouped ? { group: row.device.platform } : {}),
+		icon: (
+			<Glyph
+				name={row.device.platform === 'ios' ? 'platform-apple' : 'platform-android'}
+				size={12}
+			/>
+		),
+	}));
+	const footer = picker?.footer
+		? {
+				text: picker.footer.text,
+				...(picker.footer.tone ? { tone: picker.footer.tone } : {}),
+				...('lift' in picker.footer
+					? { action: { label: t(locale, 'Start anyway'), run: () => setAnyway(true) } }
+					: {}),
+			}
+		: undefined;
 	const live = state?.status === 'on';
 	const machineName = useRemote((store) => store.session?.machineName) || remoteMachine?.name || '';
 	/** ⌘V: this Mac's clipboard locally; in a window of another machine, this device's (spec/remote-access-and-mobile#browser-from-device). */
@@ -299,7 +328,17 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 							value={device.id}
 							options={deviceOptions}
 							{...(deviceGroups ? { groups: deviceGroups } : {})}
-							displayValue={`${device.name} · ${device.os}`}
+							{...(footer ? { footer } : {})}
+							onOpenChange={(open) => {
+								if (!open) setAnyway(false);
+							}}
+							displayValue={
+								picker?.queued ? (
+									<span className={styles.queued}>{picker.trigger}</span>
+								) : (
+									picker?.trigger
+								)
+							}
 							icon={
 								<Glyph
 									name={device.platform === 'ios' ? 'platform-apple' : 'platform-android'}
@@ -307,7 +346,11 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 								/>
 							}
 							onChange={(value) => {
-								void command({ kind: 'select', device: value });
+								const row = picker?.rows.find((item) => item.device.id === value);
+								void command({ kind: 'select', device: value }).then(() => {
+									// A device that is off starts at once when the person lifted the low-memory block for it.
+									if (row && !row.running && anyway) void command({ kind: 'boot', anyway: true });
+								});
 							}}
 						/>
 					</PopupMarks.Provider>
@@ -450,18 +493,28 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 						</Button>
 					</div>
 				) : !live ? (
+					// spec/browser-and-simulator#sim-cap: at the cap there is no Start; under low memory Start becomes Start anyway.
 					<div className={styles.empty}>
 						<Glyph name="simulator" size={40} />
 						<strong>
 							{state.error ?? t(locale, '{device} is off').replace('{device}', device.name)}
 						</strong>
-						<Button
-							appearance="primary"
-							onClick={() => {
-								void command({ kind: 'boot' });
-							}}>
-							{t(locale, 'Start')}
-						</Button>
+						{picker?.footer && (
+							<span data-tone={picker.footer.tone} className={styles.gate}>
+								{picker.footer.text}
+							</span>
+						)}
+						{state.gate.running < state.gate.max && (
+							<Button
+								appearance="primary"
+								onClick={() => {
+									void command(
+										state.gate.lowMemory ? { kind: 'boot', anyway: true } : { kind: 'boot' }
+									);
+								}}>
+								{t(locale, state.gate.lowMemory ? 'Start anyway' : 'Start')}
+							</Button>
+						)}
 					</div>
 				) : (
 					<div

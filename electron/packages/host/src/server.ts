@@ -61,8 +61,11 @@ import {
 	runningSubagents,
 	outputTail,
 	isPlanApproval,
+	planApprovalText,
 	planChatPrompt,
 	planRejectOption,
+	splitPlanMarkdown,
+	type CrewPlan,
 	recordModeId,
 	selectOption,
 	sessionModeName,
@@ -106,6 +109,7 @@ import {
 	atomicJson,
 	safePath,
 	readDocument,
+	applyMetroPort,
 } from '@brigadir/persistence';
 import {
 	AgentTransport,
@@ -139,7 +143,8 @@ import {
 	partBrief,
 	type CrewContext,
 } from './crew';
-import { TaskReviewLife, ownReviewCrew, ownReviewTool } from './task-review';
+import { TaskReviewLife, ownReviewCrew, ownReviewTool, type PresentedPlan } from './task-review';
+import { saveTaskSource } from './task-sources';
 import {
 	assignmentBlock,
 	compactionDue,
@@ -151,6 +156,7 @@ import { hiddenToolMessages, serveMcp, type HiddenToolSource } from './mcp';
 import { AutoCrewHost } from './auto-crew';
 import { ModuleSettings } from './modules';
 import { claudeSubagentModel, compactionWindow } from './agent-settings';
+import { TaskBudget } from './task-budget';
 import { terminalColors } from './terminal-colors';
 import { idleBlocker, idleTimeout } from './idle';
 export type HostConfig = {
@@ -220,6 +226,41 @@ export async function startHost(config: HostConfig) {
 	/** spec/reviews#points: the task's review before the PR; a solo task gets a crew host of its reviewers when one starts. An Auto task keeps its reviewers in its own crew. */
 	const foremanTask = !!crew && (crew.role === 'foreman' || crew.role === 'auto'),
 		autoTask = crew?.role === 'auto';
+	/** spec/reviews#plan-review: the root foreman's split that waits for the person (a lead's plan is approved by the host). */
+	let waitingSplit: CrewPlan | null = null;
+	/** spec/reviews#plan-start: the plan that waits for the person now — a solo task's plan for approval or the root foreman's split. */
+	const planWaiting = (): PresentedPlan | null => {
+		// An Auto task plans like a solo task (plan approval); only a named crew's foreman presents a split.
+		if (crew?.role === 'foreman') {
+			if (!waitingSplit) return null;
+			const requests = records.filter((record) => record.event.kind === 'crew.plan.requested');
+			return {
+				kind: 'split',
+				id: waitingSplit.id,
+				revision: Math.max(1, requests.length),
+				text: splitPlanMarkdown(waitingSplit, crew?.spec.root.agents ?? []),
+			};
+		}
+		const pending = [...permissions.values()].find((item) => isPlanApproval(item.request));
+		if (!pending) return null;
+		const presented = records.filter(
+			(record) =>
+				record.event.kind === 'permission.requested' && isPlanApproval(record.event.request)
+		);
+		const at = presented.findLast(
+			(record) =>
+				record.event.kind === 'permission.requested' &&
+				record.event.request.id === pending.request.id
+		);
+		const text = planApprovalText(pending.request, records, at?.seq ?? Number.MAX_SAFE_INTEGER);
+		if (!text) return null;
+		return {
+			kind: 'approval',
+			id: pending.request.id,
+			revision: Math.max(1, at ? presented.indexOf(at) + 1 : presented.length),
+			text,
+		};
+	};
 	const taskReview: TaskReviewLife = new TaskReviewLife({
 		store,
 		key: config.key,
@@ -237,12 +278,19 @@ export async function startHost(config: HostConfig) {
 				crew: { kind: 'review-comments', round, comments: review.comments.length },
 			}),
 		// spec/reviews#who: the app resolves the reviewer from the settings, sign-ins and catalogs; without a window, a fresh session of the task's own provider.
-		resolve: async (point) => {
+		resolve: async (point, auto) => {
+			// spec/reviews#plan-start: a plan review the host starts by itself needs the app's answer — it reads `Plan review`; with no app
+			// attached, or no answer, none starts.
+			if (auto && !ui) return { off: true };
 			if (ui) {
-				const answer = await ui.request('review_reviewer', { point }).catch(() => null);
+				const answer = await ui
+					.request('review_reviewer', { point, ...(auto ? { auto: true } : {}) })
+					.catch(() => null);
+				if (isRecord(answer) && answer.off === true) return { off: true };
 				if (isRecord(answer) && typeof answer.failure === 'string')
 					return { failure: answer.failure };
 				if (isSessionCommand(answer) && answer.kind === 'startReview') return answer;
+				if (auto) return { off: true };
 			}
 			const provider = (await store.task(config.key)).provider ?? 'claude';
 			return {
@@ -266,6 +314,33 @@ export async function startHost(config: HostConfig) {
 				.then((value) => value.files.length)
 				.catch(() => 0),
 		checkpoint: () => checkpoint('tools'),
+		planWaiting,
+		// spec/reviews#plan-loop: the findings answer the waiting plan — its reject option (else it is cancelled), or the foreman's propose_plan — and run after the turn.
+		planFeedback: async (text, review, round) => {
+			// spec/reviews#plan-loop: a batch of a review the plan's approval ended is not sent.
+			if (!taskReview.planBatchLive(review.id)) return 'dropped';
+			if (foremanTask) {
+				if (await crewHost?.rejectPlanForReview(text)) return 'answered';
+			} else {
+				const pending = [...permissions.values()].find((item) => isPlanApproval(item.request));
+				if (pending) await pending.finish(planRejectOption(pending.request)?.id ?? null);
+			}
+			if (!taskReview.planBatchLive(review.id)) return 'dropped';
+			// With no split waiting (the person rejected it meanwhile) the foreman gets the batch as its next turn too.
+			await command({
+				kind: 'submitReview',
+				text,
+				review,
+				crew: { kind: 'review-comments', round, comments: review.comments.length },
+			});
+			return 'queued';
+		},
+		dropBatch: (batch) =>
+			serialPrompt(async () => {
+				for (const item of [...queue.prompts, ...(queue.held ?? [])])
+					if (item.command.kind === 'submitReview' && item.command.review.id === batch)
+						await emit({ kind: 'prompt.removed', id: item.id });
+			}),
 		prompt: (text) => command({ kind: 'prompt', text, crew: { kind: 'review-continue' } }),
 		// spec/reviews#reviewer-sessions: the task's first prompt, and a crew worker's part with its acceptance criteria.
 		brief: async () => {
@@ -358,6 +433,8 @@ export async function startHost(config: HostConfig) {
 			prompt: (text: string, marker: Extract<SessionEvent, { kind: 'turn.started' }>['crew']) =>
 				command({ kind: 'prompt', text, ...(marker ? { crew: marker } : {}) }),
 			self: taskReview.hooks(),
+			// spec/crew#budget-pause: waiting hires stay waiting while the task is held at its budget.
+			held: () => budgetBlocks(),
 		};
 		// spec/crew#auto: the Auto agent's host hires through cards and asks the app about models.
 		const host: CrewHost =
@@ -372,6 +449,10 @@ export async function startHost(config: HostConfig) {
 	}
 	// spec/settings-modules-and-onboarding#modules: the modules on in Settings decide which human tools the MCP sessions list; a switch reaches open sessions.
 	const modules = new ModuleSettings(store.root);
+	// spec/browser-and-simulator#metro-port: a task with its own worktree takes its Metro port before its agent and terminals start — a crew
+	// worker's host too, which its foreman's host starts with the foreman's environment.
+	if (modules.current().simulator)
+		await applyMetroPort(store, config.key, process.env).catch(() => null);
 	// spec/crew#roles: the root foreman's `create_task` is hidden while its crew plan exists; open MCP sessions hear the change.
 	const hiddenListeners = new Set<() => void>();
 	const hiddenTools: HiddenToolSource = {
@@ -440,6 +521,26 @@ export async function startHost(config: HostConfig) {
 		promptTail: Promise<unknown> = Promise.resolve();
 	let rateTimer: ReturnType<typeof setTimeout> | undefined;
 	const quotaBlocked = () => Boolean(queue.rateLimits?.length);
+	/** spec/agents-and-providers#task-tokens, spec/agents-and-providers#budget-reached: the task's own tokens and, for a root task, its budget and hold. */
+	const budget: TaskBudget | null = task.provider
+		? new TaskBudget(
+				{
+					store,
+					key: config.key,
+					records: () => records,
+					emit: (event) => emit(event),
+					busy: () => busy,
+					cancel: () => command({ kind: 'cancel' }),
+					stopMembers: async () => {
+						await crewHost?.stopWorkers();
+					},
+					resume: () => kickPrompts(),
+				},
+				task
+			)
+		: null;
+	/** Nothing new starts while the task, or a member's root, is held at its budget. */
+	const budgetBlocks = async () => (budget ? budget.blocks() : false);
 	function scheduleRateReset() {
 		clearTimeout(rateTimer);
 		if (stopping) return;
@@ -493,7 +594,8 @@ export async function startHost(config: HostConfig) {
 				!transport ||
 				queue.paused ||
 				quotaBlocked() ||
-				!queue.prompts.length
+				!queue.prompts.length ||
+				(await budgetBlocks())
 			)
 				return;
 			const next = queue.prompts[0]!;
@@ -614,7 +716,7 @@ export async function startHost(config: HostConfig) {
 			for (const item of due) {
 				if (!queue.held?.some((entry) => entry.id === item.id)) continue;
 				const inputs =
-					!queued && busy && transport?.steering && !quotaBlocked()
+					!queued && busy && transport?.steering && !quotaBlocked() && !budget?.held()
 						? (
 								await assets.resolve(
 									config.key,
@@ -1171,7 +1273,8 @@ export async function startHost(config: HostConfig) {
 				event.kind === 'task.proposal.requested' ||
 				event.kind === 'crew.plan.requested' ||
 				event.kind === 'crew.hire.requested' ||
-				event.kind === 'crew.model.requested'
+				event.kind === 'crew.model.requested' ||
+				event.kind === 'budget.reached'
 			)
 				status = 'needs-you';
 			// spec/crew#auto-budget: in the worker's own journal the part waits for the person.
@@ -1183,7 +1286,8 @@ export async function startHost(config: HostConfig) {
 				event.kind === 'task.proposal.resolved' ||
 				event.kind === 'crew.plan.resolved' ||
 				event.kind === 'crew.hire.resolved' ||
-				event.kind === 'crew.model.resolved'
+				event.kind === 'crew.model.resolved' ||
+				event.kind === 'budget.decided'
 			) {
 				const left = pendingInputs([...records, record]);
 				status =
@@ -1199,6 +1303,7 @@ export async function startHost(config: HostConfig) {
 					event.reason === 'cancelled'
 						? 'interrupted'
 						: pendingInputs([...records, record]).crewQuestions.length ||
+							  pendingInputs([...records, record]).budget ||
 							  taskReview.document().review?.state === 'yours'
 							? 'needs-you'
 							: 'done';
@@ -1326,6 +1431,7 @@ export async function startHost(config: HostConfig) {
 			// Snapshots must not expose an event before its durable metadata and live delivery are ready.
 			records.push(record);
 			queue = reducePromptQueue(queue, event);
+			budget?.observe(record);
 			if (crew && task.transport !== 'terminal') {
 				if (event.kind === 'context.compacted') assignmentDue = record.seq;
 				if (
@@ -1356,6 +1462,8 @@ export async function startHost(config: HostConfig) {
 					}
 				}
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
+			// spec/reviews#plan-start: a presented plan starts its review or answers one; an approval ends it.
+			if (!stopping) planEvent(event);
 			if (crewWorker && event.kind === 'turn.completed' && !stopping)
 				void (async () => {
 					if (!crewHost || (await crewHost.branchReady()))
@@ -1370,6 +1478,47 @@ export async function startHost(config: HostConfig) {
 				});
 		});
 		return result;
+	}
+	/** The plan requests the review has heard of: the journal row and the waiting request come in either order (the transport writes the row first). */
+	const presentedPlans = new Set<string>();
+	function presentPlan(id: string) {
+		const plan = planWaiting();
+		if (plan?.id !== id || presentedPlans.has(id)) return;
+		presentedPlans.add(id);
+		void taskReview.planPresented(plan).catch(() => {});
+	}
+	/** spec/reviews#plan-start, spec/reviews#plan-loop: a plan presented, answered or approved — the plan review hears it. */
+	function planEvent(event: SessionEvent) {
+		if (event.kind === 'permission.requested' && isPlanApproval(event.request)) {
+			presentPlan(event.request.id);
+			return;
+		}
+		if (event.kind === 'permission.resolved') {
+			const asked = records.findLast(
+				(record) =>
+					record.event.kind === 'permission.requested' && record.event.request.id === event.id
+			);
+			if (asked?.event.kind !== 'permission.requested' || !isPlanApproval(asked.event.request))
+				return;
+			const allowed =
+				event.optionId !== null &&
+				asked.event.request.options
+					.find((option) => option.id === event.optionId)
+					?.kind.startsWith('allow') === true;
+			void taskReview.planDecided(allowed).catch(() => {});
+			return;
+		}
+		// A lead's plan is approved by the host at once: only the root foreman's split waits for the person.
+		if (!foremanTask || crew?.parentKey) return;
+		if (event.kind === 'crew.plan.requested') {
+			waitingSplit = event.plan;
+			const plan = planWaiting();
+			if (plan) void taskReview.planPresented(plan).catch(() => {});
+		}
+		if (event.kind === 'crew.plan.resolved' && waitingSplit?.id === event.id) {
+			waitingSplit = null;
+			void taskReview.planDecided(event.approved).catch(() => {});
+		}
 	}
 	async function permission(
 		request: PermissionRequest,
@@ -1396,6 +1545,8 @@ export async function startHost(config: HostConfig) {
 				}
 			};
 			permissions.set(request.id, { request, finish });
+			// spec/reviews#plan-start: the agent's plan request is registered after its journal row.
+			if (isPlanApproval(request)) presentPlan(request.id);
 			signal.addEventListener('abort', abort, { once: true });
 			if (signal.aborted) abort();
 		});
@@ -1879,6 +2030,16 @@ export async function startHost(config: HostConfig) {
 		if (c.kind !== 'recordPullRequest') touchIdle();
 		await settleCompletedTurn();
 		if (stopping) throw new Error('Host is stopping');
+		// spec/browser-and-simulator#sim-chat-row: main's device row, journaled like any event of the task.
+		if (c.kind === 'recordDevice') {
+			await emit({
+				kind: 'simulator.device',
+				device: c.device,
+				metroPort: c.metroPort,
+				lowMemory: c.lowMemory,
+			});
+			return;
+		}
 		if (c.kind === 'recordPullRequest') {
 			await saveFinished;
 			if (!snapshots?.current.scopes.some((scope) => scope.id === c.scopeId))
@@ -1898,6 +2059,17 @@ export async function startHost(config: HostConfig) {
 			const pending = proposals.get(c.id);
 			if (!pending) throw new Error('The task proposal is already resolved');
 			await pending.finish(c.task);
+			return;
+		}
+		// spec/agents-and-providers#budget-reached, spec/agents-and-providers#task-budget
+		if (c.kind === 'decideBudget') {
+			if (!budget) throw new Error('This task has no agent');
+			await budget.decide(c.id, c.decision, c.budget);
+			return;
+		}
+		if (c.kind === 'setTokenBudget') {
+			if (!budget) throw new Error('This task has no agent');
+			await budget.setBudget(c.provider, c.budget);
 			return;
 		}
 		if (c.kind === 'decidePlan') {
@@ -2121,7 +2293,8 @@ export async function startHost(config: HostConfig) {
 					!busy ||
 					!transport?.steering ||
 					queue.paused ||
-					quotaBlocked()
+					quotaBlocked() ||
+					budget?.held()
 				)
 					throw new Error('This message cannot go into the running turn');
 				await emit({ kind: 'prompt.held', prompt: item });
@@ -2181,7 +2354,13 @@ export async function startHost(config: HostConfig) {
 					kickPrompts();
 					return;
 				}
-				if (!busy && !queue.prompts.length && !queue.paused && !quotaBlocked()) {
+				if (
+					!busy &&
+					!queue.prompts.length &&
+					!queue.paused &&
+					!quotaBlocked() &&
+					!(await budgetBlocks())
+				) {
 					await beginPrompt(c);
 					return;
 				}
@@ -2210,7 +2389,8 @@ export async function startHost(config: HostConfig) {
 					transport!.steering &&
 					!queue.prompts.length &&
 					!queue.paused &&
-					!quotaBlocked()
+					!quotaBlocked() &&
+					!budget?.held()
 				) {
 					await emit({ kind: 'prompt.held', prompt });
 					heldAt.set(prompt.id, Date.now());
@@ -2241,6 +2421,11 @@ export async function startHost(config: HostConfig) {
 		}
 		if (task.transport === 'terminal' || busy || saving)
 			throw new Error('The agent is not available');
+		// spec/agents-and-providers#budget-reached: a retry is a new turn; while the task is held at its budget it waits (after a sign-in it stays for later).
+		if (await budgetBlocks()) {
+			if (reason) return;
+			throw new Error('The task is paused at its token budget');
+		}
 		const turn = boundaries.at(-2)?.event;
 		if (transport) {
 			const old = transport;
@@ -2551,6 +2736,9 @@ export async function startHost(config: HostConfig) {
 				throw new Error(hiddenToolMessages.create_task);
 			return proposeTask(params, signal);
 		}
+		// spec/reviews#save-source: the plan's author saves a ticket or contract next to the plans.
+		if (method === 'save_source')
+			return saveTaskSource(store, config.key, isRecord(params) ? params : {}, emit);
 		if (method === 'review_reply') {
 			if (
 				!isRecord(params) ||
@@ -2850,6 +3038,7 @@ export async function startHost(config: HostConfig) {
 			await Promise.all([...proposals.values()].map((p) => p.finish(null)));
 			await Promise.all([...permissions.values()].map((p) => p.finish(null)));
 			crewWorker?.stop();
+			budget?.stop();
 			await crewHost?.stop().catch(() => {});
 			terminals.closeAll();
 			transport?.close();
@@ -2889,7 +3078,12 @@ export async function startHost(config: HostConfig) {
 			busy,
 			starting: startingAgent !== null,
 			saving,
-			inputs: permissions.size + questions.size + proposals.size,
+			// spec/agents-and-providers#budget-reached: a waiting budget question keeps the host, like any question.
+			inputs:
+				permissions.size +
+				questions.size +
+				proposals.size +
+				(budget?.currentHold()?.state === 'asked' ? 1 : 0),
 			queued: queue.prompts.length,
 			quota: quotaBlocked(),
 			consoles: terminals.consolesAlive(),
@@ -3183,6 +3377,8 @@ export async function startHost(config: HostConfig) {
 				state: 'stopped',
 				reason: 'restarted',
 			});
+		// spec/agents-and-providers#budget-reached: the figure and the hold are rebuilt from the journal before anything is drained.
+		await budget?.start();
 		contextPath = await safePath(await store.taskDir(config.key), 'cli-context.json');
 		try {
 			const doc = await readDocument(contextPath);
@@ -3299,6 +3495,20 @@ export async function startHost(config: HostConfig) {
 			if (spec) crewHost = await crewHostFor(selfContext(spec));
 		}
 		await taskReview.load();
+		// spec/reviews#plan-review: a root foreman's split that still waits after a restart.
+		if (foremanTask && !crew?.parentKey) {
+			const requested = records.findLast((record) => record.event.kind === 'crew.plan.requested');
+			if (
+				requested?.event.kind === 'crew.plan.requested' &&
+				!records.some(
+					(record) =>
+						record.seq > requested.seq &&
+						record.event.kind === 'crew.plan.resolved' &&
+						record.event.id === (requested.event as { plan: CrewPlan }).plan.id
+				)
+			)
+				waitingSplit = requested.event.plan;
+		}
 		await crewWorker?.start();
 		ready = true;
 		if (!config.consoleOnly) await ensureAgent();

@@ -451,6 +451,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'task_send',
 			'propose_review',
 			'request_review',
+			'save_source',
 			'review_reply',
 			'add_folder',
 			'commands_list',
@@ -481,6 +482,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'task_send',
 			'propose_review',
 			'request_review',
+			'save_source',
 			'review_reply',
 			'add_folder',
 			'commands_list',
@@ -530,6 +532,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'task_send',
 			'propose_review',
 			'request_review',
+			'save_source',
 			'review_reply',
 			'add_folder',
 			'console_list',
@@ -597,8 +600,10 @@ it('tells the agent in initialize what it has, from the modules on and its role 
 	await expect(worker.instructions).toMatchFileSnapshot(
 		'../fixtures/briefs/mcp-instructions-worker.txt'
 	);
-	expect(worker.instructions).toContain('shared with your crew');
-	expect(solo.instructions).not.toContain('shared with your crew');
+	expect(worker.instructions).toContain('a device of your own');
+	expect(worker.instructions).toContain('share one with your crew');
+	expect(solo.instructions).not.toContain('a device of your own');
+	expect(solo.instructions).toContain('Pass device to any simulator tool');
 	expect((await initialize('foreman', allModules)).instructions).toContain(
 		'Your agents have the same tools'
 	);

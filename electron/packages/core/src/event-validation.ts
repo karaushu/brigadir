@@ -1,3 +1,4 @@
+import { budgetDecisions, isTokenBudgetValue, type BudgetDecision } from './task-tokens';
 import { isRateReset } from './rate-limit';
 import { isQuotaReading } from './quota';
 import { isPRRef } from './forge';
@@ -121,6 +122,11 @@ const checks: Record<string, Check> = {
 	'pull-request.changed': object({
 		scopeId: (v) => typeof v === 'string' && /^[a-f0-9]{16}$/.test(v),
 		pr: isPRRef,
+	}),
+	'simulator.device': object({
+		device: (v) => typeof v === 'string' && v.length > 0 && v.length <= 200,
+		metroPort: nil((v) => Number.isSafeInteger(v) && Number(v) > 0 && Number(v) <= 65_535),
+		lowMemory: bool,
 	}),
 	'scopes.changed': object({}),
 	'scope.violation': object({
@@ -284,12 +290,15 @@ const checks: Record<string, Check> = {
 		{ id: isId, point: isReviewPoint, startedBy: starter, reviewers: array(text) },
 		{ reason: text }
 	),
-	'task-review.findings': object({
-		id: isId,
-		point: isReviewPoint,
-		findings: number,
-		reviewers: array(text),
-	}),
+	'task-review.findings': object(
+		{
+			id: isId,
+			point: isReviewPoint,
+			findings: number,
+			reviewers: array(text),
+		},
+		{ gaps: number }
+	),
 	'task-review.answered': object({
 		id: isId,
 		point: isReviewPoint,
@@ -315,8 +324,9 @@ const checks: Record<string, Check> = {
 			point: isReviewPoint,
 			state: (v) => ['passed', 'accepted', 'stopped', 'failed', 'outdated'].includes(String(v)),
 		},
-		{ failure: text }
+		{ failure: text, approval: (v) => v === true, open: number }
 	),
+	'source.saved': object({ id: isId, title: text, chars: number }, { url: text }),
 	'crew.accepted': object({ taskId: isId, nodeId: isId, name: text, conflicts: array(text) }),
 	'crew.worker.stopped': object({ taskId: isId, nodeId: isId, name: text, reason: text }),
 	'crew.hire.requested': object({ hire: isAutoHire }),
@@ -354,6 +364,18 @@ const checks: Record<string, Check> = {
 			role: text,
 		},
 		{ part: text, cancelled: (v) => v === true }
+	),
+	// spec/agents-and-providers#budget-reached
+	'budget.reached': object({
+		id: isId,
+		provider: (v) => v === 'claude' || v === 'codex',
+		tokens,
+		budget: isTokenBudgetValue,
+		estimated: bool,
+	}),
+	'budget.decided': object(
+		{ id: isId, decision: (v) => budgetDecisions.includes(v as BudgetDecision) },
+		{ budget: isTokenBudgetValue }
 	),
 	'turn.completed': object({ reason: text }),
 	'session.failed': object({ message: text }, { reason: (v) => v === 'auth' }),

@@ -30,6 +30,9 @@ import {
 	type ProjectIcon,
 	type ProjectIconPick,
 	isAgentTask,
+	budgetFromSetting,
+	isTaskBudgetSetting,
+	type TokenBudget,
 	type ProjectCommand,
 	type ProjectReviewNotes,
 	type ProjectSimulator,
@@ -416,6 +419,9 @@ export class SessionStore {
 			status,
 		};
 		if (launch) task.launch = withAutoBranch(launch, '', title, task.id);
+		// spec/agents-and-providers#task-budget: a new task takes the default budget of Settings ▸ Agents.
+		const budget = await this.defaultTokenBudget();
+		if (budget) task.tokenBudget = budget;
 		if (!isAgentTask(task)) throw new Error('Invalid task');
 		if (Buffer.byteLength(JSON.stringify(task)) > 1_000_000)
 			throw new Error('Task prompt is too large');
@@ -423,6 +429,19 @@ export class SessionStore {
 		await mkdir(dir, { recursive: true, mode: 0o700 });
 		await atomicJson(join(dir, 'task.json'), { schemaVersion: 1, task });
 		return task;
+	}
+	/** spec/agents-and-providers#task-budget: `agents.taskBudget` of settings.json; a missing or unreadable file means no limit. */
+	async defaultTokenBudget(): Promise<TokenBudget | undefined> {
+		try {
+			const doc = await readDocument(await safePath(this.root, 'settings.json'));
+			const agents =
+				isRecord(doc.settings) && isRecord(doc.settings.agents) ? doc.settings.agents : null;
+			return agents && isTaskBudgetSetting(agents.taskBudget)
+				? budgetFromSetting(agents.taskBudget)
+				: undefined;
+		} catch {
+			return undefined;
+		}
 	}
 	/**
 	 * spec/tasks#quick-tasks: the project's main tree — a task.json with no provider or launch, status `done` (not counted as active).
@@ -492,6 +511,9 @@ export class SessionStore {
 				| 'attachments'
 				| 'background'
 				| 'scheduleRun'
+				| 'tokens'
+				| 'tokenBudget'
+				| 'tokenHold'
 			>
 		>
 	): Promise<AgentTask> {

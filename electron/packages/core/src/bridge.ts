@@ -964,10 +964,10 @@ export type DesktopBridge = {
 		id: string,
 		report: import('./context-state').ContextReport | null
 	): Promise<void>;
-	simulatorCommand(projectId: string, command: SimulatorCommand): Promise<unknown>;
+	simulatorCommand(key: TaskKey, command: SimulatorCommand): Promise<unknown>;
 	readSimulatorToolchain(): Promise<SimulatorToolchain>;
 	onSimulatorEvent(listener: (value: SimulatorEvent) => void): () => void;
-	onSimulatorFrame(listener: (value: SimulatorFrame & { projectId: string }) => void): () => void;
+	onSimulatorFrame(listener: (value: SimulatorFrame & { device: string }) => void): () => void;
 	terminalCommand(
 		key: TaskKey,
 		command: TerminalCommand
@@ -1055,6 +1055,8 @@ export type DesktopBridge = {
 		requestId: string,
 		text: string
 	): Promise<{ text: string | null; path: string }>;
+	/** spec/reviews#plan-surfaces: a source the task's agent saved, opened in the editor. */
+	openSourceFile(key: TaskKey, sourceId: string): Promise<EditorDocument>;
 	/** The open editor's disk poll: the document only when its version differs from `version`, else the lease state. */
 	checkEditorFile(
 		key: TaskKey,

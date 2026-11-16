@@ -240,6 +240,7 @@ The «what is it doing now» line, derived in main and never written to `task.js
 | `question` | `question.requested` | `Question · {text}` |
 | `proposal` | `task.proposal.requested` | `New task · {title}` |
 | `review` | `task-review.verified` with open or new findings | `Review · {N findings} open` ([Reviews](reviews.md#surfaces)) |
+| — | `tokenHold` in `task.json` while the [budget question](agents-and-providers.md#budget-reached) waits | `{Provider} budget reached` (amber, like a question) |
 | none | — | `Waiting for the repo` when blocked by a lock, else the state label |
 
 - `TaskActivities` reads only tasks in `working`/`needs-you`: at most the last 64 KiB of `events.jsonl`, whole JSONL
@@ -260,13 +261,14 @@ The «what is it doing now» line, derived in main and never written to `task.js
 | Planned branch | a `preparing`/`queued` worktree task shows the planned branch before the tree exists, or `brigadir/…` while the agent is still naming it |
 | Counts | `+N −M` from the task's snapshot diff (`changeSummary`), monospace tabular digits; compact form `1.2k` |
 | PR | `#N` of the task branch's **open** (or draft) PR only |
+| Tokens | <a id="card-tokens"></a>the task's [token count](agents-and-providers.md#task-tokens) after the counts: the sum over providers and over a crew's members, mono, `--fg3`, `≈` while a turn runs; `--amber` when any provider is [near its budget](agents-and-providers.md#task-budget), `--red` when one reached it. Never the budget itself: it is in the task's `Task usage` popover. Title: `{n} tokens` |
 | Unreviewed | eye glyph `sidebar-unreviewed`, independent of the counts |
 
 - **No zero counts.** `+0 −0` is never shown (task row, repo rows, sums). When anything changed both numbers show,
   zero included (`+0 −3`): the pair reads as one value. Mode-only or binary changes can give `+0 −0` with the unreviewed
   eye still on.
 - **Nothing overlaps.** The line gives way in a fixed order: the branch middle → the PR → the branch tail (kept from the
-  start, `brigadir/…support`) → the counts as whole parts (`−M` first, then `+N`). The branch prefix up to the first `/`
+  start, `brigadir/…support`) → the counts as whole parts (`−M` first, then `+N`). The token count keeps its size. The branch prefix up to the first `/`
   and the unreviewed eye keep their size; parts keep 6 px gaps; nothing is cut mid-letter. Verified down to 220 px.
 - Data: `TaskDiffs` in main caches per `snapshots.json` identity; a changed snapshot runs a bounded `git numstat` between
   immutable trees (no patches, blobs or index writes); unchanged histories run no Git. A new repo's baseline is its first
@@ -357,7 +359,7 @@ See [Crew](crew.md) for what a crew is.
 | Header tail | collapsed: up to two provider glyphs; always: worker count pill (16 px high, ≥ 24 wide, `--tint2`, `Workers`); space for the chevron |
 | Chevron | absolute 24 × 24 target on the title line, 4 px inside the card's right edge, `Expand crew` / `Collapse crew`; `--tint` on hover; a mouse click does not take focus, the keyboard does (`:focus-visible` ring) |
 | Workers | straight under the header, no plate: indented 26 px inside the card so their glyphs stand under the title |
-| Worker row | 30 px, 12.5 px text `{Agent} · {part}` (agent name in `--fg2`), 13 px state glyph in a 14 px slot, gap 9, 11 px to the card's right edge; tail: unread dot, provider glyph. Hover `--tint`, selected `--sel`. Lead depth indents 14 px per level; a nested foreman shows its helmet before its glyph |
+| Worker row | 30 px, 12.5 px text `{Agent} · {part}` (agent name in `--fg2`), 13 px state glyph in a 14 px slot, gap 9, 11 px to the card's right edge; tail: unread dot, then the member's own token count (mono, `--fg3`, `≈` while its turn runs) in place of the provider glyph, the glyph while it has no count. Hover `--tint`, selected `--sel`. Lead depth indents 14 px per level; a nested foreman shows its helmet before its glyph |
 | Worker extra line | `Waiting for the simulator` while it waits for the project's one device |
 | Auto worker | `{role} · {part}`: the role the part was hired with, not its unique node name. Over its budget: `{role} · over budget`, the text and the glyph in amber (`needs-you`), the unread dot; the card's fill does not change. Dismissed: a quiet row in its place, the tick glyph, text `--fg3`, and the worker's `+N −M` instead of the provider glyph; a click opens the worker and its diff. The context menu of a worker that is not dismissed has `Dismiss` ([Auto](crew.md#auto-dismiss)) |
 | Branch of a worker | not shown; it derives from the crew worktree |

@@ -78,6 +78,19 @@
 	flex: none;
 	color: var(--fg2);
 }
+.chip[data-action] {
+	font: inherit;
+	font-size: var(--text-12);
+	cursor: default;
+	transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.chip[data-action]:hover {
+	background: var(--tint2);
+}
+.chip[data-action]:focus-visible {
+	outline: none;
+	box-shadow: var(--ring-soft);
+}
 .chip > span {
 	min-width: 0;
 	overflow: hidden;

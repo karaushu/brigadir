@@ -1,3 +1,4 @@
+import { isTaskOwnTokens, isTokenBudget, isTokenHold } from './task-tokens';
 import { isRateReset } from './rate-limit';
 import { isTaskArchive, type TaskArchive } from './archive';
 import { isPRRef, type PRRef } from './forge';
@@ -182,6 +183,10 @@ export type AgentTask = {
 	launch?: TaskLaunch;
 	preparation?: TaskPreparation;
 	blockedBy?: TaskKey[];
+	/** spec/agents-and-providers#task-tokens: this task's own tokens, kept by its host. */ tokens?: import('./task-tokens').TaskOwnTokens;
+	/** spec/agents-and-providers#task-budget: tokens per provider for the task and its members; absent — no limit (old tasks). */ tokenBudget?: import('./task-tokens').TokenBudget;
+	/** spec/agents-and-providers#budget-reached: the root's hold while the budget question waits or after `finish` / `stop`; members read it here. */ tokenHold?:
+		import('./task-tokens').TokenHold | null;
 };
 export type ReadIssueCode =
 	'invalid_document' | 'unsupported_schema' | 'unreadable' | 'unsafe_path';
@@ -248,6 +253,9 @@ export function isAgentTask(value: unknown): value is AgentTask {
 					([id, ref]) => /^[a-f0-9]{16}$/.test(id) && isPRRef(ref)
 				))) &&
 		(value.failure === undefined || value.failure === null || value.failure === 'auth') &&
+		(value.tokens === undefined || isTaskOwnTokens(value.tokens)) &&
+		(value.tokenBudget === undefined || isTokenBudget(value.tokenBudget)) &&
+		(value.tokenHold === undefined || value.tokenHold === null || isTokenHold(value.tokenHold)) &&
 		(value.agentRole === undefined || value.agentRole === null || isTaskRole(value.agentRole)) &&
 		(value.relayIssue === undefined ||
 			value.relayIssue === null ||

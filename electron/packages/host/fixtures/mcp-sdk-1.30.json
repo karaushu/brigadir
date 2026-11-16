@@ -454,6 +454,37 @@
      }
     },
     {
+     "name": "save_source",
+     "description": "Save the text of a source this task's plan is written from — a ticket, a spec, an API contract — into the task's folder, so the plan's reviewer reads the same version. title: its name (for example 'CRM-412 Client notes'); url: where it lives, if anywhere; text: the source as it reads, up to 200 000 characters. A source with the same title replaces the earlier one. Returns saved: true with its id. Call it when the task comes from a ticket, a spec or a contract you were given or fetched (for example from Notion, Jira or Linear), before you present a plan.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 2000
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+       }
+      },
+      "required": [
+       "title",
+       "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "review_reply",
      "description": "Object to a reviewer's finding from a review batch of this task's own review: the reply joins the finding's thread, and the reviewer reads it in its closure check. Use it for a finding you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a finding of a review batch of this task, when you do not fix it as asked.",
      "inputSchema": {
@@ -1636,6 +1667,37 @@
       },
       "required": [
        "reason"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "save_source",
+     "description": "Save the text of a source this task's plan is written from — a ticket, a spec, an API contract — into the task's folder, so the plan's reviewer reads the same version. title: its name (for example 'CRM-412 Client notes'); url: where it lives, if anywhere; text: the source as it reads, up to 200 000 characters. A source with the same title replaces the earlier one. Returns saved: true with its id. Call it when the task comes from a ticket, a spec or a contract you were given or fetched (for example from Notion, Jira or Linear), before you present a plan.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+       },
+       "url": {
+        "type": "string",
+        "maxLength": 2000
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+       }
+      },
+      "required": [
+       "title",
+       "text"
       ]
      },
      "execution": {
@@ -5466,6 +5528,153 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId",
+       "reviewId"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_plan",
+     "description": "The plan of a plan review, as the author presented it (a foreman's split as Markdown with its parts and crew). In a closure check it also returns diff: the line diff from the revision you read before. Call it first in a plan review, with the reviewId of the check you were asked to do.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId",
+       "reviewId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "read_sources",
+     "description": "The sources the plan was written from, as its author saved them: the ticket, a spec, an API contract. Texts are cut when one call passes 200 000 characters; pass sourceId to read one source whole. Call it in a plan review after read_plan, to check the plan against the ticket and the contract.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "sourceId": {
+        "type": "string",
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId",
+       "reviewId"
+      ]
+     },
+     "annotations": {
+      "readOnlyHint": true
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "submit_plan_review",
+     "description": "The verdict of a plan review. First read: findings [{kind, text, where?}] with kind missed, contradicts, out-of-scope (the plan against the ticket), assumption, left-open, unverifiable (against the repo and the contract), split (a foreman's split), and gaps [{text, where?}]: what the ticket itself leaves open, questions for the person. At most 12 items in all, the most severe first. Closure check: findings only, each {replyTo: <finding id>, text} for a finding still open or {kind, text, where?, introduced: true} for a problem the revision brought in. Call it once per check of a plan review; when nothing must change, call approve instead.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "reviewId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "findings": {
+        "default": [],
+        "maxItems": 48,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "kind": {
+           "type": "string",
+           "maxLength": 40
+          },
+          "text": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 10000
+          },
+          "where": {
+           "type": "string",
+           "maxLength": 200
+          },
+          "replyTo": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 100
+          },
+          "introduced": {
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "text"
+         ]
+        }
+       },
+       "gaps": {
+        "default": [],
+        "maxItems": 12,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "text": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 2000
+          },
+          "where": {
+           "type": "string",
+           "maxLength": 200
+          }
+         },
+         "required": [
+          "text"
+         ]
+        }
        }
       },
       "required": [

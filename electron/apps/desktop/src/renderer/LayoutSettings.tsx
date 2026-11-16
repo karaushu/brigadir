@@ -23,6 +23,7 @@ import { Button, Choice, Popup, PopupMarks, Segments, Stepper, Switch } from './
 import { HelperAgentRow } from './HelperAgentRow';
 import { SubagentModelRow } from './SubagentModelRow';
 import { CompactionWindowRow } from './CompactionWindowRow';
+import { TaskBudgetRow } from './TaskBudgetRow';
 import { ActionAgentsRows } from './ActionAgents';
 import { CliUpdatesRow } from './CliUpdatesRow';
 import { AppUpdateRow } from './AppUpdates';
@@ -607,6 +608,14 @@ export function LayoutSettings({
 											}}
 										/>
 										<CompactionWindowRow
+											settings={snapshot.settings}
+											locale={locale}
+											busy={busy}
+											update={(patch) => {
+												void update(patch);
+											}}
+										/>
+										<TaskBudgetRow
 											settings={snapshot.settings}
 											locale={locale}
 											busy={busy}

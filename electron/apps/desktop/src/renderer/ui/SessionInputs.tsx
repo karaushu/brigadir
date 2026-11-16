@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Glyph } from './Glyph';
+import { Glyph, type GlyphName } from './Glyph';
 import { useSecondTick } from './second-tick';
 import { TextArea, TextInput } from './Input';
 import {
@@ -305,6 +305,50 @@ export function ModelQuestion({
 						{t(locale, 'Use this model')}
 					</Button>
 				)}
+			</footer>
+		</section>
+	);
+}
+/**
+ * spec/chat-turns-plans-and-questions#budget-card: a card of the question family — the amber band and frame of `Question`, any body, actions at the
+ * foot. The budget question is this card (rule 17).
+ */
+export function InputCard({
+	glyph,
+	title,
+	hint,
+	since,
+	label,
+	locale,
+	actions,
+	children,
+	...data
+}: {
+	glyph: GlyphName;
+	title: ReactNode;
+	hint?: ReactNode;
+	/** When it was asked: `waiting 3 min` after a minute. */ since?: number;
+	label: string;
+	locale: Locale;
+	actions: ReactNode;
+	children: ReactNode;
+} & { [key: `data-${string}`]: string | boolean | undefined }) {
+	const now = useSecondTick(since !== undefined),
+		waited =
+			since !== undefined && now - since >= 60_000
+				? t(locale, 'waiting {age}').replace('{age}', ageShort(locale, since, now))
+				: null;
+	return (
+		<section {...data} className={styles.question} aria-label={label}>
+			<header>
+				<Glyph name={glyph} size={14} />
+				<strong>{title}</strong>
+				{hint && <small>{hint}</small>}
+				{waited && <span className={styles.waited}>{waited}</span>}
+			</header>
+			{children}
+			<footer className={styles.actions} data-size="m">
+				{actions}
 			</footer>
 		</section>
 	);

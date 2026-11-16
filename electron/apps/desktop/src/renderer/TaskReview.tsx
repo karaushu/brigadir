@@ -6,6 +6,8 @@ import {
 	fileCount,
 	findingCount,
 	formatDuration,
+	gapCount,
+	planFindingList,
 	isMainTree,
 	providerName,
 	reviewPoints,
@@ -19,6 +21,8 @@ import {
 	type EventRecord,
 	type Locale,
 	type MessageKey,
+	type PlanFindingKind,
+	type PlanFindingList,
 	type ReviewPoint,
 	type TaskKey,
 	type TaskReview,
@@ -28,6 +32,7 @@ import {
 	type TaskReviewView,
 } from '@brigadir/core';
 import { onSessionEvent } from './session-events';
+import { openTaskEditor } from './task-state';
 import { openReviewLaunch } from './ReviewLaunch';
 import { useHelperSettings } from './HelperAgent';
 import { useForge } from './Forge';
@@ -64,6 +69,7 @@ const moves = new Set([
 	'review.started',
 	'review.finished',
 	'review.replied',
+	'source.saved',
 	'task-review.started',
 	'task-review.findings',
 	'task-review.answered',
@@ -322,6 +328,7 @@ function CountLink({
 	locale,
 	point,
 	legacy = false,
+	gaps = false,
 }: {
 	task: TaskKey;
 	count: number;
@@ -329,13 +336,19 @@ function CountLink({
 	point?: ReviewPoint | undefined;
 	/** An older journal's round row says `comments`. */
 	legacy?: boolean;
+	/** spec/reviews#plan-verdict: the count of a plan review's gaps in the ticket. */
+	gaps?: boolean;
 }) {
 	return (
 		<button
 			type="button"
 			className={styles.count}
 			onClick={() => openReviewStrip(task, true, point)}>
-			{legacy ? commentCount(locale, count) : findingCount(locale, count)}
+			{legacy
+				? commentCount(locale, count)
+				: gaps
+					? gapCount(locale, count)
+					: findingCount(locale, count)}
 		</button>
 	);
 }
@@ -399,6 +412,12 @@ export function ReviewEventRow({
 					) : (
 						<small className={service.ok}>{t(locale, 'passed')}</small>
 					)}
+					{/* spec/reviews#plan-verdict: the ticket's gaps go to the person, not to the author. */}
+					{!!e.gaps && (
+						<small>
+							· <CountLink task={task} count={e.gaps} locale={locale} point={e.point} gaps />
+						</small>
+					)}
 				</Row>
 			);
 		case 'task-review.answered':
@@ -443,6 +462,19 @@ export function ReviewEventRow({
 				</Row>
 			);
 		case 'task-review.finished':
+			// spec/reviews#plan-loop: the plan's approval ended the review, with its findings still open.
+			if (e.approval)
+				return (
+					<Row state="approval">
+						{head(e.point)}
+						<span className={service.label}>{t(locale, 'ended by the approval')}</span>
+						{!!e.open && (
+							<small className={service.warn}>
+								{t(locale, '{count} open').replace('{count}', findingCount(locale, e.open))}
+							</small>
+						)}
+					</Row>
+				);
 			if (e.state === 'stopped' || e.state === 'failed' || e.state === 'outdated')
 				return (
 					<Row state={e.state} glyph={e.state === 'failed' ? 'agent-failed' : 'review'}>
@@ -598,6 +630,9 @@ export function ReviewStripView({
 	onHide,
 	onComment,
 	onReviewer,
+	onSource,
+	planWaiting = false,
+	onPlanAgain,
 }: {
 	task: AgentTask;
 	view: TaskReviewView;
@@ -606,6 +641,10 @@ export function ReviewStripView({
 	point: ReviewPoint | null;
 	now: number;
 	disabled: boolean;
+	/** spec/reviews#plan-start: a plan waits for the person — a finished plan review offers `Review again`. */
+	planWaiting?: boolean;
+	onPlanAgain?: () => void;
+	onSource?: (id: string) => void;
 	onToggle(open: boolean): void;
 	onStep(point: ReviewPoint): void;
 	onStop(): void;
@@ -627,23 +666,41 @@ export function ReviewStripView({
 	const count = (n: number) => (
 		<CountLink task={task} count={n} locale={locale} point={review.point} />
 	);
+	// spec/reviews#plan-verdict: a plan review's gaps in the ticket stand apart from its findings, which are the author's.
+	const plan = review.point === 'plan',
+		gaps = plan
+			? view.comments.filter((item) => item.reviewId === review.id && item.kind === 'gap').length
+			: 0,
+		findings = counts.findings,
+		gapsTail = gaps ? (
+			<>
+				{' · '}
+				<CountLink task={task} count={gaps} locale={locale} point={review.point} gaps />
+			</>
+		) : null;
 	const line: ReactNode =
 		state === 'reading' ? (
 			`${t(locale, pointLine[review.point])} · ${t(locale, '{reviewer} reading').replace('{reviewer}', reviewers)}`
 		) : state === 'fixing' ? (
-			<>
-				{t(locale, '{agent} fixes').replace('{agent}', agent)} {count(counts.findings)}
-			</>
+			plan ? (
+				t(locale, '{agent} revises the plan').replace('{agent}', agent)
+			) : (
+				<>
+					{t(locale, '{agent} fixes').replace('{agent}', agent)} {count(counts.findings)}
+				</>
+			)
 		) : state === 'verifying' ? (
 			t(locale, '{reviewer} checks the fixes').replace('{reviewer}', reviewers)
 		) : state === 'yours' ? (
-			t(locale, '{count} open').replace('{count}', findingCount(locale, counts.open))
+			<>
+				{t(locale, '{count} open').replace('{count}', findingCount(locale, counts.open))}
+				{gapsTail}
+			</>
 		) : state === 'passed' ? (
-			counts.findings ? (
-				count(counts.findings)
-			) : (
-				t(locale, 'no findings')
-			)
+			<>
+				{findings ? count(findings) : t(locale, 'no findings')}
+				{gapsTail}
+			</>
 		) : state === 'accepted' ? (
 			t(locale, '{n} accepted').replace('{n}', String(counts.accepted))
 		) : state === 'stopped' ? (
@@ -691,7 +748,6 @@ export function ReviewStripView({
 			title: `${t(locale, pointStep[item])} · ${t(locale, stepState[step])}`,
 			tone,
 			current: item === review.point,
-			disabled: item === 'plan',
 		};
 	});
 	return (
@@ -738,11 +794,20 @@ export function ReviewStripView({
 									{t(locale, 'Create PR')}
 								</Button>
 							)}
-							{state === 'stopped' && (
+							{state === 'stopped' && !plan && (
 								<Button size="s" variant="ghost" onClick={onAgain}>
 									{t(locale, 'Start again…')}
 								</Button>
 							)}
+							{/* spec/reviews#plan-start: a new full read of the plan that waits, only when the person asks. */}
+							{plan &&
+								planWaiting &&
+								onPlanAgain &&
+								(state === 'stopped' || state === 'passed' || state === 'accepted') && (
+									<Button size="s" variant="ghost" disabled={disabled} onClick={onPlanAgain}>
+										{t(locale, 'Review again')}
+									</Button>
+								)}
 							{!taskReviewLive(review) && (
 								<IconButton size="s" label={t(locale, 'Hide')} onClick={onHide}>
 									<Glyph name="close" size={12} />
@@ -777,6 +842,7 @@ export function ReviewStripView({
 					onStep={onStep}
 					onComment={onComment}
 					onReviewer={onReviewer}
+					{...(onSource ? { onSource } : {})}
 				/>
 			)}
 		</>
@@ -793,12 +859,15 @@ export function ReviewStrip({
 	disabled,
 	onComment,
 	onReviewer,
+	planWaiting = false,
 }: {
 	task: AgentTask;
 	locale: Locale;
 	disabled: boolean;
 	onComment(comment: TaskReviewCommentRow): void;
 	onReviewer(taskId: string): void;
+	/** spec/reviews#plan-start: a plan waits for the person's approval. */
+	planWaiting?: boolean;
 }) {
 	const forge = useForge();
 	const view = useTaskReview(task),
@@ -850,8 +919,18 @@ export function ReviewStrip({
 			}
 			onComment={onComment}
 			onReviewer={onReviewer}
+			planWaiting={planWaiting}
+			onPlanAgain={() => void startNow(task, locale, 'plan')}
+			onSource={(id) => openSource(task, id)}
 		/>
 	);
+}
+/** spec/reviews#plan-surfaces: a saved source opens in the editor like a plan copy. */
+export function openSource(task: AgentTask, id: string) {
+	void window.brigadir
+		.openSourceFile(task, id)
+		.then((document) => openTaskEditor(task, document))
+		.catch((error: unknown) => toastError(error instanceof Error ? error.message : String(error)));
 }
 const findingOrder: Record<TaskReviewFindingState, number> = {
 	open: 0,
@@ -870,6 +949,7 @@ function ReviewDetails({
 	onStep,
 	onComment,
 	onReviewer,
+	onSource,
 }: {
 	view: TaskReviewView;
 	locale: Locale;
@@ -878,6 +958,7 @@ function ReviewDetails({
 	onStep(point: ReviewPoint): void;
 	onComment(comment: TaskReviewCommentRow): void;
 	onReviewer(taskId: string): void;
+	onSource?: (id: string) => void;
 }) {
 	const shown = taskReviewAt(view, point),
 		current = shown?.id === view.review?.id;
@@ -895,7 +976,7 @@ function ReviewDetails({
 				options={reviewPoints.map((item) => ({
 					value: item,
 					label: t(locale, pointSegment[item]),
-					disabled: item === 'plan' || !taskReviewAt(view, item),
+					disabled: !taskReviewAt(view, item),
 				}))}
 			/>
 			{current && view.members.length > 0 && (
@@ -919,7 +1000,19 @@ function ReviewDetails({
 					</ul>
 				</section>
 			)}
-			{comments.length > 0 && (
+			{point === 'plan' && view.sources.length > 0 && (
+				<SourceChips sources={view.sources} locale={locale} onOpen={onSource} />
+			)}
+			{point === 'plan' &&
+				planLists.map((list) => (
+					<PlanFindings
+						key={list}
+						list={list}
+						comments={comments.filter((item) => item.kind && planFindingList(item.kind) === list)}
+						locale={locale}
+					/>
+				))}
+			{point !== 'plan' && comments.length > 0 && (
 				<section aria-label={t(locale, 'Findings')}>
 					<h3>
 						{t(locale, 'Findings')} <span>{comments.length}</span>
@@ -1088,6 +1181,188 @@ export function ReviewReminder({
 					{action[0] as string}
 				</Button>
 			)}
+		</div>
+	);
+}
+
+// ── the plan review (spec/reviews#plan-surfaces) ────────────────────────────
+
+const planLists: readonly PlanFindingList[] = ['ticket', 'code', 'gap'];
+const planListTitle: Record<PlanFindingList, MessageKey> = {
+	ticket: 'Plan vs ticket',
+	code: 'Plan vs code',
+	gap: 'Gaps in the ticket',
+};
+const planKindTag: Record<PlanFindingKind, MessageKey> = {
+	missed: 'missed',
+	contradicts: 'contradicts',
+	'out-of-scope': 'out of scope',
+	assumption: 'wrong assumption',
+	'left-open': 'left open',
+	unverifiable: 'cannot verify',
+	split: 'split',
+	gap: 'gap',
+};
+/** spec/reviews#plan-surfaces: one list of a plan review — a row per finding: its text, `<where> · <reviewer>`, and its kind while it waits
+ *  for the author, then its state. Gaps have no reviewer. Plan findings have no thread in the diff, so a row opens nothing. */
+function PlanFindings({
+	list,
+	comments,
+	locale,
+}: {
+	list: PlanFindingList;
+	comments: readonly TaskReviewCommentRow[];
+	locale: Locale;
+}) {
+	if (!comments.length) return null;
+	return (
+		<section aria-label={t(locale, planListTitle[list])} data-plan-list={list}>
+			<h3>
+				{t(locale, planListTitle[list])} <span>{comments.length}</span>
+			</h3>
+			<ul>
+				{comments.map((comment) => {
+					const tag =
+						list === 'gap' || comment.state === 'sent'
+							? planKindTag[comment.kind ?? 'gap']
+							: comment.state;
+					return (
+						<li key={comment.id} data-finding={comment.state}>
+							<div className={styles.comment} data-static>
+								<span className={styles.text}>{comment.text}</span>
+								<small>
+									{[comment.where, list === 'gap' ? null : comment.reviewer]
+										.filter(Boolean)
+										.join(' · ')}
+								</small>
+								{(comment.state === 'open' || comment.state === 'new') && comment.reason && (
+									<span className={styles.reason}>
+										{comment.reviewer}: {comment.reason}
+									</span>
+								)}
+							</div>
+							<span
+								className={styles.tag}
+								data-tag={
+									list === 'gap' ? 'gap' : comment.state === 'sent' ? 'kind' : comment.state
+								}>
+								{t(locale, tag)}
+							</span>
+						</li>
+					);
+				})}
+			</ul>
+		</section>
+	);
+}
+/** spec/reviews#plan-surfaces: the saved sources as chips; a click opens the saved text in the editor. */
+function SourceChips({
+	sources,
+	locale,
+	onOpen,
+}: {
+	sources: TaskReviewView['sources'];
+	locale: Locale;
+	onOpen?: ((id: string) => void) | undefined;
+}) {
+	return (
+		<div className={styles.sources} role="group" aria-label={t(locale, 'Sources')}>
+			<ChatCardChips>
+				{sources.map((source) => (
+					<ChatCardChip
+						key={source.id}
+						title={source.url ?? source.title}
+						aria-label={`${t(locale, 'Open the source')} · ${source.title}`}
+						data-source={source.id}
+						onClick={onOpen ? () => onOpen(source.id) : undefined}>
+						<Glyph name="note" size={12} />
+						<span>{source.title}</span>
+					</ChatCardChip>
+				))}
+			</ChatCardChips>
+		</div>
+	);
+}
+/**
+ * spec/reviews#plan-surfaces: the line above a waiting plan's footer — the saved sources as chips and the plan review's state (running, the
+ * findings and gaps as links, passed). A click on the state expands the strip on the plan step.
+ */
+export function PlanReviewLine({ task, locale }: { task: AgentTask; locale: Locale }) {
+	const view = useTaskReview(task),
+		review = taskReviewAt(view, 'plan'),
+		current = review && !review.plan?.approved ? review : null;
+	if (!current && !view.sources.length) return null;
+	const counts = current ? taskReviewCounts(view, current.id) : null,
+		gaps = current
+			? view.comments.filter((item) => item.reviewId === current.id && item.kind === 'gap').length
+			: 0,
+		reviewers = current?.reviewers.join(', ') ?? '',
+		expand = () => openReviewStrip(task, true, 'plan');
+	let state: ReactNode = null;
+	if (current && counts) {
+		const glyph: GlyphName = taskReviewRunning(current)
+				? 'agent-spinner'
+				: current.state === 'yours'
+					? 'agent-question'
+					: current.state === 'passed' || current.state === 'accepted'
+						? 'check-pass'
+						: current.state === 'failed'
+							? 'agent-failed'
+							: 'stop',
+			tone =
+				current.state === 'yours'
+					? 'yours'
+					: current.state === 'passed'
+						? 'passed'
+						: current.state === 'failed'
+							? 'failed'
+							: undefined;
+		const words =
+			current.state === 'waiting' || current.state === 'reading'
+				? `${t(locale, 'Review')} · ${t(locale, '{reviewer} reading').replace('{reviewer}', reviewers)}`
+				: current.state === 'verifying'
+					? t(locale, '{reviewer} checks the fixes').replace('{reviewer}', reviewers)
+					: current.state === 'fixing'
+						? t(locale, '{agent} revises the plan').replace('{agent}', agentName(task))
+						: current.state === 'yours'
+							? t(locale, '{count} open').replace('{count}', findingCount(locale, counts.open))
+							: current.state === 'passed'
+								? t(locale, 'Review passed')
+								: current.state === 'accepted'
+									? t(locale, 'Review closed')
+									: current.state === 'failed'
+										? t(locale, 'Review did not start')
+										: t(locale, 'Review stopped');
+		const findings = counts.findings;
+		state = (
+			<span className={styles.planState} data-state={tone}>
+				<span className={styles.glyph} data-state={tone}>
+					<Glyph name={glyph} size={12} />
+				</span>
+				<button type="button" className={styles.count} onClick={expand}>
+					{words}
+				</button>
+				{!taskReviewRunning(current) && current.state !== 'yours' && findings > 0 && (
+					<>
+						{' · '}
+						<CountLink task={task} count={findings} locale={locale} point="plan" />
+					</>
+				)}
+				{gaps > 0 && (
+					<>
+						{' · '}
+						<CountLink task={task} count={gaps} locale={locale} point="plan" gaps />
+					</>
+				)}
+			</span>
+		);
+	}
+	return (
+		<div className={styles.planLine} data-plan-review={current?.state ?? 'none'}>
+			{view.sources.length > 0 && (
+				<SourceChips sources={view.sources} locale={locale} onOpen={(id) => openSource(task, id)} />
+			)}
+			{state}
 		</div>
 	);
 }

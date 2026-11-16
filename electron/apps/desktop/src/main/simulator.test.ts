@@ -17,6 +17,8 @@ let buffer='',taken=false;process.stdin.on('data',chunk=>{buffer+=chunk;let inde
   if(typeof message.id==='number')out(1,message.cmd==='ui'&&fs.existsSync(process.env.HELPER_LOG+'.noui')?{event:'reply',id:message.id,error:'The device did not describe its screen.'}:message.cmd==='text'&&/[^\\x20-\\x7e]/.test(message.text)?{event:'reply',id:message.id,error:'Only ASCII text can be typed; paste the rest.'}:{event:'reply',id:message.id,result:message.cmd==='screenshot'?{jpeg:'/9j/',width:10,height:20}:message.cmd==='ui'?{width:402,height:874,elements:[...(fs.existsSync(process.env.HELPER_LOG+'.turned')?[{role:'Application',label:'App',frame:[0,0,874,402]}]:[]),...(taken?[{role:'Text',label:'Order taken',id:'status',frame:[12,560,378,40]}]:[]),...(fs.existsSync(process.env.HELPER_LOG+'.extra')?[{role:'Text',label:'Extra',id:'extra',frame:[12,500,378,40]}]:[]),{role:'Button',label:'Take order',id:'take-order',frame:[12,622,378,48]}]}:null});}});
 process.stdin.on('end',()=>process.exit(0));
 `;
+/** The task whose simulator tab sends the person's commands. */
+const view = { projectId: 'project', id: 'task' };
 const simctl = JSON.stringify({
 	devices: {
 		'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [
@@ -58,7 +60,7 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		data,
 		helper,
 		(event) => events.push(event),
-		(projectId, frame) => frames.push([projectId, frame]),
+		(device, frame) => frames.push([device, frame]),
 		{
 			android: async () => null,
 			clipboard: async () => 'привіт',
@@ -119,7 +121,7 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		}
 	);
 	try {
-		const state = (await simulators.command('project', { kind: 'state' })) as SimulatorState;
+		const state = (await simulators.command(view, { kind: 'state' })) as SimulatorState;
 		expect(state.toolchain).toEqual({ xcode: 'Xcode 27', android: null, ios: true });
 		// iPhones and iPads of iOS runtimes only, the newest runtime first; a booted iPhone wins the default.
 		expect(state.devices.map((device) => `${device.name} · ${device.os}`)).toEqual([
@@ -129,39 +131,39 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		]);
 		expect(state.device?.id).toBe('BBBB-1');
 		expect(state.status).toBe('off');
-		await simulators.command('project', { kind: 'select', device: 'AAAA-1' });
+		await simulators.command(view, { kind: 'select', device: 'AAAA-1' });
 		expect(
 			JSON.parse(await readFile(join(data, 'projects/project/project.json'), 'utf8')).project
 				.simulator
 		).toEqual({ platform: 'ios', device: 'AAAA-1' });
-		await simulators.command('project', { kind: 'watch', on: true });
-		await simulators.command('project', { kind: 'boot' });
+		await simulators.command(view, { kind: 'watch', on: true });
+		await simulators.command(view, { kind: 'boot' });
 		expect(calls).toContainEqual(['/usr/bin/xcrun', 'simctl', 'boot', 'AAAA-1']);
 		expect(calls).toContainEqual(['/usr/bin/xcrun', 'simctl', 'bootstatus', 'AAAA-1', '-b']);
 		await expect.poll(() => frames.length).toBeGreaterThan(0);
 		expect(frames[0]).toEqual([
-			'project',
+			'AAAA-1',
 			{ key: true, timestamp: 1000, data: new Uint8Array([7, 8, 9]) },
 		]);
 		expect(events).toContainEqual({
-			projectId: 'project',
+			device: 'AAAA-1',
 			config: { codec: 'avc1.640028', width: 1206, height: 2622, description: 'AQID' },
 		});
 		await expect
 			.poll(
-				async () =>
-					((await simulators.command('project', { kind: 'state' })) as SimulatorState).status
+				async () => ((await simulators.command(view, { kind: 'state' })) as SimulatorState).status
 			)
 			.toBe('on');
-		expect(
-			((await simulators.command('project', { kind: 'state' })) as SimulatorState).screen
-		).toEqual({ width: 402, height: 874 });
-		await simulators.command('project', { kind: 'touch', phase: 'down', x: 0.5, y: 0.25 });
-		expect(await simulators.command('project', { kind: 'screenshot' })).toEqual({
+		expect(((await simulators.command(view, { kind: 'state' })) as SimulatorState).screen).toEqual({
+			width: 402,
+			height: 874,
+		});
+		await simulators.command(view, { kind: 'touch', phase: 'down', x: 0.5, y: 0.25 });
+		expect(await simulators.command(view, { kind: 'screenshot' })).toEqual({
 			image: '/9j/',
 			mimeType: 'image/jpeg',
 		});
-		await expect(simulators.command('project', { kind: 'text', text: 'é' })).rejects.toThrow(
+		await expect(simulators.command(view, { kind: 'text', text: 'é' })).rejects.toThrow(
 			'Only ASCII'
 		);
 		// The agent's tools: the tree in compact text, a tap by testID lands in the element's centre and is marked for the human.
@@ -190,7 +192,7 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 			'Timed out after 0.3 s: #take-order is still on the screen.\nScreen 402×874 pt · 2 elements\nText "Order taken" #status 12,560 378×40\nButton "Take order" #take-order 12,622 378×48'
 		);
 		expect(events).toContainEqual({
-			projectId: 'project',
+			device: 'AAAA-1',
 			tap: { x: 201 / 402, y: 646 / 874, label: 'tap · #take-order' },
 		});
 		await expect(
@@ -237,7 +239,7 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 			/^Rotated to landscapeLeft; the app stays in portrait\. Screen settled in 0\.\d s\.\n/
 		);
 		// Rotate: devicectl turns the device; the tree speaks interface points, the touch lands in the device frame.
-		await simulators.command('project', { kind: 'rotate' });
+		await simulators.command(view, { kind: 'rotate' });
 		expect(calls).toContainEqual([
 			'/usr/bin/xcrun',
 			'devicectl',
@@ -249,14 +251,14 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 			'right',
 		]);
 		expect(
-			((await simulators.command('project', { kind: 'state' })) as SimulatorState).orientation
+			((await simulators.command(view, { kind: 'state' })) as SimulatorState).orientation
 		).toBe('landscapeLeft');
 		// The fake app does not turn first (portrait tree): points pass as they are; then it turns with the device.
 		expect(await simulators.agent(key, { tool: 'ui' })).toMatch(/^Screen 402×874 pt/);
 		await writeFile(log + '.turned', '');
 		// The app turning draws: a frame ends the tree read before it.
 		const drawn = frames.length;
-		await simulators.command('project', { kind: 'keyframe' });
+		await simulators.command(view, { kind: 'keyframe' });
 		await expect.poll(() => frames.length).toBeGreaterThan(drawn);
 		expect(await simulators.agent(key, { tool: 'ui' })).toMatch(/^Screen 874×402 pt/);
 		await simulators.agent(key, { tool: 'act', action: 'tap', x: 150, y: 32 });
@@ -268,7 +270,7 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 				.filter((entry) => entry.cmd === 'tap')
 				.at(-1)
 		).toMatchObject({ x: 1 - 32 / 402, y: 150 / 874 });
-		await simulators.command('project', { kind: 'screenshot' });
+		await simulators.command(view, { kind: 'screenshot' });
 		expect(await readFile(log, 'utf8')).toContain(
 			'"cmd":"screenshot","maxSide":1000,"orientation":"landscapeLeft"'
 		);
@@ -294,12 +296,12 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 			'2026-09-28 16:00:00.001 Df Couriers[42:1] take order'
 		);
 		expect(await simulators.agent(key, { tool: 'state' })).toContain(
-			'- :8081 /tmp/repo · attached · serves this device'
+			'- :8081 /tmp/repo · attached · serves your device'
 		);
 		simulators.close();
 		expect(calls).toContainEqual(['detach', '/usr/bin/xcrun', 'simctl', 'shutdown', 'AAAA-1']);
 		expect(calls).toContainEqual(['stream-stop']);
-		await expect(simulators.command('project', { kind: 'state' })).rejects.toThrow(
+		await expect(simulators.command(view, { kind: 'state' })).rejects.toThrow(
 			'The simulator is off in Settings.'
 		);
 	} finally {
@@ -352,9 +354,9 @@ it('the agent does not guess a device: no choice and none running refuses, a boo
 	const key = { projectId: 'project', id: 'task' };
 	try {
 		// The column still falls back to the newest iPhone; the agent is told nothing is chosen.
-		expect(
-			((await simulators.command('project', { kind: 'state' })) as SimulatorState).device?.id
-		).toBe('PRO-MAX');
+		expect(((await simulators.command(view, { kind: 'state' })) as SimulatorState).device?.id).toBe(
+			'PRO-MAX'
+		);
 		expect(await simulators.agent(key, { tool: 'state' })).toMatch(
 			/^No device is chosen for this project\.\n/
 		);
@@ -365,7 +367,7 @@ it('the agent does not guess a device: no choice and none running refuses, a boo
 		// Booted in Xcode after the app started: the list is read again, the booted iPhone is used and saved.
 		booted = 'Booted';
 		expect(await simulators.agent(key, { tool: 'state' })).toMatch(
-			/^iPhone 17 · iOS 27 · booted · not chosen, simulator_open uses it\n/
+			/^Project device: iPhone 17 · iOS 27 · booted · not chosen, simulator_open uses it\n/
 		);
 		expect(await simulators.agent(key, { tool: 'open' })).toBe('iPhone 17 · iOS 27 is running.');
 		expect(
@@ -373,7 +375,9 @@ it('the agent does not guess a device: no choice and none running refuses, a boo
 				.simulator
 		).toEqual({ platform: 'ios', device: 'SEVENTEEN' });
 		expect(calls.some((call) => call[2] === 'boot' && call[3] === 'PRO-MAX')).toBe(false);
-		expect(await simulators.agent(key, { tool: 'state' })).toMatch(/^iPhone 17 · iOS 27 · running/);
+		expect(await simulators.agent(key, { tool: 'state' })).toMatch(
+			/^Your device: iPhone 17 · iOS 27 · running/
+		);
 	} finally {
 		simulators.close();
 		await rm(root, { recursive: true, force: true });
@@ -456,7 +460,7 @@ it('lists AVDs, starts the emulator without a window, runs the Android helper wi
 		}
 	);
 	try {
-		const state = (await simulators.command('project', { kind: 'state' })) as SimulatorState;
+		const state = (await simulators.command(view, { kind: 'state' })) as SimulatorState;
 		expect(state.toolchain).toEqual({ xcode: null, android: 'Android SDK', ios: false });
 		expect(calls.some((call) => call[0] === '/usr/bin/xcrun')).toBe(false);
 		expect(state.devices).toEqual([
@@ -468,7 +472,7 @@ it('lists AVDs, starts the emulator without a window, runs the Android helper wi
 				booted: false,
 			},
 		]);
-		await simulators.command('project', { kind: 'boot' });
+		await simulators.command(view, { kind: 'boot' });
 		expect(calls).toContainEqual([
 			'detach',
 			'/sdk/emulator/emulator',
@@ -482,8 +486,7 @@ it('lists AVDs, starts the emulator without a window, runs the Android helper wi
 		]);
 		await expect
 			.poll(
-				async () =>
-					((await simulators.command('project', { kind: 'state' })) as SimulatorState).status
+				async () => ((await simulators.command(view, { kind: 'state' })) as SimulatorState).status
 			)
 			.toBe('on');
 		const sent = (await readFile(log, 'utf8'))
@@ -501,9 +504,9 @@ it('lists AVDs, starts the emulator without a window, runs the Android helper wi
 			],
 		});
 		// Any text goes to the Android helper (scrcpy pastes it); the screenshot is a PNG.
-		await simulators.command('project', { kind: 'paste' });
+		await simulators.command(view, { kind: 'paste' });
 		expect(await readFile(log, 'utf8')).toContain('"cmd":"text","text":"привіт"');
-		expect(await simulators.command('project', { kind: 'screenshot' })).toEqual({
+		expect(await simulators.command(view, { kind: 'screenshot' })).toEqual({
 			image: 'iVBOR',
 			mimeType: 'image/png',
 		});
@@ -546,5 +549,560 @@ it('finds the Android SDK where Android Studio puts it on macOS and on Linux (sp
 		);
 	} finally {
 		await rm(root, { recursive: true, force: true });
+	}
+});
+/**
+ * A fake machine for spec/browser-and-simulator#sim-lease: simctl keeps a list that boot, clone, create and delete change; every booted
+ * device runs the stand-in helper. `low` — memory pressure; `cap` — the setting.
+ */
+async function devicesWorld(options: { cap?: number; worktrees?: Record<string, string> } = {}) {
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-devices-')),
+		data = join(root, 'data'),
+		helper = join(root, 'sim-helper'),
+		simDevices = join(root, 'CoreSimulator');
+	await mkdir(join(data, 'projects/project'), { recursive: true });
+	await writeFile(
+		join(data, 'projects/project/project.json'),
+		JSON.stringify({
+			schemaVersion: 1,
+			project: {
+				id: 'project',
+				name: 'repo',
+				path: join(root, 'repo'),
+				simulator: { platform: 'ios', device: 'PHONE' },
+			},
+		})
+	);
+	await writeFile(helper, helperSource);
+	await chmod(helper, 0o755);
+	process.env.HELPER_LOG = join(root, 'helper.log');
+	// The person's app on the project iPhone, as CoreSimulator keeps it.
+	await mkdir(join(simDevices, 'PHONE/data/Containers/Bundle/Application/C1/Couriers.app'), {
+		recursive: true,
+	});
+	const list = [
+		{
+			udid: 'PHONE',
+			name: 'iPhone 17 Pro',
+			state: 'Shutdown',
+			deviceTypeIdentifier: 'type.iPhone-17-Pro',
+		},
+		{
+			udid: 'PAD',
+			name: 'iPad Air 11-inch (M4)',
+			state: 'Shutdown',
+			deviceTypeIdentifier: 'type.iPad-Air',
+		},
+		{ udid: 'AIR', name: 'iPhone Air', state: 'Shutdown', deviceTypeIdentifier: 'type.iPhone-Air' },
+	];
+	const world = {
+		root,
+		calls: [] as string[][],
+		rows: [] as { key: string; device: string; metroPort: number | null; lowMemory: boolean }[],
+		low: false,
+		cap: options.cap ?? 2,
+		ended: new Set<string>(),
+		waiting: [] as string[][],
+		list,
+		made: 0,
+		/** Runs while a boot waits at the gate (spec/browser-and-simulator#sim-cap). */
+		onSleep: () => {},
+		/** `simctl install` fails while set. */
+		installFails: false,
+		/** `simctl list` answers this many pairs of callers, each pair in the same tick: two boots read the gate together. */
+		pairLists: 0,
+		listWaiting: [] as (() => void)[],
+	};
+	const runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-27-0';
+	const simulators = new Simulators(
+		data,
+		helper,
+		() => {},
+		() => {},
+		{
+			android: async () => null,
+			detach: (file, args) => world.calls.push(['detach', file, ...args]),
+			platform: 'darwin',
+			simulatorDevices: simDevices,
+			cap: () => world.cap,
+			lowMemory: async () => world.low,
+			sleep: async () => world.onSleep(),
+			gateWaitMs: 20,
+			queue: { waitMs: 2000, idleMs: 60_000 },
+			taskTitle: async (key) => `Task ${key.id}`,
+			taskEnded: async (key) => world.ended.has(key.id),
+			worktree: async (key) => options.worktrees?.[key.id] ?? null,
+			record: async (key, row) => {
+				world.rows.push({ key: key.id, ...row });
+			},
+			waiting: (_project, ids) => world.waiting.push(ids),
+			metro: {
+				fetch: async () => {
+					throw new Error('refused');
+				},
+				socket: () => {
+					throw new Error('not used');
+				},
+				now: () => Date.now(),
+			},
+			run: async (file, args) => {
+				world.calls.push([file, ...args]);
+				const [tool, verb, ...rest] = args;
+				if (tool === 'xcodebuild') return 'Xcode 27.0\n';
+				if (tool === 'sysctl' || file.endsWith('sysctl')) return '1';
+				if (tool !== 'simctl') return '';
+				const find = (udid: string) => list.find((item) => item.udid === udid);
+				switch (verb) {
+					case 'list':
+						if (world.pairLists > 0)
+							await new Promise<void>((resolve) => {
+								world.listWaiting.push(resolve);
+								if (world.listWaiting.length === 2) {
+									world.pairLists--;
+									for (const done of world.listWaiting.splice(0)) done();
+								}
+							});
+						return JSON.stringify({ devices: { [runtime]: list } });
+					case 'boot':
+						find(rest[0]!)!.state = 'Booted';
+						return '';
+					case 'shutdown':
+						if (find(rest[0]!)) find(rest[0]!)!.state = 'Shutdown';
+						return '';
+					case 'clone': {
+						const source = find(rest[0]!)!;
+						if (source.state === 'Booted')
+							throw new Error('Unable to clone device in current state: Booted');
+						const udid = `COPY-${++world.made}`;
+						list.push({ ...source, udid, name: rest[1]!, state: 'Shutdown' });
+						return `${udid}\n`;
+					}
+					case 'create': {
+						const udid = `NEW-${++world.made}`;
+						list.push({ udid, name: rest[0]!, state: 'Shutdown', deviceTypeIdentifier: rest[1]! });
+						return `${udid}\n`;
+					}
+					case 'install':
+						if (world.installFails) throw new Error('install failed');
+						return '';
+					case 'delete':
+						for (const udid of rest)
+							list.splice(
+								list.findIndex((item) => item.udid === udid),
+								1
+							);
+						return '';
+					default:
+						return '';
+				}
+			},
+		}
+	);
+	return { simulators, world };
+}
+const task = (id: string) => ({ projectId: 'project', id });
+const run = (world: { calls: string[][] }, verb: string) =>
+	world.calls.filter((call) => call[1] === 'simctl' && call[2] === verb);
+it('gives two tasks two devices at once and lets each tab show its own; a kind picks a free device (spec/browser-and-simulator#sim-lease)', async () => {
+	const { simulators, world } = await devicesWorld();
+	try {
+		// The solo task uses the project iPhone; the second asks for an iPad by kind.
+		expect(await simulators.agent(task('solo'), { tool: 'open' })).toContain(
+			'iPhone 17 Pro · iOS 27 is running.'
+		);
+		expect(await simulators.agent(task('tablet'), { tool: 'open', device: 'iPad' })).toContain(
+			'iPad Air 11-inch (M4) · iOS 27 is running.'
+		);
+		// Both act at once: each call goes to its own device.
+		const [a, b] = await Promise.all([
+			simulators.agent(task('solo'), { tool: 'act', action: 'tap', id: 'take-order' }),
+			simulators.agent(task('tablet'), { tool: 'act', action: 'tap', id: 'take-order' }),
+		]);
+		expect(a).toMatch(/^Tapped #take-order\./);
+		expect(b).toMatch(/^Tapped #take-order\./);
+		const solo = (await simulators.command(task('solo'), { kind: 'state' })) as SimulatorState,
+			tablet = (await simulators.command(task('tablet'), { kind: 'state' })) as SimulatorState;
+		expect(solo.device?.id).toBe('PHONE');
+		expect(tablet.device?.id).toBe('PAD');
+		expect(solo.uses).toEqual({
+			PHONE: { kind: 'mine' },
+			PAD: { kind: 'task', task: task('tablet') },
+		});
+		expect(tablet.uses.PHONE).toEqual({ kind: 'task', task: task('solo') });
+		expect(solo.gate).toEqual({ running: 2, max: 2, lowMemory: false });
+		// The leases are saved per project; the person's tasks moved the project device only to devices they picked.
+		const saved = JSON.parse(
+			await readFile(join(world.root, 'data/projects/project/simulator-devices.json'), 'utf8')
+		);
+		expect(saved).toEqual({
+			schemaVersion: 1,
+			tasks: {
+				solo: { platform: 'ios', device: 'PHONE' },
+				tablet: { platform: 'ios', device: 'PAD' },
+			},
+		});
+		expect(world.rows.map((row) => `${row.key} ${row.device}`)).toEqual([
+			'solo iPhone 17 Pro',
+			'tablet iPad Air 11-inch (M4)',
+		]);
+		// The agent's state names its device and who holds the others.
+		const text = String(await simulators.agent(task('tablet'), { tool: 'state' }));
+		expect(text).toMatch(/^Your device: iPad Air 11-inch \(M4\) · iOS 27 · running/);
+		expect(text).toContain('Local devices: 2 of 2 run.');
+		expect(text).toContain('- iPhone 17 Pro · iOS 27 (PHONE) · booted · used by «Task solo»');
+		expect(text).toContain('- iPhone Air · iOS 27 (AIR) · free');
+		await expect(simulators.agent(task('solo'), { tool: 'ui', device: 'Pixel' })).rejects.toThrow(
+			'No device matches "Pixel". Call simulator_state for the list.'
+		);
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
+	}
+});
+it('makes a crew worker a device of its own: a new one of the same model when the source runs, the apps installed before use (spec/browser-and-simulator#sim-own-device)', async () => {
+	const { simulators, world } = await devicesWorld({ cap: 3 });
+	try {
+		await simulators.agent(task('foreman'), { tool: 'open' });
+		// The worker gets its own device: the iPhone runs, so it cannot be cloned; a new one of its model and runtime is made.
+		expect(await simulators.agent(task('worker'), { tool: 'open' }, true)).toContain(
+			'iPhone 17 Pro · Task worker · iOS 27 is running.'
+		);
+		expect(run(world, 'clone')).toEqual([]);
+		expect(run(world, 'create')).toEqual([
+			[
+				'/usr/bin/xcrun',
+				'simctl',
+				'create',
+				'iPhone 17 Pro · Task worker',
+				'type.iPhone-17-Pro',
+				'com.apple.CoreSimulator.SimRuntime.iOS-27-0',
+			],
+		]);
+		// The person's app is installed on the copy from the source's own bundle, after the copy booted and before any use.
+		const boot = world.calls.findIndex((call) => call[2] === 'boot' && call[3] === 'NEW-1'),
+			install = world.calls.findIndex((call) => call[2] === 'install');
+		expect(world.calls[install]).toEqual([
+			'/usr/bin/xcrun',
+			'simctl',
+			'install',
+			'NEW-1',
+			join(world.root, 'CoreSimulator/PHONE/data/Containers/Bundle/Application/C1/Couriers.app'),
+		]);
+		expect(install).toBeGreaterThan(boot);
+		const saved = JSON.parse(
+			await readFile(join(world.root, 'data/projects/project/simulator-devices.json'), 'utf8')
+		);
+		expect(saved.tasks.worker).toEqual({
+			platform: 'ios',
+			device: 'NEW-1',
+			own: { source: 'PHONE', reinstalled: true },
+		});
+		// The copy is the worker's: nobody else matches it by kind, and the project device stays the iPhone.
+		const foreman = (await simulators.command(task('foreman'), {
+			kind: 'state',
+		})) as SimulatorState;
+		expect(foreman.device?.id).toBe('PHONE');
+		expect(foreman.uses['NEW-1']).toEqual({ kind: 'task', task: task('worker') });
+		// The worker acts on its copy while the foreman acts on the iPhone.
+		await Promise.all([
+			simulators.agent(task('worker'), { tool: 'act', action: 'tap', id: 'take-order' }, true),
+			simulators.agent(task('foreman'), { tool: 'act', action: 'tap', id: 'take-order' }),
+		]);
+		// A shut-down source is cloned with its data instead.
+		await simulators.command(task('foreman'), { kind: 'shutdown', device: 'PHONE' });
+		await simulators
+			.agent(task('second'), { tool: 'ui', device: 'iPhone 17 Pro' }, true)
+			.catch(() => null);
+		expect(run(world, 'clone')[0]?.slice(0, 4)).toEqual([
+			'/usr/bin/xcrun',
+			'simctl',
+			'clone',
+			'PHONE',
+		]);
+		// The worker's task ended: its copy is shut down and deleted, its record goes.
+		world.ended.add('worker');
+		await simulators.reconcile(task('worker'));
+		expect(run(world, 'delete')).toEqual([['/usr/bin/xcrun', 'simctl', 'delete', 'NEW-1']]);
+		expect(
+			JSON.parse(
+				await readFile(join(world.root, 'data/projects/project/simulator-devices.json'), 'utf8')
+			).tasks.worker
+		).toBeUndefined();
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
+	}
+});
+it('never deletes the source of a clone that was not reinstalled, and cleans up copies of tasks gone on start (spec/browser-and-simulator#sim-own-device)', async () => {
+	const { simulators, world } = await devicesWorld();
+	try {
+		// Records as a crash would leave them: a clone (not reinstalled) of a copy whose task is gone.
+		await writeFile(
+			join(world.root, 'data/projects/project/simulator-devices.json'),
+			JSON.stringify({
+				schemaVersion: 1,
+				tasks: {
+					gone: { platform: 'ios', device: 'AIR', own: { source: 'PHONE', reinstalled: true } },
+					fresh: { platform: 'ios', device: 'PAD', own: { source: 'AIR', reinstalled: false } },
+					broken: { platform: 'ios', device: '../../etc' },
+				},
+			})
+		);
+		world.ended.add('gone');
+		await simulators.reconcile();
+		// AIR still runs PAD's apps: it stays, and so does the record of its gone task until it is really deleted.
+		expect(run(world, 'delete')).toEqual([]);
+		const kept = JSON.parse(
+			await readFile(join(world.root, 'data/projects/project/simulator-devices.json'), 'utf8')
+		).tasks;
+		expect(kept.gone).toBeDefined();
+		expect(kept.fresh).toBeDefined();
+		// PAD's task ends: PAD goes, which frees AIR, and AIR goes in the same call.
+		world.ended.add('fresh');
+		await simulators.reconcile();
+		expect(run(world, 'delete').map((call) => call[3])).toEqual(['PAD', 'AIR']);
+		const tasks = JSON.parse(
+			await readFile(join(world.root, 'data/projects/project/simulator-devices.json'), 'utf8')
+		).tasks;
+		// The broken entry was dropped on load; the others stay readable.
+		expect(Object.keys(tasks)).toEqual([]);
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
+	}
+});
+it('lets a worker share when the cap is reached, makes an agent boot wait at the gate, and lifts only low memory for the person (spec/browser-and-simulator#sim-cap)', async () => {
+	const { simulators, world } = await devicesWorld({ cap: 1 });
+	try {
+		await simulators.agent(task('foreman'), { tool: 'open' });
+		simulators.release(task('foreman'));
+		// No room for a copy: the worker shares the iPhone in its lane and is told why.
+		expect(await simulators.agent(task('worker'), { tool: 'ui' }, true)).toMatch(
+			/^Sharing iPhone 17 Pro with another task: 1 of 1 local devices run\.\n/
+		);
+		expect(run(world, 'create')).toEqual([]);
+		// An agent asking for a device that is off waits at the gate, then gives up with the cap.
+		await expect(
+			simulators.agent(task('tablet'), { tool: 'open', device: 'iPad' })
+		).rejects.toThrow(
+			'Cannot start iPad Air 11-inch (M4): 1 of 1 local devices run (Settings ▸ Modules ▸ Simulator settings).'
+		);
+		expect(world.waiting.some((ids) => ids.includes('tablet'))).toBe(true);
+		expect(world.waiting.at(-1)).not.toContain('tablet');
+		// Low memory under the cap: the agent waits and gives up; the person's Start is refused; Start anyway starts it and leaves the row.
+		world.cap = 3;
+		world.low = true;
+		await new Promise((resolve) => setTimeout(resolve, 2100));
+		await expect(
+			simulators.agent(task('tablet'), { tool: 'open', device: 'iPad' })
+		).rejects.toThrow('Cannot start iPad Air 11-inch (M4): memory is low.');
+		await simulators.command(task('person'), { kind: 'select', device: 'AIR' });
+		const state = (await simulators.command(task('person'), { kind: 'state' })) as SimulatorState;
+		expect(state.gate).toEqual({ running: 1, max: 3, lowMemory: true });
+		await expect(simulators.command(task('person'), { kind: 'boot' })).rejects.toThrow(
+			'memory is low'
+		);
+		await simulators.command(task('person'), { kind: 'boot', anyway: true });
+		expect(run(world, 'boot').map((call) => call[3])).toContain('AIR');
+		expect(world.rows.at(-1)).toEqual({
+			key: 'person',
+			device: 'iPhone Air',
+			metroPort: null,
+			lowMemory: true,
+		});
+		// No way past the cap, not even for the person.
+		world.cap = 2;
+		await simulators.command(task('person'), { kind: 'select', device: 'PAD' });
+		await expect(
+			simulators.command(task('person'), { kind: 'boot', anyway: true })
+		).rejects.toThrow('2 of 2 local devices run');
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
+	}
+});
+it('puts tasks wanting the same device in its lane, the person and solo agents ahead of workers (spec/browser-and-simulator#sim-lease)', async () => {
+	const { simulators, world } = await devicesWorld({ cap: 1 });
+	try {
+		await simulators.agent(task('w1'), { tool: 'open' }, true);
+		// w1 holds the iPhone; w2 and the foreman want it too.
+		const w2 = simulators.agent(task('w2'), { tool: 'ui' }, true);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		const foreman = simulators.agent(task('foreman'), { tool: 'ui' });
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		await expect
+			.poll(
+				async () =>
+					((await simulators.command(task('w2'), { kind: 'state' })) as SimulatorState).uses.PHONE
+			)
+			.toEqual({ kind: 'queued', holder: task('w1') });
+		await expect.poll(() => world.waiting.at(-1)).toEqual(['foreman', 'w2']);
+		simulators.release(task('w1'));
+		await foreman;
+		simulators.release(task('foreman'));
+		expect(await w2).toMatch(/^Sharing iPhone 17 Pro with another task/);
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
+	}
+});
+it('gives a worktree task a Metro port and points its device at its own Metro with the dev-client link (spec/browser-and-simulator#metro-connect)', async () => {
+	const tree = await mkdtemp(join(tmpdir(), 'brigadir-tree-'));
+	await writeFile(join(tree, 'app.json'), JSON.stringify({ expo: { scheme: 'couriers' } }));
+	await writeFile(join(tree, 'package.json'), '{}');
+	const { simulators, world } = await devicesWorld({ worktrees: { tree: tree } });
+	try {
+		// The host took port 8082 for the worktree task when it started (spec/browser-and-simulator#metro-port).
+		await writeFile(
+			join(world.root, 'data/metro-ports.json'),
+			JSON.stringify({ schemaVersion: 1, ports: { 'project/tree': 8082 } })
+		);
+		expect(String(await simulators.agent(task('tree'), { tool: 'state' }))).toContain(
+			"This task's worktree has no node_modules, so its Metro cannot start"
+		);
+		// Its own Metro answers on that port without the device: open connects the app to it once.
+		(simulators as unknown as { tools: { metro: unknown } }).tools.metro = {
+			fetch: async (url: string) => {
+				if (!url.startsWith('http://127.0.0.1:8082/')) throw new Error('refused');
+				return {
+					ok: true,
+					headers: {
+						get: (name: string) => (name === 'x-react-native-project-root' ? tree : null),
+					},
+					json: async () => [],
+				};
+			},
+			socket: () => {
+				throw new Error('not used');
+			},
+			now: () => Date.now(),
+		};
+		await mkdir(join(tree, 'node_modules'));
+		const answer = String(await simulators.agent(task('tree'), { tool: 'open' }));
+		expect(answer).toContain('Connected iPhone 17 Pro to Metro :8082.');
+		expect(answer).not.toContain('node_modules');
+		expect(run(world, 'openurl')).toEqual([
+			[
+				'/usr/bin/xcrun',
+				'simctl',
+				'openurl',
+				'PHONE',
+				'couriers://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8082',
+			],
+		]);
+		await simulators.agent(task('tree'), { tool: 'open' });
+		expect(run(world, 'openurl')).toHaveLength(1);
+		expect(world.rows[0]).toEqual({
+			key: 'tree',
+			device: 'iPhone 17 Pro',
+			metroPort: 8082,
+			lowMemory: false,
+		});
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
+		await rm(tree, { recursive: true, force: true });
+	}
+});
+
+it('never lets two boots at once pass the cap, and counts a device shut down outside the app while a boot waits (spec/browser-and-simulator#sim-cap)', async () => {
+	const { simulators, world } = await devicesWorld({ cap: 1 });
+	try {
+		// Two tasks start two devices at the same moment, both reading the gate before either boots: one slot, one boot.
+		// The calls' own reads of the list, then the gate's.
+		world.pairLists = 2;
+		const results = await Promise.allSettled([
+			simulators.agent(task('a'), { tool: 'open', device: 'iPhone 17 Pro' }),
+			simulators.agent(task('b'), { tool: 'open', device: 'iPad' }),
+		]);
+		expect(results.filter((item) => item.status === 'fulfilled')).toHaveLength(1);
+		expect(run(world, 'boot')).toHaveLength(1);
+		// A simulator started in Xcode holds the slot; it is shut down while the next boot waits: the boot goes on.
+		for (const item of world.list) item.state = item.udid === 'AIR' ? 'Booted' : 'Shutdown';
+		simulators.release(task('a'));
+		simulators.release(task('b'));
+		simulators.close();
+		simulators.reopen();
+		let waits = 0;
+		world.onSleep = () => {
+			if (++waits === 1) world.list.find((item) => item.udid === 'AIR')!.state = 'Shutdown';
+		};
+		expect(String(await simulators.agent(task('c'), { tool: 'open', device: 'iPad' }))).toContain(
+			'iPad Air 11-inch (M4) · iOS 27 is running.'
+		);
+		expect(waits).toBe(1);
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
+	}
+});
+it('offers no Shut down, and refuses one, for a device another task is using now (spec/browser-and-simulator#sim-tab)', async () => {
+	const { simulators, world } = await devicesWorld();
+	try {
+		await simulators.agent(task('agent'), { tool: 'open' });
+		// The person's task leases the same iPhone; the agent holds its lane.
+		await simulators.command(task('person'), { kind: 'select', device: 'PHONE' });
+		const state = (await simulators.command(task('person'), { kind: 'state' })) as SimulatorState;
+		expect(state.uses.PHONE).toEqual({ kind: 'mine', heldBy: task('agent') });
+		await expect(
+			simulators.command(task('person'), { kind: 'shutdown', device: 'PHONE' })
+		).rejects.toThrow('iPhone 17 Pro is in use by another task.');
+		expect(run(world, 'shutdown')).toEqual([]);
+		// Its turn ends: the person may shut it down.
+		simulators.release(task('agent'));
+		await simulators.command(task('person'), { kind: 'shutdown', device: 'PHONE' });
+		expect(run(world, 'shutdown').map((call) => call[3])).toEqual(['PHONE']);
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
+	}
+});
+it('finishes a copy whose reinstall failed or was cut off before anyone uses it (spec/browser-and-simulator#sim-own-device)', async () => {
+	const { simulators, world } = await devicesWorld({ cap: 3 });
+	try {
+		await simulators.agent(task('foreman'), { tool: 'open' });
+		world.installFails = true;
+		await expect(simulators.agent(task('worker'), { tool: 'open' }, true)).rejects.toThrow(
+			'install failed'
+		);
+		const file = join(world.root, 'data/projects/project/simulator-devices.json');
+		expect(JSON.parse(await readFile(file, 'utf8')).tasks.worker.own.reinstalled).toBe(false);
+		// The next call installs the apps first, then uses the copy.
+		world.installFails = false;
+		expect(String(await simulators.agent(task('worker'), { tool: 'ui' }, true))).toMatch(
+			/^Screen /
+		);
+		expect(run(world, 'install').length).toBe(2);
+		expect(JSON.parse(await readFile(file, 'utf8')).tasks.worker.own).toEqual({
+			source: 'PHONE',
+			reinstalled: true,
+		});
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
+	}
+});
+it("lets a moved task's copy go and points its Metro client at the new device (spec/browser-and-simulator#sim-own-device, #metro)", async () => {
+	const { simulators, world } = await devicesWorld({ cap: 3 });
+	try {
+		await simulators.agent(task('foreman'), { tool: 'open' });
+		await simulators.agent(task('worker'), { tool: 'open' }, true);
+		const metros = (simulators as unknown as { metros: Map<string, unknown> }).metros;
+		const before = metros.get('project/worker');
+		expect(before).toBeDefined();
+		// The worker takes the iPad: its copy is deleted, and its Metro client is a new one for the iPad.
+		await simulators.agent(task('worker'), { tool: 'open', device: 'iPad' }, true);
+		await expect.poll(() => run(world, 'delete').map((call) => call[3])).toEqual(['NEW-1']);
+		expect(metros.get('project/worker')).not.toBe(before);
+		const tasks = JSON.parse(
+			await readFile(join(world.root, 'data/projects/project/simulator-devices.json'), 'utf8')
+		).tasks;
+		expect(tasks).toEqual({
+			foreman: { platform: 'ios', device: 'PHONE' },
+			worker: { platform: 'ios', device: 'PAD' },
+		});
+	} finally {
+		simulators.close();
+		await rm(world.root, { recursive: true, force: true });
 	}
 });

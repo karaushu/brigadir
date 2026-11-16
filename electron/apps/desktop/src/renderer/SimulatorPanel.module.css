@@ -220,3 +220,15 @@
 .strip > [data-machine-tag] {
 	margin-right: 8px;
 }
+/* spec/browser-and-simulator#sim-tab: the trigger while the task waits in its device's lane (`iPhone 17 · waits for …`). */
+.queued {
+	color: var(--fg2);
+}
+/* spec/browser-and-simulator#sim-cap: why a device that is off cannot start now. */
+.empty .gate[data-tone='warning'] {
+	color: var(--amber-text);
+}
+/* spec/browser-and-simulator#sim-chat-row: a start past low memory, in the device row of the chat. */
+.lowMemory.lowMemory {
+	color: var(--amber-text);
+}

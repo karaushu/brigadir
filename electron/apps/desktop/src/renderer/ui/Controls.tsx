@@ -249,6 +249,12 @@ type Option = {
 };
 /** spec/composer-steering-queue-and-ghost#ghost-headless: Settings popups mark the chosen option with ✓ and give the closed button a hover; the dialog provides it. */
 export const PopupMarks = createContext(false);
+export type PopupFooter = {
+	text: string;
+	/** `warning` — amber, like low memory. */
+	tone?: 'warning';
+	action?: { label: string; run(): void };
+};
 export type PopupGroup = {
 	label: string;
 	icon?: ReactNode;
@@ -558,8 +564,14 @@ export function Popup({
 	search,
 	groups,
 	menuWidth,
+	footer,
+	onOpenChange,
 }: {
 	size?: ControlSize;
+	/** spec/browser-and-simulator#sim-tab: a line under the options — why some are off, with one action (the device list's `Start anyway`). */
+	footer?: PopupFooter;
+	/** The list opened or closed: a choice that lasts while it is open (spec/browser-and-simulator#sim-cap). */
+	onOpenChange?(open: boolean): void;
 	/** The list's width when it is wider than the 200 px default (the Helper agent's grouped list is 260). */
 	menuWidth?: number;
 	/** spec/composer-steering-queue-and-ghost#ghost-headless: headers over runs of options with the same `group`, a line between runs. */ groups?: Record<
@@ -614,6 +626,9 @@ export function Popup({
 	useEffect(() => {
 		if (disabled || !options.length) setOpen(false);
 	}, [disabled, options.length]);
+	const openChange = useRef(onOpenChange);
+	openChange.current = onOpenChange;
+	useEffect(() => openChange.current?.(open), [open]);
 	useEffect(() => {
 		if (!open) return;
 		(search ? field.current : list.current)?.focus();
@@ -749,11 +764,14 @@ export function Popup({
 			) : (
 				option.label
 			)}
+			{/* spec/browser-and-simulator#sim-tab: a row may carry both — who holds the device, then its own action. */}
+			{option.action && option.tail && <small className={s.optionTail}>{option.tail}</small>}
 			{option.action ? (
 				<button
 					type="button"
 					tabIndex={-1}
 					className={s.optionAction}
+					data-after-tail={option.tail ? true : undefined}
 					data-option-action
 					aria-label={option.action.label}
 					title={option.action.label}
@@ -938,6 +956,26 @@ export function Popup({
 						</>
 					) : (
 						optionRows
+					)}
+					{footer && (
+						<>
+							<span className={s.menuSep} aria-hidden="true" />
+							<div className={s.menuFooter} data-tone={footer.tone} role="status">
+								<span>{footer.text}</span>
+								{footer.action && (
+									<span data-size="s" className={s.menuFooterAction}>
+										<Button
+											onPointerDown={(event) => event.stopPropagation()}
+											onClick={() => {
+												footer.action!.run();
+												list.current?.focus();
+											}}>
+											{footer.action.label}
+										</Button>
+									</span>
+								)}
+							</div>
+						</>
 					)}
 				</div>
 			)}

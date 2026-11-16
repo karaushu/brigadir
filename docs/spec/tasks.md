@@ -66,7 +66,7 @@ One sheet (`NewTask.tsx`) serves New task, Edit task… (backlog), Duplicate tas
 <a id="sheet-layout"></a>
 ### Layout
 
-- Two columns, 780 px wide (narrower windows reflow; 600 px is a supported width). Left: task name and prompt. Right: a 248 px parameter rail on `--tint`, separated by `--sep`, grouped with 14 px gaps, 14 px top and bottom padding.
+- Two columns, 780 px wide (narrower windows reflow; 600 px is a supported width). Left: task name and prompt. Right: a 248 px parameter rail on `--tint`, separated by `--sep`, grouped with 14 px gaps, 14 px top and bottom padding. The header and the footer stay in place: when the sheet is taller than the window, the two columns between them scroll, each on its own.
 - Header: the task name field in place of a heading (borderless text, placeholder `Task name (optional)`), the project name and `Esc`. The dialog is named for screen readers through `aria-label`. What kind of task it is comes from the rail's `Crew` group ([Parameter rail](#sheet-rail)).
 - Prompt: the shared CodeMirror prompt editor, borderless, 13.5 / 21 like the composer, at least 84 px. Placeholder `Write a message… (optional)`. Markdown is rendered in place; markers hide except on the caret line. `@` inserts mentions (files of selected repos and folders, crew nodes when a named crew is chosen, agents `Claude` / `Codex`), shown as pills; mentions go to the agent as paths or English template names ([Composer](composer.md)). The hint row `+ · @ · ⌘V` sits right under the text; clicking the empty rest of the column puts the caret in the text.
 - A task can be created with only a name (backlog) or only a prompt.

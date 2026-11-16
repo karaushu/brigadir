@@ -13,21 +13,36 @@
 	/* spec/tasks#sheet-rail: the sheet's lower corners are 12, as the cards. */
 	border-radius: 0 0 12px 12px;
 	box-shadow: 0 22px 60px var(--shadow);
+	overflow: hidden;
+}
+/* spec/tasks#sheet-layout: the header and the footer stay in place; the columns between them scroll, each on its own. */
+.sheet[open],
+.sheet > form {
+	display: flex;
+	flex-direction: column;
+}
+.sheet > form {
+	flex: 1 1 auto;
+	min-height: 0;
 }
 .sheet::backdrop {
 	background: var(--modal-scrim);
 }
+/* The fieldset only disables its controls: a fieldset does not pass a flex height on to its children, so its box is left out and the
+   header, the columns and the error line lay out in the form's column, with the sheet's 16 px inside on them. */
 .body {
-	min-width: 0;
-	margin: 0;
-	padding: 16px 16px 12px;
-	border: 0;
+	display: contents;
 }
 .heading {
+	flex: none;
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	margin-bottom: 12px;
+	margin: 16px 16px 12px;
+}
+.body > .error {
+	flex: none;
+	margin: 12px 16px;
 }
 .heading .name {
 	flex: 1;
@@ -55,6 +70,7 @@
 	color: var(--fg3);
 }
 .footer {
+	flex: none;
 	display: flex;
 	justify-content: flex-end;
 	gap: 8px;
@@ -198,13 +214,16 @@
 
 /* spec/tasks#sheet-layout: two columns. The task text on the left, a 248 px rail on the right. */
 .columns {
+	flex: 1 1 auto;
+	min-height: 0;
 	display: flex;
 	align-items: stretch;
-	margin: 0 -16px -12px;
 }
 .left {
 	flex-grow: 1;
 	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
 	padding: 0 16px 12px;
 	display: flex;
 	flex-direction: column;
@@ -217,6 +236,8 @@
 	padding: 14px;
 	border-left: 1px solid var(--sep);
 	background: var(--tint);
+	min-height: 0;
+	overflow-y: auto;
 }
 .group {
 	margin-top: 14px;

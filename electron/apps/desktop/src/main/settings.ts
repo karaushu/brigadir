@@ -79,6 +79,10 @@ export class Settings {
 								...(!('compactionWindow' in value.agents)
 									? { compactionWindow: defaultAppSettings.agents.compactionWindow }
 									: {}),
+								// spec/agents-and-providers#task-budget: a file written before the setting has no budget.
+								...(!('taskBudget' in value.agents)
+									? { taskBudget: defaultAppSettings.agents.taskBudget }
+									: {}),
 							},
 						}
 					: {};

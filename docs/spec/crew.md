@@ -241,7 +241,7 @@ When a worker's turn ends, the worker host pushes a report to the parent with th
 - files (up to 200) with status and counts, project-relative paths;
 - `Changes outside the assigned files (n)` (up to 20 names);
 - checks with verdicts and round, and the disputed note when reviewers did not agree;
-- `Usage: N turns, X in, Y out, Z cached` — tokens of the member's task so far, summed from its `turn.usage` records: `in` is input plus cache writes, `cached` is cache reads (see [Agents and providers](agents-and-providers.md#turn-usage)); the line is left out when the provider reported none. No model and no money: reviewers read the same report, and the foreman has the model in its roster;
+- `Usage: N turns, X in, Y out, Z cached` — tokens of the member's task so far, summed from its `turn.usage` records: `in` is input plus cache writes, `cached` is cache reads (see [Agents and providers](agents-and-providers.md#turn-usage)); unlike the [task's counter](agents-and-providers.md#task-tokens) it keeps cache reads, and only finished turns; the line is left out when the provider reported none. No model and no money: reviewers read the same report, and the foreman has the model in its roster;
 - `Notes: N new` (never a separate push);
 - the question the worker ended with;
 - the worker's last message (≤ 4000 chars);
@@ -399,6 +399,17 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | `crew-part.json` | worker | the current part for its reviewers: `part`, `prompt` (≤ 100 000 chars), `acceptance?`, `clipped?` |
 | `git-merge.json` | any | open merge/squash per repo (`from`, `into`, conflicts) |
 
+<a id="budget-pause"></a>
+## Token budget and pause
+
+The crew is one task for the [token budget](agents-and-providers.md#task-budget): the count is the sum over the foreman, leads, workers and reviewers (all carry the root `crewTaskId`), per provider, and the budget is the root task's. When one provider's count reaches its budget the whole crew pauses ([reaching the budget](agents-and-providers.md#budget-reached)):
+
+- turns that run now — the foreman's and every member's — finish; nothing new starts;
+- the foreman's queue holds reports and the person's messages; every member's queue holds its parts, reviews and messages; the crew host holds waiting hires (`watchSlots` launches none);
+- the foreman is `needs-you` with `{Provider} budget reached`; members keep their own states;
+- `Stop now` cancels the foreman's turn and every member's running turn; `Finish turns, then stop` lets them end;
+- raising the budget resumes the foreman's queue, the waiting hires in their order and each member's queue in its own order.
+
 <a id="limits"></a>
 ## Limits
 
@@ -425,7 +436,7 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 - A reviewer that also owns a part of the code.
 - Automatic choice of the number of agents beyond `Foreman composes`.
 - Asking on `Stop` of a foreman whether to stop its workers too (default yes).
-- Foreman indicators (tokens, worst context, quota) aggregated over its workers; tokens per accepted part on the plan card.
+- Foreman indicators (worst context) aggregated over its workers; tokens per accepted part on the plan card.
 - Raising a worker's effort automatically after a disputed check.
 - The design check as a host step: the contract table per design node, with the host verifying that each row's screenshot exists.
 - The smoke as a host step with a time box the host enforces: at the limit it stops the run and asks for the report.

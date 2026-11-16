@@ -146,6 +146,36 @@ const uk = {
 		'На цій моделі власні субагенти Claude шукають і читають.',
 	// spec/agents-and-providers#compaction-window, spec/chat#context-compacted
 	'Compaction window': 'Вікно стиснення',
+	// spec/agents-and-providers#task-budget, spec/composer#task-usage, spec/chat-turns-plans-and-questions#budget-card
+	'Task budget': 'Бюджет задачі',
+	'A task pauses and asks when its agents use this many tokens. New tasks only.':
+		'Задача стає на паузу й питає, коли її агенти використають стільки токенів. Лише для нових задач.',
+	'No limit': 'Без ліміту',
+	'{provider} budget': 'Бюджет {provider}',
+	'Task usage': 'Токени задачі',
+	'{provider} {used} of {budget}': '{provider} {used} з {budget}',
+	'{text} · paused': '{text} · на паузі',
+	'New input {a} · written to cache {b} · output {c} · re-read from cache {d}, not counted':
+		'Новий вхід {a} · записано в кеш {b} · вихід {c} · перечитано з кешу {d}, не враховано',
+	'Account limits since the task started': 'Ліміти акаунта від початку задачі',
+	'since it reset': 'після скидання',
+	'Counted in the budget of {task}.': 'Враховано в бюджеті задачі «{task}».',
+	'{provider} budget reached': 'Бюджет {provider} вичерпано',
+	'{used} of {budget} tokens': '{used} з {budget} токенів',
+	'The task is paused.': 'Задача на паузі.',
+	'Turns that run now finish. Nothing new starts: no hires, no deliveries, no queued messages.':
+		'Турни, що вже йдуть, завершаться. Нового нічого не почнеться: ні найму, ні доставок, ні повідомлень із черги.',
+	'Turns that run now finish; nothing new starts.':
+		'Турни, що йдуть, завершаться; нового нічого не почнеться.',
+	'Stop now': 'Зупинити зараз',
+	'Finish turns, then stop': 'Дати турнам завершитись і зупинити',
+	'Finish turns': 'Завершити турни',
+	'Raise to {n}': 'Підняти до {n}',
+	'More budgets': 'Інші бюджети',
+	'No limit for this task': 'Без ліміту для цієї задачі',
+	'Budget reached': 'Бюджет вичерпано',
+	'Budget question': 'Питання бюджету',
+	'Could not change the budget.': 'Не вдалося змінити бюджет.',
 	"Agent's default": 'Як задано в агенті',
 	'New sessions compact their context when it reaches this many tokens.':
 		'Нові сесії стискають контекст, коли він сягає стількох токенів.',
@@ -5027,6 +5057,20 @@ export function tokenCount(locale: Locale, count: number): string {
 			? { one: 'токен', few: 'токени', many: 'токенів', other: 'токена' }
 			: { one: 'token', few: 'tokens', many: 'tokens', other: 'tokens' };
 	return `${short ? formatTokenCount(count) : new Intl.NumberFormat(locale).format(count)} ${forms[form as keyof typeof forms] ?? forms.other}`;
+}
+/** spec/chat-turns-plans-and-questions#budget-card: «The task and its 3 workers are paused.» — «Задача і 3 воркери на паузі.» (four `uk` forms, rule 9). */
+export function pausedWorkersText(locale: Locale, count: number): string {
+	const number = new Intl.NumberFormat(locale).format(count);
+	if (locale !== 'uk')
+		return `The task and its ${number} ${count === 1 ? 'worker' : 'workers'} are paused.`;
+	const word =
+		(
+			{ one: 'воркер', few: 'воркери', many: 'воркерів', other: 'воркера' } as Record<
+				string,
+				string
+			>
+		)[new Intl.PluralRules('uk').select(count)] ?? 'воркерів';
+	return `Задача і ${number} ${word} на паузі.`;
 }
 /** spec/chat#tool-groups: changed files past the header's chips — «ще 1 файл», «ще 3 файли», «ще 23 файли», «ще 5 файлів». */
 export function moreFileCount(locale: Locale, count: number): string {

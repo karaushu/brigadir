@@ -623,6 +623,10 @@ leads a crew.
 | Keep awake | Без сну | Keep the computer awake while agents work. | |
 | Concurrent agents | Одночасних агентів | How many agents run at the same time. | |
 | Subscription limits | Ліміти підписки | | |
+| Task budget | Бюджет задачі | Tokens a task may use per provider before it pauses and asks. | |
+| Task usage | Токени задачі | The popover of a task's token counter: per provider, its budget and its agents. | «Використання» |
+| Budget reached | Бюджет вичерпано | A provider's count reached the task's budget; the task is paused. | «Ліміт вичерпано» (that is the subscription) |
+| No limit | Без ліміту | A provider without a task budget. | |
 | Context | Контекст | The context window of a session. | |
 | Initial setup | Початкові налаштування | | |
 | Application menu | Меню застосунку | The ☰ button on Windows and Linux. | |

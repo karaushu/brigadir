@@ -137,3 +137,23 @@
 	position: relative;
 	z-index: 1;
 }
+/* spec/chat-turns-plans-and-questions#budget-strip: a row's main button — no look of its own; the row's hover is its hover. */
+.main {
+	display: block;
+	min-width: 0;
+	width: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	color: inherit;
+	text-align: left;
+}
+.main b {
+	font-weight: 600;
+}
+.main:focus-visible {
+	outline: 1.5px solid var(--accent);
+	outline-offset: 1px;
+	border-radius: 3px;
+}

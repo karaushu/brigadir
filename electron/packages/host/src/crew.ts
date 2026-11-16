@@ -288,6 +288,8 @@ export type CrewHostDeps = {
 	parent(): { request(method: string, params: unknown): Promise<unknown> } | null;
 	/** spec/reviews#points: reviewers check this task itself (the root's `checkedBy`); the task side hears every round. */
 	self?: SelfReviewHooks;
+	/** spec/crew#budget-pause: the task is held at its token budget; no waiting worker launches. A lead reads its root's hold fresh. */
+	held?(): Promise<boolean>;
 };
 export type SelfReviewHooks = {
 	/** The task review the round belongs to (`task-review.json`). */
@@ -1434,7 +1436,7 @@ export class CrewHost {
 		this.waitTimer = null;
 		void this.serial(async () => {
 			while (this.waiting.length && !this.stopping && this.launching.size < 2) {
-				if (!(await this.hasSlot())) break;
+				if ((await this.deps.held?.()) || !(await this.hasSlot())) break;
 				const taskId = this.waiting.shift()!;
 				const worker = this.workers.find((item) => item.taskId === taskId);
 				if (!worker || this.launching.has(taskId)) continue;

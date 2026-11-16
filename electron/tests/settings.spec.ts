@@ -239,6 +239,7 @@ test('settings persist theme and restart language, retain dirty edits and match 
 			keymap: defaultAppSettings.keymap,
 			terminal: defaultAppSettings.terminal,
 			onboarding: { completedVersion: 1 },
+			planReviewOff: false,
 			remoteAccess: defaultAppSettings.remoteAccess,
 			slack: defaultAppSettings.slack,
 			updates: defaultAppSettings.updates,

@@ -158,10 +158,9 @@ test('launch options preserve project defaults, animate with keyboard parity, an
 		expect(await page.evaluate((task) => window.brigadir.readPreparationLog(task), task)).toBe(log);
 		await page.getByRole('button', { name: 'New task · repository', exact: true }).click();
 		await expect(sheet.getByRole('textbox', { name: 'Message', exact: true })).toBeFocused();
-		/* spec/settings-modules-and-onboarding#settings-keys: a new task starts with the isolation from Settings ▸ Agents, not the last choice. */ await expect(
-			sheet.getByRole('radio', { name: 'No isolation', exact: true })
+		/* spec/tasks#isolation: a new Auto task in the GUI of a git project starts in a worktree, not the last choice. */ await expect(
+			sheet.getByRole('radio', { name: 'Worktree', exact: true })
 		).toBeChecked();
-		await sheet.getByRole('radio', { name: 'Worktree', exact: true }).click();
 		await expect(sheet.getByRole('button', { name: 'Base ref', exact: true })).toContainText(
 			'main'
 		);

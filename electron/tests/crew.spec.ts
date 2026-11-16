@@ -1,5 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
-import { mkdtemp, mkdir, writeFile, rm, readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile, realpath, stat } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:http';
@@ -281,7 +281,10 @@ test('launches a crew from the sheet, confirms the plan card and shows workers a
 				path: info.outputPath(`plan-summary-${theme}.png`),
 			});
 		}
-		const foremanId = (await readdir(join(project, 'tasks')))[0]!,
+		// The foreman by its crew, not the first folder: its workers' task folders may come first.
+		const foremanId = (await page.evaluate(async () =>
+				(await window.brigadir.readWorkspace()).tasks.find((task) => task.crew && !task.crewTaskId)
+			))!.id,
 			journal = (await readFile(join(project, 'tasks', foremanId, 'events.jsonl'), 'utf8'))
 				.trim()
 				.split('\n')

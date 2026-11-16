@@ -2318,7 +2318,7 @@ export class CrewHost {
 					kind: 'prompt',
 					text: self
 						? await this.selfPrompt(run, worker, reviewer, report.text)
-						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}${partBrief(worker.name, await this.readPartBrief(worker))}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId). Check the change against the part's prompt and acceptance criteria above; ask the foreman only what they leave open. ${findingRule}`,
+						: `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, round ${run.round} of ${crewReviewRounds}).\n${report.text}${partBrief(worker.name, await this.readPartBrief(worker))}\nRead with read_report and read_diff passing this reviewId, then either submit_review(taskId, reviewId, comments) or approve(taskId, reviewId). Check the change against the part's prompt and acceptance criteria above; ask the foreman only what they leave open. ${findingRule(false)}`,
 					crew: { kind: 'report', report: report.summary },
 					assignment: checkId(run.reviewId),
 				})
@@ -3301,7 +3301,7 @@ export class CrewHost {
 		if (this.deps.self?.point() === 'plan')
 			return this.deps.self.planPrompt(run.taskId, run.reviewId, run.round, reviewer.name);
 		if (run.round <= 1)
-			return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, first read).\n${report}${brief}\nThis is the ${point} of the task's changes. The files of your tree are the task's state now. Read with read_report and read_diff passing this reviewId, once and in full: this is the only read, and nothing new can be raised later. Check the change against the task above. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). ${findingRule} Do not change files.${guidance}`;
+			return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, first read).\n${report}${brief}\nThis is the ${point} of the task's changes. The files of your tree are the task's state now. Read with read_report and read_diff passing this reviewId, once and in full: this is the only read, and nothing new can be raised later. Check the change against the task above. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). ${findingRule(true)} Do not change files.${guidance}`;
 		const path = await safePath(await this.deps.store.taskDir(this.deps.key), 'review.json');
 		const doc = await readDocument(path, 16 * 1024 * 1024).catch(
 			() => ({}) as Record<string, unknown>

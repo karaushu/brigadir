@@ -169,7 +169,8 @@ A finding is a reviewer's comment of the review: a review thread in Changes attr
 ([Review from the foreman](crew.md#foreman-review)). It names something wrong in the change — wrong behaviour, a broken
 contract, a missed requirement, work outside the task — with its evidence: the lines and what goes wrong. A wish for
 more checks, tests or a fuller report is not a finding: one round of fixing costs more than the check it asks for. The
-same rule stands in a crew reviewer's prompt; the [plan review](#plan-review) keeps its own.
+same rule stands in a crew reviewer's prompt, except how it checks a doubt: its own tree is not the worker's change, so it
+reads the whole diff and the report instead of running commands. The [plan review](#plan-review) keeps its own rules.
 
 <a id="remark"></a>
 **A remark.** `approve(taskId, reviewId, note?)` takes an optional `note` (up to 2000 characters): something the person

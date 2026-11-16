@@ -94,7 +94,12 @@ export function findingsText(list: readonly ReviewComment[], reasons = false) {
 
 /**
  * spec/reviews#findings: what a finding is, for the reviewer's prompt of a code review (English, rule 12). A wish for more verification is not one;
- * a doubt is checked by the reviewer itself, and a word that needs no fix goes with the approval (spec/reviews#remark).
+ * a doubt is checked by the reviewer itself, and a word that needs no fix goes with the approval (spec/reviews#remark). `ownTree`: the reviewer's
+ * files are the reviewed change (a task's own review syncs them); a crew reviewer's are not, so it checks through read_diff only.
  */
-export const findingRule =
-	"A finding names something wrong in the change — wrong behaviour, a broken contract, a missed requirement, or work outside the task — with its evidence: the lines and what goes wrong. A wish for more checks, tests or a fuller report is not a finding. When you doubt, check it yourself with what you have: read the files of your tree and run commands that change no files (the project's tests or type check, a short script that calls the changed code); then report the defect you found, or approve. Something the person should know that needs no fix (a risk to watch, the check you ran) goes in approve's note.";
+export function findingRule(ownTree: boolean): string {
+	const check = ownTree
+		? "read the files of your tree and run commands that change no files (the project's tests or type check, a short script that calls the changed code)"
+		: 'read the whole diff with read_diff and the report; the files of your own tree are not this change, so a command you run there does not test it';
+	return `A finding names something wrong in the change — wrong behaviour, a broken contract, a missed requirement, or work outside the task — with its evidence: the lines and what goes wrong. A wish for more checks, tests or a fuller report is not a finding. When you doubt, check it yourself: ${check}; then report the defect you found, or approve. Something the person should know that needs no fix (a risk to watch, the check you ran) goes in approve's note.`;
+}

@@ -5514,7 +5514,7 @@
     },
     {
      "name": "approve",
-     "description": "Approve the checked work: nothing is left to fix. Requires the reviewId of the report you were asked to check. Call it when your check found nothing to fix.",
+     "description": "Approve the checked work: nothing is left to fix. Requires the reviewId of the report you were asked to check. note: an optional remark for the person that needs no fix (a risk to watch, the check you ran); it starts no fix. Call it when your check found nothing to fix.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -5528,6 +5528,11 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 128
+       },
+       "note": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
        }
       },
       "required": [

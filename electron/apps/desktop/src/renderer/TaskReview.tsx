@@ -995,6 +995,7 @@ function ReviewDetails({
 										{t(locale, 'Log')}
 									</Button>
 								)}
+								{member.note && <p className={`${styles.reason} ${styles.note}`}>{member.note}</p>}
 							</li>
 						))}
 					</ul>

@@ -769,8 +769,12 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 	},
 	approve: {
 		description:
-			'Approve the checked work: nothing is left to fix. Requires the reviewId of the report you were asked to check.',
-		shape: { taskId, reviewId: z.string().min(1).max(128) },
+			'Approve the checked work: nothing is left to fix. Requires the reviewId of the report you were asked to check. note: an optional remark for the person that needs no fix (a risk to watch, the check you ran); it starts no fix.',
+		shape: {
+			taskId,
+			reviewId: z.string().min(1).max(128),
+			note: z.string().min(1).max(2000).optional(),
+		},
 	},
 	// spec/reviews#plan-inputs, spec/reviews#plan-verdict: a plan review reads the plan and the sources through the host, on any provider.
 	read_plan: {

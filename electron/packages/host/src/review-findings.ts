@@ -91,3 +91,10 @@ export function findingsText(list: readonly ReviewComment[], reasons = false) {
 		'\n\nFor a comment you do not fix as asked, call review_reply with its comment id and your reason.'
 	);
 }
+
+/**
+ * spec/reviews#findings: what a finding is, for the reviewer's prompt of a code review (English, rule 12). A wish for more verification is not one;
+ * a doubt is checked by the reviewer itself, and a word that needs no fix goes with the approval (spec/reviews#remark).
+ */
+export const findingRule =
+	"A finding names something wrong in the change — wrong behaviour, a broken contract, a missed requirement, or work outside the task — with its evidence: the lines and what goes wrong. A wish for more checks, tests or a fuller report is not a finding. When you doubt, check it yourself with what you have: read the files of your tree and run commands that change no files (the project's tests or type check, a short script that calls the changed code); then report the defect you found, or approve. Something the person should know that needs no fix (a risk to watch, the check you ran) goes in approve's note.";

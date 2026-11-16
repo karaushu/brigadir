@@ -486,6 +486,8 @@ export type TaskReviewMember = {
 	since: string | null;
 	/** Why it failed to start, as the task says. */
 	failure?: string;
+	/** spec/reviews#remark: the remark it left with its approval. */
+	note?: string;
 };
 /** spec/reviews#findings */
 export type TaskReviewFindingState =

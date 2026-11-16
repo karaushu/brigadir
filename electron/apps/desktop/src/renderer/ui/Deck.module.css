@@ -1,15 +1,16 @@
 /* spec/composer#queue-deck: a deck standing on the island's top edge — the queue (spec/composer-steering-queue-and-ghost#steering-hold) and the background commands (spec/chat-turns-plans-and-questions#background-commands) share it
    (rule 17). spec/composer-steering-queue-and-ghost#queue-deck: the island lies over the deck's last pixel, so its own top border is the line between
-   them, and the last row keeps 16 px of air to that border (8 over the first row): the deck reads as a layer behind the
-   island, not as its upper half. spec/appearance#control-scale: a row is as high as its 24 px (S) buttons and the text sits on its middle, so
+   them, and the last row keeps the same 8 px of air to that border as the first row has over it: the deck reads as a layer
+   behind the island, with no thick foot under its rows. spec/appearance#control-scale: a row is as high as its 24 px (S) buttons and the text sits on its middle, so
    the deck's own padding is the air less the 4.5 that the row already gives the 15-px text line; rows touch, the buttons
    do not overlap. */
 .deck {
 	--deck-pad-x: 14px;
 	--deck-pad-top: 3.5px;
-	--deck-pad-bottom: 12.5px;
-	/* The foot a person sees under the last row: the bottom padding less the pixel the island lies over (−9 px here against the dock's 8 px gap). */
-	--deck-foot: 11.5px;
+	/* The foot a person sees under the last row equals the head over the first; the padding adds the pixel the island lies over
+	   (−9 px here against the island's 8 px top inset). */
+	--deck-foot: var(--deck-pad-top);
+	--deck-pad-bottom: calc(var(--deck-foot) + 1px);
 	flex: none;
 	position: relative;
 	box-sizing: border-box;

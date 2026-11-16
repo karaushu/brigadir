@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
 	autoHireGates,
+	countedTokens,
+	tokenTally,
 	autoHireable,
 	autoRole,
 	autoHirePartLimit,
@@ -61,10 +63,12 @@ type HireResult = { approved: boolean; parts: AutoHirePart[]; hired: AutoHired[]
 const hireFile = 'crew-hire.json';
 /** spec/crew#auto-budget: how often the host looks at its workers' working time and tokens. */
 export const budgetCheckMs = 30_000;
-/** spec/crew#auto-budget: working minutes are the minutes inside turns; tokens are input, cache writes and output (not cache reads). */
+/**
+ * spec/crew#auto-budget: working minutes are the minutes inside turns; tokens are the task counter's figure (spec/agents-and-providers#task-tokens):
+ * input, cache writes and output, with the running turn's estimate — one implementation with the task budget.
+ */
 export function partUsage(records: readonly EventRecord[], now = Date.now()) {
 	let minutes = 0,
-		tokens = 0,
 		started: number | null = null;
 	for (const record of records) {
 		const event = record.event,
@@ -78,10 +82,11 @@ export function partUsage(records: readonly EventRecord[], now = Date.now()) {
 		) {
 			if (Number.isFinite(at)) minutes += Math.max(0, at - started) / 60_000;
 			started = null;
-		} else if (event.kind === 'turn.usage') tokens += event.input + event.cacheWrite + event.output;
+		}
 	}
 	if (started !== null) minutes += Math.max(0, now - started) / 60_000;
-	return { minutes: Math.round(minutes * 10) / 10, tokens };
+	const tally = tokenTally(records);
+	return { minutes: Math.round(minutes * 10) / 10, tokens: countedTokens(tally) + tally.estimate };
 }
 /** A name not in `taken`: `base`, then `base 2`, `base 3`, … — the base shortened first so the suffix always fits the name limit. */
 export function uniqueName(base: string, taken: ReadonlySet<string>, limit = 80): string {

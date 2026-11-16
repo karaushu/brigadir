@@ -494,6 +494,15 @@ describe('spec/crew#auto-dismiss, spec/crew#auto-budget, spec/crew#auto-guard', 
 			{ schemaVersion: 1, seq: 4, at: at(50), event: { kind: 'turn.started', text: 'b' } },
 		];
 		expect(partUsage(records, Date.parse(at(55)))).toEqual({ minutes: 15, tokens: 1700 });
+		// The running turn counts as the task counter counts it: the growth of its context is an estimate until its turn.usage.
+		const usage = (seq: number, used: number): EventRecord => ({
+			schemaVersion: 1,
+			seq,
+			at: at(52),
+			event: { kind: 'usage.changed', used, capacity: 200_000, cost: null },
+		});
+		const running = [...records, usage(5, 10_000), usage(6, 14_000)];
+		expect(partUsage(running, Date.parse(at(55)))).toEqual({ minutes: 15, tokens: 15_700 });
 	});
 });
 

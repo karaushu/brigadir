@@ -1,5 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
-import { mkdtemp, mkdir, writeFile, rm, readFile, readdir, realpath, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile, realpath, stat } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:http';
@@ -137,19 +137,16 @@ test('launches a crew from the sheet, confirms the plan card and shows workers a
 		await page.getByRole('button', { name: 'New task · repo' }).click();
 		const sheet = page.getByRole('dialog', { name: 'New task', exact: true });
 		await expect(sheet).toBeVisible();
-		// Type segment in the header: Brigadir shows the crew row and the roster by name.
-		await expect(sheet.locator('[data-crew-row]')).toHaveCount(0);
-		await sheet.getByRole('radio', { name: 'Brigadir' }).click();
+		// spec/tasks#sheet-rail: `Crew` is the rail's first group, on `Auto`; there is no type segment. This test takes the person's own crew.
+		await expect(sheet.getByRole('radio', { name: 'Brigadir' })).toHaveCount(0);
 		await expect(sheet.locator('[data-crew-row]')).toBeVisible();
-		// spec/crew#compose: the foreman composes by default; this test takes the person's own crew.
-		await expect(sheet.getByRole('button', { name: 'Crew', exact: true })).toContainText(
-			'Foreman composes'
-		);
+		await expect(sheet.getByRole('button', { name: 'Crew', exact: true })).toContainText('Auto');
+		await expect(sheet.locator('[data-role-row]')).toBeVisible();
 		await sheet.getByRole('button', { name: 'Crew', exact: true }).click();
-		const list = sheet.getByRole('listbox', { name: 'Crew' }); // spec/crew#compose: «Foreman composes» first, then the templates.
-		// «Foreman composes», the built-in Review crew and the seeded own crew; no built-in crew of developers.
+		const list = sheet.getByRole('listbox', { name: 'Crew' });
+		// `Auto`, the built-in Review crew and the seeded own crew; no built-in crew of developers.
 		await expect(list.getByRole('option')).toHaveCount(3);
-		await expect(list.getByRole('option').first()).toHaveText('Foreman composes');
+		await expect(list.getByRole('option').first()).toHaveText('Auto');
 		await expect(list.getByRole('option', { name: /^Crew \d/ })).toContainText('3');
 		for (const theme of ['light', 'dark'] as const) {
 			await app.evaluate(({ nativeTheme }, theme) => {
@@ -284,7 +281,10 @@ test('launches a crew from the sheet, confirms the plan card and shows workers a
 				path: info.outputPath(`plan-summary-${theme}.png`),
 			});
 		}
-		const foremanId = (await readdir(join(project, 'tasks')))[0]!,
+		// The foreman by its crew, not the first folder: its workers' task folders may come first.
+		const foremanId = (await page.evaluate(async () =>
+				(await window.brigadir.readWorkspace()).tasks.find((task) => task.crew && !task.crewTaskId)
+			))!.id,
 			journal = (await readFile(join(project, 'tasks', foremanId, 'events.jsonl'), 'utf8'))
 				.trim()
 				.split('\n')
@@ -400,7 +400,6 @@ test('shows the reviewer inside the foreman card and the check rows of both roun
 		page.on('pageerror', (e) => errors.push(e.message));
 		await page.getByRole('button', { name: 'New task · repo' }).click();
 		const sheet = page.getByRole('dialog');
-		await sheet.getByRole('radio', { name: 'Brigadir' }).click();
 		await sheet.getByRole('button', { name: 'Crew', exact: true }).click();
 		await sheet
 			.getByRole('listbox', { name: 'Crew' })
@@ -446,125 +445,6 @@ test('shows the reviewer inside the foreman card and the check rows of both roun
 				path: info.outputPath(`crew-review-${theme}.png`),
 			});
 		}
-		expect(errors).toEqual([]);
-	} finally {
-		await stopCrew(app, root);
-	}
-});
-
-/** spec/crew#compose: «Foreman composes» on the sheet, the crew in the plan card, its edit in the crew editor, and the approved crew in task.json. */
-test('the foreman composes the crew in the plan card and the person edits it before approving @area:tasks', async ({}, info) => {
-	test.setTimeout(240_000);
-	const { root, project, app } = await launchCrew('brigadir-crew-compose-');
-	const themes = async (name: string, shot: (path: string) => Promise<unknown>) => {
-		for (const theme of ['light', 'dark'] as const) {
-			await app.evaluate(({ nativeTheme }, theme) => {
-				nativeTheme.themeSource = theme;
-			}, theme);
-			await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-			await shot(info.outputPath(`${name}-${theme}.png`));
-		}
-	};
-	const page = await app.firstWindow();
-	try {
-		const errors: string[] = [];
-		page.on('pageerror', (e) => errors.push(e.message));
-		await page.getByRole('button', { name: 'New task · repo' }).click();
-		const sheet = page.getByRole('dialog', { name: 'New task', exact: true });
-		await sheet.getByRole('radio', { name: 'Brigadir' }).click();
-		// The default, and the first entry of the Crew popup, above the templates.
-		await expect(sheet.getByRole('button', { name: 'Crew', exact: true })).toContainText(
-			'Foreman composes'
-		);
-		await sheet.getByRole('button', { name: 'Crew', exact: true }).click();
-		const list = sheet.getByRole('listbox', { name: 'Crew' });
-		await expect(list.getByRole('option')).toHaveCount(3);
-		await expect(list.getByRole('option').first()).toHaveAccessibleName('Foreman composes');
-		await themes('compose-popup', (path) => page.screenshot({ animations: 'disabled', path }));
-		await list.getByRole('option', { name: 'Foreman composes' }).click();
-		await expect(sheet.getByRole('button', { name: 'Crew', exact: true })).toContainText(
-			'Foreman composes'
-		);
-		const roster = sheet.locator('[data-crew-roster] > *');
-		await expect(roster).toHaveCount(1);
-		await expect(roster.first()).toContainText('Foreman');
-		await sheet.getByRole('button', { name: 'Base ref' }).click();
-		await page.getByRole('option', { name: 'main', exact: true }).click();
-		await sheet
-			.getByRole('textbox', { name: 'Message' })
-			.fill(
-				'@call propose_plan {"summary":"One agent writes the file, a **reviewer** looks at it.\\n\\n- `out/**` belongs to API","crew":[{"name":"API","template":"Developer","summary":"Writes the output file","zone":["out/**"],"checkedBy":["Check"]},{"name":"Check","template":"Reviewer"}],"parts":[{"title":"Write output","agent":"API","prompt":"@write out/result.txt done","files":["out/**"]}]}'
-			);
-		await themes('compose-sheet', (path) => sheet.screenshot({ animations: 'disabled', path }));
-		await sheet.getByRole('button', { name: 'Start', exact: true }).click();
-		await expect(sheet).toHaveCount(0);
-		// The crew above the parts and its checks.
-		const plan = page.locator('[data-plan-id]');
-		await expect(plan).toBeVisible({ timeout: 60_000 });
-		// The foreman's reasoning is chat markdown, not raw `**`.
-		const reasoning = plan.locator('[data-plan-summary-text]');
-		await expect(reasoning.locator('strong')).toHaveText('reviewer');
-		await expect(reasoning.locator('li code')).toHaveText('out/**');
-		await expect(reasoning).not.toContainText('**reviewer**');
-		const members = plan.locator('[data-crew-member]');
-		await expect(members).toHaveCount(2);
-		await expect(members.first()).toContainText('API');
-		await expect(members.first()).toContainText('Developer');
-		await expect(members.first()).toContainText('Writes the output file');
-		await expect(members.first()).toContainText('out/**');
-		await expect(members.nth(1)).toContainText('Reviewer');
-		await expect(members.nth(1)).toContainText('checks API');
-		await page.mouse.move(0, 0);
-		await themes('compose-plan', (path) => plan.screenshot({ animations: 'disabled', path }));
-		// The person renames the agent in the crew editor; the foreman's own settings stay.
-		await plan.getByRole('button', { name: 'Edit crew…' }).click();
-		const editor = page.getByRole('dialog', { name: 'Crew' });
-		await expect(editor).toBeVisible();
-		await expect(editor.locator('[data-crew-node]')).toHaveCount(3);
-		await editor.locator('[data-crew-node]').first().click();
-		await expect(editor.locator('[data-crew-root-locked]')).toBeVisible();
-		await editor.locator('[data-crew-node]').filter({ hasText: 'API' }).click();
-		await editor
-			.locator('[data-crew-inspector]')
-			.getByRole('textbox', { name: 'Name' })
-			.fill('Backend');
-		await editor.getByRole('button', { name: 'Done' }).click();
-		await expect(editor).toHaveCount(0);
-		await expect(members.first()).toContainText('Backend');
-		await expect(plan.locator('[data-plan-crew]')).toHaveAttribute('data-edited', 'true');
-		await expect(members.nth(1)).toContainText('checks Backend');
-		// The part still names API: a difference until the part goes to Backend.
-		await expect(plan.getByRole('button', { name: 'Start workers' })).toBeDisabled();
-		await plan.locator('[data-plan-part]').first().getByRole('button', { name: 'Agent' }).click();
-		await page.getByRole('option', { name: 'Backend' }).click();
-		await expect(plan.getByRole('button', { name: 'Start workers' })).toBeEnabled();
-		await plan.getByRole('button', { name: 'Start workers' }).click();
-		await expect(page.locator('[data-plan-id]')).toHaveCount(0);
-		// The approved crew is the task's crew; the palette is gone.
-		const foremanId = (await readdir(join(project, 'tasks')))[0]!,
-			taskFile = join(project, 'tasks', foremanId, 'task.json');
-		await expect
-			.poll(async () =>
-				(
-					JSON.parse(await readFile(taskFile, 'utf8')) as {
-						task: { crew: { root: { agents: { name: string }[] } } };
-					}
-				).task.crew.root.agents.map((agent) => agent.name)
-			)
-			.toEqual(['Backend', 'Check']);
-		expect(
-			(JSON.parse(await readFile(taskFile, 'utf8')) as { task: { crew: { compose?: unknown } } })
-				.task.crew.compose
-		).toBeUndefined();
-		const composer = page.getByRole('textbox', { name: 'Message' });
-		await expect(composer).toBeEnabled({ timeout: 30_000 });
-		await composer.fill(
-			'@call create_worker_task {"agent":"Backend","title":"Write output","prompt":"@write out/result.txt done","files":["out/**"]}'
-		);
-		await expect(page.getByRole('button', { name: /^(Send|Add to queue)$/ })).toBeEnabled();
-		await composer.press('Enter');
-		const workers = page.locator('[data-crew-workers] button');
-		await expect(workers.first()).toContainText('Backend · Write output', { timeout: 60_000 });
 		expect(errors).toEqual([]);
 	} finally {
 		await stopCrew(app, root);

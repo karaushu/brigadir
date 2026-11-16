@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
 	formatAccelerator,
 	formatTime,
@@ -31,6 +31,10 @@ import {
 	type EventRecord,
 	type Locale,
 	type SessionCommand,
+	findSpecAgent,
+	autoRoleLabel,
+	autoRootName,
+	budgetLabel,
 } from '@brigadir/core';
 import { Glyph } from './ui/Glyph';
 import { Button, Chevron, Popup, PopupMarks } from './ui/Controls';
@@ -408,7 +412,7 @@ export function PlanCard({
 	);
 }
 /** The foreman's reasoning above the parts: chat markdown, as the agent's plan body (spec/chat-turns-plans-and-questions#plan-approval). */
-function PlanSummaryText({
+export function PlanSummaryText({
 	id,
 	text,
 	task,
@@ -441,20 +445,21 @@ function PlanSummaryText({
 	);
 }
 
-function agentGlyph(
+export function agentGlyph(
 	agent: Pick<CrewSpecAgent, 'role' | 'provider'>
 ): 'helmet' | 'claude' | 'openai' {
 	return agent.role === 'foreman' ? 'helmet' : agent.provider === 'claude' ? 'claude' : 'openai';
 }
-/** spec/chat-turns-plans-and-questions#plan-row: two lines of the worker prompt, `Whole prompt` unfolds it; edit in place, ⌘↩ closes, Esc restores. */
-function PartPrompt({
+/** spec/chat-turns-plans-and-questions#plan-row: two lines of the worker prompt, `Whole prompt` unfolds it; edit in place, ⌘↩ closes, Esc restores.
+ *  spec/chat-turns-plans-and-questions#hire-card: the hire card's part prompt is the same control. */
+export function PartPrompt({
 	part,
 	index,
 	locale,
 	disabled,
 	onChange,
 }: {
-	part: CrewPlanPart;
+	part: { prompt: string };
 	index: number;
 	locale: Locale;
 	disabled: boolean;
@@ -541,6 +546,51 @@ function PartPrompt({
 		</div>
 	);
 }
+/**
+ * spec/chat-turns-plans-and-questions#plan-row, spec/chat-turns-plans-and-questions#hire-card: a decided card (a plan, a hire) folds into one framed row —
+ * the title, a count, a tail, the time — and the chevron lists its parts read-only (rule 17: one look, one component).
+ */
+export function CardFold({
+	title,
+	count,
+	tail,
+	at,
+	rows,
+	open,
+	onToggle,
+	data,
+}: {
+	title: string;
+	count: string;
+	tail: ReactNode;
+	at: string;
+	rows: readonly { id: string; title: string; who: ReactNode }[];
+	open: boolean;
+	onToggle(event: React.SyntheticEvent<HTMLDetailsElement>): void;
+	data: Record<`data-${string}`, string | boolean>;
+}) {
+	return (
+		<details className={styles.planSummary} {...data} open={open} onToggle={onToggle}>
+			<summary>
+				<Glyph name="helmet" size={13} />
+				<strong>{title}</strong>
+				{count && <small>{count}</small>}
+				<span className={styles.summaryTail}>{tail}</span>
+				<time dateTime={at}>{formatTime(at)}</time>
+				<Chevron />
+			</summary>
+			<ol>
+				{rows.map((row, index) => (
+					<li key={row.id}>
+						<span>{index + 1}</span>
+						<span>{row.title}</span>
+						{row.who}
+					</li>
+				))}
+			</ol>
+		</details>
+	);
+}
 /** spec/chat-turns-plans-and-questions#plan-row: after the decision the card folds into one framed row; the chevron lists the parts read-only. */
 export function PlanSummary({
 	plan,
@@ -561,8 +611,7 @@ export function PlanSummary({
 	open: boolean;
 	onToggle(event: React.SyntheticEvent<HTMLDetailsElement>): void;
 }) {
-	const items = parts ?? plan.parts,
-		number = new Intl.NumberFormat(locale);
+	const items = parts ?? plan.parts;
 	const glyph = (name: string) => {
 		const agent = spec?.root.agents.find((item) => item.name === name);
 		return agent ? <Glyph name={agentGlyph(agent)} size={10} /> : null;
@@ -574,36 +623,22 @@ export function PlanSummary({
 		</span>
 	);
 	return (
-		<details
-			className={styles.planSummary}
-			data-plan-summary={plan.id}
-			data-approved={approved}
+		<CardFold
+			data={{ 'data-plan-summary': plan.id, 'data-approved': approved }}
+			title={t(locale, approved ? 'Plan approved' : 'Plan rejected')}
+			count={planPartCountLabel(locale, items.length)}
+			tail={
+				approved ? (
+					[...new Set(items.map((item) => item.agent))].map(agent)
+				) : (
+					<small>{t(locale, 'the foreman will make a new plan')}</small>
+				)
+			}
+			at={at}
+			rows={items.map((item) => ({ id: item.id, title: item.title, who: agent(item.agent) }))}
 			open={open}
-			onToggle={onToggle}>
-			<summary>
-				<Glyph name="helmet" size={13} />
-				<strong>{t(locale, approved ? 'Plan approved' : 'Plan rejected')}</strong>
-				<small>{planPartCountLabel(locale, items.length)}</small>
-				<span className={styles.summaryTail}>
-					{approved ? (
-						[...new Set(items.map((item) => item.agent))].map(agent)
-					) : (
-						<small>{t(locale, 'the foreman will make a new plan')}</small>
-					)}
-				</span>
-				<time dateTime={at}>{formatTime(at)}</time>
-				<Chevron />
-			</summary>
-			<ol>
-				{items.map((item, index) => (
-					<li key={item.id}>
-						<span>{number.format(index + 1)}</span>
-						<span>{item.title}</span>
-						{agent(item.agent)}
-					</li>
-				))}
-			</ol>
-		</details>
+			onToggle={onToggle}
+		/>
 	);
 }
 function Counts({ report, locale }: { report: CrewReportSummary; locale: Locale }) {
@@ -624,6 +659,7 @@ export function CrewEventRow({
 	pendingQuestions,
 	disabled,
 	send,
+	owner,
 }: {
 	record: EventRecord;
 	locale: Locale;
@@ -631,9 +667,17 @@ export function CrewEventRow({
 	pendingQuestions: readonly CrewQuestion[];
 	disabled: boolean;
 	send(command: SessionCommand): void;
+	/** spec/crew#auto: the task whose chat this is; an Auto task names its workers by their role. */ owner?: AgentTask;
 }) {
 	const e = record.event;
 	const name = (agent: string) => crewLabel(locale, agent);
+	// spec/sidebar#crew-card: an Auto worker reads `{role} · {part}`, not its unique node name.
+	const worker = (nodeId: string, agent: string) => {
+		const node = owner?.auto && owner.crew ? findSpecAgent(owner.crew.root, nodeId) : null;
+		return node ? crewLabel(locale, autoRoleLabel(owner!.auto, node)) : name(agent);
+	};
+	const workerOf = (taskId: string, agent: string) =>
+		worker(tasks.find((item) => item.id === taskId)?.crewNodeId ?? '', agent);
 	if (e.kind === 'turn.started' && e.crew) {
 		const marker = e.crew;
 		if (marker.kind === 'report' || marker.kind === 'branch-report') {
@@ -662,11 +706,14 @@ export function CrewEventRow({
 			);
 		}
 		// spec/crew#parts: the dropped part shows as its own service row (crew.part.dropped); the prompt to the foreman adds none.
+		// spec/chat-turns-plans-and-questions#hire-card: a hire decided after the call was gone shows in the folded card; files touched in a hired zone, in their own row.
 		if (
 			marker.kind === 'question' ||
 			marker.kind === 'part-dropped' ||
 			marker.kind === 'review-comments' ||
-			marker.kind === 'review-continue'
+			marker.kind === 'review-continue' ||
+			marker.kind === 'hire-decision' ||
+			marker.kind === 'zone-touched'
 		)
 			return null;
 		return (
@@ -685,7 +732,7 @@ export function CrewEventRow({
 				<Glyph name="agent-run" size={12} />
 				<small>{t(locale, 'worker')}</small>
 				<span className={styles.label}>
-					<span>{name(e.name)} · </span>
+					<span>{worker(e.nodeId, e.name)} · </span>
 					{e.title}
 				</span>
 			</div>
@@ -782,8 +829,137 @@ export function CrewEventRow({
 				</small>
 			</div>
 		);
-	void tasks;
+	// spec/crew#auto-dismiss: a dismissed worker leaves one quiet row; its task keeps its diff.
+	if (e.kind === 'crew.worker.dismissed')
+		return (
+			<div className={styles.service} data-crew-row="dismissed" data-quiet>
+				<Glyph name="agent-completed" size={12} />
+				<small>{t(locale, 'dismissed')}</small>
+				<span className={styles.label}>
+					<span>{worker(e.nodeId, e.name)} · </span>
+					{e.title}
+				</span>
+				<small>
+					{t(
+						locale,
+						e.reason === 'accepted'
+							? 'part accepted'
+							: e.reason === 'discarded'
+								? 'part not accepted'
+								: 'by you'
+					)}
+				</small>
+			</div>
+		);
+	// spec/crew#auto-commit: the Auto agent's own edits became a commit before a hire or an accept.
+	if (e.kind === 'crew.lead.committed')
+		return (
+			<div className={styles.service} data-crew-row="lead-commit">
+				<Glyph name="commit-dot" size={12} />
+				<small>{t(locale, 'commit')}</small>
+				<span className={styles.label}>
+					{t(locale, e.reason === 'hire' ? 'Edits before hiring' : 'Edits before accepting')}
+				</span>
+				<code>
+					{e.commits
+						.map((item) =>
+							e.commits.length > 1 ? `${item.scope} ${item.sha.slice(0, 7)}` : item.sha.slice(0, 7)
+						)
+						.join(' · ')}
+				</code>
+			</div>
+		);
+	// spec/crew#auto-budget: the part stopped at its budget and waits for the person.
+	if (e.kind === 'crew.budget.exceeded')
+		return (
+			<div className={styles.service} data-crew-row="over-budget">
+				<Glyph name="clock" size={12} />
+				<small>{t(locale, 'over budget')}</small>
+				<span className={styles.label}>
+					<span>{workerOf(e.taskId, e.name)} · </span>
+					{e.title}
+				</span>
+				<small className={styles.warn}>
+					{t(locale, '{used} of {budget}')
+						.replace(
+							'{used}',
+							budgetLabel(locale, {
+								minutes: Math.round(e.used.minutes),
+								tokens: e.used.tokens,
+							})
+						)
+						.replace('{budget}', budgetLabel(locale, e.budget))}
+				</small>
+			</div>
+		);
+	// spec/crew#auto-guard: the agent changed files of a zone it hired out.
+	if (e.kind === 'crew.zone.touched')
+		return (
+			<div className={styles.service} data-crew-row="zone-touched">
+				<Glyph name="review-warning" size={12} />
+				<small>{t(locale, 'zone')}</small>
+				<span className={styles.label}>
+					<span>{workerOf(e.taskId, e.name)} · </span>
+					{e.title}
+				</span>
+				<small className={styles.warn} title={e.paths.join('\n')}>
+					{t(locale, 'changed by the agent: {files}').replace(
+						'{files}',
+						e.paths
+							.slice(0, 3)
+							.map((path) => path.split('/').at(-1))
+							.join(', ') + (e.paths.length > 3 ? ` +${e.paths.length - 3}` : '')
+					)}
+				</small>
+			</div>
+		);
+	// spec/crew#auto-model: the card is in place of the request; the answer is one row.
+	if (e.kind === 'crew.model.requested') return null;
+	if (e.kind === 'crew.model.resolved')
+		return <ModelResolvedRow event={e} owner={owner} locale={locale} />;
+	// spec/chat-turns-plans-and-questions#hire-card: the decision shows as the folded card on its place (Conversation).
+	if (e.kind === 'crew.hire.requested' || e.kind === 'crew.hire.resolved') return null;
 	return null;
+}
+/** spec/crew#auto-model: `model · GPT-6 Astra · High · saved as role “Vision developer”`, `Keep Developer`, or `· chosen by Claude`. */
+function ModelResolvedRow({
+	event,
+	owner,
+	locale,
+}: {
+	event: Extract<EventRecord['event'], { kind: 'crew.model.resolved' }>;
+	owner: AgentTask | undefined;
+	locale: Locale;
+}) {
+	const answer = event.answer,
+		chosen = answer ? [answer.model?.name, answer.effort?.name].filter(Boolean).join(' · ') : '';
+	return (
+		<div className={styles.service} data-crew-row="model" data-by={event.by}>
+			<Glyph name={answer?.provider === 'codex' ? 'openai' : 'claude'} size={12} />
+			<small>{t(locale, 'model')}</small>
+			<span className={styles.label}>
+				{answer
+					? chosen || crewLabel(locale, event.role)
+					: event.cancelled
+						? crewLabel(locale, event.role)
+						: t(locale, 'Keep {role}').replace('{role}', crewLabel(locale, event.role))}
+				{event.part ? <span> · {event.part}</span> : null}
+			</span>
+			<small>
+				{/* spec/crew#auto-model: the agent's call was cancelled before anyone answered. */}
+				{event.cancelled
+					? t(locale, 'No answer')
+					: event.by === 'agent'
+						? t(locale, 'chosen by {agent}').replace(
+								'{agent}',
+								autoRootName(owner?.provider ?? 'claude')
+							)
+						: answer?.saveAs
+							? t(locale, 'saved as role “{name}”').replace('{name}', answer.saveAs)
+							: t(locale, 'Resolved')}
+			</small>
+		</div>
+	);
 }
 /**
  * spec/chat#tool-calls: an answered crew question is one plate like the waiting row —

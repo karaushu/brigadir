@@ -8,7 +8,9 @@ export class AgentFiles {
 	constructor(
 		private root: string,
 		private scopes: () => readonly Scope[],
-		private readOnlyAgent: () => boolean = () => false
+		private readOnlyAgent: () => boolean = () => false,
+		/** spec/crew#auto-guard: the hired part that owns a project-relative path, while its worker runs. */
+		private hiredZone: (path: string) => { name: string; title: string } | null = () => null
 	) {}
 	/** The root a file is resolved from: the project, or for an external repo or folder (spec/projects-and-board#external-folders) — itself.
 	 *  Otherwise a path outside the project root would fail `projectFile`, and nothing could be written to an external repo. */
@@ -60,6 +62,11 @@ export class AgentFiles {
 			throw new Error('You check the work and do not write code. Do not edit files.');
 		if (scopes.length && (!scope || !writableByAgent(scope)))
 			throw new Error('This repository is not in the task. Do not edit it through other tools.');
+		const hired = root === (await realpath(this.root)) ? this.hiredZone(local) : null;
+		if (hired)
+			throw new Error(
+				`This file belongs to «${hired.title}», the part you hired out to ${hired.name}. Hand the change to it with prompt_task, or dismiss it first.`
+			);
 		try {
 			const current = await readProjectFile(root, local);
 			if (current.state !== 'text') throw new Error('The file is not supported as text');

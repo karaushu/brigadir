@@ -14,8 +14,8 @@ files link here.
 | Mid-task | `mid` | the agent ([`request_review`](#request-tool)); the host API also takes a host start | `Mid-task review` |
 | Before the pull request | `pre-pr` | the person (the strip, `Review…`, the proposal), or the host when the person presses `Create PR` ([gate](#before-pr)) | `Review before PR` |
 
-- **A review targets a task.** A solo task and a crew worker's part are covered the same way: a part is a task, and its
-  review runs in the worker's own host. A worker's review carries the part number and the part's prompt and acceptance
+- **A review targets a task.** A solo task, an [Auto](crew.md#auto) task, a hired part and a crew worker's part are
+  covered the same way: a part is a task, and its review runs in the worker's own host. A worker's review carries the part number and the part's prompt and acceptance
   criteria; the crew's own check edge on parts ([Crew](crew.md#reviewer)) and its per-part round limit
   ([Crew](crew.md#review-limit)) stay as they are.
 - One review of a task lives at a time. A finished review stays in the task's record, so each point shows its last
@@ -64,7 +64,8 @@ provider's own option catalog.
 - The spec of the reviewers is kept in the task (`task.reviewCrew`: a crew spec whose root `Task agent` is the task's
   agent with `checkedBy` = the reviewers), so worker hosts and restarts read it like a crew's. Reviewers of an earlier
   review stay in it unchecked. A foreman task adds the reviewers below its root; findings go to the foreman, which
-  returns work to its workers.
+  returns work to its workers. An Auto task keeps them in `reviewCrew` until its first hire and below the root of its
+  crew from then on; its agent fixes the findings itself or hands them to the worker of that zone.
 - Reviewer tasks stay service rows under the task's card in the sidebar ([Surfaces](#surfaces)).
 
 <a id="start"></a>

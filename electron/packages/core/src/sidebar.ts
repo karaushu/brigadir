@@ -53,7 +53,10 @@ export function crewWorkers(foreman: AgentTask, tasks: readonly AgentTask[]): Ag
 }
 /** spec/crew#attention: a worker of this crew waits for the person (permission, or a question after escalation); the foreman carries the attention. */
 export function crewNeedsYou(foreman: AgentTask, tasks: readonly AgentTask[]): boolean {
-	return crewWorkers(foreman, tasks).some((task) => task.status === 'needs-you');
+	// spec/sidebar#crew-card: a worker over its budget waits in its own row; the card keeps its fill.
+	return crewWorkers(foreman, tasks).some(
+		(task) => task.status === 'needs-you' && !task.overBudget
+	);
 }
 /** Workers that hold an agent right now: the number beside the helmet on a board card (spec/projects-and-board#board). */
 export function liveCrewWorkers(foreman: AgentTask, tasks: readonly AgentTask[]): number {
@@ -114,6 +117,8 @@ export type CrewWorkerRow = {
 	depth: number;
 	provider: AgentTask['provider'];
 	role: CrewSpecAgent['role'];
+	/** spec/sidebar#crew-card: an Auto worker that was dismissed stays as a quiet row with its `+N −M`. */
+	dismissed: boolean;
 };
 /** Worker rows of a foreman card in tree order with the agent name as prefix and lead depth (spec/crew-templates-and-editor#after-launch, spec/crew#subordinates). */
 export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]): CrewWorkerRow[] {
@@ -132,10 +137,12 @@ export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]):
 				.sort((a, b) => (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '')))
 				rows.push({
 					task,
-					name: child.name,
+					// spec/sidebar#crew-card: an Auto worker's row is `{role} · {part}`.
+					name: foreman.auto ? autoRoleLabel(foreman.auto, child) : child.name,
 					depth,
 					provider: task.provider ?? child.provider,
 					role: child.role,
+					dismissed: !!foreman.auto && task.status === 'completed',
 				});
 			visit(child, depth + 1);
 		}
@@ -148,6 +155,7 @@ export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]):
 			depth: 0,
 			provider: task.provider,
 			role: findSpecAgent(spec.root, task.crewNodeId ?? '')?.role ?? 'developer',
+			dismissed: !!foreman.auto && task.status === 'completed',
 		});
 	return rows;
 }
@@ -158,10 +166,12 @@ export function crewTaskLabel(task: AgentTask, tasks: readonly AgentTask[]): str
 		(item) => item.id === task.crewTaskId && item.projectId === task.projectId
 	);
 	const spec = foreman?.crew ?? foreman?.reviewCrew,
-		name = spec ? findSpecAgent(spec.root, task.crewNodeId)?.name : undefined;
+		node = spec ? findSpecAgent(spec.root, task.crewNodeId) : null,
+		name = node ? (foreman?.auto ? autoRoleLabel(foreman.auto, node) : node.name) : undefined;
 	return name ? `${name} · ${task.title}` : task.title;
 }
 import { findSpecAgent, type CrewSpecAgent } from './crew';
+import { autoRoleLabel } from './auto';
 /** spec/sidebar#open-last: what was open when the app last ran — a project (or `*`, All projects) and, inside it, a task. */
 export type SidebarSelection = { project: string; task?: string };
 export const isSidebarSelection = (value: unknown): value is SidebarSelection =>

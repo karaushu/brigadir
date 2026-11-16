@@ -1112,9 +1112,9 @@ export function Intro({
 									)}
 								</p>
 							</Field>
-							<Field label={tr('Isolation for new tasks')} wide>
+							<Field label={tr('Isolation for CLI tasks')} wide>
 								<Seg
-									label={tr('Isolation for new tasks')}
+									label={tr('Isolation for CLI tasks')}
 									value={draft.agents.isolation}
 									options={[
 										{ value: 'in-place', label: tr('No isolation') },

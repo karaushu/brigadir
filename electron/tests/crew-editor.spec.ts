@@ -37,7 +37,6 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		await page.emulateMedia({ reducedMotion: 'no-preference' });
 		await page.getByRole('button', { name: 'New task · repo' }).click();
 		const sheet = page.getByRole('dialog');
-		await sheet.getByRole('radio', { name: 'Brigadir' }).click();
 		await sheet.getByRole('button', { name: 'Crew', exact: true }).click();
 		await sheet
 			.getByRole('listbox', { name: 'Crew' })

@@ -34,6 +34,7 @@ import {
 	isRemoteAccessSettings,
 	type RemoteAccessSettings,
 } from './remote-access';
+import { defaultAutoSettings, isAutoSettings, type AutoSettings } from './auto';
 import {
 	isActionAgents,
 	isActionCrews,
@@ -242,6 +243,8 @@ export type AppSettings = {
 	slack: SlackSettings;
 	/** spec/architecture-and-platform#auto-update: `autoDownload` — a new version downloads by itself; checking runs either way. */
 	updates: UpdateSettings;
+	/** spec/settings-modules-and-onboarding#settings-keys: Settings ▸ Auto — models outside the roles and the part budget of new Auto tasks. */
+	auto: AutoSettings;
 };
 export type UpdateSettings = { autoDownload: boolean };
 export function isUpdateSettings(value: unknown): value is UpdateSettings {
@@ -311,6 +314,7 @@ export const defaultAppSettings: AppSettings = {
 		mentions: { ...defaultSlackSettings.mentions, people: [] },
 	},
 	updates: { autoDownload: true },
+	auto: { anyModel: false, partBudget: { ...defaultAutoSettings.partBudget } },
 };
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (
@@ -354,10 +358,11 @@ export function isAgentDefaults(value: unknown): value is AgentDefaults {
 export function isAppSettings(value: unknown): value is AppSettings {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 24 &&
+		Object.keys(value).length === 25 &&
 		typeof value.planReviewOff === 'boolean' &&
 		isSlackSettings(value.slack) &&
 		isUpdateSettings(value.updates) &&
+		isAutoSettings(value.auto) &&
 		isTaskColumns(value.taskColumns) &&
 		isRemoteAccessSettings(value.remoteAccess) &&
 		(value.helperAgent === null || isHelperAgent(value.helperAgent)) &&

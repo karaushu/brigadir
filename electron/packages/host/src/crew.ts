@@ -68,6 +68,9 @@ import {
 	type Scope,
 	type CrewAssignment,
 	isCrewAssignment,
+	autoSpec,
+	crewWorkerClosed,
+	type AutoTask,
 } from '@brigadir/core';
 import {
 	buildReport,
@@ -79,6 +82,7 @@ import {
 	crewProcessRole,
 	humanToolsAllowed,
 	foremanBrief,
+	autoBrief,
 	rosterBrief,
 	parsePlan,
 	planBlocked,
@@ -136,12 +140,29 @@ export type CrewContext = {
 	parent: CrewSpecAgent | null;
 	parentKey: TaskKey | null;
 	isRoot: boolean;
+	/** spec/crew#auto: the roles and budget of an Auto task, and whether it runs in a worktree (hiring needs one). */
+	auto?: AutoTask;
+	worktree?: boolean;
 };
 /** Which crew role this host plays: the foreman task carries the spec, a worker points at it (spec/crew-templates-and-editor#snapshot). */
 export async function readCrewContext(
 	store: SessionStore,
 	task: AgentTask
 ): Promise<CrewContext | null> {
+	// spec/crew#auto: an Auto task is the root of its own crew from its first session; a CLI task stays one agent.
+	// spec/tasks#sheet-role: a checker writes no code and hires nobody, also when an edit gave an Auto task a checker's role.
+	if (task.auto && task.transport !== 'terminal' && task.readOnlyAgent !== true)
+		return {
+			role: 'auto',
+			crewKey: task,
+			spec: task.crew ?? autoSpecWithReviewers(task),
+			node: (task.crew ?? autoSpecWithReviewers(task)).root,
+			parent: null,
+			parentKey: null,
+			isRoot: true,
+			auto: task.auto,
+			worktree: task.launch?.isolation === 'worktree',
+		};
 	if (task.crew)
 		return {
 			role: 'foreman',
@@ -173,8 +194,20 @@ export async function readCrewContext(
 		isRoot: false,
 	};
 }
+/** spec/crew#auto-root: before its first hire an Auto task's crew is its agent alone, plus the reviewers of its own review when one ran. */
+export function autoSpecWithReviewers(task: AgentTask): CrewSpec {
+	const spec = autoSpec(task),
+		review = task.reviewCrew;
+	if (!review) return spec;
+	return {
+		...spec,
+		root: { ...spec.root, agents: [...review.root.agents], checkedBy: [...review.root.checkedBy] },
+	};
+}
 /** The `.context` block of the first prompt in a session (spec/crew#task-type, spec/crew#worker-context); a foreman learns its crew's tools (spec/agents-and-providers#tools-awareness). */
 export function crewBrief(context: CrewContext, tools?: WorkspaceTools): string {
+	if (context.role === 'auto' && context.auto)
+		return autoBrief(context.auto, { worktree: context.worktree === true });
 	return context.node.role === 'foreman'
 		? foremanBrief(context.spec, context.node.id, tools)
 		: workerContext(context.spec, context.node.id, tools);
@@ -220,10 +253,12 @@ export function sessionBrief(
 ): string {
 	const human = humanToolsAllowed(context?.role ?? null);
 	return [
+		// spec/tasks#agent-context: an Auto task's role text comes first, then its Auto brief.
+		context?.role === 'auto' ? (options.role ?? '') : '',
 		context ? crewBrief(context, options.tools) : (options.role ?? ''),
 		checklistBrief,
 		worktreeBrief,
-		provider === 'claude' && !context ? planApprovalBrief : '',
+		provider === 'claude' && (!context || context.role === 'auto') ? planApprovalBrief : '',
 		human ? contextBrief : '',
 		human ? sourcesBrief : '',
 		provider === 'claude' && options.subagents && !options.cli ? subagentBrief : '',
@@ -474,7 +509,7 @@ async function sessionStartRecord(
 }
 /** Foreman or lead side: plans, workers, reports, reviews and acceptance (spec/crew#task-type, spec/crew#communication). Owns crew-*.json in this task's directory. */
 export class CrewHost {
-	private workers: CrewWorkerRecord[] = [];
+	protected workers: CrewWorkerRecord[] = [];
 	private links = new Map<string, Link>();
 	private connecting = new Map<string, Promise<Link | null>>();
 	private planWaiter: {
@@ -490,7 +525,7 @@ export class CrewHost {
 	private escalations = new Map<string, ReturnType<typeof setTimeout>>();
 	private waiting: string[] = [];
 	private waitTimer: ReturnType<typeof setTimeout> | null = null;
-	private stopping = false;
+	protected stopping = false;
 	private tail: Promise<unknown> = Promise.resolve();
 	private reportSeqs = new Map<string, number>();
 	private reviews: ReviewRun[] = [];
@@ -501,7 +536,7 @@ export class CrewHost {
 		if (!isCrewNote(value) || value.seq !== count + 1) throw new Error('invalid_note');
 		return value;
 	}, 1);
-	constructor(private deps: CrewHostDeps) {}
+	constructor(protected deps: CrewHostDeps) {}
 	/**
 	 * spec/pull-requests-and-ci#review-crew: the crew task reviews a PR (`prReview.mode === 'review'`). Its reviewers are then the workers: they start
 	 * without a plan, read-only, on the PR head (`refs/brigadir-v2/pr/N`, no setup command in a quick review), report their
@@ -526,7 +561,7 @@ export class CrewHost {
 	private checks(agent: CrewSpecAgent) {
 		return this.node.agents.some((item) => item.checkedBy.includes(agent.id));
 	}
-	private isReviewWorker(agent: CrewSpecAgent | null | undefined) {
+	protected isReviewWorker(agent: CrewSpecAgent | null | undefined) {
 		return !!this.reviewing && agent?.role === 'reviewer' && !this.checks(agent);
 	}
 	/** The parts of the crew: every worker but a checker; in a PR review the reviewers are its parts. */
@@ -534,16 +569,16 @@ export class CrewHost {
 		const agent = findSpecAgent(this.deps.context.spec.root, worker.nodeId);
 		return agent?.role !== 'reviewer' || this.isReviewWorker(agent);
 	}
-	private journal(key: TaskKey) {
+	protected journal(key: TaskKey) {
 		return this.journals.read(this.deps.store, key);
 	}
-	private get node() {
+	protected get node() {
 		return this.deps.context.node;
 	}
-	private async file(part: string) {
+	protected async file(part: string) {
 		return safePath(await this.deps.store.taskDir(this.deps.key), part);
 	}
-	private serial<T>(work: () => Promise<T>): Promise<T> {
+	protected serial<T>(work: () => Promise<T>): Promise<T> {
 		const result = this.tail.catch(() => {}).then(work);
 		this.tail = result;
 		return result;
@@ -577,7 +612,7 @@ export class CrewHost {
 			(item) => item.state === 'pending' || item.state === 'escalated'
 		))
 			this.scheduleEscalation(question);
-		for (const worker of this.workers.filter((worker) => !worker.acceptedAt)) {
+		for (const worker of this.workers.filter((worker) => !crewWorkerClosed(worker))) {
 			const key = { projectId: this.deps.key.projectId, id: worker.taskId };
 			void this.link(key).then(
 				(link) => {
@@ -588,7 +623,7 @@ export class CrewHost {
 		}
 		void this.serial(async () => {
 			await this.dispatchReviews().catch(() => {});
-			for (const worker of this.workers.filter((worker) => !worker.acceptedAt)) {
+			for (const worker of this.workers.filter((worker) => !crewWorkerClosed(worker))) {
 				const task = await this.deps.store
 					.task({ projectId: this.deps.key.projectId, id: worker.taskId })
 					.catch(() => null);
@@ -616,7 +651,7 @@ export class CrewHost {
 		// Work that was in flight may have linked a worker after the first pass; an open crew socket would keep this host alive.
 		for (const link of this.links.values()) link.peer.close();
 	}
-	private async saveWorkers() {
+	protected async saveWorkers() {
 		await atomicJson(await this.file('crew-workers.json'), {
 			schemaVersion: 1,
 			workers: this.workers,
@@ -658,7 +693,7 @@ export class CrewHost {
 	private checksSelf(agentId: string) {
 		return this.node.checkedBy.includes(agentId);
 	}
-	private worker(taskId: unknown): CrewWorkerRecord {
+	protected worker(taskId: unknown): CrewWorkerRecord {
 		const self = taskId === this.deps.key.id ? this.selfRecord() : null;
 		if (self) return self;
 		const worker =
@@ -669,7 +704,7 @@ export class CrewHost {
 			);
 		return worker;
 	}
-	private workerKey(worker: CrewWorkerRecord): TaskKey {
+	protected workerKey(worker: CrewWorkerRecord): TaskKey {
 		return { projectId: this.deps.key.projectId, id: worker.taskId };
 	}
 	/** Two guards (spec/crew#task-type): the MCP server lists tools by role, and the host refuses anything else. */
@@ -961,13 +996,15 @@ export class CrewHost {
 		}
 		return { taskId: record.taskId, agent: agent.name, title, status: 'queued' };
 	}
-	private async spawnWorkerTask(
+	protected async spawnWorkerTask(
 		agent: CrewSpecAgent,
 		title: string,
 		prompt: string,
 		requestedScopes: string[],
 		/** spec/reviews#reviewer-sessions: a reviewer of the task's own changes reads the round's snapshot; it runs nothing. */
-		selfReviewer = false
+		selfReviewer = false,
+		/** spec/crew#auto-hire: what a hired part adds to its record, written with the record so a crash leaves no worker without it. */
+		extra: Partial<CrewWorkerRecord> = {}
 	): Promise<CrewWorkerRecord> {
 		const store = this.deps.store,
 			parentTask = await store.task(this.deps.key),
@@ -1074,6 +1111,7 @@ export class CrewHost {
 			title,
 			createdAt: new Date().toISOString(),
 			planPartId: planPart?.id ?? null,
+			...extra,
 		};
 		this.workers.push(record);
 		await this.saveWorkers();
@@ -1104,7 +1142,7 @@ export class CrewHost {
 		}
 		return this.discovered.scopes;
 	}
-	private async ensureReviewer(checker: CrewSpecAgent): Promise<CrewWorkerRecord> {
+	protected async ensureReviewer(checker: CrewSpecAgent): Promise<CrewWorkerRecord> {
 		const existing = this.workers.find(
 			(worker) => worker.nodeId === checker.id && !worker.acceptedAt
 		);
@@ -1220,7 +1258,7 @@ export class CrewHost {
 		};
 	}
 	/** The repos a part moves through: the worker's repos whose branch the parent's tree has (spec/crew#task-type, spec/crew#accept). */
-	private async partTargets(worker: CrewWorkerRecord) {
+	protected async partTargets(worker: CrewWorkerRecord) {
 		const key = this.workerKey(worker),
 			store = this.deps.store;
 		const parentProject = await store.projectForTask(this.deps.key),
@@ -1439,7 +1477,8 @@ export class CrewHost {
 				if ((await this.deps.held?.()) || !(await this.hasSlot())) break;
 				const taskId = this.waiting.shift()!;
 				const worker = this.workers.find((item) => item.taskId === taskId);
-				if (!worker || this.launching.has(taskId)) continue;
+				// spec/crew#auto-dismiss: a worker dismissed while it waited for a slot never starts.
+				if (!worker || crewWorkerClosed(worker) || this.launching.has(taskId)) continue;
 				this.launching.set(
 					taskId,
 					(async () => {
@@ -1505,6 +1544,8 @@ export class CrewHost {
 		const key = this.workerKey(worker),
 			store = this.deps.store,
 			task = await store.task(key);
+		// spec/crew#auto-dismiss: a dismissed worker does not start, at any step of its launch.
+		if (crewWorkerClosed(worker)) return;
 		if (worker.next?.state === 'queued' && task.hasStarted) return this.startNextPart(worker);
 		if (task.status !== 'queued' || task.hasStarted) return;
 		const launch = task.launch!;
@@ -1558,6 +1599,10 @@ export class CrewHost {
 			throw error;
 		}
 		if (this.stopping) throw new Error('Host is stopping');
+		if (crewWorkerClosed(worker)) {
+			await store.setStatus(key, 'completed');
+			return;
+		}
 		const link = await this.spawn(key);
 		await link.peer.request('start_agent', { allowScopeConflict: false });
 		const session = await awaitSessionStarted(link, 90_000);
@@ -1606,6 +1651,11 @@ export class CrewHost {
 			await this.saveWorkers();
 		});
 		await store.updateTask(key, { launchOptions: [] });
+		if (crewWorkerClosed(worker)) {
+			await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
+			await store.setStatus(key, 'completed');
+			return;
+		}
 		await link.peer.request('command', {
 			kind: 'prompt',
 			text: task.prompt ?? '',
@@ -1713,7 +1763,7 @@ export class CrewHost {
 		this.hostWatchers.get(name(key))?.close();
 		this.hostWatchers.delete(name(key));
 	}
-	private link(key: TaskKey): Promise<Link | null> {
+	protected link(key: TaskKey): Promise<Link | null> {
 		const current = this.links.get(name(key));
 		if (current) return Promise.resolve(current);
 		const pending = this.connecting.get(name(key));
@@ -2064,7 +2114,7 @@ export class CrewHost {
 		}
 	}
 	/** spec/crew#workers: the part's prompt and acceptance for its reviewers, in the member's own task directory (`crew-part.json`). */
-	private async savePartBrief(worker: CrewWorkerRecord, prompt: string, acceptance: string) {
+	protected async savePartBrief(worker: CrewWorkerRecord, prompt: string, acceptance: string) {
 		const clipped = prompt.length > crewReviewerPromptLimit;
 		const brief: CrewPartBrief = {
 			schemaVersion: 1,
@@ -3404,6 +3454,7 @@ export class CrewHost {
 	private async acceptTask(input: Record<string, unknown>) {
 		const worker = this.worker(input.taskId);
 		if (worker.acceptedAt) throw new Error('The task is already accepted');
+		if (worker.dismissedAt) throw new Error('The worker was dismissed; its part is not accepted');
 		if (this.accepting.has(worker.taskId)) throw new Error('The task is already being accepted');
 		this.accepting.add(worker.taskId);
 		try {
@@ -3429,6 +3480,7 @@ export class CrewHost {
 			}
 		await this.saveReviews();
 		if (await this.review()) return this.acceptReview(worker);
+		await this.beforeAccept(worker);
 		const { snapshots, scopes, branch, targets } = await this.partTargets(worker);
 		const preview = await previewCommits(scopes, snapshots ?? undefined);
 		// spec/crew#accept: `--squash` takes the worker's branch, so its tree is committed there first; that commit stays in the worker's branch.
@@ -3493,6 +3545,7 @@ export class CrewHost {
 			await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
 		}
 		await store.setStatus(key, 'completed').catch(() => {});
+		await this.afterAccept(worker);
 		await this.retireReviewers().catch(() => {});
 		if (conflicts.length)
 			return {
@@ -3503,6 +3556,9 @@ export class CrewHost {
 			};
 		return { accepted: true, merged, committed };
 	}
+	/** spec/crew#auto-commit: what runs before a part is squashed into this task, and after it is accepted. A named crew does nothing more. */
+	protected async beforeAccept(_worker: CrewWorkerRecord): Promise<void> {}
+	protected async afterAccept(_worker: CrewWorkerRecord): Promise<void> {}
 	/**
 	 * spec/pull-requests-and-ci#review-crew: a reviewer of a PR review changed no code and its tree is the PR head, so accepting it commits and merges
 	 * nothing — squashing that branch into a quick review's tree would bring the whole PR onto the person's branch.
@@ -3528,7 +3584,7 @@ export class CrewHost {
 	 * spec/crew#accept: the commit message generator of spec/agents-and-providers#one-shot (one shared prompt) writes the part's commit from the foreman's `git log`
 	 * and the part's diff (merge base → worker branch). Any failure, timeout or empty answer falls back to «agent: title».
 	 */
-	private async partMessage(
+	protected async partMessage(
 		worker: CrewWorkerRecord,
 		branch: string,
 		targets: readonly { scope: Scope; target: string }[]
@@ -3590,7 +3646,7 @@ export class CrewHost {
 	/** spec/crew#subordinates: a lead hands one branch report up only after it accepted every part and its tree has no merge conflict or unfinished squash left (spec/crew#accept). */
 	async branchReady(): Promise<boolean> {
 		const parts = this.workers.filter((worker) => this.isPart(worker));
-		if (!parts.length || parts.some((worker) => !worker.acceptedAt)) return false;
+		if (!parts.length || parts.some((worker) => !crewWorkerClosed(worker))) return false;
 		const snapshots = await readSnapshots(this.deps.store, this.deps.key).catch(() => null);
 		// spec/crew#parts: a part the lead gave in its own next part reopens that worker, so the report waits for its
 		// acceptance above; a next part of the lead that assigned nothing reports its branch at once.
@@ -3609,7 +3665,7 @@ export class CrewHost {
 			!this.planWaiter &&
 			!this.launching.size &&
 			!this.waiting.length &&
-			parts.every((worker) => worker.acceptedAt) &&
+			parts.every((worker) => crewWorkerClosed(worker)) &&
 			!this.reviews.some((run) => run.state === 'reviewing') &&
 			!this.questions.some((item) => item.state === 'pending' || item.state === 'escalated')
 		);
@@ -3634,7 +3690,7 @@ export class CrewHost {
 			// A reviewer of the task itself has no parts to wait for: it stops once no round of the task needs it.
 			if (
 				(!parts.length && !this.checksSelf(reviewer.nodeId)) ||
-				parts.some((worker) => !worker.acceptedAt) ||
+				parts.some((worker) => !crewWorkerClosed(worker)) ||
 				this.reviews.some(
 					(run) => run.state === 'reviewing' && run.reviewerNodeIds.includes(reviewer.nodeId)
 				)
@@ -3650,7 +3706,7 @@ export class CrewHost {
 		}
 	}
 	async stopWorkers() {
-		for (const worker of this.workers.filter((worker) => !worker.acceptedAt)) {
+		for (const worker of this.workers.filter((worker) => !crewWorkerClosed(worker))) {
 			const link = await this.link(this.workerKey(worker));
 			if (link) await link.peer.request('command', { kind: 'cancel' }).catch(() => {});
 		}

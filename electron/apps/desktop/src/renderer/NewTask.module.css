@@ -170,13 +170,7 @@
 	white-space: nowrap;
 }
 
-/* Type segment in the header; crew row with popup and «Налаштувати…»; roster indented 52px under the row. */
-.type {
-	flex: none;
-}
-.type button svg {
-	flex: none;
-}
+/* spec/tasks#sheet-rail: the crew row with its popup and `Set up…`; the roster indented 52px under the row. */
 .crewRoster {
 	margin: 0 0 10px 52px;
 }

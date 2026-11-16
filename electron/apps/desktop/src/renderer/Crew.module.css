@@ -573,3 +573,72 @@
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
+
+/* spec/chat-turns-plans-and-questions#hire-card: the hire card is the plan card (rule 17) with a role chip, a budget chip and the zone as
+   chips. The part prompt reads in `--fg`, as text the worker gets, not as a grey note. */
+.hire .promptText {
+	font-size: var(--text-12-5);
+	line-height: 19px;
+	color: var(--fg);
+}
+.hire .partFiles {
+	gap: 5px 6px;
+}
+.zoneChip {
+	font-size: var(--text-11-5);
+}
+.zoneChip > svg {
+	color: var(--fg2);
+}
+.zoneChip > span {
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+/* An edited chip takes the accent: a 1 px ring and the accent text. */
+.agent[data-edited] button[aria-haspopup] {
+	box-shadow: inset 0 0 0 1px var(--accent);
+	color: var(--accent);
+}
+.budget {
+	flex: none;
+	font: var(--text-11) var(--mono-family);
+}
+.budget > svg {
+	color: var(--fg3);
+}
+.budget[data-edited] {
+	box-shadow: inset 0 0 0 1px var(--accent);
+	color: var(--accent);
+}
+.edited {
+	flex: none;
+	padding: 1px 6px;
+	border-radius: 4px;
+	background: var(--accent-soft);
+	font-size: var(--text-10);
+	color: var(--accent);
+}
+/* A part the host keeps with the agent: everything but its reason dims, the title is struck through. */
+.hire > ol > li[data-refused] > :not(.issue) {
+	opacity: 0.5;
+}
+.hire > ol > li[data-refused] .partRow > input {
+	text-decoration: line-through;
+}
+.budgetFields {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) max-content;
+	align-items: center;
+	gap: 8px 10px;
+	font-size: var(--text-12);
+}
+.budgetNote {
+	margin: 10px 0 0;
+	font-size: var(--text-11);
+	line-height: 15px;
+	color: var(--fg2);
+}
+/* spec/crew#auto-dismiss: a dismissed worker's row is quiet. */
+.service[data-quiet] {
+	color: var(--fg2);
+}

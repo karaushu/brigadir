@@ -1,3 +1,4 @@
+import { reviewerCrews } from './review-crews';
 import { useEffect, useRef, useState } from 'react';
 import { create } from 'zustand';
 import {
@@ -228,7 +229,8 @@ function ReviewLaunchDialog({
 		fallback = agents.find((item) => item.default),
 		isDefault = (pick: HelperRun | null) =>
 			!pick || (!task && pick.provider === fallback?.provider && pick.model === fallback.model);
-	const crews = library?.crews ?? [];
+	// spec/pull-requests-and-ci#review-crew: only crews of reviewers.
+	const crews = library ? reviewerCrews(library) : [];
 	const rememberPick = (pick: HelperRun | null) => {
 		if (isDefault(pick) && ownCrew) void saveActionCrew(action, null).catch(() => {});
 		void saveActionAgent(
@@ -273,7 +275,8 @@ function ReviewLaunchDialog({
 			: fallback
 				? `${fallback.provider}:${fallback.model}`
 				: '';
-	const crewValue = chosenCrew ?? crews[0]?.id ?? '';
+	const crewValue =
+		(chosenCrew && crews.some((item) => item.id === chosenCrew) ? chosenCrew : crews[0]?.id) ?? '';
 	async function start() {
 		if (busy) return;
 		setBusy(true);

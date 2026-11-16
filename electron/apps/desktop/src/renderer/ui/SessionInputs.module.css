@@ -295,3 +295,35 @@
 	font: 12px var(--ui-family);
 	color: var(--fg2);
 }
+
+/* spec/chat-turns-plans-and-questions#model-card: the model question card — the question card's list per provider, a small provider label above
+   each, then the effort and `Save as role` rows. */
+.modelGroup {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.modelGroupLabel {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.modelRow {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	font-size: var(--text-12);
+}
+.modelRow > input {
+	flex: 1;
+	min-width: 0;
+}
+.saveAs {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+}
+.footStart {
+	margin-right: auto;
+}

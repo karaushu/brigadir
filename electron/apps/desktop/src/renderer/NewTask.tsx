@@ -13,9 +13,9 @@ import type {
 import {
 	resolveCrew,
 	templateLookup,
+	autoCrewId,
 	composeCrewId,
 	rememberedCrewId,
-	foremanTemplateId,
 } from '@brigadir/core';
 import { CrewRoster, crewLabel, crewTemplateTail, crewModel } from './Crew';
 import { CrewEditor } from './CrewEditor';
@@ -157,14 +157,18 @@ export function NewTask({
 		claude: true,
 		codex: true,
 	});
-	// spec/tasks#sheet-rail: the type decides the second row; Brigadir shows the crew by name and defaults to worktree isolation (spec/crew#task-type).
-	const [taskType, setTaskType] = useState<'agent' | 'brigadir'>(
-		editing?.crew || duplicateSource?.crew ? 'brigadir' : 'agent'
-	);
+	// spec/tasks#sheet-rail: the `Crew` group comes first: `Auto` (spec/crew#auto) unless an edited or duplicated task has a named crew.
 	const [library, setLibrary] = useState<CrewLibrary | null>(null),
-		[crewTemplateId, setCrewTemplateId] = useState<string>(
-			editing?.crew?.templateId ?? duplicateSource?.crew?.templateId ?? composeCrewId
-		);
+		[crewTemplateId, setCrewTemplateId] = useState<string>(() => {
+			const own = editing?.crew?.templateId ?? duplicateSource?.crew?.templateId;
+			return own && own !== composeCrewId ? own : autoCrewId;
+		}),
+		// spec/tasks#sheet-rail: the edited or duplicated task's crew left the library; one line says so until the first choice.
+		[goneCrew, setGoneCrew] = useState<string | null>(null),
+		// The isolation of Settings ▸ Agents: where a CLI task starts (an Auto task in the GUI starts in a worktree).
+		[settingsIsolation, setSettingsIsolation] = useState<TaskLaunch['isolation']>('in-place');
+	// spec/tasks#sheet-rail: a named crew (a library crew or a one-off) replaces the agent's own controls.
+	const brigadir = crewTemplateId !== autoCrewId;
 	// spec/tasks#sheet-role: the template a solo agent works as; an edited or duplicated task opens with its own.
 	const [roleId, setRoleId] = useState<string | null>(
 		editing?.agentRole?.templateId ?? duplicateSource?.agentRole?.templateId ?? null
@@ -244,19 +248,11 @@ export function NewTask({
 	// spec/git#agent-branch-names: an empty field is an auto name — the agent names the branch at preparation, the name from the text holds its place.
 	const branch = branchEdited ? (launch?.branch ?? '') : '';
 	const dialog = useRef<HTMLDialogElement>(null);
-	// spec/crew#compose: «the foreman composes» is the foreman alone; the editor sets its model, and agents added there make it a one-off crew.
-	const composing = crewTemplateId === composeCrewId;
 	const crewTemplate: CrewTemplate | undefined =
 		oneOff ??
-		(composing
-			? {
-					schemaVersion: 1,
-					id: composeCrewId,
-					name: 'Crew',
-					builtin: true,
-					root: { id: 'root', name: 'Foreman', template: foremanTemplateId },
-				}
-			: (library?.crews.find((item) => item.id === crewTemplateId) ?? library?.crews[0]));
+		(brigadir
+			? (library?.crews.find((item) => item.id === crewTemplateId) ?? library?.crews[0])
+			: undefined);
 	const crewSpec: CrewSpec | null = (() => {
 		if (!library || !crewTemplate) return null;
 		try {
@@ -269,14 +265,14 @@ export function NewTask({
 		}
 	})();
 	useEffect(() => {
-		const wanted = taskType === 'brigadir' ? (['claude', 'codex'] as const) : [provider];
+		const wanted = brigadir ? (['claude', 'codex'] as const) : [provider];
 		for (const p of wanted)
 			if (!(p in catalogs))
 				void window.brigadir.readProviderCatalog(p).then(
 					(catalog) => setCatalogs((current) => ({ ...current, [p]: catalog })),
 					() => setCatalogs((current) => ({ ...current, [p]: null }))
 				);
-	}, [taskType, provider]);
+	}, [brigadir, provider]);
 	// spec/tasks#sheet-base-ref: the project's own branches; a ref the settings remember stays in the list even when it is gone.
 	useEffect(() => {
 		let active = true;
@@ -364,7 +360,7 @@ export function NewTask({
 			roleId && library && !role && editing?.agentRole?.templateId === roleId ? editing : undefined,
 		// A duplicate of a task whose template is gone opens with no role.
 		chosenRole = role || goneRole || !library ? roleId : null,
-		canRole = taskType === 'agent' && !relay && !scheduling,
+		canRole = !brigadir && !relay && !scheduling,
 		// spec/tasks#sheet-role: a checker runs in the GUI.
 		checking =
 			canRole && (role ? soloRoleChecks(role) : !!goneRole && goneRole.readOnlyAgent === true),
@@ -495,10 +491,26 @@ export function NewTask({
 				},
 			}
 		: {};
-	const chooseType = (type: 'agent' | 'brigadir') => {
-		setTaskType(type);
-		if (type === 'brigadir' && launch && launch.isolation !== 'worktree' && !editing)
+	// spec/tasks#isolation: an Auto task in the GUI starts in a worktree when the project has a git repository to make one from.
+	const guiIsolation = (scopes: readonly { name: string }[], fallback: TaskLaunch['isolation']) =>
+		scopes.some((scope) => scope.name === '.') ? ('worktree' as const) : fallback;
+	// spec/tasks#sheet-rail: a named crew always runs in a worktree, and so does an Auto task in the GUI (hiring needs one).
+	const chooseCrew = (value: string) => {
+		setOneOff(null);
+		setGoneCrew(null);
+		setCrewTemplateId(value);
+		if (value !== autoCrewId && launch && launch.isolation !== 'worktree' && !editing)
 			setLaunch({ ...launch, isolation: 'worktree' });
+	};
+	// spec/tasks#isolation: an Auto task in the GUI starts in a worktree; a CLI task, one agent, starts where Settings ▸ Agents says.
+	const chooseTransport = (value: 'gui' | 'terminal') => {
+		setTransport(value);
+		if (launch && !editing && !relay)
+			setLaunch({
+				...launch,
+				isolation:
+					value === 'gui' ? guiIsolation(launch.scopes, settingsIsolation) : settingsIsolation,
+			});
 	};
 	async function loadDefaults() {
 		const revision = ++loadRevision.current;
@@ -544,18 +556,36 @@ export function NewTask({
 				setProposalSeed({ provider: proposed.provider, launchOptions: proposed.options });
 			}
 			setLibrary(templates);
-			// spec/crew-templates-and-editor#unshipped-crew-ids: a remembered crew that left the library starts with «Foreman composes».
-			const kept = editing?.crew?.templateId ?? duplicateSource?.crew?.templateId;
-			if (!editing?.crew && !duplicateSource?.crew)
-				setCrewTemplateId(rememberedCrewId(defaults.crewTemplateId, templates.crews));
-			else if (kept) setCrewTemplateId(rememberedCrewId(kept, templates.crews));
+			// spec/tasks#sheet-rail: the crew is not remembered for the project; an edited or duplicated task opens on its own crew, and on `Auto`
+			// when that crew left the library (spec/crew-templates-and-editor#unshipped-crew-ids).
+			const ownCrew = editing?.crew ?? duplicateSource?.crew;
+			const kept =
+				ownCrew?.templateId && ownCrew.templateId !== composeCrewId ? ownCrew.templateId : null;
+			const chosenCrew = kept ? rememberedCrewId(kept, templates.crews) : autoCrewId;
+			setCrewTemplateId(chosenCrew);
+			if (kept && chosenCrew === autoCrewId && ownCrew) setGoneCrew(ownCrew.name);
+			const startTransport =
+				proposed?.transport ??
+				draft?.source.transport ??
+				editing?.transport ??
+				duplicateSource?.transport ??
+				settings.agents.transport;
+			setSettingsIsolation(defaults.isolation);
 			setLaunch(
 				proposed?.launch ??
 					draft?.launch ??
 					editing?.launch ??
 					(duplicateSource?.launch
 						? { ...duplicateSource.launch, branch: '' }
-						: { ...defaults, branch: '' })
+						: // spec/tasks#isolation: a new Auto task in the GUI starts in a worktree; a CLI task where Settings ▸ Agents says.
+							{
+								...defaults,
+								isolation:
+									startTransport === 'gui'
+										? guiIsolation(defaults.scopes, defaults.isolation)
+										: defaults.isolation,
+								branch: '',
+							})
 			);
 			setEnabledProviders(settings.agents.enabled);
 			setProvider(
@@ -565,13 +595,7 @@ export function NewTask({
 					duplicateSource?.provider ??
 					settings.agents.provider
 			);
-			setTransport(
-				proposed?.transport ??
-					draft?.source.transport ??
-					editing?.transport ??
-					duplicateSource?.transport ??
-					settings.agents.transport
-			);
+			setTransport(startTransport);
 			setReady(true);
 		} catch {
 			if (mounted.current) setSettingsError(true);
@@ -626,8 +650,7 @@ export function NewTask({
 						return value ? [{ id: option.id, value }] : [];
 					}),
 				];
-				const crewProvider =
-					taskType === 'brigadir' ? (crewSpec?.root.provider ?? provider) : provider;
+				const crewProvider = brigadir ? (crewSpec?.root.provider ?? provider) : provider;
 				const schedule = await window.brigadir.createSchedule(projectId, {
 					name: (
 						name.trim() ||
@@ -641,17 +664,13 @@ export function NewTask({
 					task: {
 						prompt: text,
 						provider: crewProvider,
-						transport: taskType === 'brigadir' ? 'gui' : transport,
+						transport: brigadir ? 'gui' : transport,
 						launch: { ...base, branch: '' },
-						...(taskType === 'brigadir'
-							? {
-									crew: composing
-										? { compose: true as const, ...(oneOff ? { template: oneOff } : {}) }
-										: oneOff
-											? { template: oneOff }
-											: { templateId: crewTemplateId },
-								}
-							: {}),
+						...(brigadir
+							? { crew: oneOff ? { template: oneOff } : { templateId: crewTemplateId } }
+							: transport === 'gui'
+								? { crew: { auto: true as const } }
+								: {}),
 						...(choices.length ? { options: choices } : {}),
 					},
 				});
@@ -686,8 +705,7 @@ export function NewTask({
 							branch: suggestedBranch(name, text, editing?.id ?? draftId.current),
 							branchAuto: true,
 						};
-			const crewProvider =
-				taskType === 'brigadir' ? (crewSpec?.root.provider ?? provider) : provider;
+			const crewProvider = brigadir ? (crewSpec?.root.provider ?? provider) : provider;
 			const choices = [
 				...(model && modelOption ? [{ id: modelOption.id, value: model }] : []),
 				...launchSelects.flatMap((option) => {
@@ -731,16 +749,17 @@ export function NewTask({
 							projectId,
 							text,
 							crewProvider,
-							taskType === 'brigadir' ? 'gui' : sheetTransport,
+							brigadir ? 'gui' : sheetTransport,
 							backlog,
 							options,
-							taskType === 'brigadir'
-								? composing
-									? { compose: true, ...(oneOff ? { template: oneOff } : {}) }
-									: oneOff
-										? { template: oneOff }
-										: { templateId: crewTemplateId }
-								: undefined,
+							// spec/crew#auto: a GUI task that is not a named crew's is an Auto task; a CLI task is one agent.
+							brigadir
+								? oneOff
+									? { template: oneOff }
+									: { templateId: crewTemplateId }
+								: sheetTransport === 'gui'
+									? { auto: true }
+									: undefined,
 							Object.keys(sheet).length ? sheet : undefined
 						);
 			if (proposal)
@@ -767,7 +786,7 @@ export function NewTask({
 	// The editor is a second modal above the sheet: the sheet stays mounted, so its dialog stays open and its draft survives.
 	// spec/tasks#sheet-layout: the «Бригада» group of the `@` menu is only for the «Бригадир» type. The token is the node's English name.
 	const crewMentions: MentionOption[] =
-		taskType === 'brigadir' && crewSpec
+		brigadir && crewSpec
 			? specAgents(crewSpec.root).map((agent, index) => ({
 					kind: 'crew',
 					token: agent.name.replace(/\s+/g, '-'),
@@ -778,9 +797,9 @@ export function NewTask({
 			: [];
 	// spec/composer#slash-menu: `/` in the sheet is the same list as the task composer's before the agent starts: the agent's disk and our MCP tools.
 	const [slashOpen, setSlashOpen] = useState(false),
-		slashProvider = taskType === 'brigadir' ? (crewSpec?.root.provider ?? provider) : provider;
+		slashProvider = brigadir ? (crewSpec?.root.provider ?? provider) : provider;
 	const slashCatalog = useSlashCatalog(
-		{ projectId, provider: slashProvider, crew: taskType === 'brigadir' },
+		{ projectId, provider: slashProvider, crew: brigadir },
 		slashOpen
 	);
 	const slash = { ...slashEntries({ catalog: slashCatalog, agent: null }), onOpen: setSlashOpen };
@@ -866,25 +885,6 @@ export function NewTask({
 							<span className={styles.project} title={projectName}>
 								{projectName}
 							</span>
-							<div className={styles.type}>
-								<Segments
-									label={t(locale, 'Task type')}
-									value={taskType}
-									options={[
-										{
-											value: 'agent',
-											label: t(locale, 'Agent'),
-											icon: <Glyph name="person" size={13} />,
-										},
-										{
-											value: 'brigadir',
-											label: t(locale, 'Brigadir'),
-											icon: <Glyph name="helmet" size={13} />,
-										},
-									]}
-									onChange={(value) => chooseType(value as 'agent' | 'brigadir')}
-								/>
-							</div>
 							<PopupClose locale={locale} close={close} />
 						</header>
 						<div className={styles.columns}>
@@ -1080,11 +1080,12 @@ export function NewTask({
 										{t(locale, 'As in')} {relay.source.title}
 									</p>
 								)}
-								{taskType === 'brigadir' ? (
+								{/* spec/tasks#sheet-rail: `Crew` is the first group — `Auto` first, then the library's crews. A CLI task is one agent; a relay continues its source's. */}
+								{!relay && (
 									<div className={styles.group} data-crew-row>
 										<div className={styles.railLabelRow} data-size="s">
 											<span className={styles.railLabel}>{t(locale, 'Crew')}</span>
-											<QuotaButton locale={locale} placement="below" />
+											{brigadir && <QuotaButton locale={locale} placement="below" />}
 										</div>
 										{/* spec/crew-templates-and-editor#editor-inspector: the chosen crew is ticked. */}
 										<PopupMarks.Provider value>
@@ -1092,21 +1093,25 @@ export function NewTask({
 												label={t(locale, 'Crew')}
 												align="end"
 												value={
-													composing ? composeCrewId : oneOff ? 'one-off' : (crewTemplate?.id ?? '')
+													!brigadir || sheetTransport === 'terminal'
+														? autoCrewId
+														: oneOff
+															? 'one-off'
+															: (crewTemplate?.id ?? '')
 												}
-												{...(oneOff && !composing
+												{...(oneOff && brigadir
 													? {
 															displayValue: `${crewLabel(locale, oneOff.name)} · ${t(locale, 'own')}`,
 														}
-													: !composing && crewTemplate?.builtin
+													: brigadir && crewTemplate?.builtin
 														? // The empty slot of a built-in stays in the list; the closed popup shows the name alone.
 															{ icon: false }
 														: {})}
-												groups={{ templates: { label: t(locale, 'Crew templates') } }}
+												groups={{ crews: { label: t(locale, 'Crews') } }}
 												options={[
 													{
-														value: composeCrewId,
-														label: t(locale, 'Foreman composes'),
+														value: autoCrewId,
+														label: t(locale, 'Auto'),
 														icon: (
 															<span className={styles.crewGlyph}>
 																<Glyph name="generate" size={11} />
@@ -1123,44 +1128,61 @@ export function NewTask({
 															</span>
 														),
 														tail: crewTemplateTail(locale, item),
-														group: 'templates',
+														group: 'crews',
 													})),
 												]}
-												onChange={(value) => {
-													setOneOff(null);
-													setCrewTemplateId(value);
-												}}
-												disabled={!library}
+												onChange={chooseCrew}
+												// spec/tasks#backlog-edit: an edited task keeps its crew; a CLI task is one agent.
+												disabled={!library || !!editing || sheetTransport === 'terminal'}
 											/>
 										</PopupMarks.Provider>
-										<Button
-											disabled={!library || !crewTemplate}
-											onClick={() => setEditorOpen(true)}>
-											{t(locale, 'Set up…')}
-										</Button>
-										{crewSpec && (
-											<div className={styles.crewRoster}>
-												<CrewRoster
-													spec={crewSpec}
-													locale={locale}
-													unavailable={unavailable.map((agent) => agent.id)}
-												/>
-											</div>
+										{sheetTransport === 'terminal' && !brigadir && (
+											<p className={styles.crewHint}>{t(locale, 'A CLI task runs one agent.')}</p>
 										)}
-										{unavailable.map((agent) => (
-											<p key={agent.id} className={styles.crewWarning} role="status">
-												<Glyph name="review-warning" size={11} />
-												{t(
-													locale,
-													'Model «{model}» is unavailable in {provider} — {agent} starts with the provider default.'
-												)
-													.replace('{model}', crewModel(agent) ?? '')
-													.replace('{provider}', agent.provider === 'claude' ? 'Claude' : 'Codex')
-													.replace('{agent}', crewLabel(locale, agent.name))}
+										{goneCrew && !brigadir && (
+											<p className={styles.crewHint} role="status" data-crew-gone>
+												{t(locale, 'Crew “{name}” was deleted.').replace(
+													'{name}',
+													crewLabel(locale, goneCrew)
+												)}
 											</p>
-										))}
+										)}
+										{brigadir && (
+											<>
+												<Button
+													disabled={!library || !crewTemplate}
+													onClick={() => setEditorOpen(true)}>
+													{t(locale, 'Set up…')}
+												</Button>
+												{crewSpec && (
+													<div className={styles.crewRoster}>
+														<CrewRoster
+															spec={crewSpec}
+															locale={locale}
+															unavailable={unavailable.map((agent) => agent.id)}
+														/>
+													</div>
+												)}
+												{unavailable.map((agent) => (
+													<p key={agent.id} className={styles.crewWarning} role="status">
+														<Glyph name="review-warning" size={11} />
+														{t(
+															locale,
+															'Model «{model}» is unavailable in {provider} — {agent} starts with the provider default.'
+														)
+															.replace('{model}', crewModel(agent) ?? '')
+															.replace(
+																'{provider}',
+																agent.provider === 'claude' ? 'Claude' : 'Codex'
+															)
+															.replace('{agent}', crewLabel(locale, agent.name))}
+													</p>
+												))}
+											</>
+										)}
 									</div>
-								) : (
+								)}
+								{brigadir ? null : (
 									<>
 										{/* spec/tasks#sheet-role: the template the agent works as; «No role» is an agent with no role text. */}
 										{canRole && (
@@ -1322,7 +1344,7 @@ export function NewTask({
 														{ value: 'gui', label: 'GUI' },
 														{ value: 'terminal', label: 'CLI' },
 													]}
-													onChange={(value) => setTransport(value as 'gui' | 'terminal')}
+													onChange={(value) => chooseTransport(value as 'gui' | 'terminal')}
 												/>
 											</div>
 										)}
@@ -1585,7 +1607,6 @@ export function NewTask({
 					close={() => setEditorOpen(false)}
 					done={(template) => {
 						// No library id: the one-off crew is what launches.
-						if (composing && template.root.agents?.length) setCrewTemplateId('');
 						setOneOff(template);
 						setEditorOpen(false);
 					}}

@@ -14,6 +14,7 @@ import {
 	isCrewChoices,
 } from './crew';
 import { t, type Locale, type MessageKey } from './messages';
+import { isAutoBudget, type AutoBudget } from './auto';
 /** spec/crew#task-type/spec/crew#communication runtime records of a running crew: plans, workers, notes, questions and reports. Pure types and validators. */
 export type CrewPlanPart = {
 	id: string;
@@ -81,7 +82,28 @@ export type CrewWorkerRecord = {
 	rounds?: number;
 	/** spec/crew#review-limit: the parent was told the part is past its review limit. */
 	limitTold?: boolean;
+	/** spec/crew#auto-dismiss: an Auto worker is dismissed when its part is accepted or discarded, or by the person; its task keeps its diff. */
+	dismissedAt?: string;
+	dismissReason?: CrewDismissReason;
+	/** spec/crew#auto-budget: the part's budget, and when it went over it. */
+	budget?: AutoBudget;
+	exceededAt?: string;
+	/** When the worker's host took the stop; until then the host sends it again at every check. */
+	budgetStopped?: string;
+	/** spec/crew#auto-guard: the zone the Auto agent hired out, and the commit per repo (path relative to the project, '' — root) it started from. */
+	zone?: string[];
+	hiredFrom?: Record<string, string>;
+	/** spec/crew#auto-hire: the hire this worker came from. */
+	hireId?: string;
 };
+export type CrewDismissReason = 'accepted' | 'discarded' | 'person';
+export const crewDismissReasons: readonly CrewDismissReason[] = ['accepted', 'discarded', 'person'];
+/** spec/crew#auto-dismiss: a member whose part is over — accepted, or dismissed without it. */
+export function crewWorkerClosed(
+	worker: Pick<CrewWorkerRecord, 'acceptedAt' | 'dismissedAt'>
+): boolean {
+	return Boolean(worker.acceptedAt || worker.dismissedAt);
+}
 export type CrewNote = {
 	id: string;
 	seq: number;
@@ -130,7 +152,11 @@ export type CrewTurnMarker =
 	/** spec/reviews#loop: the reviewers' comments of a round go to the task's own agent. */
 	| { kind: 'review-comments'; round: number; comments: number }
 	/** spec/reviews#loop: a mid-task review ended while the agent waited; it goes on with the task. */
-	| { kind: 'review-continue' };
+	| { kind: 'review-continue' }
+	/** spec/crew#auto-hire: the person decided a hire after the agent's call was gone (its turn ended, or the host restarted). */
+	| { kind: 'hire-decision'; hireId: string; approved: boolean }
+	/** spec/crew#auto-guard: the Auto agent changed files of a zone it hired out. */
+	| { kind: 'zone-touched'; taskId: string; agent: string };
 export const crewPlanPartLimit = 64,
 	crewPlanPromptLimit = 100_000,
 	crewNoteLimit = 8 * 1024,
@@ -220,6 +246,25 @@ export function isCrewWorkerRecord(value: unknown): value is CrewWorkerRecord {
 		(value.rounds === undefined ||
 			(Number.isSafeInteger(value.rounds) && Number(value.rounds) >= 0)) &&
 		(value.limitTold === undefined || typeof value.limitTold === 'boolean') &&
+		(value.dismissedAt === undefined || typeof value.dismissedAt === 'string') &&
+		(value.dismissReason === undefined ||
+			crewDismissReasons.includes(value.dismissReason as CrewDismissReason)) &&
+		(value.budget === undefined || isAutoBudget(value.budget)) &&
+		(value.exceededAt === undefined || typeof value.exceededAt === 'string') &&
+		(value.budgetStopped === undefined || typeof value.budgetStopped === 'string') &&
+		(value.zone === undefined ||
+			(Array.isArray(value.zone) &&
+				value.zone.length <= 256 &&
+				value.zone.every(
+					(path) => typeof path === 'string' && normalizeZonePath(path) === path
+				))) &&
+		(value.hiredFrom === undefined ||
+			(isRecord(value.hiredFrom) &&
+				Object.keys(value.hiredFrom).length <= 256 &&
+				Object.entries(value.hiredFrom).every(
+					([path, sha]) => path.length <= 4096 && isSha(sha)
+				))) &&
+		(value.hireId === undefined || isId(value.hireId)) &&
 		isId(value.taskId) &&
 		isId(value.nodeId) &&
 		isCrewName(value.name) &&
@@ -306,6 +351,10 @@ export function isCrewTurnMarker(value: unknown): value is CrewTurnMarker {
 			);
 		case 'review-continue':
 			return Object.keys(value).length === 1;
+		case 'hire-decision':
+			return isId(value.hireId) && typeof value.approved === 'boolean';
+		case 'zone-touched':
+			return isId(value.taskId) && isCrewName(value.agent);
 		case 'part-dropped':
 			return (
 				isId(value.taskId) &&

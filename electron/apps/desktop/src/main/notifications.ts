@@ -80,7 +80,8 @@ export function phonePushKind(kind: NoticeKind, eventKind: string): PhonePushKin
 	if (kind === 'turn-ended') return 'done';
 	if (kind !== 'needs-you') return null;
 	if (eventKind === 'permission.requested') return 'permission';
-	if (eventKind === 'crew.plan.requested') return 'plan';
+	if (eventKind === 'crew.plan.requested' || eventKind === 'crew.hire.requested') return 'plan';
+	if (eventKind === 'crew.model.requested') return 'question';
 	if (
 		eventKind === 'question.requested' ||
 		eventKind === 'crew.question.escalated' ||
@@ -117,6 +118,8 @@ const requested = new Set([
 	'task.proposal.requested',
 	'crew.plan.requested',
 	'crew.question.requested',
+	'crew.hire.requested',
+	'crew.model.requested',
 ]);
 const requestIdOf = (event: EventRecord['event']): string | null =>
 	event.kind === 'permission.requested'
@@ -127,7 +130,11 @@ const requestIdOf = (event: EventRecord['event']): string | null =>
 				? event.proposal.id
 				: event.kind === 'crew.plan.requested'
 					? event.plan.id
-					: null;
+					: event.kind === 'crew.hire.requested'
+						? event.hire.id
+						: event.kind === 'crew.model.requested'
+							? event.request.id
+							: null;
 const timeOf = (record: EventRecord) => Date.parse(record.at) || Date.now();
 /** What the live requests of a task are, to tell the center only when they change (not on every streamed event). */
 const pendingSignature = (state: TaskState) =>
@@ -196,9 +203,15 @@ export class Notifications {
 			state.watermark = maxSeq(state.watermark, snapshot.records);
 			const pending = pendingInputs(snapshot.records);
 			state.permissions = new Map(pending.permissions.map((request) => [request.id, request]));
-			state.questions = new Set(pending.questions.map((question) => question.id));
+			state.questions = new Set([
+				...pending.questions.map((question) => question.id),
+				...pending.crewModels.map((request) => request.id),
+			]);
 			state.proposals = new Set(pending.proposals.map((proposal) => proposal.id));
-			state.plans = new Set(pending.crewPlan ? [pending.crewPlan.id] : []);
+			state.plans = new Set([
+				...(pending.crewPlan ? [pending.crewPlan.id] : []),
+				...(pending.crewHire ? [pending.crewHire.id] : []),
+			]);
 			state.crewQuestions = new Set(pending.crewQuestions.map((question) => question.id));
 			state.crewWaiting = state.crewQuestions.size > 0 && !snapshotBusy(snapshot.records);
 			for (const record of snapshot.records)
@@ -283,6 +296,23 @@ export class Notifications {
 				break;
 			case 'crew.plan.resolved':
 				state.plans.delete(event.id);
+				this.close(state, `${group}/needs-you/${event.id}`);
+				break;
+			// spec/crew#attention: an Auto task's hire card and model question wait like a plan and a question.
+			case 'crew.hire.requested':
+				state.plans.add(event.hire.id);
+				requestId = event.hire.id;
+				break;
+			case 'crew.hire.resolved':
+				state.plans.delete(event.id);
+				this.close(state, `${group}/needs-you/${event.id}`);
+				break;
+			case 'crew.model.requested':
+				state.questions.add(event.request.id);
+				requestId = event.request.id;
+				break;
+			case 'crew.model.resolved':
+				state.questions.delete(event.id);
 				this.close(state, `${group}/needs-you/${event.id}`);
 				break;
 			// spec/crew#attention: a worker's question waits for the person once the foreman ends its turn without answering, or after escalation.
@@ -530,21 +560,25 @@ export class Notifications {
 						? t(locale, 'The agent proposes a new task.')
 						: eventKind === 'crew.plan.requested'
 							? t(locale, 'The foreman proposes a split')
-							: eventKind === 'task-review.verified'
-								? t(locale, 'The review left findings open; your call.')
-								: (eventKind === 'turn.completed' && kind === 'needs-you') ||
-									  eventKind === 'crew.question.escalated'
-									? t(locale, 'A worker is waiting for your answer.')
-									: kind === 'turn-ended'
-										? t(locale, 'The turn ended.')
-										: kind === 'rate-limited'
-											? [
-													t(locale, 'Subscription limit reached.'),
-													limitedReset(state.rateLimits, locale),
-												].join(' ')
-											: kind === 'scope-violation'
-												? t(locale, 'A read-only repo changed.')
-												: t(locale, 'The session failed.');
+							: eventKind === 'crew.hire.requested'
+								? t(locale, 'The agent wants to hire workers.')
+								: eventKind === 'crew.model.requested'
+									? t(locale, 'The agent asks for another model.')
+									: eventKind === 'task-review.verified'
+										? t(locale, 'The review left findings open; your call.')
+										: (eventKind === 'turn.completed' && kind === 'needs-you') ||
+											  eventKind === 'crew.question.escalated'
+											? t(locale, 'A worker is waiting for your answer.')
+											: kind === 'turn-ended'
+												? t(locale, 'The turn ended.')
+												: kind === 'rate-limited'
+													? [
+															t(locale, 'Subscription limit reached.'),
+															limitedReset(state.rateLimits, locale),
+														].join(' ')
+													: kind === 'scope-violation'
+														? t(locale, 'A read-only repo changed.')
+														: t(locale, 'The session failed.');
 	}
 	/** spec/notifications-slack-notes-and-schedules#notification-center: the live requests of every task for the center's «Needs you», newest first. */
 	pendingNotices(): PendingNotice[] {
@@ -700,11 +734,13 @@ function entryKind(kind: NoticeKind, eventKind: string): NoticeEntryKind {
 				? 'question'
 				: eventKind === 'task.proposal.requested'
 					? 'proposal'
-					: eventKind === 'crew.plan.requested'
+					: eventKind === 'crew.plan.requested' || eventKind === 'crew.hire.requested'
 						? 'plan'
-						: eventKind === 'task-review.verified'
-							? 'review'
-							: 'worker';
+						: eventKind === 'crew.model.requested'
+							? 'question'
+							: eventKind === 'task-review.verified'
+								? 'review'
+								: 'worker';
 	if (kind === 'turn-ended' && eventKind === 'background.changed') return 'background';
 	return kind as NoticeEntryKind;
 }

@@ -52,6 +52,8 @@ test('host snapshots drive immutable diffs, explicit modes, draft parking and re
 		await page.getByRole('button', { name: 'Add a project…' }).click();
 		await page.getByRole('button', { name: 'New task · repository' }).click();
 		await page.getByRole('textbox', { name: 'Message', exact: true }).fill('hello');
+		// spec/tasks#isolation: an Auto task in the GUI starts in a worktree; this test edits the project's own tree.
+		await page.getByRole('radio', { name: 'No isolation', exact: true }).click();
 		await page.getByRole('button', { name: 'Start', exact: true }).click();
 		await expect(page.getByRole('log')).toContainText('world', { timeout: 20000 });
 		key = await page.evaluate(async () => {

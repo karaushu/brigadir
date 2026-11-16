@@ -812,6 +812,21 @@
 	flex: none;
 	color: var(--fg3);
 }
+/* spec/sidebar#crew-card: a dismissed Auto worker stays a quiet row — its text one step down, its role one more — with its own `+N −M`. */
+.workerRow[data-dismissed] .workerTitle {
+	color: var(--fg2);
+}
+.workerRow[data-dismissed] .workerTitle > span {
+	color: var(--fg3);
+}
+.workerCounts {
+	flex: none;
+	font-size: var(--text-10);
+}
+/* spec/sidebar#crew-card: over its budget — amber words, needs-you glyph; the card keeps its fill. */
+.workerTitle > .workerOverBudget {
+	color: var(--amber);
+}
 /* spec/sidebar#crew-card: a folded crew is its header alone, in the card's tone, 6 px to the next row. */
 .crewCard[data-collapsed='true'] {
 	padding: 0;

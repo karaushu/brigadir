@@ -388,7 +388,8 @@ test("sheet picks the first catalog model, offers the model's effort levels and 
 			'aria-checked',
 			'true'
 		);
-		// spec/tasks#isolation: the worktree fields exist only for Worktree.
+		// spec/tasks#isolation: a project without a git repository starts where Settings ▸ Agents says, even for Auto in the GUI;
+		// the worktree fields exist only for Worktree.
 		const branchField = sheet.getByRole('textbox', { name: 'Branch name', exact: true });
 		await expect(sheet.getByRole('radio', { name: 'No isolation', exact: true })).toHaveAttribute(
 			'aria-checked',
@@ -475,7 +476,6 @@ test("sheet picks the first catalog model, offers the model's effort levels and 
 		await settings.getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(settings).toHaveCount(0);
 		await page.getByRole('button', { name: 'New task · repo', exact: true }).click();
-		await sheet.getByRole('radio', { name: 'Brigadir' }).click();
 		await sheet.getByRole('button', { name: 'Crew', exact: true }).click();
 		await sheet
 			.getByRole('listbox', { name: 'Crew' })

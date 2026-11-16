@@ -120,6 +120,8 @@ export * from './solo-role';
 export * from './crew-edit';
 export * from './crew-runtime';
 export * from './crew-compose';
+export * from './auto';
+export * from './auto-labels';
 export * from './code-intel';
 export * from './git-history';
 export * from './branch-switch';

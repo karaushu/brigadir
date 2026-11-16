@@ -98,6 +98,8 @@ export class Ghosts {
 				'question.requested',
 				'task.proposal.requested',
 				'crew.plan.requested',
+				'crew.hire.requested',
+				'crew.model.requested',
 				'prompt.queued',
 			].includes(record.event.kind)
 		)

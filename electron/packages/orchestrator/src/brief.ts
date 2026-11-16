@@ -6,6 +6,7 @@ import {
 	type CrewCompose,
 	type CrewSpec,
 	type CrewSpecAgent,
+	type AutoTask,
 } from '@brigadir/core';
 import { crewToolsBrief } from './tools-brief';
 import type { WorkspaceTools } from './tools';
@@ -171,5 +172,35 @@ export function workerContext(spec: CrewSpec, nodeId: string, tools?: WorkspaceT
 		sections.push(
 			'When a report to check arrives, call read_report and read_diff with its reviewId, then submit_review with comments or approve. You have two rounds; after that the dispute goes to your parent.'
 		);
+	return sections.join('\n\n');
+}
+/**
+ * spec/crew#auto-brief: the Auto agent's brief says the opposite of a foreman's: it writes the code itself and hires only for independent
+ * parts large enough to pay for a session each. English by rule 12; no model is named in code (rule 7): the roles carry the catalog's names.
+ */
+export function autoBrief(auto: AutoTask, options: { worktree: boolean }): string {
+	const roles = auto.roles.map((role) => {
+		const parts: string[] = [role.role === 'reviewer' ? 'checks, writes no code' : 'writes code'];
+		if (role.summary?.trim())
+			parts.push(`when to use: ${role.summary.trim().replace(/[.;]+$/, '')}`);
+		parts.push(specModel(role));
+		return `\`${role.name}\` (${parts.join('; ')})`;
+	});
+	const budget = `${auto.budget.minutes} minutes of work and ${Math.round(auto.budget.tokens / 1000)}k tokens`;
+	const sections = [
+		`You do this task yourself: read the task and the code, then write the code. Do not plan aloud for a small task: a small task, or one chain of dependent steps, you do from start to end without a plan to approve and without questions.`,
+		options.worktree
+			? `You may also hire workers: agents that each take one part of the task in a worktree of their own and work at the same time as you. Hire only when the task has two or more parts that are independent (each writes its own files, and none needs another's result to start) and each part is large enough to pay for a session of its own: a worker starts with none of your context and reads the code again. You may hire at any moment of the task, not only at its start, and keep the rest of the work yourself.`
+			: `This task runs in the project's own checkout, not in a worktree, so you cannot hire workers here: do the whole task yourself. If the task clearly has independent parts large enough for workers, say in your reply that it needs a worktree for hiring.`,
+		...(options.worktree
+			? [
+					`How to hire: call hire_workers once with the parts you hand out and wait for its result. Each part has a short title, a role (one of the roles below), its zone (the paths or globs it writes; zones never overlap), your estimate of the files and lines it changes, its budget when the default of ${budget} does not fit, and the full prompt for the worker. The worker sees nothing of this conversation, so the prompt stands on its own: the goal, the behaviour expected, what must stay untouched, and the command that proves the part is done (a test, a typecheck, a build). In summary, say what each part is and why the parts are independent: the person reads it on the card. The person approves, edits or declines the hire. Declined means you do those parts yourself. The host refuses a part whose zone overlaps another part or a running worker, or that is too small for a worker; a refused part stays with you, and the other parts are still hired.`,
+					`Before a hire and before you accept a part, the host commits your own edits to this task's branch, and workers start from that commit. After a hire you no longer write inside the zones you hired out; the host refuses those writes and tells you when you changed such a file another way.`,
+					`While workers run, keep working on what stays with you. A report arrives by itself when a worker ends a turn; do not poll task_status. Read the report, then read_diff where it raises a question. Return work with prompt_task or submit_review; answer a worker's question with prompt_task and its questionId. Accept a finished part with accept_task: it merges the part into this task as one commit and dismisses the worker. dismiss_worker dismisses a worker without its part; its task keeps its diff. A worker over its budget stops and waits for the person.`,
+					`Roles you hire from: ${roles.join(', ') || 'none'}. Pass the role's name. ${modelLadder} You cannot use a model or provider outside these roles. When no role fits a part, hire it with a base role (Developer, or Reviewer for a check) and write what the part needs into its prompt, or call request_model for another model: the person chooses it (or, when the settings allow, you do), and it becomes a role you can hire.`,
+				]
+			: []),
+		`Permissions go to the person. Answer the person yourself: you are their agent for this task.`,
+	];
 	return sections.join('\n\n');
 }

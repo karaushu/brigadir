@@ -479,6 +479,8 @@ export class SessionStore {
 				| 'agentRole'
 				| 'changeBase'
 				| 'crew'
+				| 'auto'
+				| 'overBudget'
 				| 'reviewCrew'
 				| 'crewTaskId'
 				| 'crewNodeId'

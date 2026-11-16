@@ -208,6 +208,7 @@ export const taskMenuIcons = {
 	pin: 'pin',
 	copy: 'copy-text',
 	stop: 'stop',
+	dismiss: 'check-pass',
 	archive: 'archive-box',
 	delete: 'trash',
 	restore: 'archive-restore',

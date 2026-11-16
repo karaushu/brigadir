@@ -15,9 +15,19 @@ import {
 	isCrewReportSummary,
 	isCrewTurnMarker,
 	isCrewAssignmentKind,
+	crewDismissReasons,
+	type CrewDismissReason,
 } from './crew-runtime';
 import { isCrewSpecAgent } from './crew';
 import { isId } from './workspace';
+import {
+	isAutoBudget,
+	isAutoHire,
+	isAutoHirePart,
+	isAutoHired,
+	isAutoModelAnswer,
+	isAutoModelRequest,
+} from './auto';
 import { isTaskProposal, isTaskProposalResult } from './task-proposal';
 import { isReviewPoint, isTaskReviewWho } from './task-review';
 const starter = (v: unknown) => v === 'person' || v === 'agent' || v === 'host';
@@ -319,6 +329,42 @@ const checks: Record<string, Check> = {
 	'source.saved': object({ id: isId, title: text, chars: number }, { url: text }),
 	'crew.accepted': object({ taskId: isId, nodeId: isId, name: text, conflicts: array(text) }),
 	'crew.worker.stopped': object({ taskId: isId, nodeId: isId, name: text, reason: text }),
+	'crew.hire.requested': object({ hire: isAutoHire }),
+	'crew.hire.resolved': object({
+		id: isId,
+		approved: bool,
+		parts: nil(array(isAutoHirePart)),
+		hired: array(isAutoHired),
+	}),
+	'crew.worker.dismissed': object({
+		taskId: isId,
+		nodeId: isId,
+		name: text,
+		title: text,
+		reason: (v) => crewDismissReasons.includes(v as CrewDismissReason),
+	}),
+	'crew.lead.committed': object({
+		reason: (v) => v === 'hire' || v === 'accept',
+		commits: array(object({ scope: text, sha: text })),
+	}),
+	'crew.budget.exceeded': object({
+		taskId: isId,
+		name: text,
+		title: text,
+		budget: isAutoBudget,
+		used: object({ minutes: number, tokens: number }),
+	}),
+	'crew.zone.touched': object({ taskId: isId, name: text, title: text, paths: array(text) }),
+	'crew.model.requested': object({ request: isAutoModelRequest }),
+	'crew.model.resolved': object(
+		{
+			id: isId,
+			answer: nil(isAutoModelAnswer),
+			by: (v) => v === 'person' || v === 'agent',
+			role: text,
+		},
+		{ part: text, cancelled: (v) => v === true }
+	),
 	// spec/agents-and-providers#budget-reached
 	'budget.reached': object({
 		id: isId,

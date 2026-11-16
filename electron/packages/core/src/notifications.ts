@@ -88,6 +88,9 @@ export function noticeKind(event: SessionEvent): NoticeKind | null {
 		case 'question.requested':
 		case 'task.proposal.requested':
 		case 'crew.plan.requested':
+		// spec/crew#attention: an Auto task's hire card and model question.
+		case 'crew.hire.requested':
+		case 'crew.model.requested':
 			return 'needs-you';
 		// spec/reviews#surfaces: the review hands its open findings to the person.
 		case 'task-review.verified':

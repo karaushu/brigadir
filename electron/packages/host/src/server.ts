@@ -133,6 +133,7 @@ import {
 } from './runtime';
 import {
 	readCrewContext,
+	autoSpecWithReviewers,
 	sessionBrief,
 	crewLinkEvents,
 	CrewHost,
@@ -152,6 +153,7 @@ import {
 	simulatorQueued,
 } from '@brigadir/orchestrator';
 import { hiddenToolMessages, serveMcp, type HiddenToolSource } from './mcp';
+import { AutoCrewHost } from './auto-crew';
 import { ModuleSettings } from './modules';
 import { claudeSubagentModel, compactionWindow } from './agent-settings';
 import { TaskBudget } from './task-budget';
@@ -221,13 +223,15 @@ export async function startHost(config: HostConfig) {
 	let assignmentDue = crew && task.transport !== 'terminal' ? compactionDue(records) : null;
 	const crewWorker = crew?.parentKey ? new CrewWorker(store, config.key, crew) : null;
 	let crewHost: CrewHost | null = null;
-	/** spec/reviews#points: the task's review before the PR; a solo task gets a crew host of its reviewers when one starts. */
-	const foremanTask = !!crew && crew.role === 'foreman';
+	/** spec/reviews#points: the task's review before the PR; a solo task gets a crew host of its reviewers when one starts. An Auto task keeps its reviewers in its own crew. */
+	const foremanTask = !!crew && (crew.role === 'foreman' || crew.role === 'auto'),
+		autoTask = crew?.role === 'auto';
 	/** spec/reviews#plan-review: the root foreman's split that waits for the person (a lead's plan is approved by the host). */
 	let waitingSplit: CrewPlan | null = null;
 	/** spec/reviews#plan-start: the plan that waits for the person now — a solo task's plan for approval or the root foreman's split. */
 	const planWaiting = (): PresentedPlan | null => {
-		if (foremanTask) {
+		// An Auto task plans like a solo task (plan approval); only a named crew's foreman presents a split.
+		if (crew?.role === 'foreman') {
 			if (!waitingSplit) return null;
 			const requests = records.filter((record) => record.event.kind === 'crew.plan.requested');
 			return {
@@ -379,6 +383,11 @@ export async function startHost(config: HostConfig) {
 			const spec = taskReviewSpec(current.provider ?? 'claude', reviewers);
 			if (current.reviewCrew) spec.root.agents = [...current.reviewCrew.root.agents, ...reviewers];
 			await store.updateTask(config.key, { reviewCrew: spec });
+			// spec/crew#auto-root: before its first hire an Auto task's crew is its agent; the reviewers join it there, so a hire keeps them.
+			if (autoTask && crewHost) {
+				crewHost.adoptSpec(autoSpecWithReviewers({ ...current, reviewCrew: spec }));
+				return crewHost;
+			}
 			if (crewHost) {
 				crewHost.adoptSpec(spec);
 				return crewHost;
@@ -408,7 +417,7 @@ export async function startHost(config: HostConfig) {
 		isRoot: true,
 	});
 	async function crewHostFor(context: CrewContext): Promise<CrewHost> {
-		const host: CrewHost = new CrewHost({
+		const deps = {
 			store,
 			key: config.key,
 			context,
@@ -421,12 +430,20 @@ export async function startHost(config: HostConfig) {
 			emit,
 			records: () => records,
 			parent: () => crewWorker?.request() ?? null,
-			prompt: (text, marker) =>
+			prompt: (text: string, marker: Extract<SessionEvent, { kind: 'turn.started' }>['crew']) =>
 				command({ kind: 'prompt', text, ...(marker ? { crew: marker } : {}) }),
 			self: taskReview.hooks(),
 			// spec/crew#budget-pause: waiting hires stay waiting while the task is held at its budget.
 			held: () => budgetBlocks(),
-		});
+		};
+		// spec/crew#auto: the Auto agent's host hires through cards and asks the app about models.
+		const host: CrewHost =
+			context.role === 'auto'
+				? new AutoCrewHost({
+						...deps,
+						app: (method, params) => (ui ? ui.request(method, params) : null),
+					})
+				: new CrewHost(deps);
 		await host.start();
 		return host;
 	}
@@ -892,7 +909,9 @@ export async function startHost(config: HostConfig) {
 	const agentFiles = new AgentFiles(
 		project.path,
 		() => snapshots?.current.scopes ?? [],
-		() => task.readOnlyAgent === true
+		() => task.readOnlyAgent === true,
+		// spec/crew#auto-guard: the Auto agent no longer writes inside a zone it hired out.
+		(path) => (crewHost instanceof AutoCrewHost ? crewHost.hiredZone(path) : null)
 	);
 	let ready = false;
 	let snapshots: Snapshots | null = null;
@@ -1253,14 +1272,21 @@ export async function startHost(config: HostConfig) {
 				event.kind === 'question.requested' ||
 				event.kind === 'task.proposal.requested' ||
 				event.kind === 'crew.plan.requested' ||
+				event.kind === 'crew.hire.requested' ||
+				event.kind === 'crew.model.requested' ||
 				event.kind === 'budget.reached'
 			)
+				status = 'needs-you';
+			// spec/crew#auto-budget: in the worker's own journal the part waits for the person.
+			if (event.kind === 'crew.budget.exceeded' && event.taskId === config.key.id)
 				status = 'needs-you';
 			if (
 				event.kind === 'permission.resolved' ||
 				event.kind === 'question.resolved' ||
 				event.kind === 'task.proposal.resolved' ||
 				event.kind === 'crew.plan.resolved' ||
+				event.kind === 'crew.hire.resolved' ||
+				event.kind === 'crew.model.resolved' ||
 				event.kind === 'budget.decided'
 			) {
 				const left = pendingInputs([...records, record]);
@@ -1320,6 +1346,15 @@ export async function startHost(config: HostConfig) {
 					rateLimit: blockedRateLimit(nextLimits, Number.NEGATIVE_INFINITY),
 				});
 			}
+			// spec/crew#auto-budget: the person's next turn on a worker over its budget takes the part over; the budget is not checked again.
+			if (event.kind === 'turn.started' && (await store.task(config.key)).overBudget)
+				await store.updateTask(config.key, { overBudget: false });
+			// spec/crew#auto-guard: after each turn of the Auto agent the host looks for its own changes inside the zones it hired out.
+			if (event.kind === 'turn.completed' && autoTask)
+				setImmediate(() => {
+					if (crewHost instanceof AutoCrewHost && !stopping)
+						void crewHost.checkZones().catch(() => {});
+				});
 			// spec/agents-and-providers#sign-in-recovery: the task remembers a sign-in failure until the next turn or session.
 			if (
 				event.kind === 'session.failed' ||
@@ -1342,6 +1377,8 @@ export async function startHost(config: HostConfig) {
 					event.kind !== 'question.resolved' &&
 					event.kind !== 'task.proposal.resolved' &&
 					event.kind !== 'crew.plan.resolved' &&
+					event.kind !== 'crew.hire.resolved' &&
+					event.kind !== 'crew.model.resolved' &&
 					event.kind !== 'crew.question.resolved') ||
 				event.kind === 'scope.violation'
 			)
@@ -2038,6 +2075,32 @@ export async function startHost(config: HostConfig) {
 		if (c.kind === 'decidePlan') {
 			if (!crewHost) throw new Error('This task has no crew');
 			await crewHost.decidePlan(c.decision);
+			return;
+		}
+		// spec/crew#auto-hire, spec/crew#auto-model, spec/crew#auto-dismiss: the person's answers to an Auto task.
+		if (c.kind === 'decideHire' || c.kind === 'answerModel' || c.kind === 'dismissWorker') {
+			if (!(crewHost instanceof AutoCrewHost)) throw new Error('This task is not an Auto task');
+			if (c.kind === 'decideHire') await crewHost.decideHire(c.decision);
+			else if (c.kind === 'answerModel') await crewHost.answerModel(c.id, c.answer);
+			else await crewHost.dismissWorker(c.taskId);
+			return;
+		}
+		// spec/crew#auto-budget: the part went over its budget; the turn stops and the worker waits for the person.
+		if (c.kind === 'overBudget') {
+			if (busy) {
+				await command({ kind: 'cancel' });
+				for (let waited = 0; busy && waited < 30_000; waited += 200)
+					await new Promise((resolve) => setTimeout(resolve, 200));
+			}
+			await store.updateTask(config.key, { overBudget: true });
+			await emit({
+				kind: 'crew.budget.exceeded',
+				taskId: config.key.id,
+				name: crew?.node.name ?? '',
+				title: c.title,
+				budget: c.budget,
+				used: c.used,
+			});
 			return;
 		}
 		if (c.kind === 'startReview') {
@@ -3424,7 +3487,7 @@ export async function startHost(config: HostConfig) {
 			},
 			() => snapshots?.current.scopes.map((scope) => scope.path) ?? []
 		);
-		if (crew && (crew.role === 'foreman' || crew.role === 'lead'))
+		if (crew && (crew.role === 'foreman' || crew.role === 'lead' || crew.role === 'auto'))
 			crewHost = await crewHostFor(crew);
 		else {
 			// spec/reviews#points: a solo task's or a crew developer's own review continues after a restart.

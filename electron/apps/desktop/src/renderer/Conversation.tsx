@@ -122,6 +122,8 @@ import {
 	sessionModeName,
 } from '@brigadir/core';
 import { CrewAnswerRow, CrewEventRow, PlanCard, PlanSummary } from './Crew';
+import { HireCard, HireSummary } from './HireCard';
+import { ModelCard } from './ModelCard';
 import { QuickAskLogRow } from './QuickAsk';
 import { ContextCompactedRow } from './ContextCompactedRow';
 import { SimulatorDeviceRow } from './SimulatorDeviceRow';
@@ -1327,6 +1329,63 @@ export function Conversation({
 					/>
 				);
 			}
+			// spec/chat-turns-plans-and-questions#hire-card: the Auto agent's hire waits as a card and folds into its row once decided.
+			if (e.kind === 'crew.hire.requested') {
+				if (pending.crewHire?.id === e.hire.id)
+					return (
+						<HireCard
+							key={e.hire.id}
+							hire={e.hire}
+							task={task}
+							revision={linkRevision}
+							locale={locale}
+							disabled={!hostConnected || sending}
+							send={(c) => {
+								void send(c);
+							}}
+						/>
+					);
+				const resolved = records.find(
+					(record) =>
+						record.seq > row.record.seq &&
+						record.event.kind === 'crew.hire.resolved' &&
+						record.event.id === e.hire.id
+				);
+				if (resolved?.event.kind !== 'crew.hire.resolved') return null;
+				const summary = disclosure(row.id, false);
+				return (
+					<HireSummary
+						hire={e.hire}
+						parts={resolved.event.parts}
+						approved={resolved.event.approved}
+						hired={resolved.event.hired}
+						at={resolved.at}
+						task={task}
+						locale={locale}
+						open={summary.open}
+						onToggle={summary.onToggle}
+					/>
+				);
+			}
+			// spec/chat-turns-plans-and-questions#model-card: the model question waits as a card; its answer is a row of its own.
+			if (e.kind === 'crew.model.requested') {
+				const request = pending.crewModels.find((item) => item.id === e.request.id);
+				if (!request) return null;
+				return (
+					<ModelCard
+						key={request.id}
+						request={request}
+						task={task}
+						since={Date.parse(row.record.at)}
+						submitShortcut={submitShortcut}
+						locale={locale}
+						disabled={!hostConnected || sending}
+						send={(c) => {
+							void send(c);
+						}}
+					/>
+				);
+			}
 			// spec/chat#tool-calls: the answer to a crew question folds into one plate with the question it answers.
 			if (e.kind === 'crew.question.resolved') {
 				const asked = records.find(
@@ -1427,6 +1486,7 @@ export function Conversation({
 						locale={locale}
 						tasks={workspaceTasks}
 						pendingQuestions={pending.crewQuestions}
+						owner={task}
 						disabled={!hostConnected || sending}
 						send={(c) => {
 							void send(c);

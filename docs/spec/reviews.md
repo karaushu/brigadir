@@ -229,7 +229,9 @@ the state in muted text, the **step track**, actions, chevron.
   the [remark](#remark) of an approval, if any; and
   `Findings N` — a row per finding: its text, `file:line · reviewer` (mono, muted) and its tag. Open and new findings
   stand first with the reviewer's reason under them. A click on a finding opens its thread in the diff. The plan's sections differ ([Plan review
-  surfaces](#plan-surfaces)).
+  surfaces](#plan-surfaces)). The sections are the deck's fill ([Queue deck](composer-steering-queue-and-ghost.md#queue-deck)):
+  they get the room they need up to a bound set by the window, the strip's row stays in place over them, and they scroll
+  under it with a fading foot while more lies below.
 - `Log` (strip, sidebar row, thread) opens the reviewer's task, which shows its log read-only.
 - **Chat rows** (service rows, not cards): `review · <point> · <reviewer> · started` (a `mid` review adds `after
   <reason>`); `review · <point> · <reviewer> → <agent> · <N findings>` or `review · <point> · <reviewer> · passed`;

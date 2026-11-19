@@ -28,11 +28,13 @@ export function taskLabel(locale: Locale, tasks: readonly AgentTask[], key: Task
 export type PickerRow = {
 	device: SimulatorDevice;
 	running: boolean;
-	/** The row's tail: who holds the device, or its OS when nobody does. */
+	/** The row's name: `name · OS`. */
+	label: string;
+	/** The row's tail: who holds the device; empty when nobody does. */
 	tail: string;
 	/** Off while the gate is closed: a device that is off cannot start. */
 	disabled: boolean;
-	/** «Shut down {device}»: a running device no other task holds. */
+	/** «Shut down {device}»: a running device no other task is using now and that is not another task's copy. */
 	canShutDown: boolean;
 };
 /**
@@ -51,7 +53,7 @@ export function pickerModel(
 		const running = device.booted || (device.id === state.device?.id && state.status === 'on'),
 			use = state.uses[device.id];
 		const tail = !use
-			? device.os
+			? ''
 			: use.kind === 'mine'
 				? t(locale, 'this task')
 				: use.kind === 'queued'
@@ -62,9 +64,15 @@ export function pickerModel(
 		return {
 			device,
 			running,
+			label: `${device.name} · ${device.os}`,
 			tail,
 			disabled: !running && !open,
-			canShutDown: running && (!use || (use.kind === 'mine' && !use.heldBy)),
+			canShutDown:
+				running &&
+				(!use ||
+					use.kind === 'tasks' ||
+					(use.kind === 'mine' && !use.heldBy) ||
+					(use.kind === 'task' && !use.busy)),
 		};
 	});
 	const own = state.device ? state.uses[state.device.id] : undefined;
@@ -87,5 +95,13 @@ export function pickerModel(
 							lift: true,
 						}
 				: null;
-	return { rows, grouped, trigger, queued: own?.kind === 'queued', footer };
+	return {
+		rows,
+		grouped,
+		trigger,
+		queued: own?.kind === 'queued',
+		footer,
+		// spec/browser-and-simulator#sim-cap: a boot that waits at the gate says why, in the footer's words.
+		waitReason: state.gateWait ? footer : null,
+	};
 }

@@ -658,15 +658,15 @@ export class Simulators {
 				continue;
 			}
 			if (holder && !same(holder, key)) {
-				uses[device.id] = { kind: 'task', task: holder };
+				uses[device.id] = { kind: 'task', task: holder, busy: true };
 				continue;
 			}
 			const others = [...this.leases.values()].filter(
 				(item) => item.lease.device === device.id && !same(item.key, key)
 			);
 			const owner = others.find((item) => item.lease.own);
-			if (owner || others.length === 1)
-				uses[device.id] = { kind: 'task', task: (owner ?? others[0]!).key };
+			if (owner) uses[device.id] = { kind: 'task', task: owner.key, busy: true };
+			else if (others.length === 1) uses[device.id] = { kind: 'task', task: others[0]!.key };
 			else if (others.length > 1) uses[device.id] = { kind: 'tasks', count: others.length };
 		}
 		void shown;
@@ -1288,6 +1288,7 @@ export class Simulators {
 			device: device ? { ...device, booted: device.booted || status === 'on' } : null,
 			// A boot that waits at the gate shows as starting (spec/browser-and-simulator#sim-tab).
 			status: waiting && status === 'off' ? 'booting' : status,
+			gateWait: waiting && status === 'off',
 			error: runtime?.error ?? null,
 			screen: runtime?.screen ?? null,
 			orientation: runtime?.orientation ?? 'portrait',

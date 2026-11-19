@@ -726,9 +726,10 @@ it('gives two tasks two devices at once and lets each tab show its own; a kind p
 		expect(tablet.device?.id).toBe('PAD');
 		expect(solo.uses).toEqual({
 			PHONE: { kind: 'mine' },
-			PAD: { kind: 'task', task: task('tablet') },
+			// Each holds its own device's lane after the call: busy, no Shut down for the other.
+			PAD: { kind: 'task', task: task('tablet'), busy: true },
 		});
-		expect(tablet.uses.PHONE).toEqual({ kind: 'task', task: task('solo') });
+		expect(tablet.uses.PHONE).toEqual({ kind: 'task', task: task('solo'), busy: true });
 		expect(solo.gate).toEqual({ running: 2, max: 2, lowMemory: false });
 		// The leases are saved per project; the person's tasks moved the project device only to devices they picked.
 		const saved = JSON.parse(
@@ -802,7 +803,7 @@ it('makes a crew worker a device of its own: a new one of the same model when th
 			kind: 'state',
 		})) as SimulatorState;
 		expect(foreman.device?.id).toBe('PHONE');
-		expect(foreman.uses['NEW-1']).toEqual({ kind: 'task', task: task('worker') });
+		expect(foreman.uses['NEW-1']).toEqual({ kind: 'task', task: task('worker'), busy: true });
 		// The worker acts on its copy while the foreman acts on the iPhone.
 		await Promise.all([
 			simulators.agent(task('worker'), { tool: 'act', action: 'tap', id: 'take-order' }, true),

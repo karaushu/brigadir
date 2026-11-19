@@ -52,7 +52,8 @@ export type SimulatorUse =
 	/** `heldBy` — another task with a lease on it is using it now: its tab offers no Shut down. */
 	| { kind: 'mine'; heldBy?: TaskKey }
 	| { kind: 'queued'; holder: TaskKey }
-	| { kind: 'task'; task: TaskKey }
+	/** `busy` — that task is using the device now or it is that task's own copy: no Shut down. */
+	| { kind: 'task'; task: TaskKey; busy?: true }
 	| { kind: 'tasks'; count: number };
 /** spec/browser-and-simulator#sim-cap: booted devices against the cap, and whether the system reports memory pressure. */
 export type SimulatorGate = { running: number; max: number; lowMemory: boolean };
@@ -170,6 +171,8 @@ export type SimulatorState = {
 	uses: Record<string, SimulatorUse>;
 	gate: SimulatorGate;
 	metroPort: number | null;
+	/** spec/browser-and-simulator#sim-cap: this task's boot waits at the gate (the cap or low memory); the tab says why. */
+	gateWait?: boolean;
 };
 /** WebCodecs `VideoDecoder.configure` input: AVCC H.264, `description` is the avcC record in base64. */
 export type SimulatorVideoConfig = {

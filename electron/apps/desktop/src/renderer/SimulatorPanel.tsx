@@ -276,7 +276,7 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 	// shut-down button after its tail; no «Shut down …» row under the list.
 	const deviceOptions = (picker?.rows ?? []).map((row) => ({
 		value: row.device.id,
-		label: row.device.name,
+		label: row.label,
 		tail: row.tail,
 		disabled: row.disabled,
 		...(row.running ? { live: true } : {}),
@@ -467,6 +467,12 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 						<span>
 							{t(locale, '{device} is starting…').replace('{device}', device?.name ?? '')}
 						</span>
+						{/* spec/browser-and-simulator#sim-cap: a boot that waits at the gate says why. */}
+						{picker?.waitReason && (
+							<span data-tone={picker.waitReason.tone} className={styles.gate}>
+								{picker.waitReason.text}
+							</span>
+						)}
 					</div>
 				) : !device ? (
 					// No device on this machine: say so instead of « is off» without a name.

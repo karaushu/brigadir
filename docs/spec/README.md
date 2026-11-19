@@ -51,7 +51,7 @@ today, one file per area. Start with [Overview](overview.md).
 
 - [Reviews](reviews.md): reviews the host runs on a task at three points (plan, mid-task, before the PR): who
   reviews, the loop of one read, one fix and one closure check, findings, the Review strip with its step track, the
-  `request_review` tool, the gate on `Create PR` and the data.
+  `request_review` tool, task classes and the tripwire, the gate on `Create PR` and the data.
 - [Diff and review](diff-and-review.md): snapshot-tree diff engine, task step boundaries, unified and side-by-side
   views, diff base, Changes panel, selection and comments, review loop and submit, review popup, ⌘+click from a diff,
   change counters and "why did this change" attribution.

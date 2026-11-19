@@ -78,7 +78,9 @@ export function reducePromptQueue(state: PromptQueueState, event: SessionEvent):
  *  host's message to the foreman's own agent, not the person's: the queue deck lists only the person's messages. The
  *  question and the report already stand in the activity as their own rows (spec/crew-templates-and-editor#after-launch, spec/crew#ask-foreman). */
 export function isOwnQueuedPrompt(item: QueuedPrompt): boolean {
-	return !(item.command.kind === 'prompt' && item.command.crew);
+	// A review batch the host sends (spec/reviews#loop) is a `submitReview` with `crew`: removing or editing it would leave its review
+	// waiting for a turn that never takes the batch.
+	return !item.command.crew;
 }
 export function promptQueue(records: readonly EventRecord[]): PromptQueueState {
 	return records.reduce((state, record) => reducePromptQueue(state, record.event), {

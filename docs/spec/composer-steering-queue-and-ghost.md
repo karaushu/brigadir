@@ -39,7 +39,7 @@ The GUI session host keeps its own FIFO of prompts. The adapter never receives c
 
 The deck stands over the composer island in the shared `ui/Deck` component, together with background commands.
 
-- **Only the person's messages have rows.** Crew service prompts (`command.crew`: a worker's question or report, a plan decision) wait in the same FIFO but get no row on desktop or phone (`isOwnQueuedPrompt`). They already appear as their own rows in the activity.
+- **Only the person's messages have rows.** Crew service prompts (`command.crew`: a worker's question or report, a plan decision, the findings of a [review](reviews.md#loop) the host sends to the agent) wait in the same FIFO but get no row on desktop or phone (`isOwnQueuedPrompt`). They already appear as their own rows in the activity.
 - The first row carries `Queued · N`. N counts the person's rows only. A queued review shows as `Review`.
 - When the queue is paused, a header shows `The queue is paused.` and `Resume queue`. This also appears when only service prompts are queued, so the queue can still be resumed.
 - Row actions sit at the right edge of the row, in this order: `Send now` (only for a `prompt` while steering is available), then edit (`Edit queued message` / `Edit queued review`) and `Remove queued message`. Edit and Remove stay in the same place on every row.

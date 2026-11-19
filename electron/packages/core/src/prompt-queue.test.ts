@@ -98,4 +98,16 @@ it("keeps a crew service prompt in the FIFO but out of the person's deck (spec/c
 			command: { kind: 'submitReview', text: 'review', review: {} as never },
 		} as never)
 	).toBe(true);
+	// spec/composer-steering-queue-and-ghost#queue-deck: the findings of a host review are the host's message, not the person's review.
+	expect(
+		isOwnQueuedPrompt({
+			...first,
+			command: {
+				kind: 'submitReview',
+				text: 'Codex left 2 findings',
+				review: {} as never,
+				crew: { kind: 'review-comments', round: 1, comments: 2 },
+			},
+		} as never)
+	).toBe(false);
 });

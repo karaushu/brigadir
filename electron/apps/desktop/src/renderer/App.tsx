@@ -68,6 +68,7 @@ import { useRestoreSelection } from './use-restore-selection';
 import { SearchField } from './ui/PanelSearch';
 import { useSurfaceLayout } from './surface-layout';
 import { ResizeHandle } from './ui/ResizeHandle';
+import { PopupClose } from './ui/PopupClose';
 import {
 	type CSSProperties,
 	Fragment,
@@ -128,6 +129,12 @@ import {
 } from './completed-collapse';
 import { SkeletonRows } from './ui/Loading';
 
+/** The read issues as one string: the strip hidden for one list comes back when the list changes. */
+const issuesKey = (issues: { path: string; code: string }[]) =>
+	issues
+		.map((issue) => `${issue.code}:${issue.path}`)
+		.sort()
+		.join('\n');
 const issueLabels: Record<ReadIssueCode, MessageKey> = {
 	invalid_document: 'The file is invalid.',
 	unsupported_schema: 'The file uses a newer schema.',
@@ -346,6 +353,8 @@ export function App() {
 					: null;
 	})();
 	const [quietRuns, setQuietRuns] = useState(false);
+	/** The list of read issues the person hid with `Esc` (spec/architecture-and-platform#read-issues). */
+	const [issuesHidden, setIssuesHidden] = useState('');
 	const [statusFilter, setStatusFilter] = useState<SidebarFilter>(null),
 		[collapsedProjects, setCollapsedProjects] = useState<string[]>([]),
 		[filteredCollapsed, setFilteredCollapsed] = useState<string[]>([]),
@@ -1708,9 +1717,21 @@ export function App() {
 									<RemoteDialogs locale={locale} />
 									<ToastHost locale={locale} />
 									<NotificationCenterEvents />
-									{!!workspace?.issues.length && (
-										<section role="alert" className={styles.issues}>
-											<h2>{t(locale, 'Some data could not be read.')}</h2>
+									{!!workspace?.issues.length && issuesKey(workspace.issues) !== issuesHidden && (
+										<section
+											role="alert"
+											className={styles.issues}
+											onKeyDown={(event) => {
+												if (event.key === 'Escape') setIssuesHidden(issuesKey(workspace.issues));
+											}}>
+											{/* spec/architecture-and-platform#read-issues: `Esc` hides the strip until the list changes. */}
+											<header data-size="s">
+												<h2>{t(locale, 'Some data could not be read.')}</h2>
+												<PopupClose
+													locale={locale}
+													close={() => setIssuesHidden(issuesKey(workspace.issues))}
+												/>
+											</header>
 											{workspace.issues.map((issue) => (
 												<p key={issue.path}>
 													{t(locale, issueLabels[issue.code])} <code>{issue.path}</code>

@@ -12,6 +12,15 @@ import {
 import { SessionStore, safePath } from '@brigadir/persistence';
 import { readSnapshots, snapshotTotals, headTree } from '@brigadir/git';
 type Summary = Pick<AgentTask, 'hasUnreviewedChanges' | 'changeSummary' | 'taskTree'>;
+const gone = async (path: string | undefined) => {
+	if (!path) return false;
+	try {
+		await lstat(path);
+		return false;
+	} catch (error) {
+		return isRecord(error) && error.code === 'ENOENT';
+	}
+};
 /** One stat/task on refresh. Changed snapshots use bounded numstat; unchanged histories run no Git. */
 export class TaskDiffs {
 	private cache = new Map<string, { identity: string; summary: Summary }>();
@@ -112,6 +121,11 @@ export class TaskDiffs {
 					} catch {
 						delete task.hasUnreviewedChanges;
 						delete task.changeSummary;
+						// spec/architecture-and-platform#read-issues: a project whose folder is gone has no changes to read; its data is intact.
+						if (
+							await gone(workspace.projects.find((project) => project.id === task.projectId)?.path)
+						)
+							continue;
 						workspace.issues.push({
 							path: `projects/${task.projectId}/tasks/${task.id}/snapshots.json`,
 							code: 'unreadable',

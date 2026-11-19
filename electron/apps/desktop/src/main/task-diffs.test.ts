@@ -160,3 +160,24 @@ test('a checkout of the root repo from outside stands for the root in the task t
 		await rm(root, { recursive: true, force: true });
 	}
 });
+test('a task whose project folder is gone is not a read issue (spec/architecture-and-platform#read-issues)', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'sidebar-diffs-gone-'));
+	try {
+		const data = join(root, 'data'),
+			repo = join(root, 'repo');
+		await mkdir(repo);
+		await git(repo, ['init', '-b', 'main']);
+		await writeFile(join(repo, 'file'), 'base');
+		const store = await SessionStore.at(data),
+			project = await store.addProject(repo),
+			task = await store.createTask(project.id, 'Review', 'claude'),
+			snapshots = await Snapshots.open(store, task);
+		await snapshots.capture('baseline');
+		await rm(repo, { recursive: true });
+		const workspace = await new TaskDiffs(data).decorate(await readWorkspace({ dataDir: data }));
+		expect(workspace.issues).toEqual([]);
+		expect(workspace.tasks[0]?.hasUnreviewedChanges).toBeUndefined();
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

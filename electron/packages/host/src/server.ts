@@ -51,7 +51,7 @@ import { browserUrl, localBrowserUrl } from './browser-url';
 import { Terminals } from './terminals';
 import { dirname, isAbsolute, join } from 'node:path';
 import { createServer } from 'node:net';
-import { chmod, open as openFile, realpath, stat, unlink } from 'node:fs/promises';
+import { chmod, open as openFile, readFile, realpath, stat, unlink } from 'node:fs/promises';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import {
 	backgroundCommands,
@@ -67,6 +67,7 @@ import {
 	planChatPrompt,
 	planRejectOption,
 	splitPlanMarkdown,
+	figmaLinks,
 	type CrewPlan,
 	recordModeId,
 	selectOption,
@@ -149,7 +150,8 @@ import {
 } from './crew';
 import { TaskReviewLife, ownReviewCrew, ownReviewTool, type PresentedPlan } from './task-review';
 import { TaskClassLife, readSmallTaskLimit } from './task-class';
-import { saveTaskSource } from './task-sources';
+import { readTaskSources, saveTaskSource, sourcePath } from './task-sources';
+import { saveShot, submitDesignReview } from './design-review';
 import {
 	assignmentBlock,
 	compactionDue,
@@ -368,6 +370,26 @@ export async function startHost(config: HostConfig) {
 			].join('');
 		},
 		part: async () => (crewWorker ? ((await readPartBrief())?.part ?? null) : null),
+		// spec/design-review#design-source: Figma links of the task's prompt (a worker's part), its saved sources and the plans it presented.
+		designLinks: async () => {
+			const texts = records.flatMap((record) => {
+				const event = record.event;
+				if (event.kind === 'turn.started' && !event.crew && !event.review) return [event.text];
+				if (event.kind === 'permission.requested' && isPlanApproval(event.request))
+					return [planApprovalText(event.request, records, record.seq) ?? ''];
+				if (event.kind === 'crew.plan.requested')
+					return [splitPlanMarkdown(event.plan, crew?.spec.root.agents ?? [])];
+				return [];
+			});
+			const part = crewWorker ? await readPartBrief() : null;
+			if (part) texts.push(part.prompt);
+			for (const entry of (await readTaskSources(store, config.key)).sources)
+				texts.push(
+					entry.url ?? '',
+					await readFile(await sourcePath(store, config.key, entry), 'utf8').catch(() => '')
+				);
+			return [...new Set(texts.flatMap((item) => figmaLinks(item)))].slice(0, 20);
+		},
 		crew: async (start, named): Promise<CrewHost> => {
 			const current = await store.task(config.key),
 				existing = current.crew ?? current.reviewCrew,
@@ -1234,6 +1256,32 @@ export async function startHost(config: HostConfig) {
 		if (checkReadOnly && snapshots && captured)
 			for (const violation of await readOnlyChanges(snapshots.current.scopes, before, captured))
 				await emit({ kind: 'scope.violation', ...violation });
+	}
+	/** spec/design-review#shots: a checkpoint of the task's files now, and its trees; a failed checkpoint dates nothing. */
+	async function treesNow() {
+		await checkpoint('tools');
+		return (snapshots?.current.checkpoints.at(-1)?.trees ?? []).map(({ scopeId, tree }) => ({
+			scopeId,
+			tree,
+		}));
+	}
+	/** spec/design-review#shots: the image a screenshot tool returned, kept in the task's folder; the answer names its id. */
+	async function keepShot(
+		result: unknown,
+		tool: 'simulator' | 'browser',
+		trees: { scopeId: string; tree: string }[],
+		device: string | undefined
+	) {
+		if (!isRecord(result) || typeof result.image !== 'string') return result;
+		const mimeType = typeof result.mimeType === 'string' ? result.mimeType : 'image/png';
+		const shot = await saveShot(store, config.key, {
+			data: result.image,
+			mimeType,
+			tool,
+			...(typeof result.device === 'string' ? { device: result.device } : device ? { device } : {}),
+			trees,
+		}).catch(() => null);
+		return shot ? { ...result, shot: shot.id } : result;
 	}
 	const crewPeers = new Set<Peer>();
 	/** spec/reviews#plan-loop: plan review batches whose waiting plan the host just rejected; such a batch runs before what is queued. */
@@ -2738,6 +2786,11 @@ export async function startHost(config: HostConfig) {
 					if (choice === 'domain') await ui.request('browser_remember', { url: command.url });
 				}
 			}
+			// spec/design-review#shots: a screenshot is kept with the trees of the task's files taken just before it.
+			if (command.kind === 'screenshot') {
+				const trees = await treesNow().catch(() => []);
+				return keepShot(await ui!.request('browser', command), 'browser', trees, undefined);
+			}
 			return ui!.request('browser', command);
 		}
 		// spec/browser-and-simulator#simulator: the simulator lives in the app, like the browser; the host checks the module and forwards the call.
@@ -2745,11 +2798,22 @@ export async function startHost(config: HostConfig) {
 			if (!modules.current().simulator) throw new Error(moduleOffMessages.simulator);
 			if (!ui) throw new Error('The simulator needs an open application window');
 			// spec/agents-and-providers#tools-awareness: main queues a worker for the one device of the project; the foreman and a solo agent go first.
-			return ui.request('simulator', {
+			const asked = ui,
+				shooting = method === 'simulator_screenshot',
+				trees = shooting ? await treesNow().catch(() => []) : [];
+			const result = await asked.request('simulator', {
 				...(isRecord(params) ? params : {}),
 				tool: method.slice(10),
 				queued: simulatorQueued(crew?.role ?? null),
 			});
+			return shooting
+				? keepShot(
+						result,
+						'simulator',
+						trees,
+						isRecord(params) && typeof params.device === 'string' ? params.device : undefined
+					)
+				: result;
 		}
 		// spec/agents-and-providers#context-tools: what the person is looking at; the app answers, and a closed window is an answer, not an error.
 		if (method === 'editor_state' || method === 'pr_state') {
@@ -2791,6 +2855,15 @@ export async function startHost(config: HostConfig) {
 			if (crewHiddenTools(crew, records).has('create_task'))
 				throw new Error(hiddenToolMessages.create_task);
 			return proposeTask(params, signal);
+		}
+		// spec/design-review#tool: the host verifies every node itself and keeps the design review.
+		if (method === 'submit_design_review') {
+			if (!modules.current().simulator && !modules.current().browser)
+				throw new Error('The simulator and the browser are off in Settings.');
+			return submitDesignReview(
+				{ store, key: config.key, trees: treesNow, emit },
+				isRecord(params) ? params : {}
+			);
 		}
 		// spec/reviews#save-source: the plan's author saves a ticket or contract next to the plans.
 		if (method === 'save_source')

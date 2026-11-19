@@ -46,6 +46,7 @@ import { Glyph, type GlyphName } from './ui/Glyph';
 import { StepTrack } from './ui/StepTrack';
 import { DotPill, type DotPillColor } from './ui/DotPill';
 import { ChatCard, ChatCardChip, ChatCardChips } from './ui/ChatCard';
+import { Tag, type TagTone } from './ui/Tag';
 import { ChangeCounts } from './ui/ChangeCounts';
 import { useSecondTick } from './ui/second-tick';
 import { toastError } from './ui/Toast';
@@ -386,6 +387,17 @@ function ClassPill({ value, locale }: { value: TaskClass; locale: Locale }) {
 		</DotPill>
 	);
 }
+/** spec/reviews#findings: the tone of a finding's tag. */
+const findingTone = (state: string): TagTone =>
+	state === 'sent'
+		? 'accent'
+		: state === 'fixed'
+			? 'green'
+			: state === 'open' || state === 'new'
+				? 'amber'
+				: state === 'answered' || state === 'accepted'
+					? 'quiet'
+					: 'neutral';
 /** spec/reviews#strip: the reviews' service rows in the chat — and the older rows of journals written before them. */
 export function ReviewEventRow({
 	task,
@@ -1107,9 +1119,7 @@ function ReviewDetails({
 										</span>
 									)}
 								</button>
-								<span className={styles.tag} data-tag={comment.state}>
-									{t(locale, comment.state)}
-								</span>
+								<Tag tone={findingTone(comment.state)}>{t(locale, comment.state)}</Tag>
 							</li>
 						))}
 					</ul>
@@ -1314,13 +1324,16 @@ function PlanFindings({
 									</span>
 								)}
 							</div>
-							<span
-								className={styles.tag}
-								data-tag={
-									list === 'gap' ? 'gap' : comment.state === 'sent' ? 'kind' : comment.state
+							<Tag
+								tone={
+									list === 'gap'
+										? 'neutral'
+										: comment.state === 'sent'
+											? 'amber'
+											: findingTone(comment.state)
 								}>
 								{t(locale, tag)}
-							</span>
+							</Tag>
 						</li>
 					);
 				})}

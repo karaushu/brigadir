@@ -100,6 +100,11 @@ const verbs = {
 	request_review: ['Asking for a review', 'Asked for a review', 'Could not ask for a review'],
 	save_source: ['Saving a source', 'Saved a source', 'Could not save the source'],
 	set_task_class: ['Setting the task class', 'Set the task class', 'Could not set the task class'],
+	submit_design_review: [
+		'Filing the design review',
+		'Filed the design review',
+		'Could not file the design review',
+	],
 	read_plan: ['Reading the plan', 'Read the plan', 'Could not read the plan'],
 	read_sources: ['Reading the sources', 'Read the sources', 'Could not read the sources'],
 	submit_plan_review: [

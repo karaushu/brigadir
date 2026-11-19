@@ -13,6 +13,7 @@ import {
 	type TaskKey,
 } from '@brigadir/core';
 import { connectHost, readIdentity, type HostClient } from './index';
+import { readSnapshots } from '@brigadir/git';
 
 const run = promisify(execFile);
 const cleanup: (() => Promise<unknown>)[] = [];
@@ -315,3 +316,82 @@ it('the agent asks for a mid-task review; without the app the task’s own provi
 	});
 	await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
 }, 240_000);
+
+// spec/reviews#design: no approval from the code — the reviewer's approve goes through the gate on the real path.
+it('refuses the approval of a task with a Figma link until a passed design review covers the round (spec/reviews#design)', async () => {
+	const link = 'https://www.figma.com/design/AbC/Client?node-id=412-88';
+	const start = async (title: string, seed?: boolean) => {
+		const { store, task } = await setup(title);
+		const client = await launch(store, task);
+		await client.command({ kind: 'prompt', text: `@write out/screen.txt ${link}` });
+		await find(client, (r) => r.event.kind === 'turn.completed');
+		if (seed) {
+			// The author's passed design review, filed on the files as they are now.
+			const snapshots = await readSnapshots(store, task);
+			const trees = snapshots!.checkpoints.at(-1)!.trees.map(({ scopeId, tree }) => ({
+				scopeId,
+				tree,
+			}));
+			await mkdir(join(await store.taskDir(task), 'design'), { recursive: true });
+			await atomicJson(join(await store.taskDir(task), 'design', 'design-reviews.json'), {
+				schemaVersion: 1,
+				reviews: [
+					{
+						id: 'd1',
+						screen: 'Details screen',
+						at: new Date().toISOString(),
+						state: 'passed',
+						verdict: 'passed',
+						trees,
+						nodes: [
+							{
+								name: 'Header',
+								figma: '412:88',
+								state: 'ok',
+								rows: [{ property: 'Avatar', expected: '56 px', actual: '56 px', match: true }],
+							},
+						],
+					},
+				],
+			});
+		}
+		await client.command({
+			kind: 'startReview',
+			reviewers: [reviewer],
+			who: { kind: 'agent' },
+			instructions: '',
+			guidance: '',
+		});
+		const created = await find(
+			client,
+			(r) => r.event.kind === 'crew.worker.created' && r.event.name === 'Reviewer',
+			90_000
+		);
+		return {
+			store,
+			task,
+			client,
+			reviewerKey: { projectId: task.projectId, id: (created.event as { taskId: string }).taskId },
+		};
+	};
+	// Nothing filed: the scripted reviewer approves «clean» work, and the host refuses it.
+	const refused = await start('Clean screen');
+	const journal = join(await refused.store.taskDir(refused.reviewerKey), 'events.jsonl');
+	const said = await until(async () => {
+		const text = await readFile(journal, 'utf8').catch(() => '');
+		return text.includes('No approval from the code') ? text : undefined;
+	}, 90_000);
+	expect(said).toContain('no design review was filed');
+	expect(said).toContain('[error]');
+	expect(
+		(await refused.client.snapshot()).records.some((r) => r.event.kind === 'task-review.finished')
+	).toBe(false);
+	// A passed design review of the state the round reads: the same approval passes.
+	const covered = await start('Clean screen', true);
+	const finished = await find(
+		covered.client,
+		(r) => r.event.kind === 'task-review.finished',
+		90_000
+	);
+	expect(finished.event).toMatchObject({ state: 'passed', point: 'pre-pr' });
+}, 300_000);

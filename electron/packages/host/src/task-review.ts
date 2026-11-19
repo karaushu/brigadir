@@ -1,3 +1,4 @@
+import { readDesignReviewsOf, type DesignGateInput } from './design-review';
 import { createHash, randomUUID } from 'node:crypto';
 import { diffLines, unifiedDiff } from '@brigadir/diff';
 import {
@@ -125,6 +126,8 @@ export type TaskReviewDeps = {
 	part(): Promise<number | null>;
 	/** A task in a crew of its own: its closure check starts only when its tree changed, since it hands fixes to workers. */
 	foreman: boolean;
+	/** spec/design-review#design-source: the Figma links of the task's prompt, saved sources and plans. */
+	designLinks?(): Promise<string[]>;
 };
 /**
  * spec/reviews#loop: the task side of its reviews — the agent's proposal, the review the person, the agent or the host started, and where it is
@@ -905,12 +908,38 @@ export class TaskReviewLife {
 			planPrompt: (taskId, reviewId, round, reviewer) =>
 				this.planPrompt(taskId, reviewId, round, reviewer),
 			sources: (sourceId) => readSourcesForReview(this.deps.store, this.deps.key, sourceId),
+			design: (reviewerTaskId, reviewId, round) =>
+				this.designInput(reviewerTaskId, reviewId, round),
 			submitReview: async (text, batch) => {
 				await this.update({ batch: batch.id, passes: (this.doc.review?.passes ?? 0) + 1 });
 				await this.deps.submitReview(text, batch, Math.max(1, this.doc.review?.round ?? 1));
 			},
 			// Not through `serial`: a round opens from inside a serial step (`read`, `turnEnded`), and the crew host calls back before it returns.
 			round: (run, state) => this.onRound(run, state),
+		};
+	}
+	/** spec/reviews#design: a mid-task or before-PR review reads the task's design source and design reviews; a plan review has no design check. */
+	private async designInput(
+		reviewerTaskId: string,
+		reviewId: string,
+		round: readonly { tree: string }[]
+	): Promise<DesignGateInput | null> {
+		if ((this.doc.review?.point ?? 'pre-pr') === 'plan') return null;
+		const [links, own, filed, taskDir] = await Promise.all([
+			this.deps.designLinks?.().catch(() => []) ?? Promise.resolve([]),
+			readDesignReviewsOf(this.deps.store, this.deps.key),
+			readDesignReviewsOf(this.deps.store, {
+				projectId: this.deps.key.projectId,
+				id: reviewerTaskId,
+			}),
+			this.deps.store.taskDir(this.deps.key),
+		]);
+		return {
+			links,
+			own,
+			reviewer: filed.filter((review) => review.reviewId === reviewId),
+			round,
+			taskDir,
 		};
 	}
 	private async onRound(run: ReviewRun, state: 'reviewing' | 'comments' | 'approved' | 'disputed') {

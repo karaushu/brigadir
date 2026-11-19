@@ -1,0 +1,30 @@
+/* spec/appearance#one-look-one-component: the state tag of findings (spec/reviews#findings) and design review rows (spec/design-review#card). */
+.tag {
+	flex: none;
+	padding: 1px 6px;
+	border-radius: 4px;
+	font-size: var(--text-10);
+	white-space: nowrap;
+	background: var(--tint);
+	color: var(--fg2);
+}
+.tag[data-tag='accent'] {
+	background: var(--accent-soft);
+	color: var(--accent);
+}
+.tag[data-tag='green'] {
+	background: var(--green-soft);
+	color: var(--green);
+}
+.tag[data-tag='amber'] {
+	background: var(--amber-soft);
+	color: var(--amber);
+}
+.tag[data-tag='red'] {
+	background: color-mix(in srgb, var(--red) 12%, transparent);
+	color: var(--red);
+}
+/* Closed without a fix — answered or accepted — reads quieter than the other tags. */
+.tag[data-tag='quiet'] {
+	color: var(--fg3);
+}

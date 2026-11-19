@@ -1,3 +1,4 @@
+import type { DesignNode, DesignReviewState, DesignVerdict } from './design-review';
 import { isPRRef, type PRRef } from './forge';
 import type { QueuedPrompt } from './prompt-queue';
 import { isAttachmentId, isAttachmentIds, type PromptAttachment } from './attachments';
@@ -196,6 +197,16 @@ export type SessionEvent =
 	  }
 	/** spec/reviews#save-source: the author saved a ticket, spec or contract next to the plan. */
 	| { kind: 'source.saved'; id: string; title: string; url?: string; chars: number }
+	/** spec/design-review#data: a screen checked against its design, with what the host verified of each node. */
+	| {
+			kind: 'design.reviewed';
+			id: string;
+			screen: string;
+			state: DesignReviewState;
+			verdict: DesignVerdict;
+			reviewId?: string;
+			nodes: DesignNode[];
+	  }
 	| { kind: 'crew.accepted'; taskId: string; nodeId: string; name: string; conflicts: string[] }
 	| { kind: 'crew.worker.stopped'; taskId: string; nodeId: string; name: string; reason: string }
 	/** spec/crew#auto-hire: the Auto agent asked to hire; the card waits for the person (`needs-you`) and survives a restart. */

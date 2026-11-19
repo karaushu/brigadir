@@ -71,6 +71,7 @@ import {
 	autoSpec,
 	crewWorkerClosed,
 	type AutoTask,
+	designerTemplateId,
 } from '@brigadir/core';
 import {
 	buildReport,
@@ -118,6 +119,12 @@ import {
 } from '@brigadir/git';
 import { findingBatch, findingRule, findingsText } from './review-findings';
 import { classBrief } from './task-class';
+import {
+	designGate,
+	designPrompt,
+	readDesignReviewsOf,
+	type DesignGateInput,
+} from './design-review';
 import {
 	atomicJson,
 	readDocument,
@@ -359,6 +366,12 @@ export type SelfReviewHooks = {
 	sources(sourceId: unknown): Promise<Record<string, unknown>>;
 	/** spec/reviews#plan-loop: the reviewer's prompt of a plan review round — the first read or the closure check. */
 	planPrompt(taskId: string, reviewId: string, round: number, reviewer: string): Promise<string>;
+	/** spec/reviews#design: the task's design source and design reviews against the round's trees; null when the point has no design check. */
+	design?(
+		reviewerTaskId: string,
+		reviewId: string,
+		round: readonly { tree: string }[]
+	): Promise<DesignGateInput | null>;
 };
 /** spec/reviews#loop: a file of one repo — the same path in two repos of a project is two files. */
 export const scopedPath = (scopeId: string, path: string) => `${scopeId}\0${path}`;
@@ -2416,6 +2429,16 @@ export class CrewHost {
 			return { sent: items, reviewId: run.reviewId };
 		}
 		if (method === 'approve') {
+			// spec/reviews#design: no approval from the code — a task with a design source needs a passed design review of the state read.
+			const refused = await this.designRefusal(run, reviewer, node, self, closure);
+			if (refused) throw new Error(refused);
+			// The gate read files: a second call of this reviewer may have given its verdict meanwhile, or the run moved on.
+			if (run.verdicts.some((verdict) => verdict.reviewerNodeId === reviewer.nodeId))
+				throw new Error('You already gave a verdict for this reviewId');
+			if (run.state !== 'reviewing')
+				throw new Error(
+					`stale_review: this check was superseded (${run.state}); wait for the next report`
+				);
 			// spec/reviews#loop: an approval of a closure check closes every finding of this reviewer.
 			if (closure && planReview(run)) await this.deps.self!.planApprove(reviewer.name, run.round);
 			else if (closure) await this.markClosure(reviewer.name, run.round, []);
@@ -3309,8 +3332,9 @@ export class CrewHost {
 			guidance = this.deps.self?.guidance() ?? '';
 		if (this.deps.self?.point() === 'plan')
 			return this.deps.self.planPrompt(run.taskId, run.reviewId, run.round, reviewer.name);
+		const design = await this.designParagraph(run, reviewer);
 		if (run.round <= 1)
-			return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, first read).\n${report}${brief}\nThis is the ${point} of the task's changes. The files of your tree are the task's state now. Read with read_report and read_diff passing this reviewId, once and in full: this is the only read, and nothing new can be raised later. Check the change against the task above. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). ${findingRule(true)} Do not change files.${guidance}`;
+			return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, first read).\n${report}${brief}\nThis is the ${point} of the task's changes. The files of your tree are the task's state now. Read with read_report and read_diff passing this reviewId, once and in full: this is the only read, and nothing new can be raised later. Check the change against the task above. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). ${findingRule(true)} Do not change files.${design}${guidance}`;
 		const path = await safePath(await this.deps.store.taskDir(this.deps.key), 'review.json');
 		const doc = await readDocument(path, 16 * 1024 * 1024).catch(
 			() => ({}) as Record<string, unknown>
@@ -3328,7 +3352,50 @@ export class CrewHost {
 					`- id ${item.id} (${item.anchor.path}:${item.anchor.start}): ${item.text}${(item.replies ?? []).map((reply) => `\n  ${reply.agent ? 'Agent' : reply.author}: ${reply.text}`).join('')}`
 			)
 			.join('\n');
-		return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, closure check).\n${report}${brief}\nThis is the closure check of the ${point}. The agent has fixed your findings or objected to them; the files of your tree are the task's state now. For each of your findings below decide only whether it is closed — an objection you accept counts as closed:\n${list || '- (none)'}\nWhen every finding is closed and the fix introduced no problem, call approve(taskId, reviewId). Otherwise call submit_review(taskId, reviewId, comments) with one item {replyTo: <finding id>, text: why it is still open} per open finding and, only for a problem the fix itself brought in on lines it changed, an item {path, line, text, introduced: true}. Raise nothing else: a problem you missed in the first read is not part of this review. Do not change files.${guidance}`;
+		return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, closure check).\n${report}${brief}\nThis is the closure check of the ${point}. The agent has fixed your findings or objected to them; the files of your tree are the task's state now. For each of your findings below decide only whether it is closed — an objection you accept counts as closed:\n${list || '- (none)'}\nWhen every finding is closed and the fix introduced no problem, call approve(taskId, reviewId). Otherwise call submit_review(taskId, reviewId, comments) with one item {replyTo: <finding id>, text: why it is still open} per open finding and, only for a problem the fix itself brought in on lines it changed, an item {path, line, text, introduced: true}. Raise nothing else: a problem you missed in the first read is not part of this review. Do not change files.${design}${guidance}`;
+	}
+	/** spec/reviews#design: what the task's design source and design reviews tell this reviewer, for this round. */
+	private async designInput(run: ReviewRun, reviewer: CrewWorkerRecord) {
+		const round = run.scopeSnapshots.map((item) => ({ tree: item.result }));
+		return (
+			(await this.deps.self?.design?.(reviewer.taskId, run.reviewId, round).catch(() => null)) ??
+			null
+		);
+	}
+	private async designParagraph(run: ReviewRun, reviewer: CrewWorkerRecord) {
+		const input = await this.designInput(run, reviewer);
+		return input ? designPrompt(input) : '';
+	}
+	/**
+	 * spec/reviews#design: the task's own review refuses an approval no passed design review covers; spec/design-review#flow: a crew reviewer made
+	 * from the built-in Designer approves only after a passed design review it filed for this check.
+	 */
+	private async designRefusal(
+		run: ReviewRun,
+		reviewer: CrewWorkerRecord,
+		node: CrewSpecAgent | null | undefined,
+		self: boolean,
+		closure: boolean
+	): Promise<string | null> {
+		if (self) {
+			const input = await this.designInput(run, reviewer);
+			return input ? designGate(input, closure) : null;
+		}
+		if (node?.template !== designerTemplateId) return null;
+		const filed = await readDesignReviewsOf(this.deps.store, {
+			projectId: this.deps.key.projectId,
+			id: reviewer.taskId,
+		});
+		// The Designer's tree is not the worker's: its evidence counts when every screenshot was taken during this check.
+		const opened = Date.parse(run.createdAt);
+		return filed.some(
+			(review) =>
+				review.reviewId === run.reviewId &&
+				review.state === 'passed' &&
+				review.nodes.every((item) => !!item.shot && Date.parse(item.shot.at) >= opened)
+		)
+			? null
+			: 'No approval from the code: file the design review of the screens you checked with submit_design_review, passing this reviewId, with screenshots taken during this check, and approve once it passed.';
 	}
 	/** spec/reviews#findings: this reviewer's findings of the task's current review, unresolved. */
 	private async selfFindings(reviewer: string) {

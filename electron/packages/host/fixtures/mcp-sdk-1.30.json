@@ -515,6 +515,174 @@
      }
     },
     {
+     "name": "submit_design_review",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "screen": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "nodes": {
+        "minItems": 1,
+        "maxItems": 24,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "name": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "figma": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 500
+          },
+          "figmaImage": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 8192
+          },
+          "shot": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 20
+          },
+          "area": {
+           "type": "object",
+           "properties": {
+            "x": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "y": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "width": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "height": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            }
+           },
+           "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+           ]
+          },
+          "rows": {
+           "minItems": 1,
+           "maxItems": 40,
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "property": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+             },
+             "expected": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "actual": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "match": {
+              "type": "boolean"
+             },
+             "area": {
+              "type": "object",
+              "properties": {
+               "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "width": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "height": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               }
+              },
+              "required": [
+               "x",
+               "y",
+               "width",
+               "height"
+              ]
+             }
+            },
+            "required": [
+             "property",
+             "expected",
+             "actual",
+             "match"
+            ]
+           }
+          }
+         },
+         "required": [
+          "name",
+          "figma",
+          "figmaImage",
+          "shot",
+          "rows"
+         ]
+        }
+       },
+       "verdict": {
+        "type": "string",
+        "enum": [
+         "passed",
+         "mismatch"
+        ]
+       },
+       "reviewId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "screen",
+       "nodes",
+       "verdict"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "review_reply",
      "description": "Object to a reviewer's finding from a review batch of this task's own review: the reply joins the finding's thread, and the reviewer reads it in its closure check. Use it for a finding you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a finding of a review batch of this task, when you do not fix it as asked.",
      "inputSchema": {
@@ -1728,6 +1896,174 @@
       "required": [
        "title",
        "text"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "submit_design_review",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "screen": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "nodes": {
+        "minItems": 1,
+        "maxItems": 24,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "name": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "figma": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 500
+          },
+          "figmaImage": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 8192
+          },
+          "shot": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 20
+          },
+          "area": {
+           "type": "object",
+           "properties": {
+            "x": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "y": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "width": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "height": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            }
+           },
+           "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+           ]
+          },
+          "rows": {
+           "minItems": 1,
+           "maxItems": 40,
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "property": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+             },
+             "expected": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "actual": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "match": {
+              "type": "boolean"
+             },
+             "area": {
+              "type": "object",
+              "properties": {
+               "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "width": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "height": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               }
+              },
+              "required": [
+               "x",
+               "y",
+               "width",
+               "height"
+              ]
+             }
+            },
+            "required": [
+             "property",
+             "expected",
+             "actual",
+             "match"
+            ]
+           }
+          }
+         },
+         "required": [
+          "name",
+          "figma",
+          "figmaImage",
+          "shot",
+          "rows"
+         ]
+        }
+       },
+       "verdict": {
+        "type": "string",
+        "enum": [
+         "passed",
+         "mismatch"
+        ]
+       },
+       "reviewId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "screen",
+       "nodes",
+       "verdict"
       ]
      },
      "execution": {
@@ -2960,6 +3296,174 @@
   "toolsList": {
    "tools": [
     {
+     "name": "submit_design_review",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "screen": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "nodes": {
+        "minItems": 1,
+        "maxItems": 24,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "name": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "figma": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 500
+          },
+          "figmaImage": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 8192
+          },
+          "shot": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 20
+          },
+          "area": {
+           "type": "object",
+           "properties": {
+            "x": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "y": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "width": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "height": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            }
+           },
+           "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+           ]
+          },
+          "rows": {
+           "minItems": 1,
+           "maxItems": 40,
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "property": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+             },
+             "expected": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "actual": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "match": {
+              "type": "boolean"
+             },
+             "area": {
+              "type": "object",
+              "properties": {
+               "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "width": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "height": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               }
+              },
+              "required": [
+               "x",
+               "y",
+               "width",
+               "height"
+              ]
+             }
+            },
+            "required": [
+             "property",
+             "expected",
+             "actual",
+             "match"
+            ]
+           }
+          }
+         },
+         "required": [
+          "name",
+          "figma",
+          "figmaImage",
+          "shot",
+          "rows"
+         ]
+        }
+       },
+       "verdict": {
+        "type": "string",
+        "enum": [
+         "passed",
+         "mismatch"
+        ]
+       },
+       "reviewId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "screen",
+       "nodes",
+       "verdict"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "browser_open",
      "description": "Open a page in your own browser tab of this task, on screen or not: the first call makes the tab and later calls navigate it; tab \"new\" makes another one. The human sees the tab in the work area when they open the task. External navigation requires domain permission. Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.",
      "inputSchema": {
@@ -4146,6 +4650,174 @@
      }
     },
     {
+     "name": "submit_design_review",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "screen": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "nodes": {
+        "minItems": 1,
+        "maxItems": 24,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "name": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "figma": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 500
+          },
+          "figmaImage": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 8192
+          },
+          "shot": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 20
+          },
+          "area": {
+           "type": "object",
+           "properties": {
+            "x": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "y": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "width": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "height": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            }
+           },
+           "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+           ]
+          },
+          "rows": {
+           "minItems": 1,
+           "maxItems": 40,
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "property": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+             },
+             "expected": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "actual": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "match": {
+              "type": "boolean"
+             },
+             "area": {
+              "type": "object",
+              "properties": {
+               "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "width": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "height": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               }
+              },
+              "required": [
+               "x",
+               "y",
+               "width",
+               "height"
+              ]
+             }
+            },
+            "required": [
+             "property",
+             "expected",
+             "actual",
+             "match"
+            ]
+           }
+          }
+         },
+         "required": [
+          "name",
+          "figma",
+          "figmaImage",
+          "shot",
+          "rows"
+         ]
+        }
+       },
+       "verdict": {
+        "type": "string",
+        "enum": [
+         "passed",
+         "mismatch"
+        ]
+       },
+       "reviewId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "screen",
+       "nodes",
+       "verdict"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "review_reply",
      "description": "Object to a reviewer's finding from a review batch of this task's own review: the reply joins the finding's thread, and the reviewer reads it in its closure check. Use it for a finding you do not fix as asked, with your reason. commentId: the comment id from the batch. Returns replied: true, or the reason it failed. Call it only for a finding of a review batch of this task, when you do not fix it as asked.",
      "inputSchema": {
@@ -4919,6 +5591,174 @@
   },
   "toolsList": {
    "tools": [
+    {
+     "name": "submit_design_review",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "screen": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "nodes": {
+        "minItems": 1,
+        "maxItems": 24,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "name": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 80
+          },
+          "figma": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 500
+          },
+          "figmaImage": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 8192
+          },
+          "shot": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 20
+          },
+          "area": {
+           "type": "object",
+           "properties": {
+            "x": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "y": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "width": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            },
+            "height": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 1
+            }
+           },
+           "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+           ]
+          },
+          "rows": {
+           "minItems": 1,
+           "maxItems": 40,
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "property": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+             },
+             "expected": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "actual": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+             },
+             "match": {
+              "type": "boolean"
+             },
+             "area": {
+              "type": "object",
+              "properties": {
+               "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "width": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               },
+               "height": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+               }
+              },
+              "required": [
+               "x",
+               "y",
+               "width",
+               "height"
+              ]
+             }
+            },
+            "required": [
+             "property",
+             "expected",
+             "actual",
+             "match"
+            ]
+           }
+          }
+         },
+         "required": [
+          "name",
+          "figma",
+          "figmaImage",
+          "shot",
+          "rows"
+         ]
+        }
+       },
+       "verdict": {
+        "type": "string",
+        "enum": [
+         "passed",
+         "mismatch"
+        ]
+       },
+       "reviewId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "screen",
+       "nodes",
+       "verdict"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
     {
      "name": "browser_open",
      "description": "Open a page in your own browser tab of this task, on screen or not: the first call makes the tab and later calls navigate it; tab \"new\" makes another one. The human sees the tab in the work area when they open the task. External navigation requires domain permission. Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.",

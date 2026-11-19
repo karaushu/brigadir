@@ -485,6 +485,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'request_review',
 			'set_task_class',
 			'save_source',
+			'submit_design_review',
 			'review_reply',
 			'add_folder',
 			'commands_list',

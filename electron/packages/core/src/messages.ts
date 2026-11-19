@@ -2456,6 +2456,30 @@ const uk = {
 	'Saving a source': 'Зберігає джерело',
 	'Saved a source': 'Зберіг джерело',
 	'Could not save the source': 'Не вдалося зберегти джерело',
+	// spec/design-review#card: the design review card, its viewer and its service row.
+	'Filing the design review': 'Подає ревʼю дизайну',
+	'Filed the design review': 'Подав ревʼю дизайну',
+	'Could not file the design review': 'Не вдалося подати ревʼю дизайну',
+	'Design review': 'Ревʼю дизайну',
+	'Design review passed': 'Ревʼю дизайну пройдено',
+	Figma: 'Figma',
+	Property: 'Властивість',
+	Expected: 'Очікується',
+	'On device': 'На пристрої',
+	mismatch: 'розбіжність',
+	'old screenshot': 'старий знімок',
+	'no screenshot': 'без знімка',
+	'no design image': 'без зображення дизайну',
+	'before the last change': 'до останньої зміни',
+	'No screenshot': 'Без знімка',
+	'No design image': 'Без зображення дизайну',
+	design: 'дизайн',
+	'{agent} takes new screenshots': '{agent} робить нові знімки',
+	'{n} with an old screenshot': '{n} зі старим знімком',
+	'{n} without a screenshot': '{n} без знімка',
+	'{n} without a design image': '{n} без зображення дизайну',
+	'{rows} not accepted': '{rows} не прийнято',
+	'Images of {node}': 'Зображення: {node}',
 	'Reading the plan': 'Читає план',
 	'Read the plan': 'Прочитав план',
 	'Could not read the plan': 'Не вдалося прочитати план',
@@ -5701,4 +5725,34 @@ export function revokeAllText(locale: Locale, count: number): string {
 		many: `${n} пристроїв більше не підключаться, поки їх не спарити знову. Журнал і назва машини лишаються.`,
 		other: `${n} пристрою більше не підключаться, поки їх не спарити знову. Журнал і назва машини лишаються.`,
 	}[form];
+}
+/** spec/design-review#card: rows of a design review — «1 рядок», «3 рядки», «5 рядків» (rule 9). */
+export function designRowCount(locale: Locale, count: number): string {
+	const number = new Intl.NumberFormat(locale).format(count);
+	if (locale === 'en') return `${number} ${count === 1 ? 'row' : 'rows'}`;
+	return `${number} ${ukForm(count, { one: 'рядок', few: 'рядки', many: 'рядків', other: 'рядка' })}`;
+}
+/** spec/design-review#card: rows that match — «1 збігається», «3 збігаються». */
+export function designMatchCount(locale: Locale, count: number): string {
+	const number = new Intl.NumberFormat(locale).format(count);
+	if (locale === 'en') return `${number} match`;
+	return `${number} ${ukForm(count, { one: 'збігається', few: 'збігаються', many: 'збігаються', other: 'збігається' })}`;
+}
+/** spec/design-review#card: mismatched rows — «1 розбіжність», «3 розбіжності», «5 розбіжностей». */
+export function designMismatchCount(locale: Locale, count: number): string {
+	const number = new Intl.NumberFormat(locale).format(count);
+	if (locale === 'en') return `${number} ${count === 1 ? 'mismatch' : 'mismatches'}`;
+	return `${number} ${ukForm(count, { one: 'розбіжність', few: 'розбіжності', many: 'розбіжностей', other: 'розбіжності' })}`;
+}
+/** spec/design-review#card: «1 знімок», «2 знімки», «5 знімків». */
+export function designShotCount(locale: Locale, count: number): string {
+	const number = new Intl.NumberFormat(locale).format(count);
+	if (locale === 'en') return `${number} ${count === 1 ? 'screenshot' : 'screenshots'}`;
+	return `${number} ${ukForm(count, { one: 'знімок', few: 'знімки', many: 'знімків', other: 'знімка' })}`;
+}
+/** spec/design-review#card: «1 вузол Figma», «2 вузли Figma», «5 вузлів Figma». */
+export function designNodeCount(locale: Locale, count: number): string {
+	const number = new Intl.NumberFormat(locale).format(count);
+	if (locale === 'en') return `${number} Figma ${count === 1 ? 'node' : 'nodes'}`;
+	return `${number} ${ukForm(count, { one: 'вузол', few: 'вузли', many: 'вузлів', other: 'вузла' })} Figma`;
 }

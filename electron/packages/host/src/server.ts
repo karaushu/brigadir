@@ -323,8 +323,14 @@ export async function startHost(config: HostConfig) {
 			// An Auto task plans like a solo task (`planWaiting`): its plan waits as a plan approval, and with that request
 			// open the turn never ends, so a batch that only queued would never run.
 			const pending = [...permissions.values()].find((item) => isPlanApproval(item.request));
-			if (pending) await pending.finish(planRejectOption(pending.request)?.id ?? null);
-			if (!taskReview.planBatchLive(review.id)) return 'dropped';
+			if (pending) {
+				await pending.finish(planRejectOption(pending.request)?.id ?? null);
+				planAnswered.add(review.id);
+			}
+			if (!taskReview.planBatchLive(review.id)) {
+				planAnswered.delete(review.id);
+				return 'dropped';
+			}
 			// With no split waiting (the person rejected it meanwhile) the foreman gets the batch as its next turn too.
 			await command({
 				kind: 'submitReview',
@@ -1199,6 +1205,8 @@ export async function startHost(config: HostConfig) {
 				await emit({ kind: 'scope.violation', ...violation });
 	}
 	const crewPeers = new Set<Peer>();
+	/** spec/reviews#plan-loop: plan review batches whose waiting plan the host just rejected; such a batch runs before what is queued. */
+	const planAnswered = new Set<string>();
 	const permissions = new Map<
 		string,
 		{
@@ -2332,27 +2340,38 @@ export async function startHost(config: HostConfig) {
 				)
 					return;
 				// spec/chat-turns-plans-and-questions#plan-chat: Enter while a plan waits answers the plan — the request is rejected and the message runs right after the turn.
-				const plan =
-						c.kind === 'prompt' && c.steer === true
+				// spec/chat-turns-plans-and-questions#plan-answer: so does the plan card's own answer, with its text as it is; either runs before what is queued.
+				const card = c.kind === 'prompt' && c.answersPlan === true,
+					plan =
+						c.kind === 'prompt' && (c.steer === true || card)
 							? [...permissions.values()].find((item) => isPlanApproval(item.request))
 							: undefined,
 					planReject = plan ? planRejectOption(plan.request) : null;
 				if (c.kind === 'prompt' && plan && planReject) {
-					const { steer: _steer, ...rest } = c,
+					const { steer: _steer, answersPlan: _answersPlan, ...rest } = c,
 						attachments = await assets.resolve(config.key, rest.attachmentIds ?? []);
 					transport!.validateAttachments(attachments.map((value) => value.input));
 					await plan.finish(planReject.id);
+					const before = queue.prompts[0]?.id;
 					await emit({
 						kind: 'prompt.queued',
 						prompt: {
 							id: randomUUID(),
-							command: { ...rest, text: planChatPrompt(rest.text) },
+							command: card ? rest : { ...rest, text: planChatPrompt(rest.text) },
 							attachments: attachments.map((value) => value.attachment),
 						},
+						...(before ? { before } : {}),
 					});
 					kickPrompts();
 					return;
 				}
+				// The plan was answered meanwhile: the card's text is an ordinary message.
+				const own: PromptCommand =
+					c.kind === 'prompt' && c.answersPlan
+						? (({ answersPlan: _answersPlan, ...rest }) => rest)(c)
+						: c;
+				// spec/reviews#plan-loop: the findings of a plan review answered the waiting plan, so they run before what is queued.
+				const front = c.kind === 'submitReview' && planAnswered.delete(c.review.id);
 				if (
 					!busy &&
 					!queue.prompts.length &&
@@ -2360,7 +2379,7 @@ export async function startHost(config: HostConfig) {
 					!quotaBlocked() &&
 					!(await budgetBlocks())
 				) {
-					await beginPrompt(c);
+					await beginPrompt(own);
 					return;
 				}
 				if (
@@ -2376,7 +2395,7 @@ export async function startHost(config: HostConfig) {
 				transport!.validateAttachments(attachments.map((value) => value.input));
 				const prompt: QueuedPrompt = {
 					id: randomUUID(),
-					command: c,
+					command: own,
 					attachments: attachments.map((value) => value.attachment),
 				};
 				// spec/composer-steering-queue-and-ghost#steering: the person's own words reach the running turn; crew reports, reviews and an earlier queue keep their FIFO order.
@@ -2397,7 +2416,8 @@ export async function startHost(config: HostConfig) {
 					scheduleHeld();
 					return;
 				}
-				await emit({ kind: 'prompt.queued', prompt });
+				const before = front ? queue.prompts[0]?.id : undefined;
+				await emit({ kind: 'prompt.queued', prompt, ...(before ? { before } : {}) });
 				kickPrompts();
 			});
 		if (busy) throw new Error('Wait for the active turn before changing options');

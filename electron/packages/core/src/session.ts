@@ -554,6 +554,7 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 				(v.attachmentIds === undefined || isAttachmentIds(v.attachmentIds)) &&
 				(v.crew === undefined || isCrewTurnMarker(v.crew)) &&
 				(v.steer === undefined || (v.steer === true && v.crew === undefined)) &&
+				(v.answersPlan === undefined || (v.answersPlan === true && v.crew === undefined)) &&
 				(v.assignment === undefined || isCrewAssignmentId(v.assignment)) &&
 				(v.text.trim().length > 0 || (Array.isArray(v.attachmentIds) && v.attachmentIds.length > 0))
 			);

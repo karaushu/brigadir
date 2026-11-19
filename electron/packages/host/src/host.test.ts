@@ -7,7 +7,13 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SessionStore, atomicJson, readProjectFile } from '@brigadir/persistence';
-import { pendingInputs, planChatPrompt, type EventRecord, type TaskKey } from '@brigadir/core';
+import {
+	pendingInputs,
+	planChatPrompt,
+	planFeedbackPrompt,
+	type EventRecord,
+	type TaskKey,
+} from '@brigadir/core';
 import { connectHost, readIdentity, Peer, type HostClient, type HostIdentity } from './index';
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -1299,6 +1305,37 @@ it('answers a waiting plan with the message sent from the composer', async () =>
 	const next = await event(client, 'turn.started', resolved.seq);
 	expect(next.event).toMatchObject({ text: planChatPrompt('Why two phases?') });
 	expect((await client.snapshot()).records.some((r) => r.event.kind === 'prompt.held')).toBe(false);
+});
+
+// spec/chat-turns-plans-and-questions#plan-answer: what answers a waiting plan is the agent's next turn, whatever was queued before it.
+it('runs the answer to a waiting plan before the queue', async () => {
+	const { store, task } = await setup();
+	const { client } = await launch(store, task, 'plan-modes');
+	await client.command({ kind: 'prompt', text: 'plan' });
+	const requested = await event(client, 'permission.requested');
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await event(client, 'prompt.queued', requested.seq);
+	const feedback = planFeedbackPrompt('Split phase two');
+	await client.command({ kind: 'prompt', text: feedback, answersPlan: true });
+	const resolved = await event(client, 'permission.resolved', requested.seq);
+	expect(resolved.event).toMatchObject({ optionId: 'reject' });
+	const next = await event(client, 'turn.started', resolved.seq);
+	expect(next.event).toMatchObject({ text: feedback });
+	expect(next.event).not.toHaveProperty('answersPlan');
+	// The queued message runs after it and presents a plan; a chat message answers that one in front of the queue too.
+	const second = await event(client, 'permission.requested', next.seq);
+	await client.command({ kind: 'prompt', text: 'later' });
+	await event(client, 'prompt.queued', second.seq);
+	await client.command({ kind: 'prompt', text: 'Why?', steer: true });
+	const rejected = await event(client, 'permission.resolved', second.seq);
+	expect((await event(client, 'turn.started', rejected.seq)).event).toMatchObject({
+		text: planChatPrompt('Why?'),
+	});
+	// With no plan waiting the card's text is an ordinary message.
+	const other = await setup();
+	const { client: idle } = await launch(other.store, other.task);
+	await idle.command({ kind: 'prompt', text: 'hello', answersPlan: true });
+	expect((await event(idle, 'turn.started')).event).not.toHaveProperty('answersPlan');
 });
 
 // spec/tasks#agent-created-tasks: `create_task` waits on its card; main answers with the created task, `Відхилити` and Stop with null.

@@ -279,8 +279,8 @@ export function PlanApproval({
 	};
 	const rejectWith = async (prompt: string) => {
 		if (!reject) return;
-		if (await send({ kind: 'answerPermission', id: request.id, optionId: reject.id }))
-			await send({ kind: 'prompt', text: prompt });
+		// spec/chat-turns-plans-and-questions#plan-answer: one command — the host rejects the plan and runs the text before anything queued.
+		await send({ kind: 'prompt', text: prompt, answersPlan: true });
 	};
 	const submitFeedback = () => {
 		const value = feedback?.trim();

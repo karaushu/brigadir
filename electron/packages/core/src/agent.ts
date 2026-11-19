@@ -151,6 +151,8 @@ export type AgentCommand =
 			attachmentIds?: string[];
 			crew?: import('./crew-runtime').CrewTurnMarker;
 			steer?: true;
+			/** spec/chat-turns-plans-and-questions#plan-answer: the plan card's own answer (`Plan further…`, `Send edits`): the host rejects the waiting plan and runs this text, as it is, before anything queued. */
+			answersPlan?: true;
 			/** spec/crew#assignment-after-compaction: the id of the crew assignment this prompt gives (a part, a check), set by the host that sends it. */
 			assignment?: string;
 	  }

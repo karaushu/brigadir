@@ -132,6 +132,10 @@ it('names the tools in the brief of Codex and the CLI only, built from the modul
 	expect(toolsBrief('developer', allOn)).toContain('a Metro port of your own');
 	expect(toolsBrief(null, allOn)).not.toContain('a Metro port of your own');
 	expect(toolsBrief(null, allOn)).toContain('device for another kind');
+	// spec/notifications-slack-notes-and-schedules#slack-agent-post: Codex and the CLI hear the Slack rule in the first prompt.
+	expect(toolsBrief(null, { ...allOn, slack: true })).toContain('goes through slack_post');
+	expect(toolsBrief('developer', { ...allOn, slack: true })).not.toContain('slack_post');
+	expect(toolsBrief(null, allOn)).not.toContain('slack_post');
 });
 
 // spec/agents-and-providers#tools-awareness: the whole first-prompt brief of a solo agent, a foreman and a worker, with every module on, as goldens.

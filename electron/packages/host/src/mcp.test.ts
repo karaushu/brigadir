@@ -607,6 +607,18 @@ it('tells the agent in initialize what it has, from the modules on and its role 
 	expect((await initialize('foreman', allModules)).instructions).toContain(
 		'Your agents have the same tools'
 	);
+	// spec/notifications-slack-notes-and-schedules#slack-agent-post: the root agent of a task posts as Brigadir's bot; a worker has no slack_post.
+	const slackOn = { ...allModules, slack: true };
+	for (const role of [null, 'foreman', 'auto'] as const)
+		expect((await initialize(role, slackOn)).instructions, String(role)).toContain(
+			"Every Slack message you send goes through slack_post, from Brigadir's bot"
+		);
+	expect((await initialize('developer', slackOn)).instructions).not.toContain('slack_post');
+	expect(solo.instructions).not.toContain('slack_post');
+	const post = (mcpTools(null, slackOn).list.tools as { name: string; description: string }[]).find(
+		(tool) => tool.name === 'slack_post'
+	);
+	expect(post?.description).toContain("posts under the person's own name");
 	// A module switched off is not named; with none of the three on, only the console is (spec/terminal-and-cli-agents#agent-console-tools).
 	const browserOnly = await initialize(null, { ...offModules, browser: true });
 	expect(browserOnly.instructions).toContain('browser_open');

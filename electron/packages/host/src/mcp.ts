@@ -11,6 +11,7 @@ import {
 	crewTools,
 	humanToolsAllowed,
 	isWorkspaceTool,
+	slackRule,
 	toolsInstructions,
 	type CrewProcessRole,
 	type CrewToolName,
@@ -116,8 +117,7 @@ const whenToUse: Record<string, string> = {
 	propose_review:
 		'Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.',
 	add_folder: 'Use it when the work needs files outside the project, such as a sibling repository.',
-	slack_post:
-		'Use it when the person asks to post to Slack as Brigadir or as the bot. Never read a Slack token from env files or call the Slack API yourself.',
+	slack_post: `${slackRule} Never read a Slack token from env files or call the Slack API yourself.`,
 	browser_open:
 		'Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.',
 	browser_state: 'Call it to see which page is open and whether it finished loading.',

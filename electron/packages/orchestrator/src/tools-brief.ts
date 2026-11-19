@@ -1,4 +1,9 @@
-import { simulatorQueued, type CrewProcessRole, type WorkspaceTools } from './tools';
+import {
+	humanToolsAllowed,
+	simulatorQueued,
+	type CrewProcessRole,
+	type WorkspaceTools,
+} from './tools';
 /**
  * spec/agents-and-providers#tools-awareness: an agent uses only the tools it knows about. English by rule 12. Built from the modules that are on (spec/settings-modules-and-onboarding#module-off) and
  * the role of the session; a module switched off is never named. Three texts: the MCP `instructions`, a short line of
@@ -12,12 +17,17 @@ function words(items: readonly (string | false | undefined)[], last: 'and' | 'or
 		? `${kept.slice(0, -1).join(', ')} ${last} ${kept.at(-1)}`
 		: (kept[0] ?? '');
 }
+/** The workspace modules, plus Slack: `slack_post` is the person's tool, so only the root agent of a task hears of it. */
+type BriefTools = WorkspaceTools & { slack?: boolean };
+/** spec/notifications-slack-notes-and-schedules#slack-agent-post: a task's Slack messages come from Brigadir's bot unless the person asks for their own name. */
+export const slackRule =
+	"Every Slack message you send goes through slack_post, from Brigadir's bot, also when the person only says to write or reply in Slack. Another Slack tool or connector of yours posts under the person's own name: send with it only when the person asks in words for a message from themselves; reading Slack with it is fine. When slack_post cannot post, tell the person the reason and do not post as them instead.";
 const sharedSimulator =
 	'You get a device of your own when one can start, and your own Metro port (RCT_METRO_PORT, in your session and terminals): start Metro in your worktree on it. When no device can start (the device cap, low memory), you share one with your crew: while another agent uses it, your call waits up to 60 seconds; if it is still busy, do other work and retry later.';
 const deviceKinds =
 	'Pass device to any simulator tool to use another kind (iPhone, iPad, Android, a model such as iPhone 17 Pro); simulator_state lists the devices and who holds each.';
 /** spec/agents-and-providers#tools-awareness: the `instructions` of `initialize`; the console line stays when every module is off (spec/terminal-and-cli-agents#agent-console-tools). */
-export function toolsInstructions(role: CrewProcessRole | null, tools: WorkspaceTools): string {
+export function toolsInstructions(role: CrewProcessRole | null, tools: BriefTools): string {
 	const lines: string[] = [];
 	if (tools.browser)
 		lines.push(
@@ -35,6 +45,7 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: Workspace
 	lines.push(
 		'- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.'
 	);
+	if (tools.slack && humanToolsAllowed(role)) lines.push(`- Slack (slack_post). ${slackRule}`);
 	const asks = words(
 			[
 				tools.browser && 'open a page',
@@ -67,7 +78,7 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: Workspace
 	].join('\n');
 }
 /** spec/agents-and-providers#tools-awareness: the same in one paragraph of the first-prompt brief; it names the console in any case (spec/terminal-and-cli-agents#agent-console-tools). */
-export function toolsBrief(role: CrewProcessRole | null, tools: WorkspaceTools): string {
+export function toolsBrief(role: CrewProcessRole | null, tools: BriefTools): string {
 	const named = [
 		tools.browser && 'a real browser (browser_open, browser_ui, browser_screenshot, browser_act)',
 		tools.simulator &&
@@ -84,7 +95,8 @@ export function toolsBrief(role: CrewProcessRole | null, tools: WorkspaceTools):
 		tools.simulator && simulatorQueued(role)
 			? ' You get a simulator device and a Metro port of your own when one can start; otherwise a call may wait for the shared device, and if it stays busy, retry later.'
 			: '';
-	return `This app gives you ${list}.${check}${queue}`;
+	const slack = tools.slack && humanToolsAllowed(role) ? ` ${slackRule}` : '';
+	return `This app gives you ${list}.${check}${queue}${slack}`;
 }
 /** spec/agents-and-providers#tools-awareness, spec/crew#smoke: how the foreman's plan uses its crew's tools; empty when no module is on. */
 export function crewToolsBrief(tools: WorkspaceTools): string {

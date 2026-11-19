@@ -58,7 +58,8 @@ export function CrewCard({
 		providers = task.crew ? specProviders(task.crew.root) : [],
 		// spec/reviews#surfaces: a solo task's reviewers — the card has no helmet and counts reviewers.
 		reviewOnly = !task.crew,
-		review = useTaskReview(reviewOnly && !preview ? task : null);
+		// spec/reviews#surfaces: a reviewer row says its state under any card — a solo task's, an Auto task's or a crew's.
+		review = useTaskReview(!preview ? task : null);
 	// spec/appearance#evolution-redesign: a collapsed crew says what its workers do when the foreman has no activity line.
 	const working = rows.filter(
 			(row) => !['done', 'completed', 'backlog'].includes(row.task.status)
@@ -142,7 +143,7 @@ export function CrewCard({
 							locale={locale}
 							onOpen={onOpen}
 							onMenu={onMenu}
-							{...(reviewOnly ? reviewerState(review, row.task.id, locale) : {})}
+							{...reviewerState(review, row.task.id, locale)}
 						/>
 					))}
 				</div>

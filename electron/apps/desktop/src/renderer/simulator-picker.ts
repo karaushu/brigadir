@@ -71,7 +71,7 @@ export function pickerModel(
 				running &&
 				(!use ||
 					use.kind === 'tasks' ||
-					(use.kind === 'mine' && !use.heldBy) ||
+					(use.kind === 'mine' && !use.heldBy && !use.busy) ||
 					(use.kind === 'task' && !use.busy)),
 		};
 	});

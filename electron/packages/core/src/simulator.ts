@@ -49,8 +49,8 @@ export function simulatorLeases(value: unknown): SimulatorLeases {
  * A device missing from `uses` is free.
  */
 export type SimulatorUse =
-	/** `heldBy` — another task with a lease on it is using it now: its tab offers no Shut down. */
-	| { kind: 'mine'; heldBy?: TaskKey }
+	/** `heldBy` — another task with a lease on it is using it now; `busy` — it is another task's own copy. Either: no Shut down. */
+	| { kind: 'mine'; heldBy?: TaskKey; busy?: true }
 	| { kind: 'queued'; holder: TaskKey }
 	/** `busy` — that task is using the device now or it is that task's own copy: no Shut down. */
 	| { kind: 'task'; task: TaskKey; busy?: true }

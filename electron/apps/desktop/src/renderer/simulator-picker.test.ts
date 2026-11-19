@@ -88,6 +88,15 @@ it('names each row with its OS, ends it with who holds the device, and offers Sh
 			false
 		).rows[0]!.canShutDown
 	).toBe(false);
+	// The task's own lease on another task's copy: no Shut down either.
+	expect(
+		pickerModel(
+			state({ uses: { 'iPhone 17 Pro': { kind: 'mine', busy: true } } }),
+			'en',
+			tasks,
+			false
+		).rows[0]!.canShutDown
+	).toBe(false);
 	// Ukrainian: the same tails in its own words.
 	expect(pickerModel(state({}), 'uk', tasks, false).rows.map((row) => row.tail)).toEqual([
 		'ця задача',

@@ -510,14 +510,17 @@ export function BudgetStrip({
 	locale,
 	disabled,
 	send,
+	open = false,
 }: {
 	question: BudgetQuestion;
 	view: TaskTokensView;
 	locale: Locale;
 	disabled: boolean;
 	send(command: SessionCommand): void;
+	/** Starts expanded (the tests: a server render cannot click the chevron). */
+	open?: boolean;
 }): ReactNode {
-	const [shown, setShown] = useState(false);
+	const [shown, setShown] = useState(open);
 	const decide = (decision: BudgetDecision, budget?: number) =>
 		send({
 			kind: 'decideBudget',

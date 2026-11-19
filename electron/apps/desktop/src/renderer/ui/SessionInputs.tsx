@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type KeyboardEventHandler, type ReactNode } from 'react';
 import { Glyph, type GlyphName } from './Glyph';
 import { useSecondTick } from './second-tick';
 import { TextArea, TextInput } from './Input';
@@ -150,10 +150,12 @@ export function Question({
 }
 /** spec/chat-turns-plans-and-questions#model-card: one model of a catalog on the model question card. */
 export type ModelRow = { key: string; name: string; note?: string };
+/** A provider's models on the card; `rows` null while its catalog loads. */
+export type ModelGroup = { label: string; glyph?: GlyphName; rows: ModelRow[] | null };
 /**
- * spec/chat-turns-plans-and-questions#model-card: the Auto agent asks for a model outside its roles. The question card's look (rule 17): the reason,
+ * spec/chat-turns-plans-and-questions#model-card: the Auto agent asks for a model outside its roles. An `InputCard` (rule 17): the reason,
  * the catalog models grouped by provider, the effort of the chosen model, `Save as role`, and `Keep {role}` / `Use this model`.
- * `groups` null — the catalogs are still loading; empty — no other models.
+ * `groups` null — the providers are not known yet; a group's `rows` null — its catalog loads; all empty — no other models.
  */
 export function ModelQuestion({
 	title,
@@ -171,7 +173,7 @@ export function ModelQuestion({
 	onKeep,
 	onUse,
 	onSettings,
-	waited = null,
+	since,
 	submitShortcut = null,
 	disabled,
 	locale,
@@ -179,7 +181,7 @@ export function ModelQuestion({
 	title: string;
 	part?: string | undefined;
 	reason: string;
-	groups: { label: string; glyph?: GlyphName; rows: ModelRow[] }[] | null;
+	groups: ModelGroup[] | null;
 	selected: string | null;
 	onSelect(key: string): void;
 	efforts: { value: string; name: string }[] | null;
@@ -191,78 +193,113 @@ export function ModelQuestion({
 	onKeep(): void;
 	onUse(): void;
 	onSettings(): void;
-	/** `waiting 3 min`, from the caller's clock. */ waited?: string | null;
+	/** When the agent asked: `waiting 3 min` after a minute. */ since?: number;
 	submitShortcut?: string | null;
 	disabled: boolean;
 	locale: Locale;
 }) {
-	const empty = groups !== null && groups.every((group) => !group.rows.length);
+	// One radio group per card: two waiting model questions in one chat must not share `name`.
+	const radios = useId(),
+		loading = groups === null || groups.some((group) => group.rows === null),
+		empty = !loading && groups.every((group) => !group.rows?.length),
+		ready = !disabled && !loading && !!selected,
+		loadingText = <p className={styles.description}>{t(locale, 'Loading models…')}</p>;
 	return (
-		<section
-			className={styles.question}
+		<InputCard
+			glyph="question"
+			title={title}
+			hint={part}
+			{...(since !== undefined ? { since } : {})}
+			label={title}
+			locale={locale}
 			data-model-question
-			aria-label={title}
 			onKeyDown={(event) => {
-				if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && selected && !disabled) {
+				if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && ready) {
 					event.preventDefault();
 					onUse();
 				}
-			}}>
-			<header>
-				<Glyph name="question" size={14} />
-				<strong>{title}</strong>
-				{part && <small>{part}</small>}
-				{waited && <span className={styles.waited}>{waited}</span>}
-			</header>
+			}}
+			actions={
+				empty ? (
+					<>
+						<Button className={styles.footStart} disabled={disabled} onClick={onSettings}>
+							{t(locale, 'Settings…')}
+						</Button>
+						<Button appearance="primary" disabled={disabled} onClick={onKeep}>
+							{keepLabel}
+						</Button>
+					</>
+				) : (
+					<>
+						{submitShortcut && (
+							<small className={styles.footHint}>
+								{t(locale, '{key} to answer').replace('{key}', submitShortcut)}
+							</small>
+						)}
+						<Button disabled={disabled} onClick={onKeep}>
+							{keepLabel}
+						</Button>
+						<Button appearance="primary" disabled={!ready} onClick={onUse}>
+							{t(locale, 'Use this model')}
+						</Button>
+					</>
+				)
+			}>
 			<h3>{reason}</h3>
 			{groups === null ? (
-				<p className={styles.description}>{t(locale, 'Loading models…')}</p>
+				loadingText
 			) : empty ? (
 				<p className={styles.description}>{t(locale, 'No other models.')}</p>
 			) : (
 				groups.map((group) =>
-					group.rows.length ? (
+					group.rows === null || group.rows.length ? (
 						<div key={group.label} className={styles.modelGroup}>
 							<span className={styles.modelGroupLabel}>
 								{group.glyph && <Glyph name={group.glyph} size={12} />}
 								{group.label}
 							</span>
-							<div className={styles.options} role="radiogroup" aria-label={group.label}>
-								{group.rows.map((row) => (
-									<label
-										key={row.key}
-										className={styles.questionOption}
-										data-selected={selected === row.key}>
-										<Choice
-											type="radio"
-											name="model"
-											label={row.name}
-											disabled={disabled}
-											checked={selected === row.key}
-											onChange={() => onSelect(row.key)}
-										/>
-										<span>
-											<strong>{row.name}</strong>
-											{row.note && <span className={styles.description}>{row.note}</span>}
-										</span>
-									</label>
-								))}
-							</div>
+							{group.rows === null ? (
+								loadingText
+							) : (
+								<div className={styles.options} role="radiogroup" aria-label={group.label}>
+									{group.rows.map((row) => (
+										<label
+											key={row.key}
+											className={styles.questionOption}
+											data-selected={selected === row.key}>
+											<Choice
+												type="radio"
+												name={radios}
+												label={row.name}
+												disabled={disabled}
+												checked={selected === row.key}
+												onChange={() => onSelect(row.key)}
+											/>
+											<span>
+												<strong>{row.name}</strong>
+												{row.note && <span className={styles.description}>{row.note}</span>}
+											</span>
+										</label>
+									))}
+								</div>
+							)}
 						</div>
 					) : null
 				)
 			)}
 			{!empty && groups !== null && efforts && efforts.length > 0 && (
-				<div className={styles.modelRow} data-size="s">
-					<span>{t(locale, 'Effort')}</span>
-					<Segments
-						size="s"
-						label={t(locale, 'Effort')}
-						value={effort ?? ''}
-						disabled={disabled}
-						options={efforts.map((level) => ({ value: level.value, label: level.name }))}
-						onChange={onEffort}
-					/>
+				<div className={styles.modelGroup}>
+					<span className={styles.modelGroupLabel}>{t(locale, 'Effort')}</span>
+					<div className={styles.modelRow} data-size="s">
+						<Segments
+							size="s"
+							label={t(locale, 'Effort')}
+							value={effort ?? ''}
+							disabled={disabled}
+							options={efforts.map((level) => ({ value: level.value, label: level.name }))}
+							onChange={onEffort}
+						/>
+					</div>
 				</div>
 			)}
 			{!empty && groups !== null && (
@@ -290,31 +327,12 @@ export function ModelQuestion({
 					)}
 				</div>
 			)}
-			<footer className={styles.actions} data-size="m">
-				{empty ? (
-					<Button className={styles.footStart} disabled={disabled} onClick={onSettings}>
-						{t(locale, 'Settings…')}
-					</Button>
-				) : submitShortcut ? (
-					<small className={styles.footHint}>
-						{t(locale, '{key} to answer').replace('{key}', submitShortcut)}
-					</small>
-				) : null}
-				<Button disabled={disabled} onClick={onKeep}>
-					{keepLabel}
-				</Button>
-				{!empty && (
-					<Button appearance="primary" disabled={disabled || !selected} onClick={onUse}>
-						{t(locale, 'Use this model')}
-					</Button>
-				)}
-			</footer>
-		</section>
+		</InputCard>
 	);
 }
 /**
  * spec/chat-turns-plans-and-questions#budget-card: a card of the question family — the amber band and frame of `Question`, any body, actions at the
- * foot. The budget question is this card (rule 17).
+ * foot. The budget question and the model question are this card (rule 17).
  */
 export function InputCard({
 	glyph,
@@ -325,6 +343,7 @@ export function InputCard({
 	locale,
 	actions,
 	children,
+	onKeyDown,
 	...data
 }: {
 	glyph: GlyphName;
@@ -335,6 +354,7 @@ export function InputCard({
 	locale: Locale;
 	actions: ReactNode;
 	children: ReactNode;
+	/** A card's own keys, such as `⌘↩` that answers the model question. */ onKeyDown?: KeyboardEventHandler<HTMLElement>;
 } & { [key: `data-${string}`]: string | boolean | undefined }) {
 	const now = useSecondTick(since !== undefined),
 		waited =
@@ -342,7 +362,7 @@ export function InputCard({
 				? t(locale, 'waiting {age}').replace('{age}', ageShort(locale, since, now))
 				: null;
 	return (
-		<section {...data} className={styles.question} aria-label={label}>
+		<section {...data} className={styles.question} aria-label={label} onKeyDown={onKeyDown}>
 			<header>
 				<Glyph name={glyph} size={14} />
 				<strong>{title}</strong>

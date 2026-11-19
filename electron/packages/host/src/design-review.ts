@@ -8,6 +8,7 @@ import {
 	designLimits,
 	designNodeLabel,
 	designReviewState,
+	imageSizeRefusal,
 	isDesignArea,
 	isRecord,
 	isShotId,
@@ -47,11 +48,13 @@ async function shotsFile(store: SessionStore, key: TaskKey) {
 async function reviewsFile(store: SessionStore, key: TaskKey) {
 	return safePath(await store.taskDir(key), 'design', 'design-reviews.json');
 }
+/** spec/design-review#data: a missing index is empty; one that cannot be read fails, so numbering never starts over a kept shot. */
 export async function readShots(store: SessionStore, key: TaskKey) {
 	try {
-		return readDesignShots(await readDocument(await shotsFile(store, key)));
-	} catch {
-		return readDesignShots(null);
+		return readDesignShots(await readDocument(await shotsFile(store, key), 16 * 1024 * 1024));
+	} catch (error) {
+		if (isRecord(error) && error.code === 'ENOENT') return readDesignShots(null);
+		throw error;
 	}
 }
 export async function readDesignReviewsOf(store: SessionStore, key: TaskKey) {
@@ -96,17 +99,16 @@ export function saveShot(
 		};
 		let shots = [...doc.shots, entry];
 		// The last 200 stay; an older shot's file goes unless a design review names it.
-		if (shots.length > designLimits.shotsKept) {
-			const named = new Set(
-				(await readDesignReviewsOf(store, key)).flatMap((review) =>
-					review.nodes.flatMap((node) => (node.shot ? [node.shot.id] : []))
-				)
+		// The last 200 stay; an older shot goes unless a design review named it (`kept`), so a card keeps its evidence.
+		const loose = shots.filter((item) => !item.kept);
+		if (loose.length > designLimits.shotsKept) {
+			const drop = new Set(
+				loose.slice(0, loose.length - designLimits.shotsKept).map((item) => item.id)
 			);
-			const drop = shots.slice(0, shots.length - designLimits.shotsKept);
-			shots = shots.slice(-designLimits.shotsKept);
-			for (const old of drop)
-				if (named.has(old.id)) shots.unshift(old);
-				else await rm(await safePath(await store.taskDir(key), old.file), { force: true });
+			for (const old of shots)
+				if (drop.has(old.id))
+					await rm(await safePath(await store.taskDir(key), old.file), { force: true });
+			shots = shots.filter((item) => !drop.has(item.id));
 		}
 		await atomicJson(await shotsFile(store, key), {
 			schemaVersion: 1,
@@ -168,7 +170,10 @@ export async function readDesignImage(
 	}
 	if (bytes.length > designLimits.imageBytes) return { reason: 'it is larger than 10 MB' };
 	const kind = imageKind(bytes);
-	return kind ? { bytes, kind } : { reason: 'it is not a PNG, JPEG or WebP image' };
+	if (!kind) return { reason: 'it is not a PNG, JPEG or WebP image' };
+	// The header must give a size the window can draw, not only the format's first bytes.
+	const refusal = imageSizeRefusal(bytes);
+	return refusal ? { reason: refusal.replace(/\.$/, '').toLowerCase() } : { bytes, kind };
 }
 
 /** A shot with no trees (its checkpoint failed) or a task with none cannot be dated: it counts as old. */
@@ -322,6 +327,13 @@ export function submitDesignReview(deps: DesignReviewDeps, input: Record<string,
 			trees: now.map(({ scopeId, tree }) => ({ scopeId, tree })),
 			nodes,
 		};
+		// The shots this design review names are kept for its card.
+		const named = new Set(nodes.flatMap((item) => (item.shot ? [item.shot.id] : [])));
+		if (named.size)
+			await atomicJson(await shotsFile(deps.store, deps.key), {
+				...shots,
+				shots: shots.shots.map((item) => (named.has(item.id) ? { ...item, kept: true } : item)),
+			});
 		const reviews = [...(await readDesignReviewsOf(deps.store, deps.key)), review].slice(
 			-designLimits.reviewsKept
 		);

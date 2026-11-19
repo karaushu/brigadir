@@ -2426,6 +2426,13 @@ export class CrewHost {
 			// spec/reviews#design: no approval from the code — a task with a design source needs a passed design review of the state read.
 			const refused = await this.designRefusal(run, reviewer, node, self, closure);
 			if (refused) throw new Error(refused);
+			// The gate read files: a second call of this reviewer may have given its verdict meanwhile, or the run moved on.
+			if (run.verdicts.some((verdict) => verdict.reviewerNodeId === reviewer.nodeId))
+				throw new Error('You already gave a verdict for this reviewId');
+			if (run.state !== 'reviewing')
+				throw new Error(
+					`stale_review: this check was superseded (${run.state}); wait for the next report`
+				);
 			// spec/reviews#loop: an approval of a closure check closes every finding of this reviewer.
 			if (closure && planReview(run)) await this.deps.self!.planApprove(reviewer.name, run.round);
 			else if (closure) await this.markClosure(reviewer.name, run.round, []);
@@ -3370,9 +3377,16 @@ export class CrewHost {
 			projectId: this.deps.key.projectId,
 			id: reviewer.taskId,
 		});
-		return filed.some((review) => review.reviewId === run.reviewId && review.state === 'passed')
+		// The Designer's tree is not the worker's: its evidence counts when every screenshot was taken during this check.
+		const opened = Date.parse(run.createdAt);
+		return filed.some(
+			(review) =>
+				review.reviewId === run.reviewId &&
+				review.state === 'passed' &&
+				review.nodes.every((item) => !!item.shot && Date.parse(item.shot.at) >= opened)
+		)
 			? null
-			: 'No approval from the code: file the design review of the screens you checked with submit_design_review, passing this reviewId, and approve once it passed.';
+			: 'No approval from the code: file the design review of the screens you checked with submit_design_review, passing this reviewId, with screenshots taken during this check, and approve once it passed.';
 	}
 	/** spec/reviews#findings: this reviewer's findings of the task's current review, unresolved. */
 	private async selfFindings(reviewer: string) {

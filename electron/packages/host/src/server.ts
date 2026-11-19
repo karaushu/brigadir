@@ -380,6 +380,7 @@ export async function startHost(config: HostConfig) {
 			if (part) texts.push(part.prompt);
 			for (const entry of (await readTaskSources(store, config.key)).sources)
 				texts.push(
+					entry.url ?? '',
 					await readFile(await sourcePath(store, config.key, entry), 'utf8').catch(() => '')
 				);
 			return [...new Set(texts.flatMap((item) => figmaLinks(item)))].slice(0, 20);

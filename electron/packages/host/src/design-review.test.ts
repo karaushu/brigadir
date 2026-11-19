@@ -21,6 +21,7 @@ import {
 	designPrompt,
 	imageKind,
 	readDesignImage,
+	saveShot,
 } from './design-review';
 
 /** spec/design-review: the contract a task's agent files and what the host verifies by itself, end to end through the built host. */
@@ -247,6 +248,32 @@ describe('design review through the host', () => {
 	}, 60_000);
 });
 
+describe('the screenshot index', () => {
+	it('keeps the shots a design review names and never restarts the numbering over an unreadable index', async () => {
+		const { store, key } = await setup();
+		const trees = [{ scopeId: 's', tree: 'a' }];
+		const first = await saveShot(store, key, {
+			data: png.toString('base64'),
+			mimeType: 'image/png',
+			tool: 'browser',
+			trees,
+		});
+		expect(first.id).toBe('s1');
+		await writeFile(join(await store.taskDir(key), 'shots', 'shots.json'), '{broken');
+		await expect(
+			saveShot(store, key, {
+				data: png.toString('base64'),
+				mimeType: 'image/png',
+				tool: 'browser',
+				trees,
+			})
+		).rejects.toThrow();
+		expect((await readFile(join(await store.taskDir(key), 'shots', 's1.png'))).equals(png)).toBe(
+			true
+		);
+	});
+});
+
 describe('design review rules', () => {
 	it('finds Figma links and node ids', () => {
 		const text =
@@ -266,6 +293,11 @@ describe('design review rules', () => {
 		const fetcher = (async () => new Response(png, { status: 200 })) as typeof fetch;
 		expect(await readDesignImage('http://localhost:3845/assets/a.png', fetcher)).toMatchObject({
 			kind: 'png',
+		});
+		// Only the first bytes of a PNG: no size, no image.
+		const prefix = (async () => new Response(png.subarray(0, 8), { status: 200 })) as typeof fetch;
+		expect(await readDesignImage('https://x.test/a.png', prefix)).toEqual({
+			reason: 'the image cannot be read',
 		});
 		const failing = (async () => new Response('', { status: 404 })) as typeof fetch;
 		expect(await readDesignImage('https://x.test/a.png', failing)).toEqual({

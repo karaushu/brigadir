@@ -15,6 +15,7 @@ saved with [`save_source`](reviews.md#save-source), or in a plan presented for a
 `https://figma.com/…` or `https://www.figma.com/…` address under `design/`, `file/` or `proto/`. The host finds the
 links in the text; no model decides it. A task that filed a design review has one too.
 
+- A saved source counts by its text and its `url`.
 - The links (at most 20, each with its `node-id` when it has one) go into the reviewer's prompt ([Reviews](#flow)).
 - A mock-up file or a reference screen is a design source for the agents (the [Designer](crew-templates-and-editor.md#builtin-templates)
   names it), not for the host: a review asks for a design review only on a Figma link.
@@ -36,7 +37,9 @@ files it: its screenshots, its files and its card in that task's chat.
 - Before the image is taken the host takes a checkpoint of the task's files ([Snapshots](diff-and-review.md#snapshot-engine)),
   and the shot keeps that checkpoint's trees. Taken before the image, it errs towards "old": a file written while
   the screenshot is taken makes it old. A shot whose checkpoint failed keeps no trees and is always old.
-- The index keeps the last 200 shots; an older shot's file goes unless a design review names it.
+- The index keeps the last 200 shots; an older shot's file goes unless a design review named it (`kept`), so a card in
+  the chat keeps its images. An index that cannot be read fails the screenshot's saving rather than start the numbering
+  again over kept files.
 
 <a id="tool"></a>
 
@@ -72,7 +75,7 @@ itself:
 
 | Node state     | When                                                                                                                                                | Tag of its rows   |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `no-figma`     | the design image cannot be read: no such file, not a PNG, JPEG or WebP by its bytes, larger than 10 MB, or the address does not answer with one    | `no design image` |
+| `no-figma`     | the design image cannot be read: no such file, not a PNG, JPEG or WebP whose header gives a size, larger than 10 MB, or the address does not answer with one | `no design image` |
 | `no-shot`      | `shot` is not a screenshot this task's own tool took (an id of another task, a made-up id, a deleted file)                                          | `no screenshot`   |
 | `old-shot`     | the task's files changed after the shot: its trees differ from the trees now, or either could not be read                                           | `old screenshot`  |
 | `ok`           | otherwise: the node's rows are accepted, each `match` or `mismatch` as the agent filled it                                                         | — or `mismatch`   |
@@ -114,7 +117,9 @@ do:
   person with `Fix {n}` / `Accept` as every finding does. `Accept` is the person's answer to a design that does not
   match; nothing else lets a review pass without a `passed` design review.
 - **A Designer of a crew** (the crew's own check of a part, [Reviewer agents](crew.md#reviewer)): a reviewer made from
-  the built-in Designer template can `approve` only after a `passed` design review it filed with this `reviewId`.
+  the built-in Designer template can `approve` only after a `passed` design review it filed with this `reviewId` whose
+  screenshots were all taken after the check opened: its own tree is not the worker's, so the time of the check dates
+  the evidence.
 - **A plan review** has no design check.
 
 <a id="prompt"></a>
@@ -175,7 +180,7 @@ A popover over the chat, 500 px wide: the head is the node's name, its id (mono,
 ## Data
 
 - `shots/shots.json`, `schemaVersion: 1` (rule 10): `shots` — `id`, `file` (`s12.jpg`), `tool` ∈ `simulator |
-  browser`, `device?`, `at`, `trees` (`scopeId`, `tree`), and `next` (the next number). One image file per shot.
+  browser`, `device?`, `at`, `trees` (`scopeId`, `tree`), `kept?` — and `next` (the next number). One image file per shot.
 - `design/design-reviews.json`, `schemaVersion: 1`: `reviews`, the last 50 — `id`, `screen`, `at`, `state`,
   `reviewId?`, `trees` (the trees it was filed on) and `nodes` as in the event. A node's design image is copied to
   `design/<id>/figma-<n>.<ext>`; the device image stays in `shots/`.

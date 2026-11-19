@@ -62,6 +62,8 @@ export type DesignShot = {
 	device?: string;
 	at: string;
 	trees: DesignTree[];
+	/** A design review named it: its card keeps the image (spec/design-review#shots). */
+	kept?: boolean;
 };
 export type DesignShotsDocument = { schemaVersion: 1; next: number; shots: DesignShot[] };
 export const emptyDesignShots: DesignShotsDocument = { schemaVersion: 1, next: 1, shots: [] };
@@ -165,7 +167,8 @@ function isShot(value: unknown): value is DesignShot {
 		(value.device === undefined || isText(value.device, 200)) &&
 		typeof value.at === 'string' &&
 		Array.isArray(value.trees) &&
-		value.trees.every(isTree)
+		value.trees.every(isTree) &&
+		(value.kept === undefined || typeof value.kept === 'boolean')
 	);
 }
 export function readDesignShots(value: unknown): DesignShotsDocument {

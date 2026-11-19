@@ -134,6 +134,7 @@ The tools are served by the existing `brigadir` MCP server (`mcp__brigadir__brow
 
 - Every tool except `browser_show` takes an optional `tab` (`b…`). Without it the call goes to the agent's own tab, otherwise to the task's tab currently on screen.
 - The screenshot is taken from the live view itself, so the agent sees exactly what the person would see. Width is limited to save context tokens, not disk space.
+- The host keeps every screenshot in the task's folder under an id (`Saved as s12.`), the evidence of a [design review](design-review.md#shots).
 - Each tool call appears in chat as a tool row (`Opening the page`, `Acting on the page`, …), and these rows double as the action log.
 
 <a id="opening-tabs"></a>
@@ -380,7 +381,7 @@ These are served by the same `brigadir` server (`mcp__brigadir__simulator_*`). T
 | `simulator_ui` | Accessibility tree, one element per line: role, label, `#testID`, frame in points. Paged with `offset`. `grid: true` adds a 32 pt hit-test sweep that finds children hidden by containers (iOS, slower). |
 | `simulator_act` | One action: `tap`, `longpress`, `swipe` (to `x2,y2`) at `x,y` points or at an element by `id` (testID) or `label`; `type`; `key` (a KeyboardEvent code); `button` (`home`, `lock`, `back` on Android); `rotate`. Answers once the screen has settled, with what changed in the tree ([settle and changes](#sim-act-settle)). |
 | `simulator_wait` | Waits in main until an element appears, or with `gone: true` disappears: `text` (in a label or value), `id` (testID) or `label` (as `simulator_act` finds it). `timeoutMs` up to 30 000, default 10 000 ([waiting](#sim-wait)). |
-| `simulator_screenshot` | The latest frame of the stream the person sees, longer side ≤ 1000 px, returned as an `image` block (JPEG on iOS, PNG on Android) |
+| `simulator_screenshot` | The latest frame of the stream the person sees, longer side ≤ 1000 px, returned as an `image` block (JPEG on iOS, PNG on Android); the host keeps it in the task's folder under an id for a [design review](design-review.md#shots) |
 | `simulator_logs` | `source: js` (default): `console.*` and JS errors with stacks through Metro. `source: native`: the app process. Filtered by lowest `level` and `grep`. |
 | `simulator_network` | App requests through Metro CDP `Network.*`: id, method, status, time, size, URL. `filter` by URL text. With `requestId`: headers and body. |
 
@@ -445,7 +446,6 @@ The app never starts Metro: the agent or a project command does, in the task's f
 
 - Driving the person's own Chrome or Safari, or a separate headless browser for agents. Either way the person couldn't see what the agent sees.
 - A homemade inspector (Elements, Sources, breakpoints, profiler). Chromium DevTools and React Native DevTools already cover this.
-- Saving screenshots to disk: they go into the prompt and the task transcript.
 - Waiting on pixels (image matching) in `simulator_wait`: it waits on the accessibility tree.
 - An agent filling passwords, one-time codes or payment cards, or uploading files.
 - Web Push for pages in the task browser.

@@ -40,7 +40,7 @@ import {
 	autoRootName,
 	budgetLabel,
 } from '@brigadir/core';
-import { Glyph } from './ui/Glyph';
+import { Glyph, type GlyphName } from './ui/Glyph';
 import { Button, Chevron, Popup, PopupMarks } from './ui/Controls';
 import { TextInput, TextArea } from './ui/Input';
 import styles from './Crew.module.css';
@@ -555,20 +555,25 @@ export function PartPrompt({
  * the title, a count, a tail, the time — and the chevron lists its parts read-only (rule 17: one look, one component).
  */
 export function CardFold({
+	glyph = 'helmet',
 	title,
 	count,
 	tail,
 	at,
 	rows,
+	children,
 	open,
 	onToggle,
 	data,
 }: {
+	glyph?: GlyphName;
 	title: string;
 	count: string;
 	tail: ReactNode;
 	at: string;
-	rows: readonly { id: string; title: string; who: ReactNode }[];
+	/** The numbered rows the chevron lists; `children` instead shows a body of its own (spec/design-review#card). */
+	rows?: readonly { id: string; title: string; who: ReactNode }[];
+	children?: ReactNode;
 	open: boolean;
 	onToggle(event: React.SyntheticEvent<HTMLDetailsElement>): void;
 	data: Record<`data-${string}`, string | boolean>;
@@ -576,22 +581,26 @@ export function CardFold({
 	return (
 		<details className={styles.planSummary} {...data} open={open} onToggle={onToggle}>
 			<summary>
-				<Glyph name="helmet" size={13} />
+				<Glyph name={glyph} size={13} />
 				<strong>{title}</strong>
 				{count && <small>{count}</small>}
 				<span className={styles.summaryTail}>{tail}</span>
 				<time dateTime={at}>{formatTime(at)}</time>
 				<Chevron />
 			</summary>
-			<ol>
-				{rows.map((row, index) => (
-					<li key={row.id}>
-						<span>{index + 1}</span>
-						<span>{row.title}</span>
-						{row.who}
-					</li>
-				))}
-			</ol>
+			{rows ? (
+				<ol>
+					{rows.map((row, index) => (
+						<li key={row.id}>
+							<span>{index + 1}</span>
+							<span>{row.title}</span>
+							{row.who}
+						</li>
+					))}
+				</ol>
+			) : (
+				<div className={styles.foldBody}>{open && children}</div>
+			)}
 		</details>
 	);
 }

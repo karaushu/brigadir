@@ -2,6 +2,7 @@ import type { Socket } from 'node:net';
 import { z } from 'zod';
 import {
 	defaultModules,
+	designCheckPrompt,
 	isRecord,
 	moduleOffMessages,
 	toolModule,
@@ -46,6 +47,16 @@ const toolError = (message: string): Content => ({
 	content: [{ type: 'text', text: message }],
 	isError: true,
 });
+/** spec/design-review#shots: the id the host kept a screenshot under. */
+const shotLine = (result: object): { type: 'text'; text: string }[] =>
+	'shot' in result && typeof result.shot === 'string'
+		? [
+				{
+					type: 'text',
+					text: `Saved as ${result.shot}. Pass it as shot to submit_design_review.`,
+				},
+			]
+		: [];
 /** spec/task-window-workspace#work-area: every browser tool takes the tab; without it the call goes to the tab you opened. */
 const browserTab = z
 	.string()
@@ -99,6 +110,8 @@ const whenToUse: Record<string, string> = {
 		'Do not use it to ask the person to check a page, the app or a command you can check with your own tools.',
 	save_source:
 		'Call it when the task comes from a ticket, a spec or a contract you were given or fetched (for example from Notion, Jira or Linear), before you present a plan.',
+	submit_design_review:
+		'Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.',
 	read_plan: 'Call it first in a plan review, with the reviewId of the check you were asked to do.',
 	read_sources:
 		'Call it in a plan review after read_plan, to check the plan against the ticket and the contract.',
@@ -112,6 +125,8 @@ const whenToUse: Record<string, string> = {
 		'Use it when the person asks you to send, hand over or tell something to another task. Never use your own messaging or agent tools for Brigadir tasks: they do not reach them.',
 	review_reply:
 		'Call it only for a finding of a review batch of this task, when you do not fix it as asked.',
+	set_task_class:
+		'Call it once, after you read the task and the code it touches and before your first edit; call it again only when the task turns out larger or smaller.',
 	request_review:
 		'Call it after you finish a layer that other work builds on, such as the data layer, a shared API, a schema or a migration, before you build on top of it. Do not call it after small steps or at the end of the task: the review before the pull request covers that.',
 	propose_review:
@@ -176,6 +191,13 @@ const whenToUse: Record<string, string> = {
 	dismiss_worker: 'Call it when a worker’s part is not needed any more.',
 	request_model: 'Call it only when no role fits a part.',
 };
+/** spec/design-review#tool: where something is on a screenshot, as fractions of its width and height. */
+const designArea = z.object({
+	x: z.number().min(0).max(1),
+	y: z.number().min(0).max(1),
+	width: z.number().min(0).max(1),
+	height: z.number().min(0).max(1),
+});
 const humanTools: Tool[] = [
 	{
 		name: 'ask_user',
@@ -293,6 +315,17 @@ const humanTools: Tool[] = [
 		shape: { reason: z.string().trim().min(1).max(500) },
 		run: async (args, call, signal) => text(await call('request_review', args, signal)),
 	},
+	// spec/reviews#class-tool: the agent states the task's class; the answer says what the class needs next.
+	{
+		name: 'set_task_class',
+		description:
+			"State this task's class in Brigadir: small (one chain of steps, no contract change), medium (a source ticket or contract, or the data layer, an API or migrations are touched) or large (workers are going to be hired, or the work comes in layers that other work builds on). The person sees it in the chat. reason: one line on why, e.g. 'one screen, no contract change'. Returns the class and next: what the class needs from you now — follow it.",
+		shape: {
+			class: z.enum(['small', 'medium', 'large']),
+			reason: z.string().trim().min(1).max(200),
+		},
+		run: async (args, call, signal) => text(await call('set_task_class', args, signal)),
+	},
 	// spec/reviews#save-source: the plan's author saves the ticket or contract text, so a reviewer on any provider reads the same version.
 	{
 		name: 'save_source',
@@ -304,6 +337,41 @@ const humanTools: Tool[] = [
 			text: z.string().min(1).max(200_000),
 		},
 		run: async (args, call, signal) => text(await call('save_source', args, signal)),
+	},
+	// spec/design-review#tool: a screen checked against its design node by node; the host verifies the images and screenshots itself.
+	{
+		name: 'submit_design_review',
+		description: `File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. ${designCheckPrompt} screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo.`,
+		shape: {
+			screen: z.string().trim().min(1).max(80),
+			nodes: z
+				.array(
+					z.object({
+						name: z.string().trim().min(1).max(80),
+						figma: z.string().trim().min(1).max(500),
+						figmaImage: z.string().trim().min(1).max(8192),
+						shot: z.string().trim().min(1).max(20),
+						area: designArea.optional(),
+						rows: z
+							.array(
+								z.object({
+									property: z.string().trim().min(1).max(80),
+									expected: z.string().trim().min(1).max(200),
+									actual: z.string().trim().min(1).max(200),
+									match: z.boolean(),
+									area: designArea.optional(),
+								})
+							)
+							.min(1)
+							.max(40),
+					})
+				)
+				.min(1)
+				.max(24),
+			verdict: z.enum(['passed', 'mismatch']),
+			reviewId: z.string().trim().min(1).max(128).optional(),
+		},
+		run: async (args, call, signal) => text(await call('submit_design_review', args, signal)),
 	},
 	{
 		name: 'review_reply',
@@ -371,7 +439,12 @@ const humanTools: Tool[] = [
 				'image' in result &&
 				typeof result.image === 'string'
 			)
-				return { content: [{ type: 'image', data: result.image, mimeType: 'image/png' }] };
+				return {
+					content: [
+						{ type: 'image', data: result.image, mimeType: 'image/png' },
+						...shotLine(result),
+					],
+				};
 			return text(result);
 		},
 	})),
@@ -624,6 +697,7 @@ const simulatorTools: Tool[] = (
 								? result.mimeType
 								: 'image/png',
 					},
+					...shotLine(result),
 				],
 			};
 		return text(result);
@@ -929,8 +1003,13 @@ export function mcpTools(
 		const module = toolModule(tool.name);
 		return (
 			(!module || modules[module]) &&
+			// spec/reviews#classes: a named crew's foreman has no class — its split gets the plan review.
+			!(role === 'foreman' && tool.name === 'set_task_class') &&
+			// spec/design-review#who: any agent with the simulator or the browser files a design review.
+			(tool.name !== 'submit_design_review' || modules.simulator || modules.browser) &&
 			(humanToolsAllowed(role) ||
 				isWorkspaceTool(tool.name) ||
+				tool.name === 'submit_design_review' ||
 				// spec/reviews#points: a crew developer's part is a task with reviews of its own.
 				(role === 'developer' && ownReviewTools.has(tool.name)))
 		);

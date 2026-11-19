@@ -1,3 +1,4 @@
+import { readDesignReviewsOf, type DesignGateInput } from './design-review';
 import { createHash, randomUUID } from 'node:crypto';
 import { diffLines, unifiedDiff } from '@brigadir/diff';
 import {
@@ -59,6 +60,13 @@ const cut = (value: string) =>
 		: value;
 
 export type StartReview = Extract<SessionCommand, { kind: 'startReview' }>;
+/** spec/reviews#tripwire, spec/reviews#large-review: what a host start of a mid-task review carries into its `task-review.started`. */
+export type ReviewTrigger = { threshold?: { files: number; lines: number }; hired?: boolean };
+type ReviewRequest = {
+	point: ReviewPoint;
+	startedBy: TaskReviewStarter;
+	reason: string;
+} & ReviewTrigger;
 /** spec/reviews#points: the roles whose task has reviews of its own — a solo task, a foreman, a crew developer (its part is a task). */
 const ownReviewRoles: readonly (string | null)[] = [null, 'foreman', 'developer'];
 /** spec/reviews#request-tool: `request_review` and `review_reply` belong to a task with reviews of its own. */
@@ -80,8 +88,9 @@ export type TaskReviewDeps = {
 	records(): readonly EventRecord[];
 	/** A turn of the task's agent runs now. */
 	busy(): boolean;
-	/** The crew host of the task with the reviewers as the root's checkers: created for a solo task, extended for a foreman. */
-	crew(start: StartReview): Promise<SelfReviewHost>;
+	/** The crew host of the task with the reviewers as the root's checkers: created for a solo task, extended for a foreman. `named` hears
+	 *  the names the reviewers got in the crew (spec/reviews#who: `Codex 2` when `Codex` is taken by an earlier review's reviewer). */
+	crew(start: StartReview, named?: (names: string[]) => void): Promise<SelfReviewHost>;
 	/** The crew host that already runs the task's review after a restart, if any. */
 	existing(): SelfReviewHost | null;
 	/** A foreman's crew has no open work: the fixes it handed to workers are accepted (spec/reviews#loop). */
@@ -117,6 +126,8 @@ export type TaskReviewDeps = {
 	part(): Promise<number | null>;
 	/** A task in a crew of its own: its closure check starts only when its tree changed, since it hands fixes to workers. */
 	foreman: boolean;
+	/** spec/design-review#design-source: the Figma links of the task's prompt, saved sources and plans. */
+	designLinks?(): Promise<string[]>;
 };
 /**
  * spec/reviews#loop: the task side of its reviews — the agent's proposal, the review the person, the agent or the host started, and where it is
@@ -203,7 +214,8 @@ export class TaskReviewLife {
 	start(command: StartReview) {
 		return this.serial(() => this.begin(command));
 	}
-	private async begin(command: StartReview) {
+	/** `trigger`: spec/reviews#tripwire, spec/reviews#large-review — why the host started a mid-task review, for its chat row. */
+	private async begin(command: StartReview, trigger: ReviewTrigger = {}) {
 		if (taskReviewLive(this.doc.review))
 			throw new Error('A review of this task is already running.');
 		// spec/reviews#plan-start: a plan review reads the plan that waits for the person.
@@ -260,7 +272,7 @@ export class TaskReviewLife {
 				finishedAt: review.startedAt,
 			});
 			await this.save();
-			await this.emitStarted(this.doc.review!);
+			await this.emitStarted(this.doc.review!, trigger);
 			await this.deps.emit({
 				kind: 'task-review.finished',
 				id,
@@ -270,16 +282,22 @@ export class TaskReviewLife {
 			});
 			return review;
 		}
-		this.host = await this.deps.crew(command);
-		this.doc = withNextReview(this.doc, review);
+		// The record, the journal, the strip and `request_review`'s answer name the reviewers as the crew does, so `Codex 2 → Claude` follows
+		// `Codex 2 · started`.
+		let names = review.reviewers;
+		this.host = await this.deps.crew(command, (given) => {
+			if (given.length) names = given;
+		});
+		const named = { ...review, reviewers: names };
+		this.doc = withNextReview(this.doc, named);
 		await this.save();
-		await this.emitStarted(review);
-		// spec/reviews#start: the agent's review reads at once (`request` took a checkpoint); the others wait for a running turn to end. A plan
-		// review reads at once: the agent's turn waits for the plan's answer.
-		if (point === 'plan' || startedBy === 'agent' || !this.deps.busy()) await this.read();
-		return review;
+		await this.emitStarted(named, trigger);
+		// spec/reviews#start: a mid-task review — the agent's or the host's — reads at once (`request` took a checkpoint); the others wait for a
+		// running turn to end. A plan review reads at once: the agent's turn waits for the plan's answer.
+		if (point === 'plan' || point === 'mid' || !this.deps.busy()) await this.read();
+		return named;
 	}
-	private emitStarted(review: TaskReview) {
+	private emitStarted(review: TaskReview, trigger: ReviewTrigger = {}) {
 		return this.deps.emit({
 			kind: 'task-review.started',
 			id: review.id,
@@ -287,22 +305,36 @@ export class TaskReviewLife {
 			startedBy: review.startedBy,
 			reviewers: review.reviewers,
 			...(review.reason ? { reason: review.reason } : {}),
+			...(trigger.threshold ? { threshold: trigger.threshold } : {}),
+			...(trigger.hired ? { hired: true } : {}),
 		});
 	}
 	/**
-	 * spec/reviews#request-tool: the agent (or, later, a threshold) asks for a review; the host decides — refuses while one lives or when nothing
+	 * spec/reviews#request-tool: the agent, or the host (the tripwire, a Large task's hired parts), asks for a review; the host decides — refuses while one lives or when nothing
 	 * changed, resolves the reviewer, records a review that could not start, else starts it.
 	 */
-	request(input: { point: ReviewPoint; startedBy: TaskReviewStarter; reason: string }) {
-		return this.serial(async () => {
+	request(input: ReviewRequest) {
+		return this.serial(async () => (await this.ask(input)).answer);
+	}
+	/** spec/reviews#tripwire, spec/reviews#large-review: the host's own start — true only when this call recorded a review (running, or failed
+	 *  for want of a reviewer), decided inside the serial step so a review another caller started meanwhile never counts. */
+	requestByHost(input: ReviewRequest & { startedBy: 'host' }) {
+		return this.serial(async () => (await this.ask(input)).recorded);
+	}
+	private async ask(input: ReviewRequest): Promise<{
+		answer: { started: boolean; reviewer?: string; reason?: string };
+		recorded: boolean;
+	}> {
+		const refuse = (reason: string) => ({ answer: { started: false, reason }, recorded: false });
+		{
 			if (taskReviewLive(this.doc.review))
-				return { started: false, reason: 'A review of this task is already running.' };
+				return refuse('A review of this task is already running.');
 			// The agent may have written through its own shell since the last checkpoint: look at the files now.
 			await this.deps.checkpoint().catch(() => {});
 			if (!(await this.deps.changes()) || !(await this.changedSinceLast()))
-				return { started: false, reason: 'Nothing changed since the last review.' };
+				return refuse('Nothing changed since the last review.');
 			const resolved = await this.deps.resolve(input.point);
-			if ('off' in resolved) return { started: false, reason: 'Reviews are off.' };
+			if ('off' in resolved) return refuse('Reviews are off.');
 			const command: StartReview =
 				'failure' in resolved
 					? {
@@ -314,16 +346,26 @@ export class TaskReviewLife {
 							failure: resolved.failure,
 						}
 					: resolved;
-			const review = await this.begin({
-				...command,
-				point: input.point,
-				startedBy: input.startedBy,
-				reason: input.reason.trim(),
-			});
-			return review.reviewers.length && !('failure' in resolved)
-				? { started: true, reviewer: review.reviewers.join(', ') }
-				: { started: false, reason: 'failure' in resolved ? resolved.failure : '' };
-		});
+			const review = await this.begin(
+				{
+					...command,
+					point: input.point,
+					startedBy: input.startedBy,
+					reason: input.reason.trim(),
+				},
+				{
+					...(input.threshold ? { threshold: input.threshold } : {}),
+					...(input.hired ? { hired: true } : {}),
+				}
+			);
+			return {
+				answer:
+					review.reviewers.length && !('failure' in resolved)
+						? { started: true, reviewer: review.reviewers.join(', ') }
+						: { started: false, reason: 'failure' in resolved ? resolved.failure : '' },
+				recorded: true,
+			};
+		}
 	}
 	/** The task's trees differ from every tree an earlier review read: something is left to review. */
 	private async changedSinceLast() {
@@ -866,12 +908,38 @@ export class TaskReviewLife {
 			planPrompt: (taskId, reviewId, round, reviewer) =>
 				this.planPrompt(taskId, reviewId, round, reviewer),
 			sources: (sourceId) => readSourcesForReview(this.deps.store, this.deps.key, sourceId),
+			design: (reviewerTaskId, reviewId, round) =>
+				this.designInput(reviewerTaskId, reviewId, round),
 			submitReview: async (text, batch) => {
 				await this.update({ batch: batch.id, passes: (this.doc.review?.passes ?? 0) + 1 });
 				await this.deps.submitReview(text, batch, Math.max(1, this.doc.review?.round ?? 1));
 			},
 			// Not through `serial`: a round opens from inside a serial step (`read`, `turnEnded`), and the crew host calls back before it returns.
 			round: (run, state) => this.onRound(run, state),
+		};
+	}
+	/** spec/reviews#design: a mid-task or before-PR review reads the task's design source and design reviews; a plan review has no design check. */
+	private async designInput(
+		reviewerTaskId: string,
+		reviewId: string,
+		round: readonly { tree: string }[]
+	): Promise<DesignGateInput | null> {
+		if ((this.doc.review?.point ?? 'pre-pr') === 'plan') return null;
+		const [links, own, filed, taskDir] = await Promise.all([
+			this.deps.designLinks?.().catch(() => []) ?? Promise.resolve([]),
+			readDesignReviewsOf(this.deps.store, this.deps.key),
+			readDesignReviewsOf(this.deps.store, {
+				projectId: this.deps.key.projectId,
+				id: reviewerTaskId,
+			}),
+			this.deps.store.taskDir(this.deps.key),
+		]);
+		return {
+			links,
+			own,
+			reviewer: filed.filter((review) => review.reviewId === reviewId),
+			round,
+			taskDir,
 		};
 	}
 	private async onRound(run: ReviewRun, state: 'reviewing' | 'comments' | 'approved' | 'disputed') {

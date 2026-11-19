@@ -277,6 +277,7 @@ test('reads v2, isolates the renderer, updates theme, and opens Kit @area:shell 
 				'pasteAttachment',
 				'attachDroppedFiles',
 				'readAttachment',
+				'readDesignImage',
 				'readAttachmentThumbnail',
 				'openPlanFile',
 				'readPlanFile',

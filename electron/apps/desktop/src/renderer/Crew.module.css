@@ -413,6 +413,11 @@
 	color: var(--fg2);
 	white-space: nowrap;
 }
+/* spec/design-review#card: a folded card's own body under the summary. */
+.foldBody {
+	border-top: 1px solid var(--sep);
+	padding: 10px 14px 12px;
+}
 .planSummary ol {
 	margin: 0;
 	padding: 0;

@@ -451,12 +451,19 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | sent · fixed · answered · open · new · accepted | надіслано · виправлено · відповів · відкрите · нове · прийнято | The tags of a finding. | |
 | Your call | Вирішуєш ти | The strip when open findings wait for the person. | |
 | Fix {n} · Accept | Виправити {n} · Прийняти | The person's two answers to open findings. | «Fix more», «Accept as is» |
+| Design review | Ревʼю дизайну | A screen checked against its Figma design node by node on the device, as a table per node (spec/design-review). `Design review passed` / `Ревʼю дизайну пройдено`. | «Контракт дизайну», «Перевірка дизайну» |
+| Property · Expected · On device | Властивість · Очікується · На пристрої | The columns of a design review's table. | |
+| mismatch · old screenshot · no screenshot · no design image | розбіжність · старий знімок · без знімка · без зображення дизайну | The tags of a design review's rows; `before the last change` / `до останньої зміни` under an old screenshot. | |
 | Plan vs ticket · Plan vs code · Gaps in the ticket | План і тикет · План і код · Прогалини в тикеті | The three lists of a plan review: what the author fixes (the first two) and the ticket's own gaps, which are questions for the person. | |
 | missed · contradicts · out of scope · wrong assumption · left open · cannot verify · split | пропущено · суперечить · поза задачею · хибне припущення · не вирішено · не перевірити · поділ | The kinds of a plan finding. | |
 | Gap | Прогалина | What the ticket itself leaves open; goes to the person, not to the author. Plural `1 прогалина · 2 прогалини · 5 прогалин`. | «питання» |
 | Source | Джерело | A ticket, spec or contract the agent saved next to the plan with `save_source`; shown as a chip. | «вкладення» |
 | Code reviews | Ревʼю коду | Customize per action: who reviews mid-task and before the PR. | |
 | Auto (reviewer) | Авто | Who reviews by default: another signed-in agent, else a fresh session of the task's own. | |
+| Small · Medium · Large | Мала · Середня · Велика | The task's class, a pill in the chat row; `class` / `клас` before it. | «Маленька», «Невелика» |
+| review before PR · plan · plan review · reviews · workers | ревʼю перед PR · план · ревʼю плану · ревʼю · воркери | What a class adds, after its reason in the chat row. | |
+| more than a small task | більше за малу задачу | The tripwire's review row: a small task grew past its limit. | |
+| Small task limit | Межа малої задачі | Settings ▸ Agents ▸ Reviews: files and changed lines past which a small task gets a mid-task review. | «поріг», «ліміт» |
 
 ## Pull requests and CI
 

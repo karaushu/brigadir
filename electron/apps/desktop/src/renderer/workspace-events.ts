@@ -38,6 +38,20 @@ export const workspaceEventKinds: ReadonlySet<string> = new Set([
 	'crew.worker.stopped',
 	'crew.question.requested',
 	'crew.question.resolved',
+	// spec/crew#auto-hire, spec/crew#auto-model, spec/crew#auto-dismiss, spec/crew#auto-budget: the card's state and its worker rows.
+	'crew.hire.requested',
+	'crew.hire.resolved',
+	'crew.model.requested',
+	'crew.model.resolved',
+	'crew.worker.dismissed',
+	'crew.budget.exceeded',
+	// spec/reviews#surfaces: the reviewer rows, and the activity line a review takes (`Review · N findings open`) and gives back.
+	'task-review.started',
+	'task-review.findings',
+	'task-review.answered',
+	'task-review.verified',
+	'task-review.decided',
+	'task-review.finished',
 	// spec/agents-and-providers#task-tokens: the card's token count and the budget's reason on the activity line.
 	'usage.changed',
 	'turn.usage',

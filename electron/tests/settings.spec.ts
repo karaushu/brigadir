@@ -244,6 +244,7 @@ test('settings persist theme and restart language, retain dirty edits and match 
 			slack: defaultAppSettings.slack,
 			updates: defaultAppSettings.updates,
 			auto: defaultAppSettings.auto,
+			reviews: defaultAppSettings.reviews,
 		});
 		app = await launch(['--brigadir-interactive']);
 		page = await app.firstWindow();

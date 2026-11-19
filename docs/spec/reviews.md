@@ -12,7 +12,7 @@ files link here.
 | Point                     | `point`  | Started by                                                                                                            | Step name          |
 | ------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------- | ------------------ |
 | The plan, before approval | `plan`   | the host, when the plan is presented ([The plan review](#plan-start)); the person again from the strip                | `Plan review`      |
-| Mid-task                  | `mid`    | the agent ([`request_review`](#request-tool)); the host API also takes a host start                                   | `Mid-task review`  |
+| Mid-task                  | `mid`    | the agent ([`request_review`](#request-tool)); the host: the [tripwire](#tripwire) and a Large task's [hired parts](#large-review) | `Mid-task review`  |
 | Before the pull request   | `pre-pr` | the person (the strip, `Review…`, the proposal), or the host when the person presses `Create PR` ([gate](#before-pr)) | `Review before PR` |
 
 - **A review targets a task.** A solo task, an [Auto](crew.md#auto) task, a hired part and a crew worker's part are
@@ -85,15 +85,16 @@ provider's own option catalog.
   `Remember for code reviews` (action `taskReview`). `Starting…` on the button; a failure keeps the dialog with `Could
 not start the review: …` and `Retry`.
 - **The host** starts a `pre-pr` review when the person presses `Create PR` ([gate](#before-pr)), a `plan` review when a plan is
-  presented ([The plan review](#plan-start)), and its API takes
-  `{point, startedBy: 'host', reason}` for a later threshold start.
+  presented ([The plan review](#plan-start)), and a `mid` review when a small task outgrows its limit ([tripwire](#tripwire))
+  or a Large task's hired parts are back ([Large](#large-review)).
 - **The agent proposes** a review before the PR with MCP `propose_review(summary?)` (person tool, `whenToUse`: after
   the task's work and the agent's own checks are done, before the person creates a PR; never while a review runs). It
   returns at once with `proposed: true`; the proposal stays until the person starts the review or dismisses it with
   `Not now`. Refused while a review runs: `A review of this task is already running.`
-- A review the person or the host starts while the task's agent is in a turn waits for that turn to end and reads its
-  snapshot. A review the agent asks for reads at once (the host takes a checkpoint first) while the agent works on. A
-  plan review reads at once: the agent's turn waits for the plan's answer.
+- A review the person starts, or a review before the PR the host starts, while the task's agent is in a turn waits for
+  that turn to end and reads its snapshot. A mid-task review — the agent's or the host's — reads at once (the host takes
+  a checkpoint first) while the agent works on. A plan review reads at once: the agent's turn waits for the plan's
+  answer.
 
 <a id="request-tool"></a>
 
@@ -186,6 +187,15 @@ request fires per list item or again on every focus or render with no cache, req
 or one screen fires more than three requests at once, even to different endpoints. The finding names every call site
 (`path:line`), gives the count and proposes the change: reuse the existing query or cache, give the request one owner,
 load a secondary section when it is shown, or ask the back-end for one endpoint.
+
+<a id="design"></a>
+**Design.** A mid-task review or a review before the PR of a task with a [design source](design-review.md#design-source)
+adds the task's latest design review per screen to the reviewer's prompt (its state, its rows and the paths of its
+images) with the [design prompt](design-review.md#prompt), and the host refuses the reviewer's `approve` unless a
+`passed` design review covers the round ([In the flow](design-review.md#flow)): `No approval from the code: this task has a
+design source, and no passed design review covers the state you read. …` with what is missing. Each mismatched node, or
+a missing design review, is the reviewer's finding at the line that sets the property (or at the screen's file); the
+closure check approves only when a new `passed` design review covers the fix.
 
 <a id="remark"></a>
 **A remark.** `approve(taskId, reviewId, note?)` takes an optional `note` (up to 2000 characters): something the person
@@ -444,6 +454,111 @@ revises the plan`), or
   `<N findings>` and `<N gaps>` as links (open findings in `--amber`, `· N open`), or `Review passed` with
   `check-pass`. A click on the state expands the strip on the plan step.
 
+<a id="classes"></a>
+
+## Task classes
+
+The task's agent states how large the task is, in one line, before its first edit. The class decides what the host asks
+for and starts on top of the review before the PR; it adds no review mechanism of its own.
+
+| Class  | `class`  | When                                                                                                      | What it adds                                                                                          |
+| ------ | -------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Small  | `small`  | one chain of steps, no contract change                                                                    | nothing: the review before the PR; the [tripwire](#tripwire) watches the size                         |
+| Medium | `medium` | a source ticket or contract, or the data layer, an API or migrations are touched                          | a plan for approval before the first edit, with its [plan review](#plan-review)                       |
+| Large  | `large`  | the agent is going to hire workers, or the work comes in layers that other work builds on                 | the same, plus a [mid-task review](#large-review)                                                     |
+
+- **Who has a class:** the agent of a solo task and of an [Auto](crew.md#auto) task that writes code. A named crew's
+  foreman has none: it always presents a split, which gets the plan review, so its task is Large by its crew. A worker
+  (a crew's or an Auto task's) and a reviewer have none: a part is sized by its hire or its plan and is covered by its
+  parent's class, and the tripwire does not watch it.
+- **No class stated:** the task runs as before — no plan is asked for, and the tripwire watches it as a Small task. The
+  host does not ask for a class.
+- The class lives in the journal (`task.class`); the newest event is the task's class. It shows only in the chat
+  ([below](#class-row)), never on the sidebar card.
+
+<a id="class-tool"></a>
+
+### `set_task_class`
+
+MCP `set_task_class(class, reason)` — a person tool of a solo task's agent and an Auto agent; a foreman's session does
+not list it. `reason` (1–200 characters) is one line on why, shown in the chat row (`one screen, no contract change`).
+
+- `whenToUse` (English, rule 12): once, after reading the task and the code it touches, before the first edit; again only
+  when the task turns out larger or smaller. The session brief of a solo task and an Auto agent that write code says the
+  same with the three classes (`classBrief`).
+- Returns `{class, previous?, next}`; `next` (English) is what the class asks of the agent now:
+  - Small: do the task without a plan card; a review runs before the PR; past the limit of files or changed lines
+    (named with its numbers) the host starts a mid-task review by itself.
+  - Medium and Large: save the ticket or the contract with `save_source`, then present a plan for approval before any
+    edit — a Claude session with `EnterPlanMode` and `ExitPlanMode`; a Codex session, which cannot enter its plan mode by
+    itself, writes the plan in its reply and ends its turn without edits. Large adds: call `request_review` after a layer
+    other work builds on; in an Auto task, hire only independent parts, and a mid-task review starts when the hired
+    parts are back.
+- The same class again journals nothing and returns the same answer. Another class journals `task.class` with
+  `previous`. A class below Large while workers of the task run is refused: `Workers run in this task: it stays Large
+  until they are dismissed.` A task that writes no code refuses the call: `This task changes no code.`
+- The host holds no edit back: it cannot see an edit before it lands. A plan presented for approval starts its plan
+  review as always, whatever the class.
+
+<a id="class-raise"></a>
+
+### The host raises the class
+
+- **A hire.** An approved hire that starts at least one worker makes the task Large when it is not (`task.class`,
+  `by: host`, `cause: hire`).
+- **The tripwire** makes a Small task, or a task with no class, Medium.
+- The host never lowers a class; the agent may, within the rule above.
+
+<a id="tripwire"></a>
+
+### The tripwire
+
+A Small task, or a task with no class, that grows past the limit gets a mid-task review the host starts by itself.
+
+- **The limit:** Settings ▸ Agents ▸ `Reviews` ▸ `Small task limit` — files (default 15, 1–500) and changed lines
+  (default 300, 10–20 000). The host reads it at each check, so a change reaches running tasks.
+- **The count** comes from the task's snapshots (rule 3): the change from the task's change base to its latest checkpoint
+  across its repos, as Changes shows `Task start` — the changed files and their added plus deleted lines. Generated files
+  (lock files), binaries and a submodule's pointer do not count.
+- **When:** after each new checkpoint of the task (every fifth finished tool and each turn end). More files **or** more
+  lines than the limit fire it.
+- **The start** is the one `request_review` uses (`{point: mid, startedBy: host, threshold: {files, lines}}`): the host
+  takes a checkpoint, and refuses while a review of the task lives or when nothing changed since the last review — then
+  the tripwire stays armed and tries again at the next checkpoint. A start that records a review, running or `failed`
+  for want of a reviewer, fires it: the host journals `task.class` (`medium`, `by: host`, `cause: threshold`, `files`,
+  `lines`). The review reads at once while the agent works on; its findings reach the agent as the batch of the loop.
+- **Once per task.** A fired tripwire never fires again, after a restart too: the journal holds the raise and the
+  review's start. A host that stopped between the two journals the raise when it starts again; its checks begin once it
+  has loaded the task's review record.
+- **Which tasks:** a task whose class is Small or none and which has a class at all ([above](#classes)): a solo task or an
+  Auto task that writes code. Not a foreman, a worker, a reviewer, a task that writes no code, or the main tree.
+
+<a id="large-review"></a>
+
+### The mid-task review of a Large task
+
+- The agent asks for it with `request_review` after a layer other work builds on; its brief and `next` say so.
+- In an Auto task the host starts one by itself when the hired parts are back: the last running worker of the task is
+  dismissed, at least one part was accepted since the newest approved hire, and no mid-task review started since that
+  hire (`startedBy: host`, `hired: true`). The same start and refusals as the tripwire's; a host tries it once per hire,
+  and a host that starts after the parts came back while it was down tries it then. The hire's raise to Large is caught up
+  the same way.
+
+<a id="class-row"></a>
+
+### Chat rows
+
+- **The class** is a service row (`list-bullets` glyph): `class`, the class pill, the agent's reason, then what the
+  class adds: `review before PR`; `plan · plan review`; `plan · reviews`, in an Auto task `plan · reviews · workers`.
+- **The pill** (`ui/DotPill`): a 7-px dot in the class's colour from the project-icon palette — Small `--icon-green`,
+  Medium `--icon-blue`, Large `--icon-yellow` — on that colour at 16 %, the name in `--fg` (11.5/500), 18 px high,
+  fully rounded. Not the state tokens: Large never reads as a warning.
+- **A changed class** shows both pills, `Small → Large` with the arrow in `--fg3`, then the new reason and what the new
+  class adds. A raise by a hire reads `hires workers` in place of the reason.
+- **The tripwire** draws no class row of its own: its review's row says it — `review · mid-task · <reviewer> · N files ·
+  N lines`, `more than a small task` in `--amber`, `started`. A Large task's hired-parts review reads `after the hired
+  parts` where an agent's request has its reason.
+
 <a id="data"></a>
 
 ## Data
@@ -469,12 +584,15 @@ outdated`, `round` (runs opened: 1 = the read, then closure checks), `passes` (a
   `savedAt`), and one Markdown file per source.
 - Code findings are review comments in the task's `review.json` with `review` = `{reviewId, round, reviewer, open?, closed?,
 introduced?, accepted?}` (`disputed` of older files reads as `open`).
-- Journal events (rule 2), each with `id` and `point`: `task-review.started` (`startedBy`, `reviewers`, `reason?`),
+- Journal events (rule 2), each with `id` and `point`: `task-review.started` (`startedBy`, `reviewers`, `reason?`,
+  `threshold?` — `{files, lines}` of a tripwire start, `hired?` — a Large task's hired-parts start),
   `task-review.findings` (`findings`, `reviewers`, `gaps?` for a plan), `task-review.answered` (`fixed`, `answered`: the findings of the
   pass the agent answered with `review_reply`, the rest count as fixed until the closure check),
   `task-review.verified` (`closed`, `open`, `introduced`), `task-review.decided` (`decision` ∈ `fix | accept`,
   `findings`), `task-review.finished` (`state` ∈ `passed | accepted | stopped | failed | outdated`, `failure?`, `open?` and
-  `approval?` when the plan's approval ended it). `source.saved` (`id`, `title`, `url?`, `chars`). The proposal keeps `review.proposed`, `review.dismissed` and `review.replied`. The kinds of older
+  `approval?` when the plan's approval ended it). `source.saved` (`id`, `title`, `url?`, `chars`). `task.class`
+  (`class` ∈ `small | medium | large`, `reason` — the agent's line, empty for the host's, `by` ∈ `agent | host`,
+  `previous?`, `cause?` ∈ `threshold | hire` for the host's, `files?` and `lines?` of a tripwire). The proposal keeps `review.proposed`, `review.dismissed` and `review.replied`. The kinds of older
   journals — `review.started`, `review.finished` and the task's own `crew.review` rows — stay valid and replay as they
   were drawn.
 - Host commands: `startReview` (the resolved reviewers, `who`, `reviewer`, `point`, `instructions`, `guidance`,
@@ -485,7 +603,7 @@ introduced?, accepted?}` (`disputed` of older files reads as `open`).
 
 ## Later
 
-- A threshold start of the mid-task review by the host (changed lines or files since the last review).
+- A Codex session switched into its plan mode by the host when its class asks for a plan.
 - A review strip on the phone.
 
 <a id="non-goals"></a>

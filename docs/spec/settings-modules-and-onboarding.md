@@ -15,7 +15,7 @@ Related: theme, accent, fonts and the settings form look in [Appearance](appeara
 | Editor | `editor` | see [Editor](editor.md), [Code intelligence](editor-code-intelligence.md) |
 | Language | `language` | `Interface language` (`Follow system`, `Українська`, `English`), restart line; `Updates` card with the `Brigadir` row ([auto-update](architecture-and-platform.md#auto-update)) |
 | Notifications | `notifications` | `When`, `macOS permission`, `Sound` with per-slot sounds, quiet-while-viewing |
-| Agents | `agents` | `Providers`, `Agents`, `Auto`, `Tasks` cards ([below](#agents-tab)) |
+| Agents | `agents` | `Providers`, `Agents`, `Auto`, `Reviews`, `Tasks` cards ([below](#agents-tab)) |
 | Templates | `templates` | see [Crew templates](crew-templates-and-editor.md) |
 | Modules | `modules` | the module list ([below](#modules)) |
 
@@ -84,6 +84,7 @@ A settings row (`SettingsRow`, and the `Rights` row in Templates) whose control 
 | `Providers` | `Claude Code`, `Codex`: switch + `AgentStatus` (found / sign-in state, `Sign in…`, `Check`, `How to install`); `CliUpdatesRow` |
 | `Agents` | `Default agent` (Claude / Codex segments), `Helper agent` capsule, `Subagent model` (Claude catalog models, first item `Same as the agent`; shown while Claude is on; caption "Claude's own subagents search and read on this model."), `Compaction window` (`Agent's default`, `100k`, `200k`, `400k`; caption "New sessions compact their context when it reaches this many tokens."), `Task budget` (one popup per enabled provider, each named by its provider when two are on: `No limit`, `500k`, `1m`, `2m`, `5m`, `10m`; caption "A task pauses and asks when its agents use this many tokens. New tasks only."; [task budget](agents-and-providers.md#task-budget)), `Customize per action` rows (groups `Tasks`, `Reviews`, `One-off texts`, `Slack`; `Reviews` holds `Plan review` and `Code reviews`, whose inherited entry is `Auto` — [who reviews](reviews.md#who); `Plan review` also has `Off`), `Launch in` (`GUI` / `Terminal`), `Isolation for CLI tasks` (`No isolation` / `Worktree`), `Max concurrent` (0 = `Unlimited`, up to 99), `Keep awake` and `Display` rows, `Prompt suggestion` |
 | `Auto` | `Models` ▸ `Any catalog model` (switch; caption `Off: for a model outside the roles the agent asks first.` / `On: the agent picks a model for a part without asking.`), `Part budget` (minutes and thousands of tokens, steppers; caption `A worker over its budget stops and asks.`) — [Auto](crew.md#auto) |
+| `Reviews` | `Small task limit` (files and changed lines, steppers; caption `A small task that grows past this gets a mid-task review.`) — [tripwire](reviews.md#tripwire) |
 | `Tasks` | `Archive completed` (`Never`, after 1 / 3 / 7 / 30 days) |
 
 - A disabled provider is not offered in New task, in templates or as `Default agent`. Tasks that already use it still open. A provider that was not found cannot be turned on. The last enabled provider's switch is disabled. Turning off the default provider moves `agents.provider` to one that is on.
@@ -109,6 +110,7 @@ Everything the intro can change lives in `settings.json` (`schemaVersion` 1). A 
 | `agents.isolation` | `in-place` \| `worktree`, `in-place` | Agents ▸ `Isolation for CLI tasks` |
 | `auto.anyModel` | boolean, `false` | Agents ▸ `Auto` ▸ `Any catalog model` ([Auto](crew.md#auto-model)) |
 | `auto.partBudget` | `{minutes 5–600, tokens 50 000–20 000 000}`, `{40, 400000}` | Agents ▸ `Auto` ▸ `Part budget`; copied into each new Auto task ([Auto](crew.md#auto-budget)) |
+| `reviews.smallTask` | `{files 1–500, lines 10–20 000}`, `{15, 300}` | Agents ▸ `Reviews` ▸ `Small task limit`; read by each task's host at every check ([tripwire](reviews.md#tripwire)) |
 | `editor.codeTheme` | `brigadir` \| `vscode` \| `intellij`, `brigadir` | Editor ▸ `Code theme` |
 | `projects.defaultView` | `board` \| `list`, `board` | Appearance ▸ `Tasks` ▸ `View` |
 | `keymap` | `{preset, overrides}`, `brigadir`, `{}` | Appearance ▸ `Keyboard` ▸ `Keymap` |

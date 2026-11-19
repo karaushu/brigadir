@@ -901,6 +901,8 @@ export type DesktopBridge = {
 	/** spec/composer#paste: files dropped from Finder or copied there and pasted; `[]` when none of them is a file on disk. */
 	attachDroppedFiles(key: AttachmentOwner, files: object[]): Promise<PromptAttachment[]>;
 	readAttachment(key: AttachmentOwner, id: string): Promise<AttachmentInput>;
+	/** spec/design-review#data: a design review's image (a kept screenshot or a copied design image) as a `data:` URL. */
+	readDesignImage(key: TaskKey, file: string): Promise<string>;
 	/** spec/composer#mentions: an attachment's record (name, kind, size), to show the pill of a draft token after a restart. */
 	readAttachmentInfo(key: AttachmentOwner, id: string): Promise<PromptAttachment>;
 	/** spec/composer#mentions: attaches a snapshot summary of `source` (same project) to `key`'s next prompt. */

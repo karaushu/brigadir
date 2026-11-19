@@ -1,9 +1,9 @@
 import { expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Forge, type GhRunner } from '@brigadir/forge';
-import { SessionStore } from '@brigadir/persistence';
+import { atomicJson, SessionStore } from '@brigadir/persistence';
 import { gitText, Snapshots } from '@brigadir/git';
 import { ForgeActions } from './forge';
 import type { Sessions } from './sessions';
@@ -544,6 +544,67 @@ it('a task whose worktree is being prepared reads no GitHub status and reports n
 			read = await new ForgeActions(store.root, {} as Sessions, new Forge(runner)).read(task, true);
 		expect(read).toEqual({ auth: 'ready', scopes: [], error: null });
 		expect(runner).not.toHaveBeenCalled();
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+it('spec/pull-requests-and-ci#github-status: the first local read after preparation reads GitHub instead of reporting a failure', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'brigadir-pr-prep-')),
+		repo = join(dir, 'repo');
+	try {
+		await mkdir(repo);
+		await gitText(repo, ['init', '-b', 'main']);
+		await gitText(repo, ['remote', 'add', 'origin', 'https://github.com/example/repo.git']);
+		await gitText(repo, ['config', 'user.name', 'Fixture']);
+		await gitText(repo, ['config', 'user.email', 'fixture@example.invalid']);
+		await gitText(repo, ['commit', '--allow-empty', '-m', 'first']);
+		const store = await SessionStore.at(join(dir, 'data')),
+			project = await store.addProject(repo),
+			task = await store.createTask(project.id, 'Remote', 'claude');
+		const launch = {
+			isolation: 'worktree',
+			branch: 'b',
+			baseRef: 'HEAD',
+			setupCommand: '',
+			scopes: [],
+		};
+		await store.updateTask(task, {
+			launch,
+			preparation: { state: 'preparing', step: 'worktree' },
+		} as never);
+		const runner = vi.fn<GhRunner>(async (_, args) =>
+				args[0] === 'auth'
+					? { code: 0, stdout: '', stderr: '' }
+					: { code: 1, stdout: '', stderr: 'unreachable' }
+			),
+			actions = new ForgeActions(store.root, {} as Sessions, new Forge(runner));
+		// The task view opens during preparation: its GitHub read returns at once.
+		expect(await actions.read(task, true)).toEqual({ auth: 'ready', scopes: [], error: null });
+		const tree = join(store.root, 'worktrees', project.id, task.id);
+		await mkdir(join(store.root, 'worktrees', project.id), { recursive: true });
+		await gitText(repo, ['worktree', 'add', '-b', 'b', tree]);
+		await atomicJson(join(await store.taskDir(task), 'worktree.json'), {
+			schemaVersion: 1,
+			root: await realpath(tree),
+			branch: 'b',
+			baseRef: 'HEAD',
+			state: 'ready',
+			step: 'ready',
+			setupCommand: '',
+			repositories: [{ kind: 'root', ready: true, relativePath: '', source: repo }],
+		});
+		await store.updateTask(task, {
+			launch,
+			preparation: { state: 'ready', step: 'ready' },
+		} as never);
+		// After preparation a turn ends: the refresh is local, but nothing was read yet, so it asks GitHub.
+		const read = await actions.read(task, false);
+		expect(read.auth).toBe('ready');
+		expect(read.error).toBeNull();
+		expect(runner).toHaveBeenCalledWith(expect.any(String), ['auth', 'status'], undefined);
+		const calls = runner.mock.calls.length;
+		await actions.read(task, false);
+		expect(runner).toHaveBeenCalledTimes(calls);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}

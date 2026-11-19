@@ -31,6 +31,8 @@ import {
 import { isTaskProposal, isTaskProposalResult } from './task-proposal';
 import { isWorkspaceMoveFields } from './workspace-move';
 import { isReviewPoint, isTaskReviewWho } from './task-review';
+import { isDesignNode, isDesignReviewState, isDesignVerdict } from './design-review';
+import { isTaskClass } from './task-class';
 const starter = (v: unknown) => v === 'person' || v === 'agent' || v === 'host';
 import { isBackgroundId, isBackgroundPath } from './background';
 type Check = (v: unknown) => boolean;
@@ -289,7 +291,20 @@ const checks: Record<string, Check> = {
 	}),
 	'task-review.started': object(
 		{ id: isId, point: isReviewPoint, startedBy: starter, reviewers: array(text) },
-		{ reason: text }
+		{
+			reason: text,
+			threshold: object({ files: number, lines: number }),
+			hired: (v) => v === true,
+		}
+	),
+	'task.class': object(
+		{ class: isTaskClass, reason: text, by: (v) => v === 'agent' || v === 'host' },
+		{
+			previous: isTaskClass,
+			cause: (v) => v === 'threshold' || v === 'hire',
+			files: number,
+			lines: number,
+		}
 	),
 	'task-review.findings': object(
 		{
@@ -328,6 +343,16 @@ const checks: Record<string, Check> = {
 		{ failure: text, approval: (v) => v === true, open: number }
 	),
 	'source.saved': object({ id: isId, title: text, chars: number }, { url: text }),
+	'design.reviewed': object(
+		{
+			id: isId,
+			screen: text,
+			state: isDesignReviewState,
+			verdict: isDesignVerdict,
+			nodes: (v) => Array.isArray(v) && v.length >= 1 && v.every(isDesignNode),
+		},
+		{ reviewId: isId }
+	),
 	'crew.accepted': object({ taskId: isId, nodeId: isId, name: text, conflicts: array(text) }),
 	'crew.worker.stopped': object({ taskId: isId, nodeId: isId, name: text, reason: text }),
 	'crew.hire.requested': object({ hire: isAutoHire }),

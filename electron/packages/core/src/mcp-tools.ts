@@ -15,6 +15,7 @@ import {
 } from './messages';
 import { isBuiltinCrewName } from './crew';
 import { toolOutput } from './tool-output';
+import { isTaskClass, taskClassLabel } from './task-class';
 /**
  * spec/chat#mcp-calls: a call of an MCP tool, read from the provider's own spelling. Claude names it `mcp__<server>__<tool>`
  * (`_meta.claudeCode.toolName`); Codex sends no name and titles it `mcp.<server>.<tool>` with `rawInput`
@@ -98,6 +99,12 @@ const verbs = {
 	review_reply: ['Answering a reviewer', 'Answered a reviewer', 'Could not answer the reviewer'],
 	request_review: ['Asking for a review', 'Asked for a review', 'Could not ask for a review'],
 	save_source: ['Saving a source', 'Saved a source', 'Could not save the source'],
+	set_task_class: ['Setting the task class', 'Set the task class', 'Could not set the task class'],
+	submit_design_review: [
+		'Filing the design review',
+		'Filed the design review',
+		'Could not file the design review',
+	],
 	read_plan: ['Reading the plan', 'Read the plan', 'Could not read the plan'],
 	read_sources: ['Reading the sources', 'Read the sources', 'Could not read the sources'],
 	submit_plan_review: [
@@ -231,7 +238,8 @@ export function mcpModule(tool: string): McpModule {
 		tool === 'task_send' ||
 		tool === 'propose_review' ||
 		tool === 'request_review' ||
-		tool === 'review_reply'
+		tool === 'review_reply' ||
+		tool === 'set_task_class'
 	)
 		return 'human';
 	if (tool === 'editor_state' || tool === 'editor_restart_language_servers') return 'editor';
@@ -733,6 +741,12 @@ export function mcpRow(
 		}
 		case 'review_reply': {
 			text = str(a.text);
+			break;
+		}
+		// spec/reviews#class-tool: the class, and the agent's line on why.
+		case 'set_task_class': {
+			detail = plain(isTaskClass(a.class) ? t(locale, taskClassLabel[a.class]) : null);
+			text = str(a.reason);
 			break;
 		}
 		// spec/reviews#request-tool: what the agent finished, and the host's answer.

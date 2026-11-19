@@ -1,3 +1,4 @@
+import type { DesignNode, DesignReviewState, DesignVerdict } from './design-review';
 import { isPRRef, type PRRef } from './forge';
 import type { QueuedPrompt } from './prompt-queue';
 import { isAttachmentId, isAttachmentIds, type PromptAttachment } from './attachments';
@@ -17,6 +18,7 @@ import {
 	type AutoModelRequest,
 } from './auto';
 import type { CrewDismissReason } from './crew-runtime';
+import type { TaskClass, TaskClassCause } from './task-class';
 import {
 	isCrewPlan,
 	isCrewPlanDecision,
@@ -136,6 +138,10 @@ export type SessionEvent =
 			startedBy: TaskReviewStarter;
 			reviewers: string[];
 			reason?: string;
+			/** spec/reviews#tripwire: the host started it because a small task grew past its limit. */
+			threshold?: { files: number; lines: number };
+			/** spec/reviews#large-review: the host started it because a Large task's hired parts are back. */
+			hired?: boolean;
 	  }
 	| {
 			kind: 'task-review.findings';
@@ -178,8 +184,29 @@ export type SessionEvent =
 			approval?: boolean;
 			open?: number;
 	  }
+	/** spec/reviews#classes: the agent stated the task's class, or the host raised it (a hire, the tripwire). */
+	| {
+			kind: 'task.class';
+			class: TaskClass;
+			reason: string;
+			by: 'agent' | 'host';
+			previous?: TaskClass;
+			cause?: TaskClassCause;
+			files?: number;
+			lines?: number;
+	  }
 	/** spec/reviews#save-source: the author saved a ticket, spec or contract next to the plan. */
 	| { kind: 'source.saved'; id: string; title: string; url?: string; chars: number }
+	/** spec/design-review#data: a screen checked against its design, with what the host verified of each node. */
+	| {
+			kind: 'design.reviewed';
+			id: string;
+			screen: string;
+			state: DesignReviewState;
+			verdict: DesignVerdict;
+			reviewId?: string;
+			nodes: DesignNode[];
+	  }
 	| { kind: 'crew.accepted'; taskId: string; nodeId: string; name: string; conflicts: string[] }
 	| { kind: 'crew.worker.stopped'; taskId: string; nodeId: string; name: string; reason: string }
 	/** spec/crew#auto-hire: the Auto agent asked to hire; the card waits for the person (`needs-you`) and survives a restart. */
@@ -751,6 +778,26 @@ import {
 	type TaskReviewWho,
 } from './task-review';
 /** The card or row that waits for the person's answer keeps the task in `needs-you` (spec/tasks#agent-created-tasks adds the proposed task, spec/crew#workers the foreman's plan). */
+/**
+ * spec/crew#auto-hire, spec/crew#plan, spec/crew#attention: the task's status when a turn of its agent ends. A hire card or a split still
+ * waits for the person though the agent's call is gone with the turn (a message sent into the turn moves the call to the background; Codex
+ * ends its turn with the call open), and so do a worker's question, the budget question and a review's open findings. Permissions and agent
+ * questions end with their turn and do not count here.
+ */
+export function statusAfterTurn(
+	reason: string | undefined,
+	inputs: PendingInputs,
+	reviewWaits: boolean
+): 'interrupted' | 'needs-you' | 'done' {
+	if (reason === 'cancelled') return 'interrupted';
+	return inputs.crewQuestions.length > 0 ||
+		inputs.budget !== null ||
+		inputs.crewHire !== null ||
+		inputs.crewPlan !== null ||
+		reviewWaits
+		? 'needs-you'
+		: 'done';
+}
 export function waitsForPerson(inputs: PendingInputs) {
 	return (
 		inputs.questions.length > 0 ||

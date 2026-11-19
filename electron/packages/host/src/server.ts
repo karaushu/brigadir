@@ -11,6 +11,8 @@ import {
 	isTaskAgentRequest,
 	samePullRequest,
 	waitsForPerson,
+	statusAfterTurn,
+	queuedCrewQuestion,
 	type TaskProposal,
 	type TaskProposalResult,
 	type SaveFileRequest,
@@ -49,7 +51,7 @@ import { browserUrl, localBrowserUrl } from './browser-url';
 import { Terminals } from './terminals';
 import { dirname, isAbsolute, join } from 'node:path';
 import { createServer } from 'node:net';
-import { chmod, open as openFile, realpath, stat, unlink } from 'node:fs/promises';
+import { chmod, open as openFile, readFile, realpath, stat, unlink } from 'node:fs/promises';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import {
 	backgroundCommands,
@@ -65,6 +67,7 @@ import {
 	planChatPrompt,
 	planRejectOption,
 	splitPlanMarkdown,
+	figmaLinks,
 	type CrewPlan,
 	recordModeId,
 	selectOption,
@@ -93,6 +96,8 @@ import {
 	type CrewAssignment,
 	type TaskKey,
 	type UserQuestion,
+	changeSize,
+	isMainTree,
 } from '@brigadir/core';
 import {
 	readOnlyChanges,
@@ -144,7 +149,9 @@ import {
 	type CrewContext,
 } from './crew';
 import { TaskReviewLife, ownReviewCrew, ownReviewTool, type PresentedPlan } from './task-review';
-import { saveTaskSource } from './task-sources';
+import { TaskClassLife, readSmallTaskLimit } from './task-class';
+import { readTaskSources, saveTaskSource, sourcePath } from './task-sources';
+import { saveShot, submitDesignReview } from './design-review';
 import {
 	assignmentBlock,
 	compactionDue,
@@ -367,7 +374,27 @@ export async function startHost(config: HostConfig) {
 			].join('');
 		},
 		part: async () => (crewWorker ? ((await readPartBrief())?.part ?? null) : null),
-		crew: async (start): Promise<CrewHost> => {
+		// spec/design-review#design-source: Figma links of the task's prompt (a worker's part), its saved sources and the plans it presented.
+		designLinks: async () => {
+			const texts = records.flatMap((record) => {
+				const event = record.event;
+				if (event.kind === 'turn.started' && !event.crew && !event.review) return [event.text];
+				if (event.kind === 'permission.requested' && isPlanApproval(event.request))
+					return [planApprovalText(event.request, records, record.seq) ?? ''];
+				if (event.kind === 'crew.plan.requested')
+					return [splitPlanMarkdown(event.plan, crew?.spec.root.agents ?? [])];
+				return [];
+			});
+			const part = crewWorker ? await readPartBrief() : null;
+			if (part) texts.push(part.prompt);
+			for (const entry of (await readTaskSources(store, config.key)).sources)
+				texts.push(
+					entry.url ?? '',
+					await readFile(await sourcePath(store, config.key, entry), 'utf8').catch(() => '')
+				);
+			return [...new Set(texts.flatMap((item) => figmaLinks(item)))].slice(0, 20);
+		},
+		crew: async (start, named): Promise<CrewHost> => {
 			const current = await store.task(config.key),
 				existing = current.crew ?? current.reviewCrew,
 				reviewers = taskReviewers(
@@ -375,6 +402,7 @@ export async function startHost(config: HostConfig) {
 					`review-${Date.now().toString(36)}`,
 					existing ? specAgents(existing.root).map((agent) => agent.name) : [taskReviewRootName]
 				);
+			named?.(reviewers.map((agent) => agent.name));
 			if (foremanTask && crewHost && current.crew) {
 				const spec = {
 					...current.crew,
@@ -404,6 +432,22 @@ export async function startHost(config: HostConfig) {
 			crewHost = await crewHostFor(selfContext(spec));
 			return crewHost;
 		},
+	});
+	/** spec/reviews#classes: a solo task or an Auto agent that writes code has a class; a foreman, a worker and a reviewer have none. */
+	const classTask =
+		(!crew || crew.role === 'auto') && task.readOnlyAgent !== true && !isMainTree(config.key);
+	const taskClass = new TaskClassLife({
+		records: () => records,
+		emit: (event) => emit(event),
+		eligible: classTask,
+		readOnly: task.readOnlyAgent === true,
+		auto: autoTask,
+		provider: task.provider ?? 'claude',
+		limit: () => readSmallTaskLimit(store.root),
+		size: () => readChanges(store, config.key).then((value) => changeSize(value.files)),
+		// spec/reviews#tripwire: the start of `request_review`; it fired when it recorded a review (running, or failed with no reviewer).
+		start: (input) => taskReview.requestByHost(input).catch(() => false),
+		stopping: () => stopping,
 	});
 	/** spec/crew#parts: a crew worker's current part as its crew host saved it. */
 	async function readPartBrief() {
@@ -444,6 +488,11 @@ export async function startHost(config: HostConfig) {
 			self: taskReview.hooks(),
 			// spec/crew#budget-pause: waiting hires stay waiting while the task is held at its budget.
 			held: () => budgetBlocks(),
+			dropQuestion: (questionId: string) =>
+				serialPrompt(async () => {
+					for (const item of queuedCrewQuestion(queue, questionId))
+						await emit({ kind: 'prompt.removed', id: item.id });
+				}),
 		};
 		// spec/crew#auto: the Auto agent's host hires through cards and asks the app about models.
 		const host: CrewHost =
@@ -480,6 +529,7 @@ export async function startHost(config: HostConfig) {
 		commands: modules.current().commands && Boolean(project.commands?.length),
 		tools: modules.current(),
 		cli: task.transport === 'terminal',
+		...(classTask ? { classes: autoTask ? ('auto' as const) : ('solo' as const) } : {}),
 	});
 	const scopeLocks = new ScopeLocks(
 		store,
@@ -1356,10 +1406,39 @@ export async function startHost(config: HostConfig) {
 		if (captured && captured.id !== lastCheckpoint) {
 			await emit({ kind: 'checkpoint.created', checkpoint: captured.id });
 			lastCheckpoint = captured.id;
+			// spec/reviews#tripwire: a new checkpoint of the agent's work (every fifth tool, each turn end) is a tripwire check.
+			if ((reason === 'tools' || reason === 'turn') && !stopping)
+				void taskClass.checkpoint().catch(() => {});
 		}
 		if (checkReadOnly && snapshots && captured)
 			for (const violation of await readOnlyChanges(snapshots.current.scopes, before, captured))
 				await emit({ kind: 'scope.violation', ...violation });
+	}
+	/** spec/design-review#shots: a checkpoint of the task's files now, and its trees; a failed checkpoint dates nothing. */
+	async function treesNow() {
+		await checkpoint('tools');
+		return (snapshots?.current.checkpoints.at(-1)?.trees ?? []).map(({ scopeId, tree }) => ({
+			scopeId,
+			tree,
+		}));
+	}
+	/** spec/design-review#shots: the image a screenshot tool returned, kept in the task's folder; the answer names its id. */
+	async function keepShot(
+		result: unknown,
+		tool: 'simulator' | 'browser',
+		trees: { scopeId: string; tree: string }[],
+		device: string | undefined
+	) {
+		if (!isRecord(result) || typeof result.image !== 'string') return result;
+		const mimeType = typeof result.mimeType === 'string' ? result.mimeType : 'image/png';
+		const shot = await saveShot(store, config.key, {
+			data: result.image,
+			mimeType,
+			tool,
+			...(typeof result.device === 'string' ? { device: result.device } : device ? { device } : {}),
+			trees,
+		}).catch(() => null);
+		return shot ? { ...result, shot: shot.id } : result;
 	}
 	const crewPeers = new Set<Peer>();
 	/** spec/reviews#plan-loop: plan review batches whose waiting plan the host just rejected; such a batch runs before what is queued. */
@@ -1462,15 +1541,13 @@ export async function startHost(config: HostConfig) {
 							: 'done';
 			}
 			// spec/crew#attention: a foreman that ends its turn with a worker's question unanswered relayed it to the person; the crew waits for them.
+			// spec/crew#auto-hire, spec/crew#plan: so does a hire card or a split whose call ended with the turn.
 			if (event.kind === 'turn.completed')
-				status =
-					event.reason === 'cancelled'
-						? 'interrupted'
-						: pendingInputs([...records, record]).crewQuestions.length ||
-							  pendingInputs([...records, record]).budget ||
-							  taskReview.document().review?.state === 'yours'
-							? 'needs-you'
-							: 'done';
+				status = statusAfterTurn(
+					event.reason,
+					pendingInputs([...records, record]),
+					taskReview.document().review?.state === 'yours'
+				);
 			if (event.kind === 'crew.question.escalated' && !busy) status = 'needs-you';
 			if (
 				event.kind === 'crew.question.resolved' &&
@@ -1626,6 +1703,8 @@ export async function startHost(config: HostConfig) {
 					}
 				}
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
+			// spec/reviews#tripwire, spec/reviews#class-raise, spec/reviews#large-review
+			if (!stopping) classEvent(event);
 			// spec/reviews#plan-start: a presented plan starts its review or answers one; an approval ends it.
 			if (!stopping) planEvent(event);
 			if (crewWorker && event.kind === 'turn.completed' && !stopping)
@@ -1642,6 +1721,12 @@ export async function startHost(config: HostConfig) {
 				});
 		});
 		return result;
+	}
+	/** spec/reviews#classes: an approved hire raises the class; a dismissal may bring the hired parts back. */
+	function classEvent(event: SessionEvent) {
+		if (event.kind === 'crew.hire.resolved' && event.approved && event.hired.length)
+			void taskClass.hired().catch(() => {});
+		if (event.kind === 'crew.worker.dismissed') void taskClass.dismissed().catch(() => {});
 	}
 	/** The plan requests the review has heard of: the journal row and the waiting request come in either order (the transport writes the row first). */
 	const presentedPlans = new Set<string>();
@@ -2875,6 +2960,11 @@ export async function startHost(config: HostConfig) {
 					if (choice === 'domain') await ui.request('browser_remember', { url: command.url });
 				}
 			}
+			// spec/design-review#shots: a screenshot is kept with the trees of the task's files taken just before it.
+			if (command.kind === 'screenshot') {
+				const trees = await treesNow().catch(() => []);
+				return keepShot(await ui!.request('browser', command), 'browser', trees, undefined);
+			}
 			return ui!.request('browser', command);
 		}
 		// spec/browser-and-simulator#simulator: the simulator lives in the app, like the browser; the host checks the module and forwards the call.
@@ -2882,11 +2972,22 @@ export async function startHost(config: HostConfig) {
 			if (!modules.current().simulator) throw new Error(moduleOffMessages.simulator);
 			if (!ui) throw new Error('The simulator needs an open application window');
 			// spec/agents-and-providers#tools-awareness: main queues a worker for the one device of the project; the foreman and a solo agent go first.
-			return ui.request('simulator', {
+			const asked = ui,
+				shooting = method === 'simulator_screenshot',
+				trees = shooting ? await treesNow().catch(() => []) : [];
+			const result = await asked.request('simulator', {
 				...(isRecord(params) ? params : {}),
 				tool: method.slice(10),
 				queued: simulatorQueued(crew?.role ?? null),
 			});
+			return shooting
+				? keepShot(
+						result,
+						'simulator',
+						trees,
+						isRecord(params) && typeof params.device === 'string' ? params.device : undefined
+					)
+				: result;
 		}
 		// spec/agents-and-providers#context-tools: what the person is looking at; the app answers, and a closed window is an answer, not an error.
 		if (method === 'editor_state' || method === 'pr_state') {
@@ -2929,6 +3030,15 @@ export async function startHost(config: HostConfig) {
 				throw new Error(hiddenToolMessages.create_task);
 			return proposeTask(params, signal);
 		}
+		// spec/design-review#tool: the host verifies every node itself and keeps the design review.
+		if (method === 'submit_design_review') {
+			if (!modules.current().simulator && !modules.current().browser)
+				throw new Error('The simulator and the browser are off in Settings.');
+			return submitDesignReview(
+				{ store, key: config.key, trees: treesNow, emit },
+				isRecord(params) ? params : {}
+			);
+		}
 		// spec/reviews#save-source: the plan's author saves a ticket or contract next to the plans.
 		if (method === 'save_source')
 			return saveTaskSource(store, config.key, isRecord(params) ? params : {}, emit);
@@ -2941,6 +3051,8 @@ export async function startHost(config: HostConfig) {
 				throw new Error('commentId and text are required');
 			return taskReview.reply(params.commentId, params.text);
 		}
+		// spec/reviews#class-tool
+		if (method === 'set_task_class') return taskClass.set(params);
 		// spec/reviews#request-tool: the host decides and runs a mid-task review; the agent works on.
 		if (method === 'request_review') {
 			if (task.readOnlyAgent === true) throw new Error('This task changes no code to review.');
@@ -3671,6 +3783,8 @@ export async function startHost(config: HostConfig) {
 			if (spec) crewHost = await crewHostFor(selfContext(spec));
 		}
 		await taskReview.load();
+		// spec/reviews#classes: the class checks start once the review's record is loaded.
+		void taskClass.start().catch(() => {});
 		// spec/reviews#plan-review: a root foreman's split that still waits after a restart.
 		if (foremanTask && !crew?.parentKey) {
 			const requested = records.findLast((record) => record.event.kind === 'crew.plan.requested');

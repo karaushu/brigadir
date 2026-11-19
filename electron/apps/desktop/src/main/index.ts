@@ -192,6 +192,7 @@ import {
 	NotesStore,
 	SchedulesStore,
 	lastSessionStart,
+	safePath,
 } from '@brigadir/persistence';
 import { Scheduler } from './schedules';
 import {
@@ -3601,6 +3602,13 @@ void app.whenReady().then(async () => {
 				)
 			).input
 	);
+	// spec/design-review#data: only a kept screenshot or a copied design image of the task (the channel checks the name).
+	handle('design:image', async (key, file: string) => {
+		const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR);
+		const bytes = await readFileNode(await safePath(await store.taskDir(owner(key)), file));
+		const type = file.endsWith('.jpg') ? 'jpeg' : file.endsWith('.webp') ? 'webp' : 'png';
+		return `data:image/${type};base64,${bytes.toString('base64')}`;
+	});
 	handle(
 		'attachment:thumbnail',
 		async (key, id) =>

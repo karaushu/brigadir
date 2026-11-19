@@ -236,6 +236,50 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 	};
 }
 
+describe('the design check of a review (spec/reviews#design)', () => {
+	it('reads the design source and the design reviews of the task and of this reviewer; a plan review has none', async () => {
+		const link = 'https://www.figma.com/design/AbC/Client?node-id=412-88';
+		const h = await setup({ designLinks: async () => [link] });
+		const filed = (reviewId?: string) => ({
+			id: 'd1',
+			screen: 'Details screen',
+			at: new Date().toISOString(),
+			state: 'passed',
+			verdict: 'passed',
+			...(reviewId ? { reviewId } : {}),
+			trees: [{ scopeId: 's1', tree: tree('a') }],
+			nodes: [
+				{
+					name: 'Header',
+					figma: '412:88',
+					state: 'ok',
+					rows: [{ property: 'Avatar', expected: '56 px', actual: '56 px', match: true }],
+				},
+			],
+		});
+		await mkdir(join(await h.store.taskDir(h.key), 'design'), { recursive: true });
+		await atomicJson(join(await h.store.taskDir(h.key), 'design', 'design-reviews.json'), {
+			schemaVersion: 1,
+			reviews: [filed()],
+		});
+		const reviewerKey = { projectId: h.key.projectId, id: 'reviewer-task' };
+		await mkdir(join(await h.store.taskDir(reviewerKey), 'design'), { recursive: true });
+		await atomicJson(join(await h.store.taskDir(reviewerKey), 'design', 'design-reviews.json'), {
+			schemaVersion: 1,
+			reviews: [filed('run-1'), filed('run-0')],
+		});
+		await h.life.start(start());
+		const input = await h.life.hooks().design!('reviewer-task', 'run-1', [{ tree: tree('a') }]);
+		expect(input).toMatchObject({ links: [link], round: [{ tree: tree('a') }] });
+		expect(input!.own.map((review) => review.id)).toEqual(['d1']);
+		expect(input!.reviewer.map((review) => review.reviewId)).toEqual(['run-1']);
+		// A plan review has no design check.
+		const plan = await setup({ designLinks: async () => [link] });
+		plan.state.plan = { kind: 'approval', id: 'p1', revision: 1, text: 'The plan' };
+		await plan.life.start(start({ point: 'plan' } as Partial<StartReview>));
+		expect(await plan.life.hooks().design!('reviewer-task', 'run-1', [])).toBe(null);
+	});
+});
 describe('every exit of the loop (spec/reviews#loop)', () => {
 	it('a clean pass: the first read finds nothing', async () => {
 		const h = await setup();
@@ -422,6 +466,34 @@ describe('every exit of the loop (spec/reviews#loop)', () => {
 	});
 });
 
+describe('the reviewer’s name (spec/reviews#who)', () => {
+	// Seen live: the second review of a task journaled `started` with `Codex` while its reviewer was `Codex 2` everywhere else.
+	it('the record, the journal and request_review name the reviewer as the crew named it', async () => {
+		const host = {
+			checkSelf: async () => {},
+			replySelf: async () => {},
+			stopSelf: async () => {},
+			selfTrees: async () => [{ scopeId: 's1', tree: tree('a') }],
+		};
+		const { life, records, doc } = await setup({
+			crew: async (_start, named) => {
+				named?.(['Codex 2']);
+				return host;
+			},
+			existing: () => host,
+		});
+		const answer = await life.request({
+			point: 'mid',
+			startedBy: 'agent',
+			reason: 'the data layer',
+		});
+		expect(answer).toEqual({ started: true, reviewer: 'Codex 2' });
+		expect(doc().review?.reviewers).toEqual(['Codex 2']);
+		expect(
+			records.find((record) => record.event.kind === 'task-review.started')?.event
+		).toMatchObject({ reviewers: ['Codex 2'] });
+	});
+});
 describe('the agent asks for a review (spec/reviews#request-tool)', () => {
 	it('the host starts it at once while the agent works, and refuses a second one or one with nothing new', async () => {
 		let checkpoints = 0;
@@ -1075,5 +1147,41 @@ describe('fixes of an independent review of the plan review', () => {
 		const dir = join(await s.store.taskDir(s.key), 'sources');
 		expect(await readFile(join(dir, entry!.file), 'utf8')).toBe('second');
 		expect((await readdir(dir)).sort()).toEqual([entry!.file, 'sources.json'].sort());
+	});
+});
+
+describe('the host starts a mid-task review (spec/reviews#tripwire, spec/reviews#large-review)', () => {
+	it('reads at once while the agent works, with the size on its start, and counts only a review this call recorded', async () => {
+		let checkpoints = 0;
+		const h = await setup({
+			checkpoint: async () => {
+				checkpoints++;
+			},
+		});
+		h.state.busy = true;
+		expect(
+			await h.life.requestByHost({
+				point: 'mid',
+				startedBy: 'host',
+				reason: '',
+				threshold: { files: 16, lines: 400 },
+			})
+		).toBe(true);
+		expect(checkpoints).toBe(1);
+		// The agent's turn still runs and the round already opened on the checkpoint: no wait for the turn's end.
+		expect(h.state.checks).toBe(1);
+		expect(h.doc().review).toMatchObject({ point: 'mid', startedBy: 'host', state: 'reading' });
+		expect(h.records[0]!.event).toEqual({
+			kind: 'task-review.started',
+			id: h.doc().review!.id,
+			point: 'mid',
+			startedBy: 'host',
+			reviewers: ['Codex'],
+			threshold: { files: 16, lines: 400 },
+		});
+		// A review that lives (here its own; the agent's would be the same) makes a second host start record nothing.
+		expect(
+			await h.life.requestByHost({ point: 'mid', startedBy: 'host', reason: '', hired: true })
+		).toBe(false);
 	});
 });

@@ -111,7 +111,7 @@
 	flex: none;
 	color: var(--fg2);
 }
-.details li > span:not(.tag) {
+.details li > span:not([data-tag]) {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
@@ -168,32 +168,6 @@
 [data-finding='fixed'] .text {
 	text-decoration: line-through;
 	color: var(--fg2);
-}
-.tag {
-	flex: none;
-	padding: 1px 6px;
-	border-radius: 4px;
-	font-size: var(--text-10);
-	background: var(--tint);
-	color: var(--fg2);
-}
-.tag[data-tag='sent'] {
-	background: var(--accent-soft);
-	color: var(--accent);
-}
-.tag[data-tag='fixed'] {
-	background: var(--green-soft);
-	color: var(--green);
-}
-.tag[data-tag='open'],
-.tag[data-tag='new'] {
-	background: var(--amber-soft);
-	color: var(--amber);
-}
-/* spec/reviews#findings: closed without a fix — answered or accepted — reads quieter than the other tags. */
-.tag[data-tag='answered'],
-.tag[data-tag='accepted'] {
-	color: var(--fg3);
 }
 .reason {
 	font-size: var(--text-11);
@@ -265,10 +239,6 @@
 .comment[data-static]:active {
 	background: none;
 }
-.tag[data-tag='kind'] {
-	background: var(--amber-soft);
-	color: var(--amber);
-}
 .sources {
 	padding: 2px 0;
 }
@@ -294,4 +264,20 @@
 }
 .planState[data-state='yours'] > .count:first-of-type {
 	color: var(--amber);
+}
+/* spec/reviews#class-row: the class row places its pills in the label; the arrow of a changed class is --fg3. */
+.classLine {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.classArrow {
+	color: var(--fg3) !important;
+}
+.classReason {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 0 1 auto !important;
 }

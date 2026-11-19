@@ -82,6 +82,15 @@ export function isOwnQueuedPrompt(item: QueuedPrompt): boolean {
 	// waiting for a turn that never takes the batch.
 	return !item.command.crew;
 }
+/** spec/crew#ask-foreman: the prompts that still carry a worker's question to this task's agent — queued or held. */
+export function queuedCrewQuestion(state: PromptQueueState, questionId: string): QueuedPrompt[] {
+	return [...state.prompts, ...(state.held ?? [])].filter(
+		(item) =>
+			item.command.kind === 'prompt' &&
+			item.command.crew?.kind === 'question' &&
+			item.command.crew.questionId === questionId
+	);
+}
 export function promptQueue(records: readonly EventRecord[]): PromptQueueState {
 	return records.reduce((state, record) => reducePromptQueue(state, record.event), {
 		prompts: [],

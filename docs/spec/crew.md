@@ -415,6 +415,7 @@ Worker branches and worktrees are removed with the worker task. `+N −M` and th
 | `cancelled` | the task was cancelled; the tool returns a cancellation error, never a permission |
 
 - `prompt_task` without `questionId` is an ordinary queued prompt and does not close a question; a wrong addressee or closed question is an error.
+- A question that ends while its prompt still waits in the parent's queue — cancelled with the caller's turn, or answered by the person — takes that prompt out (`prompt.removed`): the parent's agent may be held by a plan for approval or a hire card, and the prompt would otherwise run after the answer, for a question nobody waits on.
 - After a restart an overdue question escalates at once. If the ACP session resumes, the answer returns into its tool call; if the call is lost, the question stays visible and the stored answer goes with the next turn's context under the same id.
 - `ask_foreman` never carries permissions.
 

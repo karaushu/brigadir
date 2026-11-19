@@ -12,6 +12,7 @@ import {
 	samePullRequest,
 	waitsForPerson,
 	statusAfterTurn,
+	queuedCrewQuestion,
 	type TaskProposal,
 	type TaskProposalResult,
 	type SaveFileRequest,
@@ -441,6 +442,11 @@ export async function startHost(config: HostConfig) {
 			self: taskReview.hooks(),
 			// spec/crew#budget-pause: waiting hires stay waiting while the task is held at its budget.
 			held: () => budgetBlocks(),
+			dropQuestion: (questionId: string) =>
+				serialPrompt(async () => {
+					for (const item of queuedCrewQuestion(queue, questionId))
+						await emit({ kind: 'prompt.removed', id: item.id });
+				}),
 		};
 		// spec/crew#auto: the Auto agent's host hires through cards and asks the app about models.
 		const host: CrewHost =

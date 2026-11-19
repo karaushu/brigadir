@@ -291,7 +291,7 @@ test('the machine asks the device to show its menus, dialogs and folders, and ta
 		thinkpad = await machine('ThinkPad', true, null);
 	// The folder browser starts in the machine's home: a known one here.
 	const home = join(studio.root, 'home');
-	await mkdir(join(home, 'projects/shop/.git'), { recursive: true });
+	await mkdir(join(home, 'devel/shop/.git'), { recursive: true });
 	await mkdir(join(home, 'devel/new-project'), { recursive: true });
 	const work = await launch(studio, port, { HOME: home }),
 		device = await launch(thinkpad, port + 10);

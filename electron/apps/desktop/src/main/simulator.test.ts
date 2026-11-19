@@ -894,7 +894,7 @@ it('lets a worker share when the cap is reached, makes an agent boot wait at the
 		);
 		expect(run(world, 'create')).toEqual([]);
 		// An agent asking for a device that is off waits at the gate, then gives up with the cap; meanwhile its tab starts and says why.
-		let during: Promise<unknown> | null = null;
+		let during = null as Promise<unknown> | null;
 		world.onSleep = () => {
 			during ??= simulators.command(task('tablet'), { kind: 'state' });
 		};

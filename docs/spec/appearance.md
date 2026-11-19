@@ -337,7 +337,7 @@ One size sets the height, padding, radius, font, icon, gap, box and switch of ev
 - Before writing a new control, look for an existing one in `ui/` and extend a similar one with a prop. Feature CSS sets placement only (margins, place in a row), never the control's look.
 - A second copy of the same look is moved into `ui/` in the same change.
 - Examples of shared components: `Controls` (`Button`, `IconButton`, `SplitButton`, `ChoiceButton`, `Popup`, `Segments`, `Switch`, `Stepper`, `Chip`, `Field`), `Input`, `Popover`, `PopupClose`, `ModalDialog`, `ConfirmDialog`, `DocumentDialog`, `ClearField`, `GenerateButton`, `Loading`, `ChangeCounts` (`+N −M` with tooltip, used everywhere), `NoticeChip`, `Banner`, `Toast`, `ListCard`, `OptionCard`, `SpotBadges`.
-- `Popup` menus use `ui/Popover` metrics (padding 5, item 0 8), so all menus look the same. `Chip` with `warning` uses the `NoticeChip` look, so there is one amber pill.
+- `Popup` menus use `ui/Popover` metrics (padding 5, item 0 8), so all menus look the same. <a id="popup-list-room"></a>A `Popup` list opens towards the side with room, flips to the other edge of its trigger when it is wider than the room, and scrolls itself. A scrolling surface around the trigger never cuts it: the list leaves the scroller and is bounded by the next box that clips without scrolling (a sheet, a dialog, the window). A pinned list does not follow its trigger: it closes when a scroll or a window resize moves the trigger. `Chip` with `warning` uses the `NoticeChip` look, so there is one amber pill.
 
 <a id="split-button"></a>
 ### Split button

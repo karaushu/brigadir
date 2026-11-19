@@ -7,6 +7,7 @@ import {
 	Chip,
 	Field,
 	IconButton,
+	listBound,
 	Popup,
 	Segments,
 	Stepper,
@@ -399,4 +400,46 @@ it('tokens.css defines the theme tokens in light and dark, one soft --sel and se
 		expect(stack, name).not.toContain('var(');
 		expect(stack.split(',').length, name).toBeGreaterThan(1);
 	}
+});
+
+it('a Popup list leaves the scrollers around its trigger and is bounded by the next box that only clips (spec/appearance#popup-list-room)', () => {
+	const box = (overflow: string, dialog = false, carriesFixed = false) => ({
+		overflow,
+		dialog,
+		carriesFixed,
+	});
+	const group = box('visible visible'),
+		scroller = box('auto auto'),
+		clip = box('hidden hidden');
+	// The launch sheet: a group, the scrolling rail, the form, the dialog.
+	expect(listBound([group, scroller, group, box('hidden hidden', true)])).toEqual({
+		bound: 3,
+		origin: 'window',
+	});
+	// A dialog that keeps a `translate` after its entrance carries fixed boxes: the list is measured from it.
+	expect(listBound([group, scroller, group, box('hidden hidden', true, true)])).toEqual({
+		bound: 3,
+		origin: 3,
+	});
+	// A box that scrolls one way and hides the other is still a scroller.
+	expect(listBound([box('hidden auto'), clip])).toEqual({ bound: 1, origin: 'window' });
+	// Nothing scrolls on the way: the list hangs on its trigger.
+	expect(listBound([group, clip])).toBeNull();
+	expect(listBound([group, box('auto auto', true)])).toBeNull();
+	// A collapsed section clips before the scroller: the list stays inside it.
+	expect(listBound([clip, scroller])).toBeNull();
+	// No clipping box above the scroller: the window bounds the list.
+	expect(listBound([scroller, group])).toEqual({ bound: 'window', origin: 'window' });
+	// A transformed box above the scroller carries the list and the first clip from it up bounds it.
+	expect(listBound([scroller, box('visible visible', false, true), clip])).toEqual({
+		bound: 2,
+		origin: 1,
+	});
+	expect(listBound([scroller, clip, box('visible visible', false, true)])).toEqual({
+		bound: 1,
+		origin: 2,
+	});
+	// A transformed box under the scroller, or one that scrolls itself, keeps the list inside.
+	expect(listBound([box('visible visible', false, true), scroller, clip])).toBeNull();
+	expect(listBound([scroller, box('auto auto', false, true), clip])).toBeNull();
 });

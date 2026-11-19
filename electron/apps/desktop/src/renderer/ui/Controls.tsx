@@ -547,6 +547,89 @@ function clippingBox(node: HTMLElement, axis: 'overflowX' | 'overflowY' = 'overf
 	}
 	return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
 }
+/** What makes a box the containing block of fixed descendants: a pinned list is measured from such a box and cut by it. */
+function carriesFixed(style: CSSStyleDeclaration) {
+	return (
+		[
+			style.transform,
+			style.translate,
+			style.scale,
+			style.rotate,
+			style.filter,
+			style.backdropFilter,
+			style.perspective,
+		].some((value) => value && value !== 'none') ||
+		/paint|layout|strict|content/.test(style.contain ?? '') ||
+		/transform|filter|perspective/.test(style.willChange ?? '')
+	);
+}
+/**
+ * spec/appearance#popup-list-room: a scrolling surface around the trigger does not cut the list. The list leaves it, pinned, and is
+ * bounded by the next box that clips without scrolling (a sheet, a dialog, the window). `chain` is the trigger's ancestors, nearest
+ * first. The answer names the bounding box and the box a pinned list is measured from (one that carries fixed boxes, else the
+ * window); null when nothing scrolls between the trigger and the bound, so the list hangs on its trigger.
+ */
+export function listBound(
+	chain: { overflow: string; dialog: boolean; carriesFixed: boolean }[]
+): { bound: number | 'window'; origin: number | 'window' } | null {
+	let scrolls = false,
+		bound: number | undefined;
+	for (const [index, box] of chain.entries()) {
+		const scroller = /(auto|scroll)/.test(box.overflow) && !box.dialog;
+		if (bound !== undefined) {
+			if (box.carriesFixed) return { bound, origin: index };
+			continue;
+		}
+		if (box.carriesFixed) {
+			// Pinned inside this box, the list still leaves the scrollers under it; one that scrolls itself would take the list along.
+			if (!scrolls || scroller) return null;
+			const clip = chain.findIndex(
+				(above, at) =>
+					at >= index && (above.dialog || /(auto|scroll|hidden|clip)/.test(above.overflow))
+			);
+			return { bound: clip < 0 ? 'window' : clip, origin: index };
+		}
+		if (scroller) scrolls = true;
+		else if (box.dialog || /(hidden|clip)/.test(box.overflow)) {
+			if (!scrolls) return null;
+			// A dialog sits in the top layer: nothing above it carries its fixed boxes.
+			if (box.dialog) return { bound: index, origin: 'window' };
+			bound = index;
+		}
+	}
+	return scrolls ? { bound: bound ?? 'window', origin: 'window' } : null;
+}
+function roomPastScrollers(node: HTMLElement): { room: DOMRect; origin: DOMRect } | null {
+	const parents: HTMLElement[] = [];
+	for (let parent = node.parentElement; parent; parent = parent.parentElement) parents.push(parent);
+	const found = listBound(
+		parents.map((parent) => {
+			const style = getComputedStyle(parent);
+			return {
+				overflow: `${style.overflowX} ${style.overflowY}`,
+				dialog: parent.tagName === 'DIALOG',
+				carriesFixed: carriesFixed(style),
+			};
+		})
+	);
+	if (!found) return null;
+	const viewport = new DOMRect(0, 0, window.innerWidth, window.innerHeight),
+		carrier = found.origin === 'window' ? undefined : parents[found.origin]!,
+		outer = carrier?.getBoundingClientRect();
+	return {
+		room: found.bound === 'window' ? viewport : parents[found.bound]!.getBoundingClientRect(),
+		// Fixed boxes are measured from the carrier's padding box.
+		origin:
+			carrier && outer
+				? new DOMRect(
+						outer.left + carrier.clientLeft,
+						outer.top + carrier.clientTop,
+						carrier.clientWidth,
+						carrier.clientHeight
+					)
+				: viewport,
+	};
+}
 export function Popup({
 	size,
 	label,
@@ -609,6 +692,8 @@ export function Popup({
 		maxHeight: 280,
 	});
 	const [edge, setEdge] = useState(align);
+	/** The trigger's box, the room around it and the origin of fixed boxes while the list is pinned (spec/appearance#popup-list-room). */
+	const [pin, setPin] = useState<{ box: DOMRect; room: DOMRect; origin: DOMRect } | null>(null);
 	const root = useRef<HTMLDivElement>(null);
 	const trigger = useRef<HTMLButtonElement>(null);
 	const list = useRef<HTMLDivElement>(null);
@@ -648,11 +733,27 @@ export function Popup({
 		else if (option.offsetTop + option.offsetHeight > menu.scrollTop + menu.clientHeight)
 			menu.scrollTop = option.offsetTop + option.offsetHeight - menu.clientHeight;
 	}, [active, open, query]);
+	// A pinned list does not follow its trigger: a scroll or a resize that moves the trigger closes it, as it closes a menu.
+	useEffect(() => {
+		if (!open || !pin) return;
+		const close = () => {
+			const now = root.current?.getBoundingClientRect();
+			if (now && Math.abs(now.left - pin.box.left) < 1 && Math.abs(now.top - pin.box.top) < 1)
+				return;
+			setOpen(false);
+		};
+		document.addEventListener('scroll', close, true);
+		window.addEventListener('resize', close);
+		return () => {
+			document.removeEventListener('scroll', close, true);
+			window.removeEventListener('resize', close);
+		};
+	}, [open, pin]);
 	// A list wider than the room on its side flips to the other edge of the trigger, so a narrow panel never cuts it.
 	useLayoutEffect(() => {
 		if (!open || !list.current || !root.current) return;
 		const box = root.current.getBoundingClientRect(),
-			clip = clippingBox(root.current, 'overflowX'),
+			clip = pin?.room ?? clippingBox(root.current, 'overflowX'),
 			width = list.current.offsetWidth;
 		const toRight = clip.right - box.left - 8,
 			toLeft = box.right - clip.left - 8;
@@ -665,7 +766,7 @@ export function Popup({
 					? 'start'
 					: 'end'
 		);
-	}, [open, align]);
+	}, [open, align, pin]);
 	function finish(index?: number) {
 		if (index !== undefined && shown[index]?.disabled) return;
 		if (index !== undefined && shown[index]) onChange(shown[index].value);
@@ -683,7 +784,8 @@ export function Popup({
 		);
 		// Open towards the side with room and cap the height there; the list scrolls itself, never the surface around it.
 		const box = trigger.current!.getBoundingClientRect(),
-			clip = clippingBox(root.current!),
+			past = roomPastScrollers(root.current!),
+			clip = past?.room ?? clippingBox(root.current!),
 			below = clip.bottom - box.bottom - 10,
 			above = box.top - clip.top - 10;
 		const side = (chip ? !(above >= 200 || above >= below) : below >= 200 || below >= above)
@@ -693,6 +795,7 @@ export function Popup({
 			side,
 			maxHeight: Math.max(96, Math.min(chip ? 280 : 300, side === 'bottom' ? below : above)),
 		});
+		setPin(past ? { box: root.current!.getBoundingClientRect(), ...past } : null);
 		setOpen(true);
 	}
 	const optionRow = (option: Option, index: number) => (
@@ -877,7 +980,22 @@ export function Popup({
 					data-align={edge}
 					data-side={place.side}
 					data-search={Boolean(search)}
-					style={{ maxHeight: place.maxHeight, ...(menuWidth ? { width: menuWidth } : {}) }}
+					style={{
+						maxHeight: place.maxHeight,
+						...(menuWidth ? { width: menuWidth } : {}),
+						// The same 6 px gap and edges as the list hanging on its trigger, measured from the pinned list's origin.
+						...(pin
+							? {
+									position: 'fixed',
+									minWidth: Math.max(200, pin.box.width),
+									maxWidth: pin.room.width - 16,
+									top: place.side === 'bottom' ? pin.box.bottom + 6 - pin.origin.top : 'auto',
+									bottom: place.side === 'top' ? pin.origin.bottom - pin.box.top + 6 : 'auto',
+									left: edge === 'start' ? pin.box.left - pin.origin.left : 'auto',
+									right: edge === 'end' ? pin.origin.right - pin.box.right : 'auto',
+								}
+							: {}),
+					}}
 					onKeyDown={(event) => {
 						const typing = event.target instanceof HTMLInputElement;
 						const onAction = (event.target as HTMLElement).hasAttribute('data-option-action');

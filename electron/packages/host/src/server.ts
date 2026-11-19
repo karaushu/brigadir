@@ -1225,9 +1225,9 @@ export async function startHost(config: HostConfig) {
 			for (const violation of await readOnlyChanges(snapshots.current.scopes, before, captured))
 				await emit({ kind: 'scope.violation', ...violation });
 	}
-	/** spec/design-review#shots: a checkpoint of the task's files now, and its trees. */
+	/** spec/design-review#shots: a checkpoint of the task's files now, and its trees; a failed checkpoint dates nothing. */
 	async function treesNow() {
-		await checkpoint('tools').catch(() => {});
+		await checkpoint('tools');
 		return (snapshots?.current.checkpoints.at(-1)?.trees ?? []).map(({ scopeId, tree }) => ({
 			scopeId,
 			tree,
@@ -2750,7 +2750,7 @@ export async function startHost(config: HostConfig) {
 			}
 			// spec/design-review#shots: a screenshot is kept with the trees of the task's files taken just before it.
 			if (command.kind === 'screenshot') {
-				const trees = await treesNow();
+				const trees = await treesNow().catch(() => []);
 				return keepShot(await ui!.request('browser', command), 'browser', trees, undefined);
 			}
 			return ui!.request('browser', command);
@@ -2762,7 +2762,7 @@ export async function startHost(config: HostConfig) {
 			// spec/agents-and-providers#tools-awareness: main queues a worker for the one device of the project; the foreman and a solo agent go first.
 			const asked = ui,
 				shooting = method === 'simulator_screenshot',
-				trees = shooting ? await treesNow() : [];
+				trees = shooting ? await treesNow().catch(() => []) : [];
 			const result = await asked.request('simulator', {
 				...(isRecord(params) ? params : {}),
 				tool: method.slice(10),

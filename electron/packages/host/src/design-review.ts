@@ -171,7 +171,9 @@ export async function readDesignImage(
 	return kind ? { bytes, kind } : { reason: 'it is not a PNG, JPEG or WebP image' };
 }
 
+/** A shot with no trees (its checkpoint failed) or a task with none cannot be dated: it counts as old. */
 const sameTrees = (a: readonly DesignTree[], b: readonly DesignTree[]) =>
+	a.length > 0 &&
 	a.length === b.length &&
 	b.every((tree) => a.some((item) => item.scopeId === tree.scopeId && item.tree === tree.tree));
 const text = (value: unknown, max: number) =>

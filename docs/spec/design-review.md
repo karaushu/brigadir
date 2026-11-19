@@ -35,7 +35,7 @@ files it: its screenshots, its files and its card in that task's chat.
   id, `s1`, `s2`, …, and their answer adds a line: `Saved as s12. Pass it as shot to submit_design_review.`
 - Before the image is taken the host takes a checkpoint of the task's files ([Snapshots](diff-and-review.md#snapshot-engine)),
   and the shot keeps that checkpoint's trees. Taken before the image, it errs towards "old": a file written while
-  the screenshot is taken makes it old.
+  the screenshot is taken makes it old. A shot whose checkpoint failed keeps no trees and is always old.
 - The index keeps the last 200 shots; an older shot's file goes unless a design review names it.
 
 <a id="tool"></a>
@@ -67,13 +67,14 @@ browser module.
 
 ## What the host verifies
 
-The host takes a checkpoint of the task's files, then checks every node by itself:
+The host takes a checkpoint of the task's files (a failed checkpoint fails the call), then checks every node by
+itself:
 
 | Node state     | When                                                                                                                                                | Tag of its rows   |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | `no-figma`     | the design image cannot be read: no such file, not a PNG, JPEG or WebP by its bytes, larger than 10 MB, or the address does not answer with one    | `no design image` |
 | `no-shot`      | `shot` is not a screenshot this task's own tool took (an id of another task, a made-up id, a deleted file)                                          | `no screenshot`   |
-| `old-shot`     | the task's files changed after the shot: its trees differ from the trees now                                                                        | `old screenshot`  |
+| `old-shot`     | the task's files changed after the shot: its trees differ from the trees now, or either could not be read                                           | `old screenshot`  |
 | `ok`           | otherwise: the node's rows are accepted, each `match` or `mismatch` as the agent filled it                                                         | — or `mismatch`   |
 
 - One screenshot per node, so a node that is not `ok` refuses all its rows.

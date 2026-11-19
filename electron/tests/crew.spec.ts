@@ -45,6 +45,15 @@ const launchCrew = async (prefix: string) => {
 	);
 	// The app ships no crew of developers: the person's own crew stands in.
 	await seedOwnCrew(join(root, 'data'));
+	// spec/reviews#plan-start: the foreman's `propose_plan` would start a plan review by a signed-in provider (a third row
+	// in the card); these flows are about the crew.
+	await writeFile(
+		join(root, 'data/settings.json'),
+		JSON.stringify({
+			schemaVersion: 1,
+			settings: { appearance: 'system', language: 'en', planReviewOff: true },
+		})
+	);
 	const app = await electron.launch({
 		executablePath,
 		args: [desktop, `--user-data-dir=${join(root, 'profile')}`],

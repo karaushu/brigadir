@@ -97,9 +97,9 @@ import {
 	taskCount,
 	type AgentTask,
 	type NoteDocument,
-	type MessageKey,
-	type ReadIssueCode,
+	type ReadIssue,
 } from '@brigadir/core';
+import { readIssueLine, readIssuesReport } from './read-issues';
 import { useWorkspace } from './store';
 import { useCommandShortcut } from './ui/use-command-shortcut';
 import { TaskView } from './TaskView';
@@ -135,12 +135,27 @@ const issuesKey = (issues: { path: string; code: string }[]) =>
 		.map((issue) => `${issue.code}:${issue.path}`)
 		.sort()
 		.join('\n');
-const issueLabels: Record<ReadIssueCode, MessageKey> = {
-	invalid_document: 'The file is invalid.',
-	unsupported_schema: 'The file uses a newer schema.',
-	unreadable: 'The file could not be read.',
-	unsafe_path: 'The data location is not allowed.',
-};
+/** spec/architecture-and-platform#read-issues: «Copy the details» copies the issues' paths for a bug report. */
+function ReadIssuesCopy({ issues, locale }: { issues: ReadIssue[]; locale: Locale }) {
+	const [copied, setCopied] = useState(false),
+		timer = useRef(0);
+	useEffect(() => () => clearTimeout(timer.current), []);
+	return (
+		<Button
+			onClick={() => {
+				void window.brigadir.copyText(readIssuesReport(issues)).then(
+					() => {
+						setCopied(true);
+						clearTimeout(timer.current);
+						timer.current = window.setTimeout(() => setCopied(false), 1500);
+					},
+					() => {}
+				);
+			}}>
+			{t(locale, copied ? 'Copied' : 'Copy the details')}
+		</Button>
+	);
+}
 /** A collapsed project's needs-you count pops when it grows, never when it first renders. */
 function ProjectAttention({ count, label }: { count: number; label: string }) {
 	const previous = useRef(count),
@@ -1727,16 +1742,24 @@ export function App() {
 											{/* spec/architecture-and-platform#read-issues: `Esc` hides the strip until the list changes. */}
 											<header data-size="s">
 												<h2>{t(locale, 'Some data could not be read.')}</h2>
+												<ReadIssuesCopy issues={workspace.issues} locale={locale} />
 												<PopupClose
 													locale={locale}
 													close={() => setIssuesHidden(issuesKey(workspace.issues))}
 												/>
 											</header>
-											{workspace.issues.map((issue) => (
-												<p key={issue.path}>
-													{t(locale, issueLabels[issue.code])} <code>{issue.path}</code>
-												</p>
-											))}
+											{/* The project and task by name; the data path stays in the title and in «Copy the details». */}
+											{workspace.issues.map((issue) => {
+												const line = readIssueLine(issue, workspace.projects, workspace.tasks),
+													place = [line.project, line.task].filter(Boolean).join(' › ');
+												return (
+													<p key={`${issue.code}:${issue.path}`} title={issue.path}>
+														{place && <strong>{place}</strong>}
+														{place && ' · '}
+														{t(locale, line.what)}: {t(locale, line.reason)}
+													</p>
+												);
+											})}
 										</section>
 									)}
 								</main>

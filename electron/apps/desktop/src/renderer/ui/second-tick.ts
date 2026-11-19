@@ -45,5 +45,7 @@ export function catchUpClock(at = Date.now()) {
 /** The current time, refreshed every second while `active`; 0 when inactive (the caller has a fixed end). */
 export function useSecondTick(active: boolean): number {
 	if (active) catchUpClock();
-	return useSyncExternalStore(active ? subscribeSecondTick : unsubscribed, active ? current : idle);
+	const snapshot = active ? current : idle;
+	// The same clock for a static render (the cards' markup tests), which has no subscription.
+	return useSyncExternalStore(active ? subscribeSecondTick : unsubscribed, snapshot, snapshot);
 }

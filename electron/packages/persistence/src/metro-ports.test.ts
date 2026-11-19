@@ -27,11 +27,12 @@ it("hands concurrent hosts different ports and keeps each task's port (spec/brow
 		});
 		await forgetMetroPort(root, key('a'));
 		expect((await readMetroPorts(root))['project/a']).toBeUndefined();
-		// A lock left by a host that died goes after 15 s.
+		// A lock left by a host that died goes after 15 s; the next task gets the port `a` gave back. Which of the four hosts took the lock
+		// first is up to the machine, so `a`'s port is whatever it was handed, not necessarily the first one.
 		await writeFile(join(root, 'metro-ports.lock'), '');
 		const old = new Date(Date.now() - 60_000);
 		await utimes(join(root, 'metro-ports.lock'), old, old);
-		expect(await metroPortFor(root, key('e'), '/w/e', { free: async () => true })).toBe(8082);
+		expect(await metroPortFor(root, key('e'), '/w/e', { free: async () => true })).toBe(ports[0]);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

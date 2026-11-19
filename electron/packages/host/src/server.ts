@@ -319,12 +319,11 @@ export async function startHost(config: HostConfig) {
 		planFeedback: async (text, review, round) => {
 			// spec/reviews#plan-loop: a batch of a review the plan's approval ended is not sent.
 			if (!taskReview.planBatchLive(review.id)) return 'dropped';
-			if (foremanTask) {
-				if (await crewHost?.rejectPlanForReview(text)) return 'answered';
-			} else {
-				const pending = [...permissions.values()].find((item) => isPlanApproval(item.request));
-				if (pending) await pending.finish(planRejectOption(pending.request)?.id ?? null);
-			}
+			if (foremanTask && (await crewHost?.rejectPlanForReview(text))) return 'answered';
+			// An Auto task plans like a solo task (`planWaiting`): its plan waits as a plan approval, and with that request
+			// open the turn never ends, so a batch that only queued would never run.
+			const pending = [...permissions.values()].find((item) => isPlanApproval(item.request));
+			if (pending) await pending.finish(planRejectOption(pending.request)?.id ?? null);
 			if (!taskReview.planBatchLive(review.id)) return 'dropped';
 			// With no split waiting (the person rejected it meanwhile) the foreman gets the batch as its next turn too.
 			await command({

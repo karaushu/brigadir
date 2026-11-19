@@ -165,6 +165,8 @@ test('a plan is reviewed before the person approves it @area:review', async ({},
 				status: 'done',
 				provider: 'claude',
 				prompt: 'plan',
+				// spec/crew#auto: the sheet's default. An Auto task is the root of its own crew, and its plan still waits as a plan approval.
+				auto: { budget: { minutes: 40, tokens: 400000 }, roles: [] },
 			},
 		})
 	);

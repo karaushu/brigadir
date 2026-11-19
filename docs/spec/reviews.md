@@ -396,7 +396,7 @@ review. Revise the plan once: fix each finding in the plan, or object to it with
 commentId is the finding's id; then present the plan for approval again with ExitPlanMode, unchanged if you object to every
 finding` (a foreman: `then call propose_plan again with the revised split, …`) `. <reviewer> then checks only whether each finding is closed.` with each
    finding's id, kind, place and text (`- id p1 [missed] (CRM-412 · Notes): …`). `Fix {n}` sends `The person asks you
-to fix N findings of the plan review that are still open…` with the reviewer's reasons. A solo task's waiting plan is answered with its first `reject_once` (else the first
+to fix N findings of the plan review that are still open…` with the reviewer's reasons. The waiting plan of a solo task or an Auto task (it plans like a solo one) is answered with its first `reject_once` (else the first
    `reject_*`, else the request is cancelled), as in [plan chat](chat-turns-plans-and-questions.md#plan-chat), and the batch runs right after the
    turn; a foreman's waiting `propose_plan` returns `approved: false` with the batch as `review` (after its turn ended,
    the batch comes as the decision prompt). With no plan waiting (the person answered it meanwhile, a foreman's split too), the batch only queues, and the turn

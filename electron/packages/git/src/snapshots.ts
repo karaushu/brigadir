@@ -169,6 +169,7 @@ function validateSnapshots(doc: Record<string, unknown>, key: TaskKey) {
 				'user-after',
 				'quick-before',
 				'quick-after',
+				'move',
 			].includes(String(c.reason)) ||
 			!Array.isArray(c.trees)
 		)
@@ -443,7 +444,22 @@ export class Snapshots {
 						: undefined
 				),
 				prior = new Map(scopes.map((scope) => [scope.id, scope]));
-			const next = found.map((scope) => {
+			// spec/diff-and-review#snapshots: a repo keeps the id of its first discovery. After a move into a worktree (spec/tasks#worktree-move)
+			// the copy at the same relative path is the same repo of the task, so its checkpoints and refs go on.
+			const inRoot = (kind: ScopeKind) =>
+					kind === 'root' || kind === 'submodule' || kind === 'nested' || kind === 'worktree',
+				foundIds = new Set(found.map((scope) => scope.id)),
+				byName = new Map(
+					scopes
+						.filter((scope) => inRoot(scope.kind) && !foundIds.has(scope.id))
+						.map((scope) => [scope.name, scope.id])
+				);
+			const next = found.map((discovered) => {
+				const kept =
+					!prior.has(discovered.id) && inRoot(discovered.kind)
+						? byName.get(discovered.name)
+						: undefined;
+				const scope = kept ? { ...discovered, id: kept } : discovered;
 				const choice = launch?.scopes.find((item) => item.name === scope.name);
 				/* spec/projects-and-board#repo-selection: a repo found after setup arrives unselected. */ return {
 					...scope,

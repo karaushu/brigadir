@@ -25,7 +25,9 @@ export type Checkpoint = {
 		| 'user-before'
 		| 'user-after'
 		| 'quick-before'
-		| 'quick-after';
+		| 'quick-after'
+		/** spec/tasks#worktree-move: each repo's `HEAD` tree in the worktree a running task moved into. */
+		| 'move';
 	trees: SnapshotTree[];
 };
 export type SnapshotDocument = { schemaVersion: 1; scopes: Scope[]; checkpoints: Checkpoint[] };

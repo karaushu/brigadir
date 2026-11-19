@@ -33,6 +33,7 @@ git write-tree              # → tree; a snapshot commit is chained to the prev
 | Refs | One tip ref per task and repo, `refs/brigadir-v2/tip/<project>/<task>/<scope>`; snapshot commits form a parent chain, so the tip keeps all of them from `git gc`. Legacy per-checkpoint refs `refs/brigadir-v2/snap/<project>/<task>/<scope>/<n>` are kept only where a commit would otherwise become unreachable. Refs stay when a task or project is deleted (it goes to the Trash and can be restored). |
 | Document | `snapshots.json` in the task folder (`schemaVersion: 1`, `scopes`, `checkpoints`), written by the host only; read cap 32 MiB. |
 | Repo discovery | `.git` is searched to depth 4, including gitignored independent repos; heavy folders and symlinks are skipped; submodules and worktrees are recognised. |
+| Repo identity | A repo's id is fixed at its first discovery in the task. After a [move into a worktree](tasks.md#worktree-move) the copy at the same relative path keeps the id, so its checkpoints, refs and review anchors go on. |
 | No git | A project without any repo still runs the conversation; the panel says `No Git snapshots`. |
 
 A checkpoint is `{id, at, reason, trees[]}`; `reason` is one of:
@@ -45,6 +46,7 @@ A checkpoint is `{id, at, reason, trees[]}`; `reason` is one of:
 | `refresh` | When the repo watcher sees HEAD move (commit, reset, checkout — [Git in users' repos](architecture-and-platform.md#perf-git)) or a repo appear/disappear, and on the panel's refresh button. A HEAD move also emits `scopes.changed`, so the `head` base rereads when the tree did not change. |
 | `user-before` / `user-after` | Around an explicit Save in the built-in editor and around a file revert. |
 | `quick-before` / `quick-after` | Around a quick question's edit. |
+| `move` | When a running task moves into a worktree: each repo's `HEAD` tree in the new working copy, the task's change base from then on ([Tasks](tasks.md#worktree-move)). |
 
 Saving is explicit (no autosave), so the user's own edit is a clean delta between `user-before` and `user-after`.
 

@@ -29,6 +29,7 @@ import {
 	isAutoModelRequest,
 } from './auto';
 import { isTaskProposal, isTaskProposalResult } from './task-proposal';
+import { isWorkspaceMoveFields } from './workspace-move';
 import { isReviewPoint, isTaskReviewWho } from './task-review';
 const starter = (v: unknown) => v === 'person' || v === 'agent' || v === 'host';
 import { isBackgroundId, isBackgroundPath } from './background';
@@ -330,12 +331,16 @@ const checks: Record<string, Check> = {
 	'crew.accepted': object({ taskId: isId, nodeId: isId, name: text, conflicts: array(text) }),
 	'crew.worker.stopped': object({ taskId: isId, nodeId: isId, name: text, reason: text }),
 	'crew.hire.requested': object({ hire: isAutoHire }),
-	'crew.hire.resolved': object({
-		id: isId,
-		approved: bool,
-		parts: nil(array(isAutoHirePart)),
-		hired: array(isAutoHired),
-	}),
+	'crew.hire.resolved': object(
+		{
+			id: isId,
+			approved: bool,
+			parts: nil(array(isAutoHirePart)),
+			hired: array(isAutoHired),
+		},
+		{ reason: (v) => v === 'no-worktree' }
+	),
+	'workspace.move': isWorkspaceMoveFields,
 	'crew.worker.dismissed': object({
 		taskId: isId,
 		nodeId: isId,

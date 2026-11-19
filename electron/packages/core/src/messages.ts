@@ -267,6 +267,17 @@ const uk = {
 	commit: 'коміт',
 	'Edits before hiring': 'Правки перед наймом',
 	'Edits before accepting': 'Правки перед прийняттям',
+	// spec/crew#auto-move: the row of the move into a worktree.
+	workspace: 'середовище',
+	'Moving to a worktree': 'Перенесення у worktree',
+	'Could not move to a worktree': 'Не вдалося перенести у worktree',
+	moved: 'перенесено',
+	'no worktree': 'без worktree',
+	'changed while {agent} worked': 'змінено, поки працював {agent}',
+	'changed while moving': 'змінено під час перенесення',
+	'conflicts with edits made before the task': 'конфлікт із правками до задачі',
+	'ignored by git': 'ігнорує git',
+	'outside git': 'поза git',
 	'over budget': 'понад бюджет',
 	'{used} of {budget}': '{used} з {budget}',
 	zone: 'зона',
@@ -5594,6 +5605,23 @@ export function planPartCountLabel(locale: Locale, count: number): string {
 					form as 'one' | 'few' | 'many' | 'other'
 				] ?? 'частини');
 	return `${new Intl.NumberFormat(locale).format(count)} ${word}`;
+}
+/** spec/crew#auto-move: `2 repos`; a repo does not decline in Ukrainian (docs/glossary.md). */
+export function moveRepoCount(locale: Locale, count: number): string {
+	const n = new Intl.NumberFormat(locale).format(count);
+	return locale === 'en' ? `${n} ${count === 1 ? 'repo' : 'repos'}` : `${n} repo`;
+}
+/** spec/crew#auto-move: `2 paths stayed` in amber on the move's row. */
+export function movePathsStayed(locale: Locale, count: number): string {
+	const n = new Intl.NumberFormat(locale).format(count);
+	if (locale === 'en') return count === 1 ? `${n} path stayed` : `${n} paths stayed`;
+	const form = new Intl.PluralRules('uk').select(count) as 'one' | 'few' | 'many' | 'other';
+	return {
+		one: `${n} шлях лишився`,
+		few: `${n} шляхи лишилися`,
+		many: `${n} шляхів лишилося`,
+		other: `${n} шляху лишилося`,
+	}[form];
 }
 /** spec/chat-turns-plans-and-questions#plan-row: `3 частини для 3 агентів`; the agent count is genitive in uk. */
 export function planSplitLabel(locale: Locale, parts: number, agents: number): string {

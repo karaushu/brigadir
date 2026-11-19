@@ -644,3 +644,36 @@
 .service[data-quiet] {
 	color: var(--fg2);
 }
+/* spec/crew#activity: the move into a worktree — the failure glyph and reason in red, the stayed paths under the row aligned with its
+   label (the row's margin, padding, glyph and gap), monospace 10.5 with the reason in the interface font. */
+.failed {
+	display: inline-flex;
+	flex: none;
+	color: var(--red);
+}
+.service > small.error {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--red);
+}
+.paths {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: -2px 16px 6px 43px;
+	font: var(--text-10-5) / 16px var(--mono-family);
+	color: var(--fg2);
+	min-width: 0;
+}
+.paths > div {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.paths span {
+	font-family: var(--ui-family);
+	color: var(--fg3);
+}

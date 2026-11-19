@@ -55,7 +55,7 @@ The Auto agent has its whole tool set from its first session, so the list never 
 <a id="auto-brief"></a>
 ### The brief (`autoBrief`)
 
-The opposite of a foreman's: you do this task yourself and write the code. Hire only when the task has two or more parts that are independent (each writes its own files, none needs another's result to start) and each is large enough to pay for a session of its own; say on the card what each part is and why the parts are independent. A small task, or one chain of dependent steps, is done from start to end without a plan card and without questions. Then: how to hire (title, role, zone, the estimate of files and lines, the budget when the default does not fit, a prompt that stands on its own and names the command that proves the part); that a refused part stays with the agent; that its edits are committed before a hire and an accept, and that it no longer writes inside a zone it hired out; how reports, returns, `accept_task` and `dismiss_worker` work; the roles it hires from with provider, model and effort, the [model ladder](#model-ladder), and that a model outside the roles needs `request_model`. The role chosen on the sheet ([Role](tasks.md#sheet-role)) comes first, before the Auto brief. A Claude session also gets the plan sentence of a solo session ([Plan approval](chat-turns-plans-and-questions.md#plan-approval)), so a person who asks for a plan first gets one. A task without a worktree is told it cannot hire here ([Isolation](#auto-isolation)).
+The opposite of a foreman's: you do this task yourself and write the code. Hire only when the task has two or more parts that are independent (each writes its own files, none needs another's result to start) and each is large enough to pay for a session of its own; say on the card what each part is and why the parts are independent. A small task, or one chain of dependent steps, is done from start to end without a plan card and without questions. Then: how to hire (title, role, zone, the estimate of files and lines, the budget when the default does not fit, a prompt that stands on its own and names the command that proves the part); that a refused part stays with the agent; that its edits are committed before a hire and an accept, and that it no longer writes inside a zone it hired out; how reports, returns, `accept_task` and `dismiss_worker` work; the roles it hires from with provider, model and effort, the [model ladder](#model-ladder), and that a model outside the roles needs `request_model`. The role chosen on the sheet ([Role](tasks.md#sheet-role)) comes first, before the Auto brief. A Claude session also gets the plan sentence of a solo session ([Plan approval](chat-turns-plans-and-questions.md#plan-approval)), so a person who asks for a plan first gets one. A task without a worktree is told that an approved hire moves it into one ([Moving into a worktree](#auto-move)).
 
 A named crew's foreman keeps its own brief and still writes no code ([Foreman brief](#foreman-brief)).
 
@@ -67,7 +67,7 @@ A named crew's foreman keeps its own brief and still writes no code ([Foreman br
 1. The host checks the parts ([Gates](#auto-gates)). When no part passes, the call returns the refusals and no card shows.
 2. Otherwise it writes `crew-hire.json` `{hire, decision: null}` and journals `crew.hire.requested`; the task goes `needs-you`. The [hire card](chat-turns-plans-and-questions.md#hire-card) waits for the person, with no host-side timeout. The card survives a restart: it comes from the journal, and the decision is kept in `crew-hire.json`.
 3. The person may edit each part's title, role, budget and prompt, then approve (`Hire`, or `Hire {n}` when some parts are refused) or reject (`Do it yourself`). Zones, scopes and estimates are what the gates read and stay as proposed. The gates run again on the decision, against the workers running at that moment.
-4. On approval the host commits the agent's edits ([Commit](#auto-commit)), adds one node per hireable part under the root (the role's resolved node, named after the role, `Developer`, then `Developer 2`, …, the role's name shortened so the number fits 80 characters; its id comes from the hire and the part), writes `task.crew`, and starts one worker task per part ([Workers are tasks](#workers)). The worker's record carries its hire, its part (`planPartId`), budget, zone and the commit it starts from from the moment it is written. `crew.hire.resolved` lists the edited parts (null — as proposed) and the started workers.
+4. On approval (after the [move](#auto-move) for a task without isolation) the host commits the agent's edits ([Commit](#auto-commit)), adds one node per hireable part under the root (the role's resolved node, named after the role, `Developer`, then `Developer 2`, …, the role's name shortened so the number fits 80 characters; its id comes from the hire and the part), writes `task.crew`, and starts one worker task per part ([Workers are tasks](#workers)). The worker's record carries its hire, its part (`planPartId`), budget, zone and the commit it starts from from the moment it is written. `crew.hire.resolved` lists the edited parts (null — as proposed) and the started workers.
    - The decision is recorded only after every worker started. When the host stops in between, the card is still waiting; deciding it again starts only the parts that have no worker yet, reuses their nodes, and does not take the hire's own workers for overlapping zones.
    - A second press while a decision starts workers is refused (`The hire is being decided`).
 5. The tool returns `approved`, the started workers (task id, name, role, title, budget) and the parts that stay with the agent. Declined returns `approved: false`: the agent does the parts itself and goes on alone. When the call is gone (the turn ended, or the host restarted), the decision goes to the agent as a prompt marked `hire-decision`.
@@ -89,7 +89,31 @@ A refused part stays with the agent and does not block the rest: the card shows 
 <a id="auto-isolation"></a>
 ### Isolation
 
-Hiring needs the task in a worktree: workers start from the task's branch. An Auto task on GUI starts in `Worktree` on the sheet ([Tasks](tasks.md#isolation)). An Auto task that runs in the project's checkout works alone: its brief says so, a `hire_workers` call is refused with `Hiring needs this task to run in a worktree…`, and the agent tells the person that the task needs a worktree for hiring. The host keeps that check in one place (`hireIsolation`), where moving a running task into a worktree will plug in.
+Workers start from the task's branch, so a hire needs the task in a worktree. An Auto task on GUI starts in `Worktree` on the sheet ([Tasks](tasks.md#isolation)). An Auto task that runs in the project's checkout hires too: an approved hire first moves the task into a worktree of its own ([Moving into a worktree](#auto-move)). Only a project without a git repository refuses `hire_workers` with `Hiring needs a worktree, and this project has no Git repository…`. While a move runs, another `hire_workers` is refused (`The task is moving into a worktree for the previous hire.`). The host keeps that decision in one place (`hireIsolation`).
+
+<a id="auto-move"></a>
+### Moving into a worktree
+
+When the person approves a hire of a task without isolation, the host moves the task into a worktree before any worker starts.
+
+1. **The decision waits for the turn.** The approval is written to `workspace-move.json` (`{hireId, decision, state: 'pending'}`); the hire's call returns `approved` with `moving: true` and tells the agent to end its turn. The card closes. The move starts when the turn ends (at once when no turn runs, for example when Codex ended the turn with the call open). Until the move ends no prompt starts; the person's messages wait in the queue.
+2. **`Moving to a worktree`.** The host journals `workspace.move` `{state: 'moving'}` with the repos it moves, closes the agent's session, stops the repo watcher and takes a last checkpoint. Background commands and consoles of the task stop with the session.
+3. **The worktree.** Branch: the name derived from the task's title (`suggestedBranch`), with `-2`, `-3`… when any repo already has it. Every repo of the project (root, submodules, nested repos) gets a working copy at its own `HEAD`, the same [preparation](tasks.md#worktree-preparation) as a task isolated from the start, with the task's `.env` copying and setup command. The base shown (`from main`) is the root repo's branch.
+4. **What moves.** Only the task's own changes, read from snapshots, never from `git diff HEAD` ([Diff and review](diff-and-review.md#snapshot-engine)). Per repo, with `B` the tree at the task's start (its change base), `C` the last checkpoint and `H` the repo's `HEAD`, each path changed between `B` and `C`:
+   - equal in `C` and `H` (already committed) — nothing to move;
+   - unchanged between `B` and `H` — moves: the worktree gets `C`'s version;
+   - also changed before the task (`B` differs from `H`) — the task's own change is merged onto `H` (`git merge-file`); a path that does not merge, or is not a text file on all three sides, stays: `conflicts with edits made before the task`;
+   - changed in a checkpoint outside the agent's turns or by an explicit Save of the person (the [attribution](diff-and-review.md#why-changed) rules) — stays: `changed while {agent} worked`.
+   Gitlinks move with their submodule's own repo. A path the agent wrote (its edit tools) that git ignores, or that lies in no repo of the worktree, cannot move and stays: `ignored by git`, `outside git`.
+5. **Checked before anything changes in the project folder.** The host writes the moved paths into the worktree and checks every one against the blob it expects. Any failure up to here removes the new working copies and branches, nothing in the project folder has changed, and the move fails.
+6. **The switch.** `task.launch` becomes `worktree` with the branch and base, `worktreeBranch` and a `ready` preparation are set, `snapshots.json` points its repos at the worktree under the same repo ids and gains a `move` checkpoint (each repo's `HEAD` tree), which becomes `task.changeBase`: the task's diff counts from the worktree's start, so it holds exactly what moved. From here on the task is a worktree task for every reader: files, editor, terminals, diff, reviews, branch and PR.
+7. **The project folder.** Each moved path goes back to its version at the task's start (`B`): the agent's new files are removed, and empty folders they made with them. A path the person changed since the last checkpoint is left as it is (`changed while moving`; its moved version is in the worktree). An index entry the agent staged for a moved path returns to `HEAD`. Edits that were in the project folder before the task stay.
+8. **The session follows.** A Claude session's transcript is copied to the worktree's folder of Claude Code's projects, so `session/load` finds it; then the host restarts itself in the worktree (journal `host.stopped` `moved`) and the agent resumes its session there.
+9. **The hire goes on.** The new host commits the agent's moved edits as its part ([Commit](#auto-commit)), starts the workers from that commit, journals `crew.hire.resolved` and `workspace.move` `{state: 'moved'}` (branch, base, repos, paths that stayed), and prompts the agent (`hire-decision`) with the hire's result, the worktree's path and branch and the paths that stayed. A restart in any step after the switch continues from `workspace-move.json`.
+
+**When the move fails** (the branch, a working copy, the setup command, a write or the check), the changes stay where they were and the task keeps running in the project folder: `workspace.move` `{state: 'failed', message}` journals the reason as git or the step gave it, the hire resolves as not approved with `reason: 'no-worktree'`, and the agent is told to do the parts itself.
+
+The person has no separate action to move a task.
 
 <a id="auto-commit"></a>
 ### The agent's own commit
@@ -497,7 +521,13 @@ The foreman's activity shows crew events as service rows (shared chat row engine
 
 Tool rows use verbs such as `Assigning a part` / `Assigned a part`, `Accepting the part`, `Asking the foreman`, `Answered the worker`, `Reading the crew log`.
 
-An Auto task's activity adds: the [hire card](chat-turns-plans-and-questions.md#hire-card) and its folded row (`crew.hire.requested` / `resolved`), the worker rows of the hire, `crew.worker.dismissed`, `crew.lead.committed`, `crew.budget.exceeded`, `crew.zone.touched`, the [model question card](chat-turns-plans-and-questions.md#model-card) and its row (`crew.model.*`). Turn markers: `hire-decision`, `zone-touched`.
+An Auto task's activity adds: the [hire card](chat-turns-plans-and-questions.md#hire-card) and its folded row (`crew.hire.requested` / `resolved`), the worker rows of the hire, `crew.worker.dismissed`, `crew.lead.committed`, `crew.budget.exceeded`, `crew.zone.touched`, the move into a worktree (`workspace.move`, below), the [model question card](chat-turns-plans-and-questions.md#model-card) and its row (`crew.model.*`). Turn markers: `hire-decision`, `zone-touched`.
+
+The move into a worktree is one service row at the place of its first `workspace.move`, showing the newest state of that move (glyph, `workspace`, then):
+- moving: a spinning glyph, `Moving to a worktree`, the repos (`business · design-tokens`);
+- moved: the worktree glyph, the branch, `from {base}`, `{n} repos`, `moved` in green;
+- some paths stayed: the branch, `from {base}`, `{n} paths stayed` in amber, and under the row each path with its reason (`apps/mobile/.env.local · ignored by git`), monospace 10.5, up to 20 and `{n} more`;
+- failed: the failure glyph in red, `Could not move to a worktree`, the reason in red; the hire's folded row says `Not hired · {agent} does it itself · no worktree`.
 
 Visual specifics of the crew surfaces:
 - the plan card is a chat card (no border, `--lift` shadow, radius 12, `--hair` lines between header, crew, parts and footer); the foreman's brief inside it is chat Markdown one step smaller (12.5/19);
@@ -514,6 +544,7 @@ In the task directory under `~/.brigadir/` (JSON with sorted keys and `schemaVer
 | --- | --- | --- |
 | `crew-plan.json` | foreman/lead | `{plan, decision}`; `decision: null` while pending |
 | `crew-hire.json` | Auto | `{hire, decision}` of the newest hire; `decision: null` while the card waits |
+| `workspace-move.json` | Auto | the move into a worktree: `id`, `hireId`, `decision`, `state` (`pending`, `moving`, `switched`, `moved`, `failed`), `branch`, `base`, `repos`, `moved` (per repo the paths and the blobs at the task's start, for the project folder), `stayed` |
 | `crew-workers.json` | foreman/lead/Auto | `CrewWorkerRecord[]`: `taskId`, `nodeId`, `name`, `title`, `createdAt`, `planPartId`, `acceptedAt?`, `effectiveChoices?`, `unavailableOptions?`, `part?`, `acceptedTips?`, `next?` (`queued \| merging`, `previous`, `heads?`), and for the current part `rounds?`, `limitTold?`; an Auto worker also `hireId`, `planPartId` (its part of the hire), `budget`, `exceededAt?`, `budgetStopped?`, `zone`, `hiredFrom` (repo path → the commit it started from), `dismissedAt?`, `dismissReason?` |
 | `crew-questions.json` | parent | `CrewQuestion[]` (`id`, `workerTaskId`, `parentTaskId`, `callId`, `agent`, `question`, `options`, `createdAt`, `escalateAt`, `state`, `answer?`, `answeredBy?`) |
 | `crew-reviews.json` | parent | `ReviewRun[]` |
@@ -561,7 +592,6 @@ The crew is one task for the [token budget](agents-and-providers.md#task-budget)
 - Per-project additions to the foreman's role brief (global template instructions already add to it).
 - Check edges between different branches of the tree.
 - A reviewer that also owns a part of the code.
-- Moving a running Auto task into a worktree, with its changes, when it hires from the project's checkout.
 - Task classes (small, medium, large) stated by the agent, and the host's threshold that starts a mid-task review on its own.
 - A token counter per task with a pause at a threshold.
 - Asking on `Stop` of a foreman whether to stop its workers too (default yes).

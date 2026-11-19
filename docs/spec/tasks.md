@@ -168,7 +168,7 @@ Storage: for a task that does not exist yet, files go to `drafts/<projectId>/<dr
 
 A worktree task's root is used by the host, files, editor, terminals and snapshots. Managed nested copies keep the source scope's kind; other nested worktrees are not discovered as scopes.
 
-- An `Auto` task on GUI starts in `Worktree` on the sheet when the project has a git repository: hiring workers needs one, since workers start from the task's branch ([Auto](crew.md#auto-isolation)). A project without one starts from Settings ▸ Agents ▸ `Isolation`. The person may pick `No isolation` for a task that will not hire; such a task works alone, and its agent says so when the task would need workers. A CLI task starts from Settings ▸ Agents ▸ `Isolation`.
+- An `Auto` task on GUI starts in `Worktree` on the sheet when the project has a git repository: hiring workers needs one, since workers start from the task's branch ([Auto](crew.md#auto-isolation)). A project without one starts from Settings ▸ Agents ▸ `Isolation`. The person may pick `No isolation`; when such a task hires, the host moves it into a worktree first, with its own changes ([Moving into a worktree](#worktree-move)). A CLI task starts from Settings ▸ Agents ▸ `Isolation`.
 
 <a id="worktree-preparation"></a>
 ### Worktree preparation
@@ -183,6 +183,11 @@ Order is fixed: **root → submodules → nested repos → `.env` copy → setup
 - The setup supervisor kills its process group if the controlling process dies; its kernel identity is recorded before the shell starts, so a retry never overlaps a still-exiting previous command.
 - Removal walks copies in reverse order, leaves source files and branches, refuses to traverse symlinks, and never adopts an unregistered existing folder as its own.
 - `.env` copying: [Git](git.md). An interrupted preparation is recovered at app start.
+
+<a id="worktree-move"></a>
+### Moving a running task into a worktree
+
+An `Auto` task without isolation that hires is moved into a worktree in the middle of the task ([Crew](crew.md#auto-move)): the same preparation as above, each repo from its own `HEAD`, then only the task's own changes (by snapshots) move from the project folder into the copies; what was dirty there before the task stays, and the project folder returns to its state at the task's start. After the switch the task is a worktree task in every respect: `launch.isolation` is `worktree`, the composer and the sidebar card show `Worktree · <branch>`, its diff counts from the worktree's start (`changeBase` = the `move` checkpoint), it holds no repo locks, and `Remove worktree…`, the PR and archiving work as for any worktree task. Nothing else moves a task between isolation modes.
 
 <a id="agent-worktrees"></a>
 ### Worktrees the agent creates

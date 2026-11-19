@@ -149,6 +149,7 @@ The host ends through one stop path that journals `host.stopped` with a reason, 
 | A finished turn | none: the session stays open for the next message | — |
 | Idle for `hostIdleMs` (15 min) | `idle` | unchanged |
 | Host of another app version, at its first moment with nothing running ([auto-update](#auto-update)) | `update` | unchanged |
+| The task moved into a worktree ([Tasks](tasks.md#worktree-move)) | `moved` | unchanged; the host starts the next host at once in the worktree from the same configuration, which resumes the session there; the app attaches to it and reads the task again |
 | Task dir gone or replaced, or socket file gone | `orphaned` | — |
 | All consoles closed on a console-only host with no agent | `console_closed` | — |
 | Crew reviewer whose parts are all accepted and reviews finished | stop | unchanged |
@@ -214,7 +215,7 @@ The agent launches the native `mcp-relay` as its MCP server. It sends a `mcp` ha
       events.jsonl         journal of domain events
       snapshots.json       checkpoint list
       surface.json         task surface state
-      worktree.json  review.json  crew-*.json  attachments/  snap-index-*
+      worktree.json  workspace-move.json  review.json  crew-*.json  attachments/  snap-index-*
       host-config.json  host.json  host.lock  host-owner.guard  host.log
 ```
 

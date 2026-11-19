@@ -178,6 +178,8 @@ function sameToken(a: unknown, b: string) {
 }
 export async function startHost(config: HostConfig) {
 	const store = await SessionStore.at(config.dataDir);
+	// spec/crew#auto-move: a move that stopped while it rewrote the task's documents is finished before anything reads the task's folder.
+	await finishSwitch(store, config.key);
 	let task = await store.task(config.key);
 	const project = await store.projectForTask(config.key);
 	// spec/tasks#quick-tasks: the main tree has no provider; its host runs only consoles, and `startAgent` refuses.
@@ -447,6 +449,7 @@ export async function startHost(config: HostConfig) {
 				? new AutoCrewHost({
 						...deps,
 						app: (method, params) => (ui ? ui.request(method, params) : null),
+						workspace: { hold: holdWorkspace, sessionId: () => sessionId() },
 					})
 				: new CrewHost(deps);
 		await host.start();
@@ -522,6 +525,88 @@ export async function startHost(config: HostConfig) {
 	let sentScopeContext = '';
 	/** spec/projects-and-board#folders-mid-task: a folder joined the task after the adapter negotiated its roots; the next prompt reconnects it first. */
 	let rootsStale = false;
+	/**
+	 * spec/crew#auto-move: work that needs the task with no session, no capture and no watcher — the move into a worktree. It runs once no turn
+	 * runs; returning true stops this host (`moved`) so the next one starts in the new folder.
+	 */
+	type WorkspaceWork = (hold: { capture(): Promise<void>; detach(): void }) => Promise<boolean>;
+	let workspaceDue: WorkspaceWork | null = null,
+		workspaceHeld = false,
+		restartAfterStop = false;
+	function holdWorkspace(work: WorkspaceWork) {
+		workspaceDue = work;
+		setImmediate(() => void runWorkspaceHold());
+	}
+	const sessionId = () => {
+		const started = records.findLast((record) => record.event.kind === 'session.started')?.event;
+		return started?.kind === 'session.started' ? started.sessionId : null;
+	};
+	/** The person's message or a service prompt while the task moves: it waits in the queue for the host in the new folder. */
+	function queueWhileMoving(c: Extract<SessionCommand, { kind: 'prompt' | 'submitReview' }>) {
+		return serialPrompt(async () => {
+			if (queue.prompts.length >= 32) throw new Error('The prompt queue is full');
+			const attachments = await assets.resolve(
+				config.key,
+				c.kind === 'prompt' ? (c.attachmentIds ?? []) : []
+			);
+			const { answersPlan: _answersPlan, ...command } = c as typeof c & { answersPlan?: boolean };
+			await emit({
+				kind: 'prompt.queued',
+				prompt: {
+					id: randomUUID(),
+					command,
+					attachments: attachments.map((value) => value.attachment),
+				},
+			});
+		});
+	}
+	async function runWorkspaceHold() {
+		if (!workspaceDue || workspaceHeld || busy || starting || saving || stopping) return;
+		const work = workspaceDue;
+		workspaceDue = null;
+		workspaceHeld = true;
+		let restart = false;
+		try {
+			await startingAgent?.catch(() => {});
+			stopScopeWatch();
+			stopScopeWatch = () => {};
+			await scopeRefresh.catch(() => {});
+			await saveFinished.catch(() => {});
+			await agentFileTail.catch(() => {});
+			if (transport) {
+				const old = transport;
+				transport = null;
+				old.close();
+				await old.closed.catch(() => {});
+			}
+			restart = await work({
+				capture: async () => {
+					await checkpoint('refresh');
+				},
+				detach: () => {
+					snapshots = null;
+				},
+			});
+		} catch (error) {
+			process.stderr.write(
+				`[host] workspace move failed: ${error instanceof Error ? error.message : String(error)}\n`
+			);
+		} finally {
+			if (restart) {
+				restartAfterStop = true;
+				void stop('moved');
+			} else {
+				// The move failed and the task stays here: the watcher and the agent's session come back, then the queue goes on.
+				workspaceHeld = false;
+				if (!stopping) {
+					startScopeWatch();
+					void ensureAgent()
+						.catch(() => {})
+						.finally(() => kickPrompts());
+				}
+			}
+		}
+	}
 	let queue = promptQueue(records),
 		promptTail: Promise<unknown> = Promise.resolve();
 	let rateTimer: ReturnType<typeof setTimeout> | undefined;
@@ -592,6 +677,11 @@ export async function startHost(config: HostConfig) {
 				for (const item of queue.held) await queueHeld(item);
 				scheduleHeld();
 			}
+			// spec/crew#auto-move: the task is moving into a worktree; the queue waits for the host in the new folder.
+			if (workspaceDue || workspaceHeld) {
+				void runWorkspaceHold();
+				return;
+			}
 			if (
 				busy ||
 				saving ||
@@ -622,7 +712,16 @@ export async function startHost(config: HostConfig) {
 			old.close();
 			await ensureAgent();
 		}
-		if (!transport || !ready || busy || saving || stopping || quotaBlocked())
+		if (
+			!transport ||
+			!ready ||
+			busy ||
+			saving ||
+			stopping ||
+			quotaBlocked() ||
+			workspaceDue ||
+			workspaceHeld
+		)
 			throw new Error('Agent is not available');
 		busy = true;
 		starting = true;
@@ -909,6 +1008,32 @@ export async function startHost(config: HostConfig) {
 		}
 	}
 	let stopScopeWatch = () => {};
+	/** Discovery only when a repo may have appeared or gone; a HEAD change of a known repo snapshots only that repo. */
+	function startScopeWatch() {
+		stopScopeWatch = watchScopes(
+			project.path,
+			(change) => {
+				scopeRefresh = (async () => {
+					await saveFinished;
+					if (stopping) return;
+					const options = snapshots?.refreshOptions(change) ?? {};
+					try {
+						await checkpoint(
+							'refresh',
+							options.scopeIds,
+							options.discover,
+							change.heads.length > 0
+						);
+					} catch (error) {
+						if (!stopping) await emit({ kind: 'snapshot.failed', message: String(error) });
+					}
+				})();
+				return scopeRefresh;
+			},
+			() => snapshots?.current.scopes.map((scope) => scope.path) ?? []
+		);
+	}
+
 	let scopeRefresh: Promise<void> = Promise.resolve();
 	let agentFileTail: Promise<unknown> = Promise.resolve();
 	const agentFiles = new AgentFiles(
@@ -1046,6 +1171,8 @@ export async function startHost(config: HostConfig) {
 	function ensureAgent(allowConflict = false) {
 		if (transport || (task.transport === 'terminal' && terminals.agentAlive()))
 			return Promise.resolve();
+		// spec/crew#auto-move: no session starts in the folder the task is leaving.
+		if (workspaceHeld) return Promise.reject(new Error('The task is moving into a worktree'));
 		if (!startingAgent)
 			startingAgent = startAgent(allowConflict)
 				.catch(async (error) => {
@@ -2270,7 +2397,12 @@ export async function startHost(config: HostConfig) {
 			await startingAgent;
 			if (stopping) throw new Error('Host is stopping');
 		}
-		if (!transport || !ready) throw new Error('Agent is starting');
+		if (!transport || !ready) {
+			// spec/crew#auto-move: while the task moves into a worktree there is no session; messages wait in the queue.
+			if (workspaceHeld && (c.kind === 'prompt' || c.kind === 'submitReview'))
+				return queueWhileMoving(c);
+			throw new Error('Agent is starting');
+		}
 		// spec/chat-turns-plans-and-questions#background-commands: Stop on a background command; the turn, if any, goes on.
 		if (c.kind === 'stopBackground') {
 			if (!liveBackground(records).some((command) => command.id === c.id))
@@ -2377,6 +2509,8 @@ export async function startHost(config: HostConfig) {
 					!queue.prompts.length &&
 					!queue.paused &&
 					!quotaBlocked() &&
+					!workspaceDue &&
+					!workspaceHeld &&
 					!(await budgetBlocks())
 				) {
 					await beginPrompt(own);
@@ -3483,29 +3617,7 @@ export async function startHost(config: HostConfig) {
 			() => {},
 			() => {}
 		);
-		// Discovery only when a repo may have appeared or gone; a HEAD change of a known repo snapshots only that repo.
-		stopScopeWatch = watchScopes(
-			project.path,
-			(change) => {
-				scopeRefresh = (async () => {
-					await saveFinished;
-					if (stopping) return;
-					const options = snapshots?.refreshOptions(change) ?? {};
-					try {
-						await checkpoint(
-							'refresh',
-							options.scopeIds,
-							options.discover,
-							change.heads.length > 0
-						);
-					} catch (error) {
-						if (!stopping) await emit({ kind: 'snapshot.failed', message: String(error) });
-					}
-				})();
-				return scopeRefresh;
-			},
-			() => snapshots?.current.scopes.map((scope) => scope.path) ?? []
-		);
+		startScopeWatch();
 		if (crew && (crew.role === 'foreman' || crew.role === 'lead' || crew.role === 'auto'))
 			crewHost = await crewHostFor(crew);
 		else {
@@ -3556,6 +3668,10 @@ export async function startHost(config: HostConfig) {
 		identity,
 		closed,
 		stop,
+		/** spec/crew#auto-move: the host stopped because the task moved; the process starts the next host in the new folder. */
+		get restart() {
+			return restartAfterStop;
+		},
 		get adapterInfo() {
 			return transport?.info ?? null;
 		},
@@ -3565,3 +3681,4 @@ export async function startHost(config: HostConfig) {
 	};
 }
 import { relayContext } from './relay-context';
+import { finishSwitch } from './workspace-move';

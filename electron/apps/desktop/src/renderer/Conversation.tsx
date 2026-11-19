@@ -121,7 +121,7 @@ import {
 	planPromptFeedback,
 	sessionModeName,
 } from '@brigadir/core';
-import { CrewAnswerRow, CrewEventRow, PlanCard, PlanSummary } from './Crew';
+import { CrewAnswerRow, CrewEventRow, PlanCard, PlanSummary, WorkspaceMoveRow } from './Crew';
 import { HireCard, HireSummary } from './HireCard';
 import { ModelCard } from './ModelCard';
 import { QuickAskLogRow } from './QuickAsk';
@@ -1358,6 +1358,7 @@ export function Conversation({
 						hire={e.hire}
 						parts={resolved.event.parts}
 						approved={resolved.event.approved}
+						noWorktree={resolved.event.reason === 'no-worktree'}
 						hired={resolved.event.hired}
 						at={resolved.at}
 						task={task}
@@ -1476,6 +1477,17 @@ export function Conversation({
 						)}
 					</>
 				);
+			}
+			// spec/crew#activity: the move into a worktree is one row at the place of its first event, showing its newest state.
+			if (e.kind === 'workspace.move') {
+				const same = records.filter(
+					(record) => record.event.kind === 'workspace.move' && record.event.id === e.id
+				);
+				if (same[0]?.seq !== row.record.seq) return null;
+				const newest = same.at(-1)!.event;
+				return newest.kind === 'workspace.move' ? (
+					<WorkspaceMoveRow event={newest} owner={task} locale={locale} />
+				) : null;
 			}
 			if (e.kind === 'crew.report' && e.report.taskId === task.id) return null;
 			if (e.kind === 'crew.worker.created' && e.nodeId.startsWith('review-')) return null;

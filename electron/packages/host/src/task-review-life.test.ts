@@ -752,8 +752,13 @@ describe('the plan review (spec/reviews#plan-review)', () => {
 		const read = await s.life.hooks().planRead(2);
 		expect(read).toMatchObject({ revision: 2, previous: 1, read: 1 });
 		expect(read.diff).toContain('+- edit and delete notes');
+		// spec/reviews#plan-verdict: the first read counts a screen's requests; a closure check raises nothing new.
+		const first = await s.life.hooks().planPrompt('t1', 'r1', 1, 'Codex');
+		expect(first).toContain('more than three requests at once');
+		expect(first).toContain('how many requests a screen fires');
 		const prompt = await s.life.hooks().planPrompt('t1', 'r2', 2, 'Codex');
 		expect(prompt).toContain('closure check');
+		expect(prompt).not.toContain('requests at once');
 		expect(prompt).toContain("Author's objection: The store already serializes saves");
 
 		await s.life.hooks().planVerdict('Codex', 2, {

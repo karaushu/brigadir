@@ -93,6 +93,12 @@ export function findingsText(list: readonly ReviewComment[], reasons = false) {
 }
 
 /**
+ * spec/reviews#requests: the network requests a code review traces (English, rule 12). Part of the finding rule, so a task's own review,
+ * a crew reviewer and a pull request's review crew all carry it.
+ */
+export const requestRule =
+	'Trace the network requests this change adds or alters; skip this when it touches none. For each screen or action, count the requests that fire for one open or one action, and when they fire: on open, on focus, on every render, per list item. Raise a finding when the same data is requested from more than one place; when a request fires per list item, or again on every focus or render with no cache; when requests wait on each other without need; or when one screen fires more than three requests at once, even to different endpoints. In that finding name every call site (path:line), give the count, and propose the change: reuse the existing query or cache, give the request one owner, load a secondary section when it is shown, or ask the back-end for one endpoint.';
+/**
  * spec/reviews#findings: what a finding is, for the reviewer's prompt of a code review (English, rule 12). A wish for more verification is not one;
  * a doubt is checked by the reviewer itself, and a word that needs no fix goes with the approval (spec/reviews#remark). `ownTree`: the reviewer's
  * files are the reviewed change (a task's own review syncs them); a crew reviewer's are not, so it checks through read_diff only.
@@ -101,5 +107,5 @@ export function findingRule(ownTree: boolean): string {
 	const check = ownTree
 		? "read the files of your tree and run commands that change no files (the project's tests or type check, a short script that calls the changed code)"
 		: 'read the whole diff with read_diff and the report; the files of your own tree are not this change, so a command you run there does not test it';
-	return `A finding names something wrong in the change — wrong behaviour, a broken contract, a missed requirement, or work outside the task — with its evidence: the lines and what goes wrong. A wish for more checks, tests or a fuller report is not a finding. When you doubt, check it yourself: ${check}; then report the defect you found, or approve. Something the person should know that needs no fix (a risk to watch, the check you ran) goes in approve's note.`;
+	return `A finding names something wrong in the change — wrong behaviour, a broken contract, a missed requirement, or work outside the task — with its evidence: the lines and what goes wrong. A wish for more checks, tests or a fuller report is not a finding. When you doubt, check it yourself: ${check}; then report the defect you found, or approve. Something the person should know that needs no fix (a risk to watch, the check you ran) goes in approve's note. ${requestRule}`;
 }

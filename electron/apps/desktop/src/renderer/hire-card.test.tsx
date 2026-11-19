@@ -276,6 +276,94 @@ describe('the model question card (spec/chat-turns-plans-and-questions#model-car
 		expect(none).toContain('No other models.');
 		expect(none).toContain('Settings…');
 		expect(none).not.toContain('Use this model');
+		// With nothing else to choose, `Keep {role}` is the primary answer.
+		expect(html.match(/<button[^>]*>Keep Developer/)?.[0]).not.toContain(
+			'data-appearance="primary"'
+		);
+		const noneHtml = renderToStaticMarkup(
+			<ModelQuestion
+				title="t"
+				reason="r"
+				groups={[{ label: 'Codex', rows: [] }]}
+				selected={null}
+				onSelect={() => {}}
+				efforts={null}
+				effort={null}
+				onEffort={() => {}}
+				saveAs={null}
+				onSaveAs={() => {}}
+				keepLabel="Keep Developer"
+				onKeep={() => {}}
+				onUse={() => {}}
+				onSettings={() => {}}
+				disabled={false}
+				locale="en"
+			/>
+		);
+		expect(noneHtml.match(/<button[^>]*>Keep Developer/)?.[0]).toContain(
+			'data-appearance="primary"'
+		);
+		// A provider whose catalog loads waits in its place; the others are listed, and the answer waits.
+		const partial = renderToStaticMarkup(
+			<ModelQuestion
+				title="t"
+				reason="r"
+				groups={[
+					{ label: 'Claude', rows: [{ key: 'claude:opus', name: 'Opus 5.5' }] },
+					{ label: 'Codex', rows: null },
+				]}
+				selected="claude:opus"
+				onSelect={() => {}}
+				efforts={null}
+				effort={null}
+				onEffort={() => {}}
+				saveAs={null}
+				onSaveAs={() => {}}
+				keepLabel="Keep Developer"
+				onKeep={() => {}}
+				onUse={() => {}}
+				onSettings={() => {}}
+				disabled={false}
+				locale="en"
+			/>
+		);
+		expect(text(partial)).toMatch(/Opus 5\.5[^]*Codex[^]*Loading models…[^]*Save as role/);
+		expect(partial.match(/<button[^>]*>Use this model/)?.[0]).toContain('disabled');
+		// It is the question family's card (rule 17).
+		expect(partial).toContain('data-model-question');
+		// Two waiting questions in one chat keep their own radio groups.
+		const two = renderToStaticMarkup(
+			<>
+				{[1, 2].map((n) => (
+					<ModelQuestion
+						key={n}
+						title="t"
+						reason="r"
+						groups={[{ label: 'Claude', rows: [{ key: 'claude:opus', name: 'Opus 5.5' }] }]}
+						selected="claude:opus"
+						onSelect={() => {}}
+						efforts={null}
+						effort={null}
+						onEffort={() => {}}
+						saveAs={null}
+						onSaveAs={() => {}}
+						keepLabel="Keep Developer"
+						onKeep={() => {}}
+						onUse={() => {}}
+						onSettings={() => {}}
+						disabled={false}
+						locale="en"
+					/>
+				))}
+			</>
+		);
+		expect(
+			new Set(
+				[...two.matchAll(/type="radio"[^>]*name="([^"]+)"|name="([^"]+)"[^>]*type="radio"/g)].map(
+					(m) => m[1] ?? m[2]
+				)
+			).size
+		).toBe(2);
 	});
 });
 describe('a worker row of an Auto crew (spec/sidebar#crew-card)', () => {

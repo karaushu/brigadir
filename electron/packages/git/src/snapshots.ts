@@ -300,6 +300,10 @@ export class Snapshots {
 	get current() {
 		return this.document;
 	}
+	/** Resolves once no capture runs (spec/crew#auto-move: the move writes the document after the last one). */
+	settled(): Promise<void> {
+		return this.tail.then(() => {});
+	}
 	/** The caller owns host.lock. Preserve unrelated flags and managed/source identities by name. */
 	setScope(update: ScopeUpdate) {
 		const result = this.tail.then(async () => {

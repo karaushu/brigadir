@@ -944,7 +944,7 @@ describe('spec/crew#auto-move: a hire moves a task without isolation into a work
 				const point = await snapshots.capture('refresh');
 				events.push({ kind: 'checkpoint.created', checkpoint: point!.id });
 			},
-			detach: () => {},
+			detach: async () => {},
 		});
 		expect(restart).toBe(true);
 		const moved = await store.task(task);
@@ -1028,7 +1028,7 @@ describe('spec/crew#auto-move: a hire moves a task without isolation into a work
 			capture: async () => {
 				await snapshots.capture('refresh');
 			},
-			detach: () => {},
+			detach: async () => {},
 		});
 		expect(restart).toBe(false);
 		expect(events.findLast((event) => event.kind === 'workspace.move')).toMatchObject({

@@ -1,4 +1,18 @@
-import { mkdtemp, readdir, readlink, rm, rmdir, stat, writeFile } from 'node:fs/promises';
+import {
+	chmod,
+	copyFile,
+	lstat,
+	mkdir,
+	mkdtemp,
+	readdir,
+	readlink,
+	rename,
+	rm,
+	rmdir,
+	stat,
+	symlink,
+	writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -69,8 +83,8 @@ async function mergeOnto(cwd: string, base: string, head: string, current: strin
 				maxBytes: 512 * 1024 * 1024,
 			});
 		} catch (error) {
-			if (error instanceof GitError && error.code !== null && error.code > 0 && error.code < 128)
-				return null;
+			// Conflicts, and files git does not merge (binary), stay where they are.
+			if (error instanceof GitError && error.code !== null) return null;
 			throw error;
 		}
 		const oid = await gitText(cwd, ['hash-object', '-w', '--no-filters', '--stdin'], {
@@ -210,9 +224,10 @@ export async function writeRepoMove(worktree: string, plan: RepoMovePlan): Promi
 	].map((item) => item.path);
 }
 /**
- * spec/crew#auto-move: after the switch, each moved path of the project folder goes back to its version at the task's start. A path that
- * no longer holds the last checkpoint's version was changed by the person meanwhile: it stays as it is and is returned. An index entry the
- * agent staged for a moved path returns to `HEAD`; folders left empty by removed files go too.
+ * spec/crew#auto-move: after the switch, each moved path of the project folder goes back to its version at the task's start. Git writes
+ * the start versions into a folder of its own first; then each path is checked right before it is replaced in one rename, so a version
+ * the person saved meanwhile stays (it is returned) and no path is ever missing half-way. An index entry the agent staged for a moved path
+ * (its `git add` or `git rm`) returns to `HEAD`; folders left empty by removed files go too.
  */
 export async function restoreProjectRepo(
 	repo: string,
@@ -220,23 +235,63 @@ export async function restoreProjectRepo(
 	moved: RepoMovePlan['moved']
 ): Promise<string[]> {
 	if (!moved.length) return [];
-	const now = await entryOf(
-			repo,
-			moved.map((item) => item.path)
-		),
-		changed: string[] = [],
-		back: typeof moved = [];
-	for (const item of moved)
-		if (same(now.get(item.path), item.current)) back.push(item);
-		else changed.push(item.path);
-	const writes = back.flatMap((item) =>
-		item.base ? [{ path: item.path, mode: item.base.mode, oid: item.base.oid }] : []
+	const stage = await mkdtemp(
+		join(await gitText(repo, ['rev-parse', '--absolute-git-dir']), 'brigadir-restore-')
 	);
-	await checkout(repo, baseTree, writes);
-	const removed = back.filter((item) => !item.base).map((item) => item.path);
-	for (const path of removed) await rm(await leaf(repo, path), { force: true });
-	// The agent's own `git add` of a moved path: the person's index returns to HEAD for it.
-	const staged: { path: string; mode: string; oid: string }[] = [];
+	const changed: string[] = [],
+		back: typeof moved = [],
+		removed: string[] = [];
+	try {
+		const writes = moved.flatMap((item) =>
+			item.base ? [{ path: item.path, mode: item.base.mode, oid: item.base.oid }] : []
+		);
+		if (writes.length)
+			await scratchIndex(async (env) => {
+				await gitText(repo, ['read-tree', baseTree], { env });
+				await gitText(repo, ['update-index', '-z', '--index-info'], {
+					env,
+					input: writes.map((item) => `${item.mode} ${item.oid}\t${item.path}\0`).join(''),
+				});
+				await gitText(repo, ['checkout-index', '-f', '-z', '--stdin', `--prefix=${stage}/`], {
+					env,
+					input: writes.map((item) => `${item.path}\0`).join(''),
+				});
+			});
+		for (const item of moved) {
+			const now = (await entryOf(repo, [item.path])).get(item.path);
+			// Restored already, by a run that stopped half-way: only its index entry may be left.
+			if (same(now, item.base)) {
+				back.push(item);
+				continue;
+			}
+			if (!same(now, item.current)) {
+				changed.push(item.path);
+				continue;
+			}
+			const target = await leaf(repo, item.path);
+			if (item.base) {
+				const from = join(stage, item.path),
+					next = `${target}.brigadir-restore`;
+				await mkdir(dirname(target), { recursive: true });
+				await rm(next, { force: true });
+				const info = await lstat(from);
+				if (info.isSymbolicLink()) await symlink(await readlink(from), next);
+				else {
+					await copyFile(from, next);
+					await chmod(next, info.mode & 0o777);
+				}
+				await rename(next, target);
+			} else {
+				await rm(target, { force: true });
+				removed.push(item.path);
+			}
+			back.push(item);
+		}
+	} finally {
+		await rm(stage, { recursive: true, force: true });
+	}
+	// The agent's own `git add` or `git rm` of a moved path: the person's index returns to HEAD for it.
+	const staged = new Map<string, MoveEntry>();
 	for (let i = 0; i < back.length; i += 200)
 		for (const line of (
 			await git(repo, [
@@ -252,11 +307,11 @@ export async function restoreProjectRepo(
 			.filter(Boolean)) {
 			const tab = line.indexOf('\t');
 			const [mode, oid] = line.slice(0, tab).split(' ');
-			staged.push({ path: line.slice(tab + 1), mode: mode!, oid: oid! });
+			staged.set(line.slice(tab + 1), { mode: mode!, oid: oid! });
 		}
 	const resets = back.filter((item) => {
-		const entry = staged.find((value) => value.path === item.path);
-		return item.current && entry && entry.oid === item.current.oid && !same(entry, item.head);
+		const entry = staged.get(item.path) ?? null;
+		return (entry?.oid ?? null) === (item.current?.oid ?? null) && !same(entry, item.head);
 	});
 	if (resets.length)
 		await gitText(repo, ['update-index', '-z', '--index-info'], {
@@ -264,7 +319,7 @@ export async function restoreProjectRepo(
 				.map((item) =>
 					item.head
 						? `${item.head.mode} ${item.head.oid}\t${item.path}\0`
-						: `0 ${'0'.repeat(item.current!.oid.length)}\t${item.path}\0`
+						: `0 ${'0'.repeat(40)}\t${item.path}\0`
 				)
 				.join(''),
 		});

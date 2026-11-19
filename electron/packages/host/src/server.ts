@@ -178,10 +178,7 @@ function sameToken(a: unknown, b: string) {
 }
 export async function startHost(config: HostConfig) {
 	const store = await SessionStore.at(config.dataDir);
-	// spec/crew#auto-move: a move that stopped while it rewrote the task's documents is finished before anything reads the task's folder.
-	await finishSwitch(store, config.key);
 	let task = await store.task(config.key);
-	const project = await store.projectForTask(config.key);
 	// spec/tasks#quick-tasks: the main tree has no provider; its host runs only consoles, and `startAgent` refuses.
 	if (!task.provider && !config.consoleOnly) throw new Error('Task has no provider');
 	const release = await acquireOwner(
@@ -189,8 +186,13 @@ export async function startHost(config: HostConfig) {
 		config.key,
 		join(dirname(config.mcpEntry), 'process-owner')
 	);
+	let project: Awaited<ReturnType<SessionStore['projectForTask']>>;
 	try {
+		// spec/crew#auto-move: a move that stopped while it rewrote the task's documents is finished by the task's owner, before anything reads
+		// the task's folder.
+		await finishSwitch(store, config.key);
 		task = await store.task(config.key);
+		project = await store.projectForTask(config.key);
 	} catch (error) {
 		await release();
 		throw error;
@@ -449,7 +451,7 @@ export async function startHost(config: HostConfig) {
 				? new AutoCrewHost({
 						...deps,
 						app: (method, params) => (ui ? ui.request(method, params) : null),
-						workspace: { hold: holdWorkspace, sessionId: () => sessionId() },
+						workspace: { hold: holdWorkspace, gate: gateWorkspace, sessionId: () => sessionId() },
 					})
 				: new CrewHost(deps);
 		await host.start();
@@ -529,10 +531,25 @@ export async function startHost(config: HostConfig) {
 	 * spec/crew#auto-move: work that needs the task with no session, no capture and no watcher — the move into a worktree. It runs once no turn
 	 * runs; returning true stops this host (`moved`) so the next one starts in the new folder.
 	 */
-	type WorkspaceWork = (hold: { capture(): Promise<void>; detach(): void }) => Promise<boolean>;
+	type WorkspaceWork = (hold: {
+		capture(): Promise<void>;
+		detach(): Promise<void>;
+	}) => Promise<boolean>;
 	let workspaceDue: WorkspaceWork | null = null,
 		workspaceHeld = false,
+		/** spec/crew#auto-move: the host in the new folder finishes the hire before any prompt starts. */
+		workspaceGate = false,
+		workspaceTask: Promise<void> = Promise.resolve(),
 		restartAfterStop = false;
+	function gateWorkspace(work: Promise<void>) {
+		workspaceGate = true;
+		void work
+			.catch(() => {})
+			.finally(() => {
+				workspaceGate = false;
+				kickPrompts();
+			});
+	}
 	function holdWorkspace(work: WorkspaceWork) {
 		workspaceDue = work;
 		setImmediate(() => void runWorkspaceHold());
@@ -560,16 +577,23 @@ export async function startHost(config: HostConfig) {
 			});
 		});
 	}
-	async function runWorkspaceHold() {
+	function runWorkspaceHold() {
 		if (!workspaceDue || workspaceHeld || busy || starting || saving || stopping) return;
 		const work = workspaceDue;
 		workspaceDue = null;
 		workspaceHeld = true;
+		// stop() waits for the move, so the host never lets go of the task in the middle of it.
+		workspaceTask = holdWorkspaceNow(work);
+		return workspaceTask;
+	}
+	async function holdWorkspaceNow(work: WorkspaceWork) {
 		let restart = false;
 		try {
 			await startingAgent?.catch(() => {});
 			stopScopeWatch();
 			stopScopeWatch = () => {};
+			// Consoles of the task stop with the session: nothing writes into the folder while it is captured and restored.
+			terminals.closeAll();
 			await scopeRefresh.catch(() => {});
 			await saveFinished.catch(() => {});
 			await agentFileTail.catch(() => {});
@@ -583,8 +607,12 @@ export async function startHost(config: HostConfig) {
 				capture: async () => {
 					await checkpoint('refresh');
 				},
-				detach: () => {
+				detach: async () => {
+					// No capture runs after this one ends: the moved task's snapshot document is written only by the move.
+					const current = snapshots;
 					snapshots = null;
+					await toolCapture.catch(() => {});
+					await current?.settled();
 				},
 			});
 		} catch (error) {
@@ -594,7 +622,7 @@ export async function startHost(config: HostConfig) {
 		} finally {
 			if (restart) {
 				restartAfterStop = true;
-				void stop('moved');
+				setImmediate(() => void stop('moved'));
 			} else {
 				// The move failed and the task stays here: the watcher and the agent's session come back, then the queue goes on.
 				workspaceHeld = false;
@@ -682,6 +710,7 @@ export async function startHost(config: HostConfig) {
 				void runWorkspaceHold();
 				return;
 			}
+			if (workspaceGate) return;
 			if (
 				busy ||
 				saving ||
@@ -720,7 +749,8 @@ export async function startHost(config: HostConfig) {
 			stopping ||
 			quotaBlocked() ||
 			workspaceDue ||
-			workspaceHeld
+			workspaceHeld ||
+			workspaceGate
 		)
 			throw new Error('Agent is not available');
 		busy = true;
@@ -2150,6 +2180,15 @@ export async function startHost(config: HostConfig) {
 		return null;
 	}
 	async function command(c: SessionCommand) {
+		// spec/crew#auto-move: nothing captures or changes the task's repos while it moves into a worktree.
+		if (
+			workspaceHeld &&
+			(c.kind === 'checkpoint' ||
+				c.kind === 'quickAsk' ||
+				c.kind === 'setScope' ||
+				c.kind === 'addScope')
+		)
+			throw new Error('The task is moving into a worktree');
 		// spec/architecture-and-platform#auto-update: a mark, not activity — it waits for nothing and does not restart the idle clock.
 		if (c.kind === 'retire') {
 			retiring = true;
@@ -2511,6 +2550,7 @@ export async function startHost(config: HostConfig) {
 					!quotaBlocked() &&
 					!workspaceDue &&
 					!workspaceHeld &&
+					!workspaceGate &&
 					!(await budgetBlocks())
 				) {
 					await beginPrompt(own);
@@ -3033,6 +3073,8 @@ export async function startHost(config: HostConfig) {
 					await file.close();
 				}
 			}
+			if ((method === 'revert_file' || method === 'save_file') && workspaceHeld)
+				throw new Error('The task is moving into a worktree');
 			if (method === 'revert_file' && isRecord(params) && isFileId(params.fileId)) {
 				const range = params.range;
 				if (
@@ -3174,6 +3216,9 @@ export async function startHost(config: HostConfig) {
 	async function stop(reason = 'shutdown') {
 		if (stopping) return closed;
 		stopping = true;
+		// spec/crew#auto-move: a move that runs finishes (or fails and rolls back) before the host lets go of the task.
+		await workspaceTask.catch(() => {});
+		if (restartAfterStop) reason = 'moved';
 		for (const held of heldSaves.values()) held.reject(new Error('Host is stopping'));
 		heldSaves.clear();
 		clearTimeout(rateTimer);

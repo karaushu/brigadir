@@ -73,6 +73,8 @@ export type MoveDocument = {
 	stayed?: WorkspaceStayed[];
 	restored?: boolean;
 	message?: string;
+	/** A Claude session whose transcript follows the task into the worktree's folder. */
+	sessionId?: string;
 };
 export const moveFile = 'workspace-move.json';
 const moveDocumentBytes = 64 * 1024 * 1024;
@@ -434,7 +436,19 @@ export async function prepareMove(deps: MoveDeps, doc: MoveDocument): Promise<Mo
 		base,
 		from: project.path,
 		to,
-		launch: { ...kept, isolation: 'worktree', branch, baseRef: base },
+		// Discovery in a worktree knows its copies by the names in `launch.scopes`: every moved repo is named there, with its kind.
+		launch: {
+			...kept,
+			isolation: 'worktree',
+			branch,
+			baseRef: base,
+			scopes: [
+				...kept.scopes,
+				...scopes
+					.filter((scope) => !kept.scopes.some((choice) => choice.name === scope.name))
+					.map(({ id: scopeId, name, kind, selected }) => ({ id: scopeId, name, kind, selected })),
+			],
+		},
 		checkpoint: { id, at: new Date().toISOString(), reason: 'move', trees },
 		moves,
 		stayed: stayed.slice(0, workspaceStayedLimit),
@@ -469,6 +483,8 @@ export async function applySwitch(store: SessionStore, key: TaskKey, doc: MoveDo
 		preparation: { state: 'ready', step: 'ready' },
 		changeBase: checkpoint.id,
 	});
+	// spec/crew#auto-move, step 8: part of the switch, so a host that finishes a half-written switch copies it too before the session loads.
+	if (doc.sessionId) await copyClaudeTranscript(from, to, doc.sessionId);
 	await saveMove(store, key, { ...doc, state: 'switched' });
 	return { ...doc, state: 'switched' as const };
 }

@@ -422,6 +422,34 @@ describe('every exit of the loop (spec/reviews#loop)', () => {
 	});
 });
 
+describe('the reviewer’s name (spec/reviews#who)', () => {
+	// Seen live: the second review of a task journaled `started` with `Codex` while its reviewer was `Codex 2` everywhere else.
+	it('the record, the journal and request_review name the reviewer as the crew named it', async () => {
+		const host = {
+			checkSelf: async () => {},
+			replySelf: async () => {},
+			stopSelf: async () => {},
+			selfTrees: async () => [{ scopeId: 's1', tree: tree('a') }],
+		};
+		const { life, records, doc } = await setup({
+			crew: async (_start, named) => {
+				named?.(['Codex 2']);
+				return host;
+			},
+			existing: () => host,
+		});
+		const answer = await life.request({
+			point: 'mid',
+			startedBy: 'agent',
+			reason: 'the data layer',
+		});
+		expect(answer).toEqual({ started: true, reviewer: 'Codex 2' });
+		expect(doc().review?.reviewers).toEqual(['Codex 2']);
+		expect(
+			records.find((record) => record.event.kind === 'task-review.started')?.event
+		).toMatchObject({ reviewers: ['Codex 2'] });
+	});
+});
 describe('the agent asks for a review (spec/reviews#request-tool)', () => {
 	it('the host starts it at once while the agent works, and refuses a second one or one with nothing new', async () => {
 		let checkpoints = 0;

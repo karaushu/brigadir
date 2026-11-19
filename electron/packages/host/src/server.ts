@@ -365,7 +365,7 @@ export async function startHost(config: HostConfig) {
 			].join('');
 		},
 		part: async () => (crewWorker ? ((await readPartBrief())?.part ?? null) : null),
-		crew: async (start): Promise<CrewHost> => {
+		crew: async (start, named): Promise<CrewHost> => {
 			const current = await store.task(config.key),
 				existing = current.crew ?? current.reviewCrew,
 				reviewers = taskReviewers(
@@ -373,6 +373,7 @@ export async function startHost(config: HostConfig) {
 					`review-${Date.now().toString(36)}`,
 					existing ? specAgents(existing.root).map((agent) => agent.name) : [taskReviewRootName]
 				);
+			named?.(reviewers.map((agent) => agent.name));
 			if (foremanTask && crewHost && current.crew) {
 				const spec = {
 					...current.crew,

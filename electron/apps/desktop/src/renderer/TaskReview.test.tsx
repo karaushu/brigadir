@@ -7,7 +7,8 @@ import {
 	type TaskReviewCommentRow,
 	type TaskReviewView,
 } from '@brigadir/core';
-import { ReviewStripView, retryReview, reviewStripState } from './TaskReview';
+import { ReviewEventRow, ReviewStripView, retryReview, reviewStripState } from './TaskReview';
+import type { EventRecord, SessionEvent } from '@brigadir/core';
 
 /** spec/reviews#strip: the strip's row in every state, from props only. */
 const task = { projectId: 'p', id: 't', title: 'Client screen', provider: 'claude' } as AgentTask;
@@ -300,5 +301,116 @@ describe('Retry (spec/reviews#strip)', () => {
 		const b = bridge();
 		await retryReview(task, { point: 'mid', state: 'failed' }, b as never);
 		expect(b.calls).toEqual(['start mid']);
+	});
+});
+
+/** spec/reviews#class-row: the class row, a changed class, a hire's raise and the tripwire's review row. */
+describe('class rows', () => {
+	const row = (event: SessionEvent, locale: 'en' | 'uk' = 'en', auto = false) =>
+		renderToStaticMarkup(
+			<ReviewEventRow
+				task={{
+					...task,
+					...(auto ? { auto: { roles: [], budget: { minutes: 40, tokens: 400_000 } } } : {}),
+				}}
+				record={{ schemaVersion: 1, seq: 1, at: '2026-11-19T10:00:00.000Z', event } as EventRecord}
+				locale={locale}
+			/>
+		);
+	const text = (html: string) =>
+		html
+			.replace(/<[^>]+>/g, ' ')
+			.replace(/\s+/g, ' ')
+			.trim();
+	it('states the class as a pill with its reason and what it adds', () => {
+		const html = row({
+			kind: 'task.class',
+			class: 'small',
+			reason: 'one screen, no contract change',
+			by: 'agent',
+		});
+		expect(html).toContain('data-dot-pill="green"');
+		expect(text(html)).toBe('class Small one screen, no contract change review before PR');
+		expect(
+			text(row({ kind: 'task.class', class: 'medium', reason: 'ticket CRM-412', by: 'agent' }))
+		).toBe('class Medium ticket CRM-412 plan · plan review');
+		expect(
+			text(
+				row(
+					{ kind: 'task.class', class: 'large', reason: 'API and screen apart', by: 'agent' },
+					'uk',
+					true
+				)
+			)
+		).toBe('клас Велика API and screen apart план · ревʼю · воркери');
+	});
+	it('a changed class shows both pills; a hire reads hires workers; the tripwire has no row of its own', () => {
+		const changed = row(
+			{
+				kind: 'task.class',
+				class: 'large',
+				reason: '',
+				by: 'host',
+				previous: 'small',
+				cause: 'hire',
+			},
+			'en',
+			true
+		);
+		expect(changed).toContain('data-dot-pill="green"');
+		expect(changed).toContain('data-dot-pill="yellow"');
+		expect(text(changed)).toBe('class Small → Large hires workers plan · reviews · workers');
+		expect(
+			row({
+				kind: 'task.class',
+				class: 'medium',
+				reason: '',
+				by: 'host',
+				previous: 'small',
+				cause: 'threshold',
+				files: 16,
+				lines: 620,
+			})
+		).toBe('');
+	});
+	it("the tripwire's review row names the size and says more than a small task", () => {
+		const html = row({
+			kind: 'task-review.started',
+			id: 'r1',
+			point: 'mid',
+			startedBy: 'host',
+			reviewers: ['Codex'],
+			threshold: { files: 14, lines: 620 },
+		});
+		expect(text(html)).toBe(
+			'review mid-task Codex · 14 files · 620 lines more than a small task started'
+		);
+		expect(
+			text(
+				row(
+					{
+						kind: 'task-review.started',
+						id: 'r1',
+						point: 'mid',
+						startedBy: 'host',
+						reviewers: ['Codex'],
+						threshold: { files: 14, lines: 621 },
+					},
+					'uk'
+				)
+			)
+		).toBe('ревʼю посеред задачі Codex · 14 файлів · 621 рядок більше за малу задачу почалося');
+		expect(
+			text(
+				row({
+					kind: 'task-review.started',
+					id: 'r2',
+					point: 'mid',
+					startedBy: 'host',
+					reviewers: ['Codex'],
+					hired: true,
+				})
+			)
+		).toBe('review mid-task Codex · after the hired parts started');
 	});
 });

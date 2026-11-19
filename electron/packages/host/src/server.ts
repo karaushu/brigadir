@@ -93,6 +93,7 @@ import {
 	type CrewAssignment,
 	type TaskKey,
 	type UserQuestion,
+	changeSize,
 } from '@brigadir/core';
 import {
 	readOnlyChanges,
@@ -144,6 +145,7 @@ import {
 	type CrewContext,
 } from './crew';
 import { TaskReviewLife, ownReviewCrew, ownReviewTool, type PresentedPlan } from './task-review';
+import { TaskClassLife, readSmallTaskLimit } from './task-class';
 import { saveTaskSource } from './task-sources';
 import {
 	assignmentBlock,
@@ -401,6 +403,25 @@ export async function startHost(config: HostConfig) {
 			return crewHost;
 		},
 	});
+	/** spec/reviews#classes: a solo task or an Auto agent that writes code has a class; a foreman, a worker and a reviewer have none. */
+	const classTask = (!crew || crew.role === 'auto') && task.readOnlyAgent !== true;
+	const taskClass = new TaskClassLife({
+		records: () => records,
+		emit: (event) => emit(event),
+		eligible: classTask,
+		readOnly: task.readOnlyAgent === true,
+		auto: autoTask,
+		provider: task.provider ?? 'claude',
+		limit: () => readSmallTaskLimit(store.root),
+		size: () => readChanges(store, config.key).then((value) => changeSize(value.files)),
+		// spec/reviews#tripwire: the start of `request_review`; it fired when it recorded a review (running, or failed with no reviewer).
+		start: async (input) => {
+			const before = taskReview.document().review?.id;
+			await taskReview.request(input).catch(() => null);
+			return taskReview.document().review?.id !== before;
+		},
+		stopping: () => stopping,
+	});
 	/** spec/crew#parts: a crew worker's current part as its crew host saved it. */
 	async function readPartBrief() {
 		try {
@@ -475,6 +496,7 @@ export async function startHost(config: HostConfig) {
 		commands: modules.current().commands && Boolean(project.commands?.length),
 		tools: modules.current(),
 		cli: task.transport === 'terminal',
+		...(classTask ? { classes: autoTask ? ('auto' as const) : ('solo' as const) } : {}),
 	});
 	const scopeLocks = new ScopeLocks(
 		store,
@@ -1469,6 +1491,8 @@ export async function startHost(config: HostConfig) {
 					}
 				}
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
+			// spec/reviews#tripwire, spec/reviews#class-raise, spec/reviews#large-review
+			if (!stopping) classEvent(event);
 			// spec/reviews#plan-start: a presented plan starts its review or answers one; an approval ends it.
 			if (!stopping) planEvent(event);
 			if (crewWorker && event.kind === 'turn.completed' && !stopping)
@@ -1485,6 +1509,13 @@ export async function startHost(config: HostConfig) {
 				});
 		});
 		return result;
+	}
+	/** spec/reviews#classes: a new checkpoint arms the tripwire's check; an approved hire raises the class; a dismissal may bring the hired parts back. */
+	function classEvent(event: SessionEvent) {
+		if (event.kind === 'checkpoint.created') void taskClass.checkpoint().catch(() => {});
+		if (event.kind === 'crew.hire.resolved' && event.approved && event.hired.length)
+			void taskClass.hired().catch(() => {});
+		if (event.kind === 'crew.worker.dismissed') void taskClass.dismissed().catch(() => {});
 	}
 	/** The plan requests the review has heard of: the journal row and the waiting request come in either order (the transport writes the row first). */
 	const presentedPlans = new Set<string>();
@@ -2767,6 +2798,8 @@ export async function startHost(config: HostConfig) {
 				throw new Error('commentId and text are required');
 			return taskReview.reply(params.commentId, params.text);
 		}
+		// spec/reviews#class-tool
+		if (method === 'set_task_class') return taskClass.set(params);
 		// spec/reviews#request-tool: the host decides and runs a mid-task review; the agent works on.
 		if (method === 'request_review') {
 			if (task.readOnlyAgent === true) throw new Error('This task changes no code to review.');

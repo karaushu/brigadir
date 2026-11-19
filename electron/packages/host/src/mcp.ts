@@ -112,6 +112,8 @@ const whenToUse: Record<string, string> = {
 		'Use it when the person asks you to send, hand over or tell something to another task. Never use your own messaging or agent tools for Brigadir tasks: they do not reach them.',
 	review_reply:
 		'Call it only for a finding of a review batch of this task, when you do not fix it as asked.',
+	set_task_class:
+		'Call it once, after you read the task and the code it touches and before your first edit; call it again only when the task turns out larger or smaller.',
 	request_review:
 		'Call it after you finish a layer that other work builds on, such as the data layer, a shared API, a schema or a migration, before you build on top of it. Do not call it after small steps or at the end of the task: the review before the pull request covers that.',
 	propose_review:
@@ -292,6 +294,17 @@ const humanTools: Tool[] = [
 			"Ask Brigadir for a mid-task review of this task's changes by another agent. Brigadir decides: it refuses while a review of the task runs, when nothing changed since the last review, or when no reviewer is available. A started review reads the task's state now, so keep working; its findings arrive later as a review batch: fix each one once, or object to it with review_reply. reason: what you just finished, e.g. 'the data layer'. Returns started: true with the reviewer, or started: false with the reason.",
 		shape: { reason: z.string().trim().min(1).max(500) },
 		run: async (args, call, signal) => text(await call('request_review', args, signal)),
+	},
+	// spec/reviews#class-tool: the agent states the task's class; the answer says what the class needs next.
+	{
+		name: 'set_task_class',
+		description:
+			"State this task's class in Brigadir: small (one chain of steps, no contract change), medium (a source ticket or contract, or the data layer, an API or migrations are touched) or large (workers are going to be hired, or the work comes in layers that other work builds on). The person sees it in the chat. reason: one line on why, e.g. 'one screen, no contract change'. Returns the class and next: what the class needs from you now — follow it.",
+		shape: {
+			class: z.enum(['small', 'medium', 'large']),
+			reason: z.string().trim().min(1).max(200),
+		},
+		run: async (args, call, signal) => text(await call('set_task_class', args, signal)),
 	},
 	// spec/reviews#save-source: the plan's author saves the ticket or contract text, so a reviewer on any provider reads the same version.
 	{
@@ -929,6 +942,8 @@ export function mcpTools(
 		const module = toolModule(tool.name);
 		return (
 			(!module || modules[module]) &&
+			// spec/reviews#classes: a named crew's foreman has no class — its split gets the plan review.
+			!(role === 'foreman' && tool.name === 'set_task_class') &&
 			(humanToolsAllowed(role) ||
 				isWorkspaceTool(tool.name) ||
 				// spec/reviews#points: a crew developer's part is a task with reviews of its own.

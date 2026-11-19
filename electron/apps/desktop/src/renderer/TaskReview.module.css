@@ -295,3 +295,19 @@
 .planState[data-state='yours'] > .count:first-of-type {
 	color: var(--amber);
 }
+/* spec/reviews#class-row: the class row places its pills in the label; the arrow of a changed class is --fg3. */
+.classLine {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.classArrow {
+	color: var(--fg3) !important;
+}
+.classReason {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 0 1 auto !important;
+}

@@ -39,6 +39,7 @@ import {
 import { AccentPicker } from './ui/AccentPicker';
 import { SettingsOption, SettingsRow, SettingsSection } from './SettingsForm';
 import { AutoSettings } from './AutoSettings';
+import { ReviewSettings } from './ReviewSettings';
 import { type RemoteDialog, type RemotePart } from './RemoteSettings';
 import styles from './LayoutSettings.module.css';
 import { SkeletonRows } from './ui/Loading';
@@ -714,6 +715,15 @@ export function LayoutSettings({
 									</SettingsSection>
 									{/* spec/crew#auto-model, spec/crew#auto-budget: Settings ▸ Agents ▸ Auto. */}
 									<AutoSettings
+										settings={snapshot.settings}
+										locale={locale}
+										busy={busy}
+										update={(patch) => {
+											void update(patch);
+										}}
+									/>
+									{/* spec/reviews#tripwire: Settings ▸ Agents ▸ Reviews. */}
+									<ReviewSettings
 										settings={snapshot.settings}
 										locale={locale}
 										busy={busy}

@@ -141,7 +141,8 @@ it('names the tools in the brief of Codex and the CLI only, built from the modul
 // spec/agents-and-providers#tools-awareness: the whole first-prompt brief of a solo agent, a foreman and a worker, with every module on, as goldens.
 it('keeps the briefs of a solo agent, a foreman and a worker as goldens (spec/agents-and-providers#tools-awareness)', async () => {
 	const options = { commands: true, tools: allOn };
-	await expect(sessionBrief(null, 'codex', options)).toMatchFileSnapshot(
+	// spec/reviews#classes: a solo agent that writes code states its class before its first edit.
+	await expect(sessionBrief(null, 'codex', { ...options, classes: 'solo' })).toMatchFileSnapshot(
 		'../fixtures/briefs/solo-codex.txt'
 	);
 	await expect(sessionBrief(foreman, 'codex', options)).toMatchFileSnapshot(

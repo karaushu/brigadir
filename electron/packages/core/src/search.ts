@@ -525,6 +525,13 @@ export const settingDefinitions: readonly SettingDefinition[] = [
 			raw(`${s.auto.partBudget.minutes} min · ${Math.round(s.auto.partBudget.tokens / 1000)}k`),
 	},
 	{
+		id: 'reviews-small-task',
+		tab: 'agents',
+		section: 'Reviews',
+		label: key('Small task limit'),
+		value: (s) => raw(`${s.reviews.smallTask.files} · ${s.reviews.smallTask.lines}`),
+	},
+	{
 		id: 'helper-agent',
 		tab: 'agents',
 		section: 'Agents',

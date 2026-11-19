@@ -30,6 +30,7 @@ import {
 } from './auto';
 import { isTaskProposal, isTaskProposalResult } from './task-proposal';
 import { isReviewPoint, isTaskReviewWho } from './task-review';
+import { isTaskClass } from './task-class';
 const starter = (v: unknown) => v === 'person' || v === 'agent' || v === 'host';
 import { isBackgroundId, isBackgroundPath } from './background';
 type Check = (v: unknown) => boolean;
@@ -288,7 +289,20 @@ const checks: Record<string, Check> = {
 	}),
 	'task-review.started': object(
 		{ id: isId, point: isReviewPoint, startedBy: starter, reviewers: array(text) },
-		{ reason: text }
+		{
+			reason: text,
+			threshold: object({ files: number, lines: number }),
+			hired: (v) => v === true,
+		}
+	),
+	'task.class': object(
+		{ class: isTaskClass, reason: text, by: (v) => v === 'agent' || v === 'host' },
+		{
+			previous: isTaskClass,
+			cause: (v) => v === 'threshold' || v === 'hire',
+			files: number,
+			lines: number,
+		}
 	),
 	'task-review.findings': object(
 		{

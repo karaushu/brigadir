@@ -17,6 +17,7 @@ import {
 	type AutoModelRequest,
 } from './auto';
 import type { CrewDismissReason } from './crew-runtime';
+import type { TaskClass, TaskClassCause } from './task-class';
 import {
 	isCrewPlan,
 	isCrewPlanDecision,
@@ -136,6 +137,10 @@ export type SessionEvent =
 			startedBy: TaskReviewStarter;
 			reviewers: string[];
 			reason?: string;
+			/** spec/reviews#tripwire: the host started it because a small task grew past its limit. */
+			threshold?: { files: number; lines: number };
+			/** spec/reviews#large-review: the host started it because a Large task's hired parts are back. */
+			hired?: boolean;
 	  }
 	| {
 			kind: 'task-review.findings';
@@ -177,6 +182,17 @@ export type SessionEvent =
 			/** spec/reviews#plan-loop: the plan's approval ended the review with this many findings open. */
 			approval?: boolean;
 			open?: number;
+	  }
+	/** spec/reviews#classes: the agent stated the task's class, or the host raised it (a hire, the tripwire). */
+	| {
+			kind: 'task.class';
+			class: TaskClass;
+			reason: string;
+			by: 'agent' | 'host';
+			previous?: TaskClass;
+			cause?: TaskClassCause;
+			files?: number;
+			lines?: number;
 	  }
 	/** spec/reviews#save-source: the author saved a ticket, spec or contract next to the plan. */
 	| { kind: 'source.saved'; id: string; title: string; url?: string; chars: number }

@@ -236,6 +236,50 @@ async function setup(patch: Partial<TaskReviewDeps> = {}) {
 	};
 }
 
+describe('the design check of a review (spec/reviews#design)', () => {
+	it('reads the design source and the design reviews of the task and of this reviewer; a plan review has none', async () => {
+		const link = 'https://www.figma.com/design/AbC/Client?node-id=412-88';
+		const h = await setup({ designLinks: async () => [link] });
+		const filed = (reviewId?: string) => ({
+			id: 'd1',
+			screen: 'Details screen',
+			at: new Date().toISOString(),
+			state: 'passed',
+			verdict: 'passed',
+			...(reviewId ? { reviewId } : {}),
+			trees: [{ scopeId: 's1', tree: tree('a') }],
+			nodes: [
+				{
+					name: 'Header',
+					figma: '412:88',
+					state: 'ok',
+					rows: [{ property: 'Avatar', expected: '56 px', actual: '56 px', match: true }],
+				},
+			],
+		});
+		await mkdir(join(await h.store.taskDir(h.key), 'design'), { recursive: true });
+		await atomicJson(join(await h.store.taskDir(h.key), 'design', 'design-reviews.json'), {
+			schemaVersion: 1,
+			reviews: [filed()],
+		});
+		const reviewerKey = { projectId: h.key.projectId, id: 'reviewer-task' };
+		await mkdir(join(await h.store.taskDir(reviewerKey), 'design'), { recursive: true });
+		await atomicJson(join(await h.store.taskDir(reviewerKey), 'design', 'design-reviews.json'), {
+			schemaVersion: 1,
+			reviews: [filed('run-1'), filed('run-0')],
+		});
+		await h.life.start(start());
+		const input = await h.life.hooks().design!('reviewer-task', 'run-1', [{ tree: tree('a') }]);
+		expect(input).toMatchObject({ links: [link], round: [{ tree: tree('a') }] });
+		expect(input!.own.map((review) => review.id)).toEqual(['d1']);
+		expect(input!.reviewer.map((review) => review.reviewId)).toEqual(['run-1']);
+		// A plan review has no design check.
+		const plan = await setup({ designLinks: async () => [link] });
+		plan.state.plan = { kind: 'approval', id: 'p1', revision: 1, text: 'The plan' };
+		await plan.life.start(start({ point: 'plan' } as Partial<StartReview>));
+		expect(await plan.life.hooks().design!('reviewer-task', 'run-1', [])).toBe(null);
+	});
+});
 describe('every exit of the loop (spec/reviews#loop)', () => {
 	it('a clean pass: the first read finds nothing', async () => {
 		const h = await setup();

@@ -134,6 +134,7 @@ describe('TaskClassLife (spec/reviews#classes)', () => {
 	it('the tripwire fires once past the limit, raises the class to Medium and starts the review with the size (spec/reviews#tripwire)', async () => {
 		const size = { files: 1, lines: 5 };
 		const { value, records, starts } = life({ size });
+		await value.start();
 		await value.set({ class: 'small', reason: 'one file' });
 		await value.checkpoint();
 		expect(starts).toEqual([]);
@@ -166,7 +167,10 @@ describe('TaskClassLife (spec/reviews#classes)', () => {
 			size: { files: 9, lines: 9 },
 			start: () => accept,
 		});
+		// The first check runs once the host loaded the review's record.
 		await value.checkpoint();
+		expect(starts).toEqual([]);
+		await value.start();
 		expect(starts).toHaveLength(1);
 		expect(classes(records)).toEqual([]);
 		accept = true;
@@ -186,17 +190,19 @@ describe('TaskClassLife (spec/reviews#classes)', () => {
 		]);
 		const medium = life({ size: { files: 9, lines: 9 } });
 		await medium.value.set({ class: 'medium', reason: 'an API' });
-		await medium.value.checkpoint();
+		await medium.value.start();
 		expect(medium.starts).toEqual([]);
 	});
 	it('no class and no tripwire for a task that has none (a foreman, a worker, a reviewer)', async () => {
 		const { value, starts } = life({ eligible: false, size: { files: 9, lines: 900 } });
+		await value.start();
 		await value.checkpoint();
 		expect(starts).toEqual([]);
 		await expect(value.set({ class: 'small', reason: 'x' })).rejects.toThrow('not available');
 	});
 	it('a hire makes an Auto task Large; when its parts are back the host starts a mid-task review once (spec/reviews#large-review)', async () => {
 		const { value, records, starts, emit } = life({ auto: true });
+		await value.start();
 		await value.set({ class: 'small', reason: 'one screen' });
 		await emit({
 			kind: 'crew.hire.resolved',
@@ -236,6 +242,78 @@ describe('TaskClassLife (spec/reviews#classes)', () => {
 		// A second hire raises nothing: the task is Large already.
 		await value.hired();
 		expect(classes(records).filter((event) => event.cause === 'hire')).toHaveLength(1);
+	});
+	it('a refused hired-parts start is not tried again for that hire', async () => {
+		const { value, starts, emit } = life({ auto: true, start: () => false });
+		await value.start();
+		await emit({
+			kind: 'crew.hire.resolved',
+			id: 'h1',
+			approved: true,
+			parts: null,
+			hired: [{ partId: 'p1', taskId: 'w1', name: 'Developer', role: 'Developer' }],
+		});
+		await value.hired();
+		await emit({
+			kind: 'crew.worker.dismissed',
+			taskId: 'w1',
+			nodeId: 'w1',
+			name: 'Developer',
+			title: 'Part',
+			reason: 'accepted',
+		});
+		await Promise.all([value.dismissed(), value.dismissed()]);
+		expect(starts).toHaveLength(1);
+	});
+	it('a host that stopped mid-way pays what it owes at its start: the tripwire raise, the hire raise, the hired-parts review', async () => {
+		// The tripwire's review started, the host stopped before the raise.
+		const tripped = life();
+		await tripped.emit({ kind: 'task.class', class: 'small', reason: 'one file', by: 'agent' });
+		await tripped.emit({
+			kind: 'task-review.started',
+			id: 'r0',
+			point: 'mid',
+			startedBy: 'host',
+			reviewers: ['Codex'],
+			threshold: { files: 16, lines: 40 },
+		});
+		await tripped.value.start();
+		await tripped.value.start();
+		expect(classes(tripped.records).filter((event) => event.by === 'host')).toEqual([
+			{
+				kind: 'task.class',
+				class: 'medium',
+				reason: '',
+				by: 'host',
+				previous: 'small',
+				cause: 'threshold',
+				files: 16,
+				lines: 40,
+			},
+		]);
+		expect(tripped.starts).toEqual([]);
+		// A hire was approved and its only worker accepted while the host was down.
+		const hired = life({ auto: true });
+		await hired.emit({
+			kind: 'crew.hire.resolved',
+			id: 'h1',
+			approved: true,
+			parts: null,
+			hired: [{ partId: 'p1', taskId: 'w1', name: 'Developer', role: 'Developer' }],
+		});
+		await hired.emit({
+			kind: 'crew.worker.dismissed',
+			taskId: 'w1',
+			nodeId: 'w1',
+			name: 'Developer',
+			title: 'Part',
+			reason: 'accepted',
+		});
+		await hired.value.start();
+		expect(classes(hired.records)).toEqual([
+			{ kind: 'task.class', class: 'large', reason: '', by: 'host', cause: 'hire' },
+		]);
+		expect(hired.starts).toEqual([{ point: 'mid', startedBy: 'host', reason: '', hired: true }]);
 	});
 });
 

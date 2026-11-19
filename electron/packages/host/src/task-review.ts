@@ -61,6 +61,11 @@ const cut = (value: string) =>
 export type StartReview = Extract<SessionCommand, { kind: 'startReview' }>;
 /** spec/reviews#tripwire, spec/reviews#large-review: what a host start of a mid-task review carries into its `task-review.started`. */
 export type ReviewTrigger = { threshold?: { files: number; lines: number }; hired?: boolean };
+type ReviewRequest = {
+	point: ReviewPoint;
+	startedBy: TaskReviewStarter;
+	reason: string;
+} & ReviewTrigger;
 /** spec/reviews#points: the roles whose task has reviews of its own — a solo task, a foreman, a crew developer (its part is a task). */
 const ownReviewRoles: readonly (string | null)[] = [null, 'foreman', 'developer'];
 /** spec/reviews#request-tool: `request_review` and `review_reply` belong to a task with reviews of its own. */
@@ -298,18 +303,28 @@ export class TaskReviewLife {
 	 * spec/reviews#request-tool: the agent, or the host (the tripwire, a Large task's hired parts), asks for a review; the host decides — refuses while one lives or when nothing
 	 * changed, resolves the reviewer, records a review that could not start, else starts it.
 	 */
-	request(
-		input: { point: ReviewPoint; startedBy: TaskReviewStarter; reason: string } & ReviewTrigger
-	) {
-		return this.serial(async () => {
+	request(input: ReviewRequest) {
+		return this.serial(async () => (await this.ask(input)).answer);
+	}
+	/** spec/reviews#tripwire, spec/reviews#large-review: the host's own start — true only when this call recorded a review (running, or failed
+	 *  for want of a reviewer), decided inside the serial step so a review another caller started meanwhile never counts. */
+	requestByHost(input: ReviewRequest & { startedBy: 'host' }) {
+		return this.serial(async () => (await this.ask(input)).recorded);
+	}
+	private async ask(input: ReviewRequest): Promise<{
+		answer: { started: boolean; reviewer?: string; reason?: string };
+		recorded: boolean;
+	}> {
+		const refuse = (reason: string) => ({ answer: { started: false, reason }, recorded: false });
+		{
 			if (taskReviewLive(this.doc.review))
-				return { started: false, reason: 'A review of this task is already running.' };
+				return refuse('A review of this task is already running.');
 			// The agent may have written through its own shell since the last checkpoint: look at the files now.
 			await this.deps.checkpoint().catch(() => {});
 			if (!(await this.deps.changes()) || !(await this.changedSinceLast()))
-				return { started: false, reason: 'Nothing changed since the last review.' };
+				return refuse('Nothing changed since the last review.');
 			const resolved = await this.deps.resolve(input.point);
-			if ('off' in resolved) return { started: false, reason: 'Reviews are off.' };
+			if ('off' in resolved) return refuse('Reviews are off.');
 			const command: StartReview =
 				'failure' in resolved
 					? {
@@ -333,10 +348,14 @@ export class TaskReviewLife {
 					...(input.hired ? { hired: true } : {}),
 				}
 			);
-			return review.reviewers.length && !('failure' in resolved)
-				? { started: true, reviewer: review.reviewers.join(', ') }
-				: { started: false, reason: 'failure' in resolved ? resolved.failure : '' };
-		});
+			return {
+				answer:
+					review.reviewers.length && !('failure' in resolved)
+						? { started: true, reviewer: review.reviewers.join(', ') }
+						: { started: false, reason: 'failure' in resolved ? resolved.failure : '' },
+				recorded: true,
+			};
+		}
 	}
 	/** The task's trees differ from every tree an earlier review read: something is left to review. */
 	private async changedSinceLast() {

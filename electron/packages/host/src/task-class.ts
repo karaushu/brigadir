@@ -2,6 +2,8 @@ import {
 	classBelow,
 	hiredPartsBack,
 	isTaskClass,
+	newestHire,
+	owedRaise,
 	overSmallTask,
 	runningHires,
 	smallTaskLimitOf,
@@ -76,6 +78,10 @@ export function classNext(
 export class TaskClassLife {
 	private tail: Promise<unknown> = Promise.resolve();
 	private queued = false;
+	/** Checks wait for the review's record: a tripwire before it loads could miss a review that lives. */
+	private ready = false;
+	/** spec/reviews#large-review: the hires whose hired-parts review this host tried; a refused start is not tried again. */
+	private tried = new Set<string>();
 	constructor(private deps: TaskClassDeps) {}
 	private serial<T>(work: () => Promise<T>): Promise<T> {
 		const result = this.tail.catch(() => {}).then(work);
@@ -116,9 +122,24 @@ export class TaskClassLife {
 			};
 		});
 	}
-	/** After each new checkpoint: the tripwire. Checks coalesce — one waits behind the running one. */
+	/**
+	 * After the host loaded the task's review: what a host that stopped mid-way still owes — the class raise of a tripwire or a hire, the
+	 * hired-parts review — then the first tripwire check.
+	 */
+	start() {
+		if (!this.deps.eligible) return Promise.resolve();
+		this.ready = true;
+		return this.serial(async () => {
+			const owed = owedRaise(this.deps.records());
+			if (owed && (owed.cause === 'threshold' || this.deps.auto)) await this.deps.emit(owed);
+		}).then(async () => {
+			if (this.deps.auto) await this.dismissed();
+			await this.checkpoint();
+		});
+	}
+	/** After each new checkpoint of the agent's work: the tripwire. Checks coalesce — one waits behind the running one. */
 	checkpoint() {
-		if (!this.deps.eligible || this.queued || !tripwireArmed(this.deps.records()))
+		if (!this.deps.eligible || !this.ready || this.queued || !tripwireArmed(this.deps.records()))
 			return Promise.resolve();
 		this.queued = true;
 		return this.serial(async () => {
@@ -168,8 +189,18 @@ export class TaskClassLife {
 		if (!this.deps.eligible || !this.deps.auto) return Promise.resolve();
 		return this.serial(async () => {
 			const records = this.deps.records();
-			if (this.deps.stopping() || taskClassOf(records) !== 'large' || !hiredPartsBack(records))
+			const hire = newestHire(records);
+			if (
+				!this.ready ||
+				this.deps.stopping() ||
+				!hire ||
+				hire.event.kind !== 'crew.hire.resolved' ||
+				this.tried.has(hire.event.id) ||
+				taskClassOf(records) !== 'large' ||
+				!hiredPartsBack(records)
+			)
 				return;
+			this.tried.add(hire.event.id);
 			await this.deps.start({ point: 'mid', startedBy: 'host', reason: '', hired: true });
 		});
 	}

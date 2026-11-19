@@ -519,9 +519,10 @@ A Small task, or a task with no class, that grows past the limit gets a mid-task
   for want of a reviewer, fires it: the host journals `task.class` (`medium`, `by: host`, `cause: threshold`, `files`,
   `lines`). The review reads at once while the agent works on; its findings reach the agent as the batch of the loop.
 - **Once per task.** A fired tripwire never fires again, after a restart too: the journal holds the raise and the
-  review's start.
+  review's start. A host that stopped between the two journals the raise when it starts again; its checks begin once it
+  has loaded the task's review record.
 - **Which tasks:** a task whose class is Small or none and which has a class at all ([above](#classes)): a solo task or an
-  Auto task that writes code. Not a foreman, a worker, a reviewer, or a task that writes no code.
+  Auto task that writes code. Not a foreman, a worker, a reviewer, a task that writes no code, or the main tree.
 
 <a id="large-review"></a>
 
@@ -530,8 +531,9 @@ A Small task, or a task with no class, that grows past the limit gets a mid-task
 - The agent asks for it with `request_review` after a layer other work builds on; its brief and `next` say so.
 - In an Auto task the host starts one by itself when the hired parts are back: the last running worker of the task is
   dismissed, at least one part was accepted since the newest approved hire, and no mid-task review started since that
-  hire (`startedBy: host`, `hired: true`). The same start and refusals as the tripwire's; a refused start is not tried
-  again for that hire.
+  hire (`startedBy: host`, `hired: true`). The same start and refusals as the tripwire's; a host tries it once per hire,
+  and a host that starts after the parts came back while it was down tries it then. The hire's raise to Large is caught up
+  the same way.
 
 <a id="class-row"></a>
 

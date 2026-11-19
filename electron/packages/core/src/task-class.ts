@@ -1,5 +1,5 @@
 import type { ChangedFile } from './changes';
-import type { EventRecord } from './session';
+import type { EventRecord, SessionEvent } from './session';
 import { isRecord } from './workspace';
 /**
  * spec/reviews#classes: the task's class — what the agent states before its first edit, what the host raises, and the tripwire's size of a
@@ -87,6 +87,59 @@ export const tripwireArmed = (records: readonly EventRecord[]) => {
 	const current = taskClassOf(records);
 	return (current === null || current === 'small') && !tripwireFired(records);
 };
+/** The newest approved hire that started a worker. */
+export const newestHire = (records: readonly EventRecord[]) =>
+	records.findLast(
+		(record) =>
+			record.event.kind === 'crew.hire.resolved' &&
+			record.event.approved &&
+			record.event.hired.length > 0
+	);
+/**
+ * spec/reviews#class-raise: what a host that stopped mid-way still owes the class — the tripwire's raise after its review started, and the
+ * hire's raise after an approved hire.
+ */
+export function owedRaise(
+	records: readonly EventRecord[]
+): Extract<SessionEvent, { kind: 'task.class' }> | null {
+	const current = taskClassOf(records);
+	const started = records.find(
+		(record) => record.event.kind === 'task-review.started' && !!record.event.threshold
+	)?.event;
+	const raised = records.some(
+		(record) => record.event.kind === 'task.class' && record.event.cause === 'threshold'
+	);
+	if (started?.kind === 'task-review.started' && started.threshold && !raised)
+		return {
+			kind: 'task.class',
+			class: 'medium',
+			reason: '',
+			by: 'host',
+			...(current ? { previous: current } : {}),
+			cause: 'threshold',
+			files: started.threshold.files,
+			lines: started.threshold.lines,
+		};
+	const hire = newestHire(records);
+	if (
+		hire &&
+		current !== 'large' &&
+		!records.some(
+			(record) =>
+				// Any class after the hire settled it: the raise, or the agent's own class once its workers were gone.
+				record.seq > hire.seq && record.event.kind === 'task.class'
+		)
+	)
+		return {
+			kind: 'task.class',
+			class: 'large',
+			reason: '',
+			by: 'host',
+			...(current ? { previous: current } : {}),
+			cause: 'hire',
+		};
+	return null;
+}
 /** Workers hired by the task that are not dismissed yet. */
 export function runningHires(records: readonly EventRecord[]): string[] {
 	const hired = new Set<string>(),
@@ -103,12 +156,7 @@ export function runningHires(records: readonly EventRecord[]): string[] {
  * review started since that hire.
  */
 export function hiredPartsBack(records: readonly EventRecord[]): boolean {
-	const hire = records.findLast(
-		(record) =>
-			record.event.kind === 'crew.hire.resolved' &&
-			record.event.approved &&
-			record.event.hired.length > 0
-	);
+	const hire = newestHire(records);
 	if (!hire || runningHires(records).length) return false;
 	const after = records.filter((record) => record.seq > hire.seq);
 	return (

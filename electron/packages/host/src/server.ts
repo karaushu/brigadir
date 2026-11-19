@@ -94,6 +94,7 @@ import {
 	type TaskKey,
 	type UserQuestion,
 	changeSize,
+	isMainTree,
 } from '@brigadir/core';
 import {
 	readOnlyChanges,
@@ -404,7 +405,8 @@ export async function startHost(config: HostConfig) {
 		},
 	});
 	/** spec/reviews#classes: a solo task or an Auto agent that writes code has a class; a foreman, a worker and a reviewer have none. */
-	const classTask = (!crew || crew.role === 'auto') && task.readOnlyAgent !== true;
+	const classTask =
+		(!crew || crew.role === 'auto') && task.readOnlyAgent !== true && !isMainTree(config.key);
 	const taskClass = new TaskClassLife({
 		records: () => records,
 		emit: (event) => emit(event),
@@ -415,11 +417,7 @@ export async function startHost(config: HostConfig) {
 		limit: () => readSmallTaskLimit(store.root),
 		size: () => readChanges(store, config.key).then((value) => changeSize(value.files)),
 		// spec/reviews#tripwire: the start of `request_review`; it fired when it recorded a review (running, or failed with no reviewer).
-		start: async (input) => {
-			const before = taskReview.document().review?.id;
-			await taskReview.request(input).catch(() => null);
-			return taskReview.document().review?.id !== before;
-		},
+		start: (input) => taskReview.requestByHost(input).catch(() => false),
 		stopping: () => stopping,
 	});
 	/** spec/crew#parts: a crew worker's current part as its crew host saved it. */
@@ -1221,6 +1219,9 @@ export async function startHost(config: HostConfig) {
 		if (captured && captured.id !== lastCheckpoint) {
 			await emit({ kind: 'checkpoint.created', checkpoint: captured.id });
 			lastCheckpoint = captured.id;
+			// spec/reviews#tripwire: a new checkpoint of the agent's work (every fifth tool, each turn end) is a tripwire check.
+			if ((reason === 'tools' || reason === 'turn') && !stopping)
+				void taskClass.checkpoint().catch(() => {});
 		}
 		if (checkReadOnly && snapshots && captured)
 			for (const violation of await readOnlyChanges(snapshots.current.scopes, before, captured))
@@ -1510,9 +1511,8 @@ export async function startHost(config: HostConfig) {
 		});
 		return result;
 	}
-	/** spec/reviews#classes: a new checkpoint arms the tripwire's check; an approved hire raises the class; a dismissal may bring the hired parts back. */
+	/** spec/reviews#classes: an approved hire raises the class; a dismissal may bring the hired parts back. */
 	function classEvent(event: SessionEvent) {
-		if (event.kind === 'checkpoint.created') void taskClass.checkpoint().catch(() => {});
 		if (event.kind === 'crew.hire.resolved' && event.approved && event.hired.length)
 			void taskClass.hired().catch(() => {});
 		if (event.kind === 'crew.worker.dismissed') void taskClass.dismissed().catch(() => {});
@@ -3547,6 +3547,8 @@ export async function startHost(config: HostConfig) {
 			if (spec) crewHost = await crewHostFor(selfContext(spec));
 		}
 		await taskReview.load();
+		// spec/reviews#classes: the class checks start once the review's record is loaded.
+		void taskClass.start().catch(() => {});
 		// spec/reviews#plan-review: a root foreman's split that still waits after a restart.
 		if (foremanTask && !crew?.parentKey) {
 			const requested = records.findLast((record) => record.event.kind === 'crew.plan.requested');

@@ -1077,3 +1077,39 @@ describe('fixes of an independent review of the plan review', () => {
 		expect((await readdir(dir)).sort()).toEqual([entry!.file, 'sources.json'].sort());
 	});
 });
+
+describe('the host starts a mid-task review (spec/reviews#tripwire, spec/reviews#large-review)', () => {
+	it('reads at once while the agent works, with the size on its start, and counts only a review this call recorded', async () => {
+		let checkpoints = 0;
+		const h = await setup({
+			checkpoint: async () => {
+				checkpoints++;
+			},
+		});
+		h.state.busy = true;
+		expect(
+			await h.life.requestByHost({
+				point: 'mid',
+				startedBy: 'host',
+				reason: '',
+				threshold: { files: 16, lines: 400 },
+			})
+		).toBe(true);
+		expect(checkpoints).toBe(1);
+		// The agent's turn still runs and the round already opened on the checkpoint: no wait for the turn's end.
+		expect(h.state.checks).toBe(1);
+		expect(h.doc().review).toMatchObject({ point: 'mid', startedBy: 'host', state: 'reading' });
+		expect(h.records[0]!.event).toEqual({
+			kind: 'task-review.started',
+			id: h.doc().review!.id,
+			point: 'mid',
+			startedBy: 'host',
+			reviewers: ['Codex'],
+			threshold: { files: 16, lines: 400 },
+		});
+		// A review that lives (here its own; the agent's would be the same) makes a second host start record nothing.
+		expect(
+			await h.life.requestByHost({ point: 'mid', startedBy: 'host', reason: '', hired: true })
+		).toBe(false);
+	});
+});

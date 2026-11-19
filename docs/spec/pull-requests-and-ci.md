@@ -33,7 +33,7 @@ A task spans several git roots, so **one task → up to N PRs**, one per GitHub 
 
 **No background polling of GitHub**, with two explicit exceptions: an open CI surface with a live run ([CI refresh](#ci-refresh)) and the run bell ([bell](#ci-bell)).
 
-- Reads happen on task or repo selection, window focus, a click (badge, Refresh) and after Brigadir's own actions. Turn events and checkpoints refresh only local git (2 s debounce).
+- Reads happen on task or repo selection, window focus, a click (badge, Refresh) and after Brigadir's own actions. Turn events and checkpoints refresh only local git (2 s debounce), except the first refresh of a task with no GitHub answer yet ([GitHub status](#github-status)).
 - Main-process cache (see [Forge cache](architecture-and-platform.md)): auth 5 min, repo metadata (`gh repo view`) 10 min stale-while-revalidate (a default-branch change shows within ≤10 min), branch PR / PR details / PR list / PR detail 20 s, CI runs 5 s. `fresh` bypasses the cache.
 - PR panel reads use **one GraphQL query per repo list and one per PR** (viewer, review threads, `statusCheckRollup`, files, commits). Limits: 100 open + 30 recently closed PRs per repo, 100 files, 100 threads × 50 comments, 100 commits per PR.
 - Main keeps the **last read PR** beyond the 20 s TTL and beyond `forget()` of own actions: PR files, the PR tree and `Viewed` need only node id, head/base SHA and branch names. Only a newer read replaces it; an older read answering later never overwrites it.

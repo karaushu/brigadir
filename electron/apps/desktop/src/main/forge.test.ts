@@ -555,6 +555,8 @@ it('spec/pull-requests-and-ci#github-status: the first local read after preparat
 		await mkdir(repo);
 		await gitText(repo, ['init', '-b', 'main']);
 		await gitText(repo, ['remote', 'add', 'origin', 'https://github.com/example/repo.git']);
+		await gitText(repo, ['config', 'user.name', 'Fixture']);
+		await gitText(repo, ['config', 'user.email', 'fixture@example.invalid']);
 		await gitText(repo, ['commit', '--allow-empty', '-m', 'first']);
 		const store = await SessionStore.at(join(dir, 'data')),
 			project = await store.addProject(repo),

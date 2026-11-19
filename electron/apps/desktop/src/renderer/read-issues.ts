@@ -32,7 +32,8 @@ export function readIssueLine(
 	projects: readonly Pick<Project, 'id' | 'name'>[],
 	tasks: readonly Pick<AgentTask, 'id' | 'projectId' | 'title'>[]
 ): ReadIssueLine {
-	const parts = issue.path.split('/'),
+	// readWorkspace's paths come from `path.relative`: backslashes on Windows.
+	const parts = issue.path.split(/[\\/]/),
 		line = (what: MessageKey, project: string | null = null, task: string | null = null) => ({
 			project,
 			task,

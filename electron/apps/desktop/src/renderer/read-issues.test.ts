@@ -14,6 +14,11 @@ it('names the project, the task and what could not be read; the path stays for a
 		path: 'projects/p1/tasks/t1/events.jsonl',
 	});
 	expect(line('projects/p1/tasks/t1/snapshots.json')).toMatchObject({ what: 'Changes' });
+	expect(line('projects\\p1\\tasks\\t1\\task.json')).toMatchObject({
+		project: 'business',
+		task: 'Client details',
+		what: 'Task',
+	});
 	expect(line('projects/p1/tasks/t1/host.json')).toMatchObject({ what: 'Agent' });
 	// A task.json that does not read has no title: the project names it.
 	expect(line('projects/p1/tasks/t9/task.json')).toMatchObject({

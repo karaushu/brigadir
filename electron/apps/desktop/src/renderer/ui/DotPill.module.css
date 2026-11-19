@@ -1,0 +1,36 @@
+/* spec/reviews#class-row: a dot in a colour of the project-icon palette on that colour at 16 %, the name in --fg — 18 px high, fully rounded. */
+.pill {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: 5px;
+	box-sizing: border-box;
+	height: 18px;
+	padding: 0 8px 0 6px;
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--dot) 16%, transparent);
+	color: var(--fg);
+	font: 500 var(--text-11-5) / 1 var(--ui-family);
+	white-space: nowrap;
+}
+/* The name keeps --fg inside a muted line (a service row's label greys its spans). */
+.text {
+	color: var(--fg);
+}
+.pill::before {
+	content: '';
+	flex: none;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--dot);
+}
+.pill[data-color='green'] {
+	--dot: var(--icon-green);
+}
+.pill[data-color='blue'] {
+	--dot: var(--icon-blue);
+}
+.pill[data-color='yellow'] {
+	--dot: var(--icon-yellow);
+}

@@ -457,6 +457,10 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Source | Джерело | A ticket, spec or contract the agent saved next to the plan with `save_source`; shown as a chip. | «вкладення» |
 | Code reviews | Ревʼю коду | Customize per action: who reviews mid-task and before the PR. | |
 | Auto (reviewer) | Авто | Who reviews by default: another signed-in agent, else a fresh session of the task's own. | |
+| Small · Medium · Large | Мала · Середня · Велика | The task's class, a pill in the chat row; `class` / `клас` before it. | «Маленька», «Невелика» |
+| review before PR · plan · plan review · reviews · workers | ревʼю перед PR · план · ревʼю плану · ревʼю · воркери | What a class adds, after its reason in the chat row. | |
+| more than a small task | більше за малу задачу | The tripwire's review row: a small task grew past its limit. | |
+| Small task limit | Межа малої задачі | Settings ▸ Agents ▸ Reviews: files and changed lines past which a small task gets a mid-task review. | «поріг», «ліміт» |
 
 ## Pull requests and CI
 

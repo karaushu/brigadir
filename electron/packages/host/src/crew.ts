@@ -117,6 +117,7 @@ import {
 	type CommitMessageSource,
 } from '@brigadir/git';
 import { findingBatch, findingRule, findingsText } from './review-findings';
+import { classBrief } from './task-class';
 import {
 	atomicJson,
 	readDocument,
@@ -241,6 +242,8 @@ export type BriefOptions = {
 	cli?: boolean;
 	/** spec/agents-and-providers#subagent-model: the setting is on for this session. */ subagents?: boolean;
 	/** spec/tasks#agent-context: the role text of a task without a crew. */ role?: string;
+	/** spec/reviews#classes: the agent states a class — a solo task's or an Auto agent's that writes code. */ classes?:
+		'solo' | 'auto';
 };
 /** Every session gets a brief: the role brief of a crew node (or the role of a solo task, spec/tasks#agent-context) first, then the checklist sentence (spec/chat-turns-plans-and-questions#checklist-tools), then for a Claude session that
  *  has no crew the plan sentence (spec/chat-turns-plans-and-questions#plan-approval: a foreman plans through `propose_plan`, spec/crew#plan), then for sessions with the person's tools the context sentence (spec/agents-and-providers#context-tools),
@@ -261,6 +264,7 @@ export function sessionBrief(
 		provider === 'claude' && (!context || context.role === 'auto') ? planApprovalBrief : '',
 		human ? contextBrief : '',
 		human ? sourcesBrief : '',
+		options.classes ? classBrief(options.classes === 'auto') : '',
 		provider === 'claude' && options.subagents && !options.cli ? subagentBrief : '',
 		options.tools && (provider === 'codex' || options.cli)
 			? toolsBrief(context?.role ?? null, options.tools)

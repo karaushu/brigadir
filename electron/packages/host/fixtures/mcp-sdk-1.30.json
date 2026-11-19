@@ -454,6 +454,36 @@
      }
     },
     {
+     "name": "set_task_class",
+     "description": "State this task's class in Brigadir: small (one chain of steps, no contract change), medium (a source ticket or contract, or the data layer, an API or migrations are touched) or large (workers are going to be hired, or the work comes in layers that other work builds on). The person sees it in the chat. reason: one line on why, e.g. 'one screen, no contract change'. Returns the class and next: what the class needs from you now — follow it. Call it once, after you read the task and the code it touches and before your first edit; call it again only when the task turns out larger or smaller.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "class": {
+        "type": "string",
+        "enum": [
+         "small",
+         "medium",
+         "large"
+        ]
+       },
+       "reason": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+       }
+      },
+      "required": [
+       "class",
+       "reason"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
      "name": "save_source",
      "description": "Save the text of a source this task's plan is written from — a ticket, a spec, an API contract — into the task's folder, so the plan's reviewer reads the same version. title: its name (for example 'CRM-412 Client notes'); url: where it lives, if anywhere; text: the source as it reads, up to 200 000 characters. A source with the same title replaces the earlier one. Returns saved: true with its id. Call it when the task comes from a ticket, a spec or a contract you were given or fetched (for example from Notion, Jira or Linear), before you present a plan.",
      "inputSchema": {

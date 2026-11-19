@@ -35,6 +35,7 @@ import {
 	type RemoteAccessSettings,
 } from './remote-access';
 import { defaultAutoSettings, isAutoSettings, type AutoSettings } from './auto';
+import { defaultReviewSettings, isReviewSettings, type ReviewSettings } from './task-class';
 import {
 	isActionAgents,
 	isActionCrews,
@@ -245,6 +246,8 @@ export type AppSettings = {
 	updates: UpdateSettings;
 	/** spec/settings-modules-and-onboarding#settings-keys: Settings ▸ Auto — models outside the roles and the part budget of new Auto tasks. */
 	auto: AutoSettings;
+	/** spec/settings-modules-and-onboarding#settings-keys: Settings ▸ Agents ▸ Reviews — the small task limit of the tripwire. */
+	reviews: ReviewSettings;
 };
 export type UpdateSettings = { autoDownload: boolean };
 export function isUpdateSettings(value: unknown): value is UpdateSettings {
@@ -315,6 +318,7 @@ export const defaultAppSettings: AppSettings = {
 	},
 	updates: { autoDownload: true },
 	auto: { anyModel: false, partBudget: { ...defaultAutoSettings.partBudget } },
+	reviews: { smallTask: { ...defaultReviewSettings.smallTask } },
 };
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (
@@ -358,8 +362,9 @@ export function isAgentDefaults(value: unknown): value is AgentDefaults {
 export function isAppSettings(value: unknown): value is AppSettings {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 25 &&
+		Object.keys(value).length === 26 &&
 		typeof value.planReviewOff === 'boolean' &&
+		isReviewSettings(value.reviews) &&
 		isSlackSettings(value.slack) &&
 		isUpdateSettings(value.updates) &&
 		isAutoSettings(value.auto) &&

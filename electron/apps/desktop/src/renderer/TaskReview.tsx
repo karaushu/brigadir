@@ -8,6 +8,9 @@ import {
 	formatDuration,
 	gapCount,
 	planFindingList,
+	planLinesLabel,
+	taskClassAdds,
+	taskClassLabel,
 	isMainTree,
 	providerName,
 	reviewPoints,
@@ -30,6 +33,7 @@ import {
 	type TaskReviewFindingState,
 	type TaskReviewMember,
 	type TaskReviewView,
+	type TaskClass,
 } from '@brigadir/core';
 import { onSessionEvent } from './session-events';
 import { openTaskEditor } from './task-state';
@@ -40,6 +44,7 @@ import { DeckFill, DeckList, DeckRow } from './ui/Deck';
 import { Button, IconButton, Segments } from './ui/Controls';
 import { Glyph, type GlyphName } from './ui/Glyph';
 import { StepTrack } from './ui/StepTrack';
+import { DotPill, type DotPillColor } from './ui/DotPill';
 import { ChatCard, ChatCardChip, ChatCardChips } from './ui/ChatCard';
 import { ChangeCounts } from './ui/ChangeCounts';
 import { useSecondTick } from './ui/second-tick';
@@ -368,6 +373,19 @@ function Row({
 		</div>
 	);
 }
+const classColor: Record<TaskClass, DotPillColor> = {
+	small: 'green',
+	medium: 'blue',
+	large: 'yellow',
+};
+/** spec/reviews#class-row: the class as a pill in the project-icon palette. */
+function ClassPill({ value, locale }: { value: TaskClass; locale: Locale }) {
+	return (
+		<DotPill color={classColor[value]}>
+			<span data-task-class={value}>{t(locale, taskClassLabel[value])}</span>
+		</DotPill>
+	);
+}
 /** spec/reviews#strip: the reviews' service rows in the chat — and the older rows of journals written before them. */
 export function ReviewEventRow({
 	task,
@@ -388,16 +406,55 @@ export function ReviewEventRow({
 	);
 	switch (e.kind) {
 		case 'task-review.started':
+			// spec/reviews#class-row: the tripwire's start says why — the change's size and `more than a small task`.
+			if (e.threshold)
+				return (
+					<Row state="started">
+						{head(e.point)}
+						<span className={service.label}>
+							{e.reviewers.join(', ')} · {fileCount(locale, e.threshold.files)} ·{' '}
+							{planLinesLabel(locale, e.threshold.lines)}
+						</span>
+						<small className={service.warn}>{t(locale, 'more than a small task')}</small>
+						<small>{t(locale, 'started')}</small>
+					</Row>
+				);
 			return (
 				<Row state="started">
 					{head(e.point)}
 					<span className={service.label}>
 						{e.reviewers.join(', ')}
-						{e.reason ? ` · ${t(locale, 'after {reason}').replace('{reason}', e.reason)}` : ''}
+						{e.hired
+							? ` · ${t(locale, 'after the hired parts')}`
+							: e.reason
+								? ` · ${t(locale, 'after {reason}').replace('{reason}', e.reason)}`
+								: ''}
 					</span>
 					<small>{t(locale, 'started')}</small>
 				</Row>
 			);
+		case 'task.class': {
+			// spec/reviews#class-row: the tripwire's raise has no row of its own — its review's row says it.
+			if (e.cause === 'threshold') return null;
+			return (
+				<Row state={e.previous ? 'changed' : 'stated'} glyph="list-bullets">
+					<small>{t(locale, 'class')}</small>
+					<span className={`${service.label} ${styles.classLine}`}>
+						{e.previous && (
+							<>
+								<ClassPill value={e.previous} locale={locale} />
+								<span className={styles.classArrow}>→</span>
+							</>
+						)}
+						<ClassPill value={e.class} locale={locale} />
+					</span>
+					<small className={styles.classReason}>
+						{e.cause === 'hire' ? t(locale, 'hires workers') : e.reason}
+					</small>
+					<small>{t(locale, taskClassAdds(e.class, !!task.auto))}</small>
+				</Row>
+			);
+		}
 		case 'task-review.findings':
 			return (
 				<Row

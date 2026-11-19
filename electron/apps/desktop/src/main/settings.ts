@@ -160,6 +160,10 @@ export class Settings {
 							: {}),
 						// spec/settings-modules-and-onboarding#settings-keys: a file from before Settings ▸ Auto reads as its defaults.
 						...(!('auto' in value) ? { auto: structuredClone(defaultAppSettings.auto) } : {}),
+						// spec/settings-modules-and-onboarding#settings-keys: a file from before Settings ▸ Agents ▸ Reviews reads as its defaults.
+						...(!('reviews' in value)
+							? { reviews: structuredClone(defaultAppSettings.reviews) }
+							: {}),
 						...(!('onboarding' in value)
 							? { onboarding: { completedVersion: onboardingVersion } }
 							: {}),

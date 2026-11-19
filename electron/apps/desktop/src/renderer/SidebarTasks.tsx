@@ -151,7 +151,11 @@ export function CrewCard({
 	);
 }
 /** spec/reviews#surfaces: `Review`, `N findings · waits`, `Approved`, `N open`. */
-function reviewerState(view: TaskReviewView, taskId: string, locale: Locale): { state?: string } {
+function reviewerState(
+	view: TaskReviewView,
+	taskId: string,
+	locale: Locale
+): { state?: string; stateTone?: 'amber' } {
 	const member = view.members.find((item) => item.taskId === taskId);
 	if (!member) return {};
 	switch (member.state) {
@@ -166,6 +170,7 @@ function reviewerState(view: TaskReviewView, taskId: string, locale: Locale): { 
 		case 'open':
 			return {
 				state: t(locale, '{count} open').replace('{count}', findingCount(locale, member.findings)),
+				stateTone: 'amber',
 			};
 		default:
 			return {};
@@ -179,12 +184,15 @@ function WorkerRow({
 	onOpen,
 	onMenu,
 	state,
+	stateTone,
 }: {
 	row: ReturnType<typeof crewWorkerRows>[number];
 	selected: boolean;
 	locale: Locale;
 	/** spec/reviews#surfaces: a reviewer of the task's review says its state instead of its task title. */
 	state?: string;
+	/** spec/reviews#surfaces: `N open` stands in amber. */
+	stateTone?: 'amber';
 	onOpen(task: AgentTask): void;
 	onMenu(task: AgentTask): void;
 }) {
@@ -253,9 +261,11 @@ function WorkerRow({
 				<span className={styles.workerCopy}>
 					<span ref={title} className={styles.workerTitle}>
 						<span>{crewLabel(locale, row.name)} · </span>
-						{/* spec/sidebar#crew-card: an Auto worker over its budget says so in amber in place of its part. */}
+						{/* spec/sidebar#crew-card: an Auto worker over its budget says so in amber in place of its part; spec/reviews#surfaces: so does a reviewer with open findings. */}
 						{look.overBudget ? (
-							<span className={styles.workerOverBudget}>{t(locale, 'over budget')}</span>
+							<span className={styles.workerAmber}>{t(locale, 'over budget')}</span>
+						) : stateTone === 'amber' ? (
+							<span className={styles.workerAmber}>{state}</span>
 						) : (
 							(state ?? worker.title)
 						)}

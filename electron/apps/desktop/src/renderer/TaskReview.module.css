@@ -162,6 +162,8 @@
 }
 .comment code {
 	font: var(--text-10-5) var(--mono-family);
+	/* A long path breaks anywhere rather than widen the deck. */
+	overflow-wrap: anywhere;
 }
 [data-finding='fixed'] .text {
 	text-decoration: line-through;
@@ -187,6 +189,11 @@
 .tag[data-tag='new'] {
 	background: var(--amber-soft);
 	color: var(--amber);
+}
+/* spec/reviews#findings: closed without a fix — answered or accepted — reads quieter than the other tags. */
+.tag[data-tag='answered'],
+.tag[data-tag='accepted'] {
+	color: var(--fg3);
 }
 .reason {
 	font-size: var(--text-11);

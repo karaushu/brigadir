@@ -823,8 +823,8 @@
 	flex: none;
 	font-size: var(--text-10);
 }
-/* spec/sidebar#crew-card: over its budget — amber words, needs-you glyph; the card keeps its fill. */
-.workerTitle > .workerOverBudget {
+/* spec/sidebar#crew-card: over its budget — amber words, needs-you glyph; the card keeps its fill. spec/reviews#surfaces: a reviewer's `N open`. */
+.workerTitle > .workerAmber {
 	color: var(--amber);
 }
 /* spec/sidebar#crew-card: a folded crew is its header alone, in the card's tone, 6 px to the next row. */

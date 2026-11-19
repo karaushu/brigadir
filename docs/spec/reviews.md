@@ -202,7 +202,8 @@ the state in muted text, the **step track**, actions, chevron.
   (`agent-backlog`, `--fg3`), live (spinner), waiting for the person (`agent-question`, `--amber`), passed or accepted
   (`check-pass`, `--green`), stopped, failed or outdated (`stop`, `--fg3`). The current review's step has the `--tint2`
   fill; a hovered step `--tint`. Each step has the tooltip `Plan review`, `Mid-task review`, `Review before PR`
-  (with its state). A click opens the strip on that step's findings.
+  (with its review's own state: `stopped`, `did not start` and `outdated` share the glyph, not the word). A click opens
+  the strip on that step's findings.
 - **A toned or hovered row fills the deck edge to edge** — horizontally across the deck's padding, and up to the deck's
   top edge when it is the deck's first row and down to the island's top border when it is the deck's last ([Queue deck placement](composer.md#queue-deck)).
 
@@ -228,7 +229,7 @@ the state in muted text, the **step track**, actions, chevron.
 - **Expanded** (chevron or a click on the row): a full-width segment `Plan · Mid-task · Before PR` that picks whose review the sections show; `Reviewer` — a row per reviewer: provider glyph,
   `name · provider`, its state and time (`reading · 1m 12s`, `N findings`, `checking`, `approved`), `Log`, and under it
   the [remark](#remark) of an approval, if any; and
-  `Findings N` — a row per finding: its text, `file:line · reviewer` (mono, muted) and its tag. Open and new findings
+  `Findings N` — a row per finding: its text, `path:line · reviewer` (the file's whole path, mono, muted) and its tag. Open and new findings
   stand first with the reviewer's reason under them. A click on a finding opens its thread in the diff. The plan's sections differ ([Plan review
   surfaces](#plan-surfaces)). The sections are the deck's fill ([Queue deck](composer-steering-queue-and-ghost.md#queue-deck)):
   they get the room they need up to a bound set by the window, the strip's row stays in place over them, and they scroll

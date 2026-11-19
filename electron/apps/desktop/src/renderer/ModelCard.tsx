@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
 	agentProviders,
-	ageShort,
 	autoRootName,
 	crewLabel,
 	selectOption,
@@ -13,7 +12,6 @@ import {
 } from '@brigadir/core';
 import { ModelQuestion } from './ui/SessionInputs';
 import { toastError } from './ui/Toast';
-import { useSecondTick } from './ui/second-tick';
 import { useHelperSettings, useProviderCatalogs } from './HelperAgent';
 import { catalogModels, modelAnswer, modelEfforts, type ModelChoice } from './hire-card';
 /**
@@ -37,11 +35,9 @@ export function ModelCard({
 	disabled: boolean;
 	send(command: SessionCommand): void;
 }) {
-	const now = useSecondTick(true),
-		settings = useHelperSettings(),
+	const settings = useHelperSettings(),
 		catalogs = useProviderCatalogs(settings?.enabled ?? null);
-	const enabled = agentProviders.filter((provider) => settings?.enabled[provider]),
-		loading = !settings || enabled.some((provider) => catalogs[provider] === undefined);
+	const enabled = agentProviders.filter((provider) => settings?.enabled[provider]);
 	const base = task.auto?.roles.find((role) => role.name === request.role),
 		taskModel = task.launchOptions?.find(
 			(option) => option.id === selectOption(task.agentOptions ?? [], 'model')?.id
@@ -51,7 +47,7 @@ export function ModelCard({
 			const id = selectOption(catalogs[base.provider]?.options ?? [], 'model')?.id;
 			return id ? base.requestedChoices.configOptions?.[id] : undefined;
 		};
-	const models = loading ? [] : catalogModels(catalogs, enabled);
+	const models = catalogModels(catalogs, enabled);
 	const key = (model: ModelChoice) => `${model.provider}:${model.value}`;
 	const preferred = models.find(
 		(model) =>
@@ -115,22 +111,31 @@ export function ModelCard({
 			part={request.part}
 			reason={request.reason}
 			groups={
-				loading
+				!settings
 					? null
 					: enabled.map((provider) => ({
 							label: provider === 'claude' ? 'Claude' : 'Codex',
 							glyph: provider === 'claude' ? ('claude' as const) : ('openai' as const),
-							rows: models
-								.filter((item) => item.provider === provider)
-								.map((item) => ({
-									key: key(item),
-									name: item.name,
-									...(item.provider === task.provider && item.value === taskModel
-										? { note: t(locale, 'the model of this task') }
-										: item.value === baseModel(provider)
-											? { note: t(locale, 'the model of role {role}').replace('{role}', roleName) }
-											: {}),
-								})),
+							// spec/chat-turns-plans-and-questions#model-card: a provider whose catalog loads shows `Loading models…` in its place.
+							rows:
+								catalogs[provider] === undefined
+									? null
+									: models
+											.filter((item) => item.provider === provider)
+											.map((item) => ({
+												key: key(item),
+												name: item.name,
+												...(item.provider === task.provider && item.value === taskModel
+													? { note: t(locale, 'the model of this task') }
+													: item.value === baseModel(provider)
+														? {
+																note: t(locale, 'the model of role {role}').replace(
+																	'{role}',
+																	roleName
+																),
+															}
+														: {}),
+											})),
 						}))
 			}
 			selected={selected}
@@ -149,11 +154,7 @@ export function ModelCard({
 			onSettings={() =>
 				window.dispatchEvent(new CustomEvent('brigadir:open-settings', { detail: 'agents' }))
 			}
-			waited={
-				now - since >= 60_000
-					? t(locale, 'waiting {age}').replace('{age}', ageShort(locale, since, now))
-					: null
-			}
+			since={since}
 			submitShortcut={submitShortcut}
 			disabled={disabled}
 			locale={locale}

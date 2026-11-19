@@ -173,6 +173,9 @@ export class ForgeActions {
 		// spec/pull-requests-and-ci#github-status: nothing is read while the worktree is prepared, so nothing has failed — no notice.
 		if (task.launch?.isolation === 'worktree' && task.preparation?.state !== 'ready')
 			return { auth: previous?.auth ?? 'ready', scopes: [], error: null };
+		// spec/pull-requests-and-ci#github-status: a local read keeps GitHub's last answer; with none yet (the first reads came during
+		// preparation) it reads GitHub once instead of reporting an unknown state as a failure.
+		if (!previous) remote = true;
 		const scopes = (await Snapshots.open(store, key)).current.scopes.filter(
 			(scope) => scope.available !== false
 		);

@@ -11,6 +11,7 @@ import {
 	isTaskAgentRequest,
 	samePullRequest,
 	waitsForPerson,
+	statusAfterTurn,
 	type TaskProposal,
 	type TaskProposalResult,
 	type SaveFileRequest,
@@ -1305,15 +1306,13 @@ export async function startHost(config: HostConfig) {
 							: 'done';
 			}
 			// spec/crew#attention: a foreman that ends its turn with a worker's question unanswered relayed it to the person; the crew waits for them.
+			// spec/crew#auto-hire, spec/crew#plan: so does a hire card or a split whose call ended with the turn.
 			if (event.kind === 'turn.completed')
-				status =
-					event.reason === 'cancelled'
-						? 'interrupted'
-						: pendingInputs([...records, record]).crewQuestions.length ||
-							  pendingInputs([...records, record]).budget ||
-							  taskReview.document().review?.state === 'yours'
-							? 'needs-you'
-							: 'done';
+				status = statusAfterTurn(
+					event.reason,
+					pendingInputs([...records, record]),
+					taskReview.document().review?.state === 'yours'
+				);
 			if (event.kind === 'crew.question.escalated' && !busy) status = 'needs-you';
 			if (
 				event.kind === 'crew.question.resolved' &&

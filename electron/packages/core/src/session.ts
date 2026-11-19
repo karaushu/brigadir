@@ -744,6 +744,26 @@ import {
 	type TaskReviewWho,
 } from './task-review';
 /** The card or row that waits for the person's answer keeps the task in `needs-you` (spec/tasks#agent-created-tasks adds the proposed task, spec/crew#workers the foreman's plan). */
+/**
+ * spec/crew#auto-hire, spec/crew#plan, spec/crew#attention: the task's status when a turn of its agent ends. A hire card or a split still
+ * waits for the person though the agent's call is gone with the turn (a message sent into the turn moves the call to the background; Codex
+ * ends its turn with the call open), and so do a worker's question, the budget question and a review's open findings. Permissions and agent
+ * questions end with their turn and do not count here.
+ */
+export function statusAfterTurn(
+	reason: string | undefined,
+	inputs: PendingInputs,
+	reviewWaits: boolean
+): 'interrupted' | 'needs-you' | 'done' {
+	if (reason === 'cancelled') return 'interrupted';
+	return inputs.crewQuestions.length > 0 ||
+		inputs.budget !== null ||
+		inputs.crewHire !== null ||
+		inputs.crewPlan !== null ||
+		reviewWaits
+		? 'needs-you'
+		: 'done';
+}
 export function waitsForPerson(inputs: PendingInputs) {
 	return (
 		inputs.questions.length > 0 ||

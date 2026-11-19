@@ -220,9 +220,17 @@
 	padding: 12px;
 	font-size: var(--text-12);
 }
+/* The heading and `Esc` are one S row (rule 16). */
+.issues header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 4px;
+}
 .issues h2 {
 	font-size: var(--text-12);
-	margin-bottom: 8px;
+	margin: 0;
 }
 .issues p {
 	padding: 3px 0;

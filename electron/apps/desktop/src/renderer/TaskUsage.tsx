@@ -25,7 +25,7 @@ import {
 	type TokenBudget,
 	type TokenHold,
 } from '@brigadir/core';
-import { Button, Popup, SplitButton } from './ui/Controls';
+import { Button, IconButton, Popup, SplitButton } from './ui/Controls';
 import { DeckList, DeckRow, DeckRowButton } from './ui/Deck';
 import { Glyph } from './ui/Glyph';
 import { MenuItem, MenuPopover, Popover } from './ui/Popover';
@@ -559,6 +559,13 @@ export function BudgetStrip({
 								disabled={disabled}
 								answer={decide}
 							/>
+							<IconButton
+								size="s"
+								label={t(locale, shown ? 'Collapse' : 'Expand')}
+								aria-expanded={shown}
+								onClick={() => setShown(!shown)}>
+								<Glyph name="chevron-down" size={12} />
+							</IconButton>
 						</>
 					}>
 					<DeckRowButton expanded={shown} onClick={() => setShown(!shown)}>

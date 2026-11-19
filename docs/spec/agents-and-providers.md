@@ -270,7 +270,7 @@ Rules that follow and are implemented:
 - **The number is always what is left** (`1 − utilization`); the bar shrinks with it.
 - **Quota is global**, per provider account. No share of it is ever attributed to a task or a project: other tasks, other terminals and claude.ai draw on the same windows. What a task shows is the account's remaining share when the task started and now, labelled as the account's.
 - **Tokens are per task and exact only at a turn end.** A finished turn's `turn.usage` is exact; a running turn has only an estimate, always marked `≈`.
-- **No data → no indicator.** A quota that lies is worse than none; no timer is ever derived from context usage or error text. A task whose agents reported no usage shows no counter.
+- **No data → no indicator.** A quota that lies is worse than none; no timer is ever derived from context usage or error text. A task whose agents reported no usage shows no counter, unless it has a budget ([composer](composer.md#task-usage)).
 
 <a id="task-tokens"></a>
 ### Tokens of a task

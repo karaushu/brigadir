@@ -189,6 +189,10 @@ it('the strip over the composer: Budget reached and the short answers', () => {
 	expect(html).toContain('Budget reached');
 	expect(html).toContain('Finish turns<');
 	expect(html).toContain('Raise to 3m');
+	// The row's chevron expands the breakdown (spec/chat-turns-plans-and-questions#budget-strip).
+	expect(html).toMatch(
+		/aria-label="Expand"[^>]*aria-expanded="false"|aria-expanded="false"[^>]*aria-label="Expand"/
+	);
 });
 
 it("a worker row shows the member's own count, ≈ while its turn runs", () => {

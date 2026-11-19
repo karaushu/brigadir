@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { promptQueue, isQueuedPrompt, isOwnQueuedPrompt } from './prompt-queue';
+import { promptQueue, isQueuedPrompt, isOwnQueuedPrompt, queuedCrewQuestion } from './prompt-queue';
 import { isSessionEvent } from './event-validation';
 import { isSessionCommand, type EventRecord, type SessionEvent } from './session';
 const first = {
@@ -98,4 +98,51 @@ it("keeps a crew service prompt in the FIFO but out of the person's deck (spec/c
 			command: { kind: 'submitReview', text: 'review', review: {} as never },
 		} as never)
 	).toBe(true);
+	// spec/composer-steering-queue-and-ghost#queue-deck: the findings of a host review are the host's message, not the person's review.
+	expect(
+		isOwnQueuedPrompt({
+			...first,
+			command: {
+				kind: 'submitReview',
+				text: 'Codex left 2 findings',
+				review: {} as never,
+				crew: { kind: 'review-comments', round: 1, comments: 2 },
+			},
+		} as never)
+	).toBe(false);
+});
+// spec/crew#ask-foreman: a question that ended without the foreman takes its prompt out of the queue; only that question's prompt is named.
+it('finds the queued prompt of one crew question', () => {
+	const ask = (id: string, questionId: string) => ({
+		...first,
+		id,
+		command: {
+			kind: 'prompt' as const,
+			text: `Worker asks (questionId ${questionId})`,
+			crew: { kind: 'question' as const, questionId, agent: 'Codex' },
+		},
+	});
+	const one = ask('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'q1'),
+		two = ask('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'q2');
+	const queue = promptQueue(
+		records([
+			{ kind: 'prompt.queued', prompt: first },
+			{ kind: 'prompt.queued', prompt: one },
+			{ kind: 'prompt.queued', prompt: two },
+		])
+	);
+	expect(queuedCrewQuestion(queue, 'q1')).toEqual([one]);
+	expect(queuedCrewQuestion(queue, 'missing')).toEqual([]);
+	// The turn that took the question leaves nothing to remove.
+	expect(
+		queuedCrewQuestion(
+			promptQueue(
+				records([
+					{ kind: 'prompt.queued', prompt: one },
+					{ kind: 'turn.started', text: one.command.text, queuedPromptId: one.id },
+				])
+			),
+			'q1'
+		)
+	).toEqual([]);
 });

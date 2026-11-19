@@ -390,6 +390,46 @@ describe('a review waiting for the person (spec/reviews#surfaces)', () => {
 			)
 		).toBeNull();
 	});
+	// spec/sidebar#activity-line: the plan still waits after its review ended; the line goes back to it.
+	it('gives the line back to the plan that still waits when its review ends', () => {
+		const plan: SessionEvent = {
+				kind: 'permission.requested',
+				request: {
+					id: 'p1',
+					tool: { id: 't1', title: 'Approve Plan', category: 'switch_mode', status: 'pending' },
+					options: [],
+				} as never,
+			},
+			planVerified: SessionEvent = { ...verified(2), point: 'plan' } as SessionEvent,
+			finished = (state: 'passed' | 'accepted'): SessionEvent => ({
+				kind: 'task-review.finished',
+				id: 'r1',
+				point: 'plan',
+				state,
+			});
+		expect(taskActivity(records(plan, finished('passed')))).toMatchObject({ kind: 'plan' });
+		expect(taskActivity(records(plan, planVerified))).toMatchObject({ kind: 'review', count: 2 });
+		expect(
+			taskActivity(
+				records(
+					plan,
+					planVerified,
+					{ kind: 'task-review.decided', id: 'r1', point: 'plan', decision: 'accept', findings: 2 },
+					finished('accepted')
+				)
+			)
+		).toMatchObject({ kind: 'plan' });
+		// The answer to the plan clears it; a review that ends later leaves nothing.
+		expect(
+			taskActivity(
+				records(
+					plan,
+					{ kind: 'permission.resolved', id: 'p1', optionId: 'reject' },
+					finished('passed')
+				)
+			)
+		).toBeNull();
+	});
 	it('notifies as needs-you only when something is open', () => {
 		expect(noticeKind(verified(1))).toBe('needs-you');
 		expect(noticeKind(verified(0, 1))).toBe('needs-you');

@@ -14,6 +14,7 @@ import {
 	staysWithLabel,
 	templateLookup,
 	waitsForPerson,
+	statusAfterTurn,
 	type AgentTask,
 	type AutoHire,
 	type EventRecord,
@@ -58,6 +59,28 @@ describe('pending inputs of an Auto task (spec/crew#auto-hire, spec/crew#auto-mo
 		);
 		expect(decided.crewHire).toBeNull();
 		expect(waitsForPerson(decided)).toBe(false);
+	});
+	it('a hire card that outlives the agent’s turn keeps the task needs-you', () => {
+		// A message sent into the turn moved hire_workers to the background and the turn ended: the card still waits.
+		const waiting = pendingInputs(
+			records(
+				{ kind: 'turn.started', text: 'Hire two workers.' },
+				{ kind: 'crew.hire.requested', hire },
+				{ kind: 'turn.completed', reason: 'end_turn' }
+			)
+		);
+		expect(statusAfterTurn('end_turn', waiting, false)).toBe('needs-you');
+		// The person's own Stop reads as interrupted, as for every other card.
+		expect(statusAfterTurn('cancelled', waiting, false)).toBe('interrupted');
+		const decided = pendingInputs(
+			records(
+				{ kind: 'crew.hire.requested', hire },
+				{ kind: 'crew.hire.resolved', id: 'hire-1', approved: true, parts: null, hired: [] },
+				{ kind: 'turn.completed', reason: 'end_turn' }
+			)
+		);
+		expect(statusAfterTurn('end_turn', decided, false)).toBe('done');
+		expect(statusAfterTurn('end_turn', decided, true)).toBe('needs-you');
 	});
 	it('drops a model question with the host: the agent asks again in its new session', () => {
 		const request = { id: 'm1', reason: 'No role fits.', role: 'Developer' };

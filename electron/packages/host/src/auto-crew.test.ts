@@ -128,7 +128,8 @@ async function setup(
 	const snapshots = await Snapshots.open(store, task);
 	await snapshots.capture('baseline');
 	const events: SessionEvent[] = [],
-		prompts: { text: string; marker: unknown }[] = [];
+		prompts: { text: string; marker: unknown }[] = [],
+		droppedQuestions: string[] = [];
 	const records = (): EventRecord[] =>
 		events.map((event, seq) => ({ schemaVersion: 1, seq, at: new Date().toISOString(), event }));
 	const context = (await readCrewContext(store, task))!;
@@ -153,11 +154,27 @@ async function setup(
 			},
 			records,
 			parent: () => null,
+			dropQuestion: async (id) => {
+				droppedQuestions.push(id);
+			},
 			app: options.app ?? (() => null),
 		});
 	const host = make();
 	cleanup.push(() => host.stop());
-	return { root, repo, store, task, project, host, make, events, prompts, records, snapshots };
+	return {
+		root,
+		repo,
+		store,
+		task,
+		project,
+		host,
+		make,
+		events,
+		prompts,
+		records,
+		snapshots,
+		droppedQuestions,
+	};
 }
 const until = async <T>(read: () => T | undefined, timeout = 5000): Promise<T> => {
 	const end = Date.now() + timeout;
@@ -842,5 +859,34 @@ describe('review fixes', () => {
 			part: 'Screen',
 		});
 		expect(pendingInputs(host['deps'].records()).crewModels).toHaveLength(0);
+	});
+	// spec/crew#ask-foreman: seen live — a plan reviewer asked the author while the plan waited for approval, gave up, and its prompt ran as
+	// a turn of its own after the plan was approved.
+	it('11: a question cancelled with its caller’s turn takes its prompt out of the agent’s queue', async () => {
+		const { host, events, prompts, droppedQuestions } = await hiredFixture();
+		const worker = host['workers'][0]!,
+			controller = new AbortController();
+		const call = host['askForeman'](
+			worker,
+			{ question: 'Did the person ask for it?' },
+			controller.signal
+		);
+		const asked = await until(() =>
+			events.find(
+				(event): event is Extract<SessionEvent, { kind: 'crew.question.requested' }> =>
+					event.kind === 'crew.question.requested'
+			)
+		);
+		await until(() =>
+			prompts.some((item) => (item.marker as { kind?: string } | undefined)?.kind === 'question')
+				? true
+				: undefined
+		);
+		expect(droppedQuestions).toEqual([]);
+		controller.abort();
+		await expect(call).rejects.toThrow('cancelled');
+		await until(() => (droppedQuestions.length ? true : undefined));
+		expect(droppedQuestions).toEqual([asked.question.id]);
+		expect(events.at(-1)).toMatchObject({ kind: 'crew.question.resolved', answer: null });
 	});
 });

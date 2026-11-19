@@ -80,8 +80,9 @@ export type TaskReviewDeps = {
 	records(): readonly EventRecord[];
 	/** A turn of the task's agent runs now. */
 	busy(): boolean;
-	/** The crew host of the task with the reviewers as the root's checkers: created for a solo task, extended for a foreman. */
-	crew(start: StartReview): Promise<SelfReviewHost>;
+	/** The crew host of the task with the reviewers as the root's checkers: created for a solo task, extended for a foreman. `named` hears
+	 *  the names the reviewers got in the crew (spec/reviews#who: `Codex 2` when `Codex` is taken by an earlier review's reviewer). */
+	crew(start: StartReview, named?: (names: string[]) => void): Promise<SelfReviewHost>;
 	/** The crew host that already runs the task's review after a restart, if any. */
 	existing(): SelfReviewHost | null;
 	/** A foreman's crew has no open work: the fixes it handed to workers are accepted (spec/reviews#loop). */
@@ -270,14 +271,20 @@ export class TaskReviewLife {
 			});
 			return review;
 		}
-		this.host = await this.deps.crew(command);
-		this.doc = withNextReview(this.doc, review);
+		// The record, the journal, the strip and `request_review`'s answer name the reviewers as the crew does, so `Codex 2 → Claude` follows
+		// `Codex 2 · started`.
+		let names = review.reviewers;
+		this.host = await this.deps.crew(command, (given) => {
+			if (given.length) names = given;
+		});
+		const named = { ...review, reviewers: names };
+		this.doc = withNextReview(this.doc, named);
 		await this.save();
-		await this.emitStarted(review);
+		await this.emitStarted(named);
 		// spec/reviews#start: the agent's review reads at once (`request` took a checkpoint); the others wait for a running turn to end. A plan
 		// review reads at once: the agent's turn waits for the plan's answer.
 		if (point === 'plan' || startedBy === 'agent' || !this.deps.busy()) await this.read();
-		return review;
+		return named;
 	}
 	private emitStarted(review: TaskReview) {
 		return this.deps.emit({

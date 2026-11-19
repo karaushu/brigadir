@@ -11,6 +11,8 @@ import {
 	isTaskAgentRequest,
 	samePullRequest,
 	waitsForPerson,
+	statusAfterTurn,
+	queuedCrewQuestion,
 	type TaskProposal,
 	type TaskProposalResult,
 	type SaveFileRequest,
@@ -363,7 +365,7 @@ export async function startHost(config: HostConfig) {
 			].join('');
 		},
 		part: async () => (crewWorker ? ((await readPartBrief())?.part ?? null) : null),
-		crew: async (start): Promise<CrewHost> => {
+		crew: async (start, named): Promise<CrewHost> => {
 			const current = await store.task(config.key),
 				existing = current.crew ?? current.reviewCrew,
 				reviewers = taskReviewers(
@@ -371,6 +373,7 @@ export async function startHost(config: HostConfig) {
 					`review-${Date.now().toString(36)}`,
 					existing ? specAgents(existing.root).map((agent) => agent.name) : [taskReviewRootName]
 				);
+			named?.(reviewers.map((agent) => agent.name));
 			if (foremanTask && crewHost && current.crew) {
 				const spec = {
 					...current.crew,
@@ -440,6 +443,11 @@ export async function startHost(config: HostConfig) {
 			self: taskReview.hooks(),
 			// spec/crew#budget-pause: waiting hires stay waiting while the task is held at its budget.
 			held: () => budgetBlocks(),
+			dropQuestion: (questionId: string) =>
+				serialPrompt(async () => {
+					for (const item of queuedCrewQuestion(queue, questionId))
+						await emit({ kind: 'prompt.removed', id: item.id });
+				}),
 		};
 		// spec/crew#auto: the Auto agent's host hires through cards and asks the app about models.
 		const host: CrewHost =
@@ -1305,15 +1313,13 @@ export async function startHost(config: HostConfig) {
 							: 'done';
 			}
 			// spec/crew#attention: a foreman that ends its turn with a worker's question unanswered relayed it to the person; the crew waits for them.
+			// spec/crew#auto-hire, spec/crew#plan: so does a hire card or a split whose call ended with the turn.
 			if (event.kind === 'turn.completed')
-				status =
-					event.reason === 'cancelled'
-						? 'interrupted'
-						: pendingInputs([...records, record]).crewQuestions.length ||
-							  pendingInputs([...records, record]).budget ||
-							  taskReview.document().review?.state === 'yours'
-							? 'needs-you'
-							: 'done';
+				status = statusAfterTurn(
+					event.reason,
+					pendingInputs([...records, record]),
+					taskReview.document().review?.state === 'yours'
+				);
 			if (event.kind === 'crew.question.escalated' && !busy) status = 'needs-you';
 			if (
 				event.kind === 'crew.question.resolved' &&

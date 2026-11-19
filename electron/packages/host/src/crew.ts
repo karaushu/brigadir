@@ -325,6 +325,8 @@ export type CrewHostDeps = {
 	self?: SelfReviewHooks;
 	/** spec/crew#budget-pause: the task is held at its token budget; no waiting worker launches. A lead reads its root's hold fresh. */
 	held?(): Promise<boolean>;
+	/** spec/crew#ask-foreman: the question is over; its prompt, if it still waits in this host's queue, is taken out. */
+	dropQuestion?(questionId: string): Promise<void>;
 };
 export type SelfReviewHooks = {
 	/** The task review the round belongs to (`task-review.json`). */
@@ -2765,6 +2767,9 @@ export class CrewHost {
 		if (timer) clearTimeout(timer);
 		this.escalations.delete(id);
 		await this.deps.emit({ kind: 'crew.question.resolved', id, answer, answeredBy: by });
+		// spec/crew#ask-foreman: the prompt that carried the question may still wait behind a turn that could not end (a plan for approval, a
+		// hire card). Nobody waits for that answer any more: left in the queue, it would cost the agent a turn after the request is answered.
+		await this.deps.dropQuestion?.(id).catch(() => {});
 		const waiter = this.questionWaiters.get(id);
 		this.questionWaiters.delete(id);
 		if (waiter) {

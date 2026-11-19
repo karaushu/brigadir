@@ -286,6 +286,7 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 				'task-review.verified',
 				'task-review.decided',
 				'task-review.finished',
+				'design.reviewed',
 				'crew.accepted',
 				'crew.worker.stopped',
 				'quick-ask.changed',

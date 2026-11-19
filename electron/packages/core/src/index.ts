@@ -12,6 +12,7 @@ export * from './plan-revisions';
 export * from './event-validation';
 export * from './changes';
 export * from './review';
+export * from './design-review';
 export * from './files';
 export * from './file-kinds';
 export * from './syntax';

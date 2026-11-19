@@ -146,6 +146,7 @@ import {
 	useTaskTokens,
 } from './TaskUsage';
 import { ReviewEventRow, ReviewProposalRow, ReviewStrip, useReviewStripShown } from './TaskReview';
+import { DesignReviewRow } from './DesignReview';
 import styles from './Conversation.module.css';
 const ToolTerminal = lazy(() => import('./ToolTerminal'));
 import {
@@ -1440,6 +1441,19 @@ export function Conversation({
 				(e.kind === 'crew.review' && e.taskId === task.id)
 			)
 				return <ReviewEventRow task={task} record={row.record} locale={locale} />;
+			// spec/design-review#card: the card while it is not passed, the folded row once it passed.
+			if (e.kind === 'design.reviewed') {
+				const fold = disclosure(row.id, false);
+				return (
+					<DesignReviewRow
+						task={task}
+						record={row.record}
+						locale={locale}
+						open={fold.open}
+						onToggle={fold.onToggle}
+					/>
+				);
+			}
 			// spec/chat#context-compacted
 			if (e.kind === 'context.compacted') return <ContextCompactedRow event={e} locale={locale} />;
 			// spec/browser-and-simulator#sim-chat-row

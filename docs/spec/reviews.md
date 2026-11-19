@@ -187,6 +187,15 @@ or one screen fires more than three requests at once, even to different endpoint
 (`path:line`), gives the count and proposes the change: reuse the existing query or cache, give the request one owner,
 load a secondary section when it is shown, or ask the back-end for one endpoint.
 
+<a id="design"></a>
+**Design.** A mid-task review or a review before the PR of a task with a [design source](design-review.md#design-source)
+adds the task's latest design review per screen to the reviewer's prompt (its state, its rows and the paths of its
+images) with the [design prompt](design-review.md#prompt), and the host refuses the reviewer's `approve` unless a
+`passed` design review covers the round ([In the flow](design-review.md#flow)): `No approval from the code: this task has a
+design source, and no passed design review covers the state you read. …` with what is missing. Each mismatched node, or
+a missing design review, is the reviewer's finding at the line that sets the property (or at the screen's file); the
+closure check approves only when a new `passed` design review covers the fix.
+
 <a id="remark"></a>
 **A remark.** `approve(taskId, reviewId, note?)` takes an optional `note` (up to 2000 characters): something the person
 should know that needs no fix — a risk to watch, the check the reviewer ran. It is stored with the approval, starts no

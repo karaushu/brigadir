@@ -52,6 +52,8 @@ today, one file per area. Start with [Overview](overview.md).
 - [Reviews](reviews.md): reviews the host runs on a task at three points (plan, mid-task, before the PR): who
   reviews, the loop of one read, one fix and one closure check, findings, the Review strip with its step track, the
   `request_review` tool, the gate on `Create PR` and the data.
+- [Design review](design-review.md): a screen checked against its Figma design node by node on the device — the
+  `submit_design_review` contract, the screenshots the host keeps and verifies, the gate in reviews and the card.
 - [Diff and review](diff-and-review.md): snapshot-tree diff engine, task step boundaries, unified and side-by-side
   views, diff base, Changes panel, selection and comments, review loop and submit, review popup, ⌘+click from a diff,
   change counters and "why did this change" attribution.

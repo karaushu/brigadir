@@ -22,6 +22,7 @@ import { isSoundName } from './notifications';
 import { isNoticeCenterAction, isToastNotice } from './notice-center';
 import { isContextReport } from './context-state';
 import { isTaskKey, isSessionCommand } from './session';
+import { isDesignFile } from './design-review';
 import {
 	isTaskTitle,
 	isId,
@@ -2452,6 +2453,15 @@ export const ipcTable = {
 		class: 'remote',
 		arity: 2,
 		validate: (a) => a.length === 2 && isAttachmentOwner(a[0]) && isAttachmentId(a[1]),
+	},
+	// spec/design-review#data: a kept screenshot or a copied design image of a task, for the design review card.
+	readDesignImage: {
+		kind: 'invoke',
+		bulk: true,
+		channel: 'design:image',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTaskKey(a[0]) && isDesignFile(a[1]),
 	},
 	readAttachmentInfo: {
 		kind: 'invoke',

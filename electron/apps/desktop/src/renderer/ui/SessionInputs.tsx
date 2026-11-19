@@ -179,7 +179,7 @@ export function ModelQuestion({
 	title: string;
 	part?: string | undefined;
 	reason: string;
-	groups: { label: string; rows: ModelRow[] }[] | null;
+	groups: { label: string; glyph?: GlyphName; rows: ModelRow[] }[] | null;
 	selected: string | null;
 	onSelect(key: string): void;
 	efforts: { value: string; name: string }[] | null;
@@ -223,7 +223,10 @@ export function ModelQuestion({
 				groups.map((group) =>
 					group.rows.length ? (
 						<div key={group.label} className={styles.modelGroup}>
-							<span className={styles.modelGroupLabel}>{group.label}</span>
+							<span className={styles.modelGroupLabel}>
+								{group.glyph && <Glyph name={group.glyph} size={12} />}
+								{group.label}
+							</span>
 							<div className={styles.options} role="radiogroup" aria-label={group.label}>
 								{group.rows.map((row) => (
 									<label

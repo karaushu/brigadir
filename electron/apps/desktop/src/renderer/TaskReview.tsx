@@ -601,13 +601,25 @@ const stepGlyph = {
 	done: ['check-pass', 'green'],
 	ended: ['stop', 'muted'],
 } as const;
-const stepState: Record<keyof typeof stepGlyph, MessageKey> = {
-	none: 'not started',
-	live: 'running',
-	yours: 'Your call',
-	done: 'passed',
-	ended: 'stopped',
-};
+/** spec/reviews#strip: a step's tooltip names its review's own state — a stopped, failed and outdated review share the glyph, not the word. */
+function stepState(review: TaskReview | null): MessageKey {
+	switch (taskReviewStep(review)) {
+		case 'none':
+			return 'not started';
+		case 'live':
+			return 'running';
+		case 'yours':
+			return 'Your call';
+		case 'done':
+			return review?.state === 'accepted' ? 'accepted' : 'passed';
+		case 'ended':
+			return review?.state === 'failed'
+				? 'did not start'
+				: review?.state === 'outdated'
+					? 'outdated'
+					: 'stopped';
+	}
+}
 /**
  * spec/reviews#strip: the strip's row and its open sections, from props only (the strip and its tests). `onDecide`, `onStop`, `onRetry`,
  * `onAgain` and `onCreatePR` act; `onToggle` opens or closes, `onStep` picks a point.
@@ -740,12 +752,12 @@ export function ReviewStripView({
 	const shown = open || state === 'yours';
 	const prPoint = review.point === 'pre-pr';
 	const steps = reviewPoints.map((item) => {
-		const step = taskReviewStep(taskReviewAt(view, item)),
-			[name, tone] = stepGlyph[step];
+		const at = taskReviewAt(view, item),
+			[name, tone] = stepGlyph[taskReviewStep(at)];
 		return {
 			id: item,
 			glyph: <Glyph name={name} size={12} />,
-			title: `${t(locale, pointStep[item])} · ${t(locale, stepState[step])}`,
+			title: `${t(locale, pointStep[item])} · ${t(locale, stepState(at))}`,
 			tone,
 			current: item === review.point,
 		};
@@ -981,6 +993,10 @@ function ReviewDetails({
 					disabled: !taskReviewAt(view, item),
 				}))}
 			/>
+			{/* spec/reviews#plan-surfaces: on the plan the sources come first, then the reviewer. */}
+			{point === 'plan' && view.sources.length > 0 && (
+				<SourceChips sources={view.sources} locale={locale} onOpen={onSource} />
+			)}
 			{current && view.members.length > 0 && (
 				<section aria-label={t(locale, 'Reviewer')}>
 					<h3>{t(locale, 'Reviewer')}</h3>
@@ -1003,9 +1019,6 @@ function ReviewDetails({
 					</ul>
 				</section>
 			)}
-			{point === 'plan' && view.sources.length > 0 && (
-				<SourceChips sources={view.sources} locale={locale} onOpen={onSource} />
-			)}
 			{point === 'plan' &&
 				planLists.map((list) => (
 					<PlanFindings
@@ -1026,8 +1039,8 @@ function ReviewDetails({
 								<button type="button" className={styles.comment} onClick={() => onComment(comment)}>
 									<span className={styles.text}>{comment.text}</span>
 									<small>
-										<code>
-											{comment.path.split('/').at(-1)}:{comment.line}
+										<code title={comment.path}>
+											{comment.path}:{comment.line}
 										</code>{' '}
 										· {comment.reviewer}
 									</small>

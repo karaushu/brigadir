@@ -51,19 +51,30 @@ const state = (patch: Partial<SimulatorState>): SimulatorState => ({
 	metroPort: null,
 	...patch,
 });
-it('ends each row with who holds the device, and offers Shut down only for a device nobody else holds (spec/browser-and-simulator#sim-tab)', () => {
+it('names each row with its OS, ends it with who holds the device, and offers Shut down unless another task is using it or owns it (spec/browser-and-simulator#sim-tab)', () => {
 	const model = pickerModel(state({}), 'en', tasks, false);
 	expect(
 		model.rows.map(
 			(row) =>
-				`${row.device.id}: ${row.tail}${row.disabled ? ' (off)' : ''}${row.canShutDown ? ' ⏻' : ''}`
+				`${row.label}: ${row.tail}${row.disabled ? ' (off)' : ''}${row.canShutDown ? ' ⏻' : ''}`
 		)
 	).toEqual([
-		'iPhone 17 Pro: this task ⏻',
-		'iPhone 17: Client flows',
-		'iPhone Air: iOS 27',
-		'iPad Pro: 2 tasks',
+		'iPhone 17 Pro · iOS 27: this task ⏻',
+		'iPhone 17 · iOS 27: Client flows ⏻',
+		'iPhone Air · iOS 27: ',
+		'iPad Pro · iOS 27: 2 tasks',
 	]);
+	// Another task using it now, or its own copy: no Shut down.
+	expect(
+		pickerModel(
+			state({
+				uses: { 'iPhone 17': { kind: 'task', task: { projectId: 'p', id: 'flows' }, busy: true } },
+			}),
+			'en',
+			tasks,
+			false
+		).rows[1]!.canShutDown
+	).toBe(false);
 	expect(model.trigger).toBe('iPhone 17 Pro · iOS 27');
 	expect(model.footer).toBe(null);
 	// Another task with a lease on it is using it now: no Shut down.
@@ -77,13 +88,42 @@ it('ends each row with who holds the device, and offers Shut down only for a dev
 			false
 		).rows[0]!.canShutDown
 	).toBe(false);
+	// The task's own lease on another task's copy: no Shut down either.
+	expect(
+		pickerModel(
+			state({ uses: { 'iPhone 17 Pro': { kind: 'mine', busy: true } } }),
+			'en',
+			tasks,
+			false
+		).rows[0]!.canShutDown
+	).toBe(false);
 	// Ukrainian: the same tails in its own words.
 	expect(pickerModel(state({}), 'uk', tasks, false).rows.map((row) => row.tail)).toEqual([
 		'ця задача',
 		'Client flows',
-		'iOS 27',
+		'',
 		'2 задачі',
 	]);
+});
+it('a boot that waits at the gate says why (spec/browser-and-simulator#sim-cap)', () => {
+	const off = { device: device('iPhone Air', 'ios'), status: 'booting' as const };
+	expect(
+		pickerModel(
+			state({ ...off, gate: { running: 2, max: 2, lowMemory: false }, gateWait: true }),
+			'en',
+			tasks,
+			false
+		).waitReason?.text
+	).toBe('2 of 2 devices run.');
+	expect(
+		pickerModel(
+			state({ ...off, gate: { running: 1, max: 2, lowMemory: true }, gateWait: true }),
+			'en',
+			tasks,
+			false
+		).waitReason?.text
+	).toBe('Memory is low. New devices are off.');
+	expect(pickerModel(state(off), 'en', tasks, false).waitReason).toBe(null);
 });
 it('shows the task waiting for its device in the trigger and the row (spec/browser-and-simulator#sim-tab)', () => {
 	const model = pickerModel(

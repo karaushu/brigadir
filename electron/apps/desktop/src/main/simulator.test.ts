@@ -726,9 +726,10 @@ it('gives two tasks two devices at once and lets each tab show its own; a kind p
 		expect(tablet.device?.id).toBe('PAD');
 		expect(solo.uses).toEqual({
 			PHONE: { kind: 'mine' },
-			PAD: { kind: 'task', task: task('tablet') },
+			// Each holds its own device's lane after the call: busy, no Shut down for the other.
+			PAD: { kind: 'task', task: task('tablet'), busy: true },
 		});
-		expect(tablet.uses.PHONE).toEqual({ kind: 'task', task: task('solo') });
+		expect(tablet.uses.PHONE).toEqual({ kind: 'task', task: task('solo'), busy: true });
 		expect(solo.gate).toEqual({ running: 2, max: 2, lowMemory: false });
 		// The leases are saved per project; the person's tasks moved the project device only to devices they picked.
 		const saved = JSON.parse(
@@ -802,12 +803,23 @@ it('makes a crew worker a device of its own: a new one of the same model when th
 			kind: 'state',
 		})) as SimulatorState;
 		expect(foreman.device?.id).toBe('PHONE');
-		expect(foreman.uses['NEW-1']).toEqual({ kind: 'task', task: task('worker') });
+		expect(foreman.uses['NEW-1']).toEqual({ kind: 'task', task: task('worker'), busy: true });
 		// The worker acts on its copy while the foreman acts on the iPhone.
 		await Promise.all([
 			simulators.agent(task('worker'), { tool: 'act', action: 'tap', id: 'take-order' }, true),
 			simulators.agent(task('foreman'), { tool: 'act', action: 'tap', id: 'take-order' }),
 		]);
+		// The worker's lane is free, and the foreman picks the worker's copy: still the worker's, no Shut down for the foreman.
+		simulators.release(task('worker'));
+		await simulators.command(task('foreman'), { kind: 'select', device: 'NEW-1' });
+		const picked = (await simulators.command(task('foreman'), {
+			kind: 'state',
+		})) as SimulatorState;
+		expect(picked.uses['NEW-1']).toEqual({ kind: 'mine', busy: true });
+		await expect(
+			simulators.command(task('foreman'), { kind: 'shutdown', device: 'NEW-1' })
+		).rejects.toThrow('is in use by another task.');
+		await simulators.command(task('foreman'), { kind: 'select', device: 'PHONE' });
 		// A shut-down source is cloned with its data instead.
 		await simulators.command(task('foreman'), { kind: 'shutdown', device: 'PHONE' });
 		await simulators
@@ -881,7 +893,11 @@ it('lets a worker share when the cap is reached, makes an agent boot wait at the
 			/^Sharing iPhone 17 Pro with another task: 1 of 1 local devices run\.\n/
 		);
 		expect(run(world, 'create')).toEqual([]);
-		// An agent asking for a device that is off waits at the gate, then gives up with the cap.
+		// An agent asking for a device that is off waits at the gate, then gives up with the cap; meanwhile its tab starts and says why.
+		let during = null as Promise<unknown> | null;
+		world.onSleep = () => {
+			during ??= simulators.command(task('tablet'), { kind: 'state' });
+		};
 		await expect(
 			simulators.agent(task('tablet'), { tool: 'open', device: 'iPad' })
 		).rejects.toThrow(
@@ -889,6 +905,10 @@ it('lets a worker share when the cap is reached, makes an agent boot wait at the
 		);
 		expect(world.waiting.some((ids) => ids.includes('tablet'))).toBe(true);
 		expect(world.waiting.at(-1)).not.toContain('tablet');
+		const waited = (await during) as SimulatorState;
+		expect(waited.status).toBe('booting');
+		expect(waited.gateWait).toBe(true);
+		world.onSleep = () => {};
 		// Low memory under the cap: the agent waits and gives up; the person's Start is refused; Start anyway starts it and leaves the row.
 		world.cap = 3;
 		world.low = true;

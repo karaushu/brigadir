@@ -649,24 +649,26 @@ export class Simulators {
 		for (const device of this.devices) {
 			const holder = this.queue.holder(device.id);
 			if (device.id === own) {
+				// Another task's copy stays that task's: no Shut down here either, as shutdown() refuses it.
+				const copy = this.ownedByOther(device.id, key) ? ({ busy: true } as const) : {};
 				uses[device.id] =
 					holder && !same(holder, key)
 						? this.queue.waitsFor(key) === device.id
 							? { kind: 'queued', holder }
-							: { kind: 'mine', heldBy: holder }
-						: { kind: 'mine' };
+							: { kind: 'mine', heldBy: holder, ...copy }
+						: { kind: 'mine', ...copy };
 				continue;
 			}
 			if (holder && !same(holder, key)) {
-				uses[device.id] = { kind: 'task', task: holder };
+				uses[device.id] = { kind: 'task', task: holder, busy: true };
 				continue;
 			}
 			const others = [...this.leases.values()].filter(
 				(item) => item.lease.device === device.id && !same(item.key, key)
 			);
 			const owner = others.find((item) => item.lease.own);
-			if (owner || others.length === 1)
-				uses[device.id] = { kind: 'task', task: (owner ?? others[0]!).key };
+			if (owner) uses[device.id] = { kind: 'task', task: owner.key, busy: true };
+			else if (others.length === 1) uses[device.id] = { kind: 'task', task: others[0]!.key };
 			else if (others.length > 1) uses[device.id] = { kind: 'tasks', count: others.length };
 		}
 		void shown;
@@ -1281,14 +1283,15 @@ export class Simulators {
 		else this.metros.get(nameOf(key))?.stop();
 		const target = this.metros.get(nameOf(key))?.target;
 		if (runtime && status === 'on' && target?.appId) void this.followLogs(runtime, target.appId);
-		const waiting = this.gateWaits.has(nameOf(key));
+		const gated = this.gateWaits.has(nameOf(key)) && (status === 'off' || status === 'error');
 		return {
 			toolchain: this.toolchain!,
 			devices: this.devices,
 			device: device ? { ...device, booted: device.booted || status === 'on' } : null,
-			// A boot that waits at the gate shows as starting (spec/browser-and-simulator#sim-tab).
-			status: waiting && status === 'off' ? 'booting' : status,
-			error: runtime?.error ?? null,
+			// A boot that waits at the gate shows as starting (spec/browser-and-simulator#sim-tab), also a retry after a failed boot.
+			status: gated ? 'booting' : status,
+			gateWait: gated,
+			error: gated ? null : (runtime?.error ?? null),
 			screen: runtime?.screen ?? null,
 			orientation: runtime?.orientation ?? 'portrait',
 			metro: target ? { port: target.port, appId: target.appId, root: target.root } : null,

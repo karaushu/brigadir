@@ -119,6 +119,7 @@ export function ModelCard({
 					? null
 					: enabled.map((provider) => ({
 							label: provider === 'claude' ? 'Claude' : 'Codex',
+							glyph: provider === 'claude' ? ('claude' as const) : ('openai' as const),
 							rows: models
 								.filter((item) => item.provider === provider)
 								.map((item) => ({

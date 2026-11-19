@@ -13,16 +13,19 @@ export function SimulatorDeviceRow({
 	return (
 		<div className={service.service} data-simulator-device>
 			<Glyph name="simulator" size={12} />
-			<small>{t(locale, 'Device')}</small>
-			<span className={service.label}>{event.device}</span>
-			{event.lowMemory ? (
-				<>
-					<small className={styles.lowMemory}>{t(locale, 'started with low memory')}</small>
-					<small>{t(locale, 'by you')}</small>
-				</>
-			) : (
-				event.metroPort !== null && <small>Metro :{event.metroPort}</small>
-			)}
+			<span className={service.label}>
+				{t(locale, 'Device')} · {event.device}
+				{event.lowMemory ? (
+					<>
+						{' · '}
+						<span className={styles.lowMemory}>{t(locale, 'started with low memory')}</span>
+						{' · '}
+						{t(locale, 'by you')}
+					</>
+				) : (
+					event.metroPort !== null && ` · Metro :${event.metroPort}`
+				)}
+			</span>
 		</div>
 	);
 }

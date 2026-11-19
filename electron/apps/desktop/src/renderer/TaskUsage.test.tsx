@@ -84,6 +84,11 @@ it('the counter: the sum, ≈ while a turn runs, the provider near its budget, p
 	expect(counterText('uk', tokensView(held[0]!, held, 'uk')).text).toBe(
 		'Claude 2m з 2m · на паузі'
 	);
+	// At the budget before the host holds the task: red, without · paused (spec/composer#task-usage).
+	expect(counterText('en', view(crew({ claude: 2_000_000 }, 1_690_000)))).toEqual({
+		text: 'Claude 2m of 2m',
+		tone: 'reached',
+	});
 	// Far past any budget there is none: the sum only.
 	expect(counterText('en', view(crew(undefined, 50_000_000))).tone).toBe('normal');
 	// A task whose agents reported nothing yet has no counter.
@@ -91,6 +96,17 @@ it('the counter: the sum, ≈ while a turn runs, the provider near its budget, p
 		<TaskUsageCounterView view={view([task('new')])} locale="en" disabled={false} send={() => {}} />
 	);
 	expect(html).toBe('');
+	// With a budget it stands at zero, so the budget popup is within reach before the first turn.
+	const budgeted = renderToStaticMarkup(
+		<TaskUsageCounterView
+			view={view([task('new', { tokenBudget: { claude: 2_000_000 } })])}
+			locale="en"
+			disabled={false}
+			send={() => {}}
+		/>
+	);
+	expect(budgeted).toContain('data-task-usage');
+	expect(budgeted).toContain('>0 tokens<');
 });
 
 it('a member shows only its own count, and its popover names the budget it is counted in', () => {
@@ -189,6 +205,27 @@ it('the strip over the composer: Budget reached and the short answers', () => {
 	expect(html).toContain('Budget reached');
 	expect(html).toContain('Finish turns<');
 	expect(html).toContain('Raise to 3m');
+	// The row's chevron expands the breakdown (spec/chat-turns-plans-and-questions#budget-strip).
+	expect(html).toMatch(
+		/aria-label="Expand"[^>]*aria-expanded="false"|aria-expanded="false"[^>]*aria-label="Expand"/
+	);
+	expect(html).not.toContain('Turns that run now finish; nothing new starts.');
+	// Expanded (the click itself needs a DOM, which these tests do not have): the chevron says Collapse, the breakdown and the sentence show.
+	const open = renderToStaticMarkup(
+		<BudgetStrip
+			question={question}
+			view={view(crew({ claude: 2_000_000 }))}
+			locale="en"
+			disabled={false}
+			send={() => {}}
+			open
+		/>
+	);
+	expect(open).toMatch(
+		/aria-label="Collapse"[^>]*aria-expanded="true"|aria-expanded="true"[^>]*aria-label="Collapse"/
+	);
+	expect(open).toContain('Turns that run now finish; nothing new starts.');
+	expect(open).toContain('Details screen');
 });
 
 it("a worker row shows the member's own count, ≈ while its turn runs", () => {

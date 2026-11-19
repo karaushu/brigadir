@@ -227,6 +227,54 @@ describe('the Review strip (spec/reviews#strip)', () => {
 		expect(text(html)).toContain('Ran the greet script: it prints HELLO, ANN.');
 		expect(strip(view({ state: 'passed' }), false)).not.toContain('data-deck-fill');
 	});
+	it('open on the plan: the sources stand before the reviewer', () => {
+		const html = strip(
+			view(
+				{ state: 'reading', point: 'plan' },
+				{
+					sources: [
+						{
+							id: 's1',
+							title: 'CRM-412',
+							file: 'crm-412.md',
+							chars: 10,
+							savedAt: '2026-01-01T00:00:00.000Z',
+						},
+					],
+					members: [
+						{
+							name: 'Codex',
+							provider: 'codex',
+							taskId: 'w',
+							state: 'reading',
+							findings: 0,
+							since: '2026-01-01T00:00:00.000Z',
+						},
+					],
+				}
+			),
+			true
+		);
+		expect(html.indexOf('data-source="s1"')).toBeGreaterThan(-1);
+		expect(html.indexOf('data-source="s1"')).toBeLessThan(html.indexOf('aria-label="Reviewer"'));
+	});
+	it('open: a finding shows its full path and line', () => {
+		const html = strip(view({ state: 'passed' }, { comments: [finding('a', 'fixed')] }), true);
+		expect(text(html)).toContain('src/OrdersTab.tsx:41 · Codex');
+	});
+	it("a step's tooltip names its review's own state: stopped, did not start, outdated, accepted", () => {
+		const at = (state: TaskReview['state']) =>
+			strip(
+				view(
+					{ state: 'passed', point: 'plan' },
+					{ past: [review({ id: 'r1', point: 'mid', state })] }
+				)
+			);
+		expect(at('stopped')).toContain('title="Mid-task review · stopped"');
+		expect(at('failed')).toContain('title="Mid-task review · did not start"');
+		expect(at('outdated')).toContain('title="Mid-task review · outdated"');
+		expect(at('accepted')).toContain('title="Mid-task review · accepted"');
+	});
 });
 
 describe('Retry (spec/reviews#strip)', () => {

@@ -25,7 +25,7 @@ import {
 	type TokenBudget,
 	type TokenHold,
 } from '@brigadir/core';
-import { Button, Popup, SplitButton } from './ui/Controls';
+import { Button, IconButton, Popup, SplitButton } from './ui/Controls';
 import { DeckList, DeckRow, DeckRowButton } from './ui/Deck';
 import { Glyph } from './ui/Glyph';
 import { MenuItem, MenuPopover, Popover } from './ui/Popover';
@@ -510,14 +510,17 @@ export function BudgetStrip({
 	locale,
 	disabled,
 	send,
+	open = false,
 }: {
 	question: BudgetQuestion;
 	view: TaskTokensView;
 	locale: Locale;
 	disabled: boolean;
 	send(command: SessionCommand): void;
+	/** Starts expanded (the tests: a server render cannot click the chevron). */
+	open?: boolean;
 }): ReactNode {
-	const [shown, setShown] = useState(false);
+	const [shown, setShown] = useState(open);
 	const decide = (decision: BudgetDecision, budget?: number) =>
 		send({
 			kind: 'decideBudget',
@@ -559,6 +562,13 @@ export function BudgetStrip({
 								disabled={disabled}
 								answer={decide}
 							/>
+							<IconButton
+								size="s"
+								label={t(locale, shown ? 'Collapse' : 'Expand')}
+								aria-expanded={shown}
+								onClick={() => setShown(!shown)}>
+								<Glyph name="chevron-down" size={12} />
+							</IconButton>
 						</>
 					}>
 					<DeckRowButton expanded={shown} onClick={() => setShown(!shown)}>

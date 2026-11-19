@@ -590,7 +590,9 @@
 .zoneChip > svg {
 	color: var(--fg2);
 }
+/* spec/chat-turns-plans-and-questions#hire-card: zone paths are monospace. */
 .zoneChip > span {
+	font: var(--text-11) var(--mono-family);
 	overflow-wrap: anywhere;
 	white-space: normal;
 }

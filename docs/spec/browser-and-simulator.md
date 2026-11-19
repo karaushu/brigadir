@@ -346,14 +346,14 @@ A task's chat gets a quiet service row (event `simulator.device`) when its lease
 | `queued` | The task's own device while its lane is held by another task |
 | `<role> · <title>` or `<title>` | Another task holds the device now, or owns it (a worker's copy), or is the only other lease on it |
 | `{n} tasks` | Several other tasks hold leases on it and none is using it now |
-| `iOS 27` (the OS) | Nobody holds it |
+| nothing | Nobody holds it |
 
   A running device that no other task is using now (holding its lane) and that is not another task's copy also has **Shut down {device}** after its tail; main refuses the same shutdown from anywhere else with `<device> is in use by another task.` Picking a device moves the task's lease to it; picking a device held by another task puts the task in that device's lane. While the task waits, the trigger reads `iPhone 17 · waits for Client flows`.
 - **List footer** (only while the gate is closed, see [Device cap and memory](#sim-cap)): `2 of 2 devices run.`, or `Memory is low. New devices are off.` with **Start anyway** (S, soft), then `Memory is low.` once lifted. Devices that are off are disabled meanwhile; running devices stay available.
 - On the right of strip 1 is the Metro chip: `Metro :8081`, with a tooltip giving app id · address · root. If Metro isn't found the chip reads **No Metro** in amber.
 - **Strip 2**: **Home**, **Back** (Android only), **Rotate**, a divider, **Reload app** and **DevTools** (both need Metro; DevTools opens React Native DevTools through Metro `/open-debugger`), and **Screenshot to chat** on the right (a JPEG re-encoded to PNG for the chat).
 - The screen sits inside a device frame on a tinted background and is scaled to fit the tab.
-- **States**: «{device} is off» + **Start** (under the cap: `2 of 2 devices run.` and no button; under low memory: `Memory is low. New devices are off.` and **Start anyway**); «{device} is starting…» with a spinner, also while the boot waits for the gate; running; missing toolchain; no simulators; landscape. Without Metro, a warning row reads «Metro is not running in this task», with **Commands…** (opens project commands in search, when that module is on).
+- **States**: «{device} is off» + **Start** (under the cap: `2 of 2 devices run.` and no button; under low memory: `Memory is low. New devices are off.` and **Start anyway**); «{device} is starting…» with a spinner, also while the boot waits for the gate, then with the gate's reason under it (`2 of 2 devices run.` or `Memory is low. New devices are off.`); running; missing toolchain; no simulators; landscape. Without Metro, a warning row reads «Metro is not running in this task», with **Commands…** (opens project commands in search, when that module is on).
 - An agent tap is marked by an accent ring of about 600 ms with a label like `tap · <testID>`.
 - No app console, network panel or DevTools of our own is built for the person. React Native DevTools covers these, in the same way the browser defers to Chromium DevTools.
 

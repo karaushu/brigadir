@@ -247,6 +247,31 @@ describe('the model question card (spec/chat-turns-plans-and-questions#model-car
 		expect(listed).toContain('GPT-6 Astra');
 		expect(listed).toContain('Use this model');
 		expect(listed).toContain('Save as role');
+		// A group carries its provider's glyph (spec/chat-turns-plans-and-questions#model-card).
+		const html = renderToStaticMarkup(
+			<ModelQuestion
+				title="t"
+				part="p"
+				reason="r"
+				groups={[
+					{ label: 'Codex', glyph: 'openai', rows: [{ key: 'codex:astra', name: 'GPT-6 Astra' }] },
+				]}
+				selected={null}
+				onSelect={() => {}}
+				efforts={null}
+				effort={null}
+				onEffort={() => {}}
+				saveAs={null}
+				onSaveAs={() => {}}
+				keepLabel="Keep Developer"
+				onKeep={() => {}}
+				onUse={() => {}}
+				onSettings={() => {}}
+				disabled={false}
+				locale="en"
+			/>
+		);
+		expect(html).toMatch(/data-glyph="openai"[^]*Codex/);
 		const none = card([{ label: 'Codex', rows: [] }]);
 		expect(none).toContain('No other models.');
 		expect(none).toContain('Settings…');

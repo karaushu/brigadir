@@ -123,13 +123,15 @@ The squeeze level is measured on the row itself (`ResizeObserver` on `[data-comp
 <a id="task-usage"></a>
 ### Token counter and `Task usage`
 
-The task's [token count](agents-and-providers.md#task-tokens) at the right end of the environment footer, mono 10.5, `--fg2`; a button of its own (hover `--tint`, open state underlined). A task whose agents reported no usage yet has no counter.
+The task's [token count](agents-and-providers.md#task-tokens) at the right end of the environment footer, mono 10.5, `--fg2`; a button of its own (hover `--tint`, open state underlined). A task whose agents reported no usage yet has no counter,
+unless it has a budget: then it reads `0 tokens`, so the budget popup is within reach before the first turn.
 
 | State | Shows |
 | --- | --- |
 | Normal | `1.2m tokens` — the sum over providers |
 | Estimate | `≈1.3m tokens` while a turn of the task or a member runs |
 | Near the budget | `--amber`, the provider nearest its budget and the budget: `Claude 1.7m of 2m` (`≈` when estimated) |
+| Reached | `--red`: `Claude 2m of 2m` — a provider at its budget before the host holds the task (its next check, or no host runs) |
 | Paused | `--red`: `Claude 2m of 2m · paused` while the task is held at that provider's budget |
 | No budget | the sum only, never amber or red |
 

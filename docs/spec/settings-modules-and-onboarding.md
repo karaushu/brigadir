@@ -104,6 +104,7 @@ Everything the intro can change lives in `settings.json` (`schemaVersion` 1). A 
 | `agents.provider` | `claude` \| `codex`, `claude`; must be enabled | Agents ▸ `Default agent` |
 | `agents.claudeSubagentModel` | Claude catalog model value or `null`, `null` | Agents ▸ `Subagent model` ([Agents and providers](agents-and-providers.md#subagent-model)) |
 | `agents.compactionWindow` | integer 100 000–1 000 000 tokens or `null` (agent's default), `200000` | Agents ▸ `Compaction window` ([Agents and providers](agents-and-providers.md#compaction-window)) |
+| `agents.taskBudget` | `{claude, codex}`, each an integer 1 000–10¹² tokens or `null` (no limit); both `null` | Agents ▸ `Task budget`; copied into each new task as `tokenBudget` ([Agents and providers](agents-and-providers.md#task-budget)) |
 | `agents.transport` | `gui` \| `terminal`, `gui` | Agents ▸ `Launch in` |
 | `agents.isolation` | `in-place` \| `worktree`, `in-place` | Agents ▸ `Isolation for CLI tasks` |
 | `auto.anyModel` | boolean, `false` | Agents ▸ `Auto` ▸ `Any catalog model` ([Auto](crew.md#auto-model)) |

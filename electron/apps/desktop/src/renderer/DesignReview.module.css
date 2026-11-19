@@ -92,6 +92,11 @@
 .pair[data-large] .image {
 	height: 170px;
 }
+/* The tile draws its own hover on the image (spec/design-review#card), not the global button layer. */
+button.tile:hover,
+button.tile:active {
+	background-image: none;
+}
 button.tile:hover > .image {
 	background: var(--tint2);
 	box-shadow: inset 0 0 0 1px var(--fg3);

@@ -135,6 +135,7 @@ describe('spec/composer#slash-menu: список `/` з диска', () => {
 			'propose_review',
 			'request_review',
 			'save_source',
+			'submit_design_review',
 			'review_reply',
 			'add_folder',
 			'browser_open',

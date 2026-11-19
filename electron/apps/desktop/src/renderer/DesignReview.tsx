@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
 	designCounts,
 	designMatchCount,
@@ -64,6 +64,7 @@ function DesignImage({
 	const [image, setImage] = useState<{ src: string; width: number; height: number } | false | null>(
 		null
 	);
+	const clip = useId();
 	useEffect(() => {
 		let live = true;
 		setImage(null);
@@ -78,31 +79,37 @@ function DesignImage({
 	if (image === false) return <Glyph name="image-off" size={16} />;
 	if (!image) return null;
 	const box = crop ?? { x: 0, y: 0, width: 1, height: 1 };
-	const view = [
-		box.x * image.width,
-		box.y * image.height,
-		Math.max(1, box.width * image.width),
-		Math.max(1, box.height * image.height),
-	].join(' ');
+	const area = {
+		x: box.x * image.width,
+		y: box.y * image.height,
+		width: Math.max(1, box.width * image.width),
+		height: Math.max(1, box.height * image.height),
+	};
 	return (
 		<svg
 			className={s.picture}
-			viewBox={view}
+			viewBox={`${area.x} ${area.y} ${area.width} ${area.height}`}
 			preserveAspectRatio="xMidYMid meet"
 			aria-hidden="true">
-			<image href={image.src} width={image.width} height={image.height} />
-			{marks.map((mark, index) => (
-				<rect
-					key={index}
-					className={s.mark}
-					x={mark.x * image.width}
-					y={mark.y * image.height}
-					width={mark.width * image.width}
-					height={mark.height * image.height}
-					rx={3}
-					vectorEffect="non-scaling-stroke"
-				/>
-			))}
+			{/* The crop: what lies outside the node's area is not drawn where the tile is wider than the area. */}
+			<clipPath id={clip}>
+				<rect {...area} />
+			</clipPath>
+			<g clipPath={`url(#${clip})`}>
+				<image href={image.src} width={image.width} height={image.height} />
+				{marks.map((mark, index) => (
+					<rect
+						key={index}
+						className={s.mark}
+						x={mark.x * image.width}
+						y={mark.y * image.height}
+						width={mark.width * image.width}
+						height={mark.height * image.height}
+						rx={3}
+						vectorEffect="non-scaling-stroke"
+					/>
+				))}
+			</g>
 		</svg>
 	);
 }

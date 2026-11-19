@@ -218,7 +218,11 @@ export type SessionEvent =
 			approved: boolean;
 			parts: AutoHirePart[] | null;
 			hired: AutoHired[];
+			/** spec/crew#auto-move: the move into a worktree failed, so the hire did not start. */
+			reason?: 'no-worktree';
 	  }
+	/** spec/crew#auto-move: a task without isolation moves into a worktree before its hire; the newest event of an id is its chat row. */
+	| WorkspaceMoveEvent
 	/** spec/crew#auto-dismiss */
 	| {
 			kind: 'crew.worker.dismissed';
@@ -711,6 +715,8 @@ export function pendingInputs(records: readonly EventRecord[]): PendingInputs {
 		budget = reduceBudgetJournal(budget, record);
 		if (e.kind === 'crew.hire.requested') crewHire = e.hire;
 		if (e.kind === 'crew.hire.resolved' && crewHire?.id === e.id) crewHire = null;
+		// spec/crew#auto-move: an approved hire that moves the task first no longer waits for the person.
+		if (e.kind === 'workspace.move' && e.hireId === crewHire?.id) crewHire = null;
 		if (e.kind === 'crew.model.requested') crewModels.set(e.request.id, e.request);
 		if (e.kind === 'crew.model.resolved') crewModels.delete(e.id);
 		if (e.kind === 'crew.plan.requested') crewPlan = e.plan;
@@ -759,6 +765,7 @@ import { isScopeChoice, type ScopeChoice } from './launch';
 import { isTaskProposalResult, type TaskProposal, type TaskProposalResult } from './task-proposal';
 import { isBackgroundId, isSubagentId } from './background';
 import { isCrewSpecAgent, type CrewSpecAgent } from './crew';
+import type { WorkspaceMoveEvent } from './workspace-move';
 import {
 	isReviewPoint,
 	isReviewerChoice,

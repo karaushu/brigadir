@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { isRecord, isTaskKey } from '@brigadir/core';
@@ -40,6 +41,15 @@ async function main() {
 		void host.stop('terminated');
 	});
 	await host.closed;
+	// spec/crew#auto-move: the task moved into a worktree; the next host starts from the same configuration in the new folder.
+	if (host.restart) {
+		const child = spawn(process.execPath, [...process.execArgv, process.argv[1]!, path], {
+			detached: true,
+			stdio: ['ignore', 'inherit', 'inherit'],
+			env: process.env,
+		});
+		child.unref();
+	}
 }
 void main().catch((e) => {
 	console.error(e instanceof Error ? e.message : 'Host failed');

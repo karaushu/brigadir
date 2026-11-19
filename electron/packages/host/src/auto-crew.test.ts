@@ -108,6 +108,10 @@ async function setup(
 	options: {
 		worktree?: boolean;
 		app?: (method: string, params: unknown) => Promise<unknown> | null;
+		/** spec/crew#auto-move: the host's hold; the test runs the work itself. */
+		workspace?: boolean;
+		/** What the project folder holds before the task starts (its dirty state). */
+		before?: (repo: string) => Promise<void>;
 	} = {}
 ) {
 	const root = await mkdtemp(join(tmpdir(), 'brigadir-auto-'));
@@ -125,6 +129,7 @@ async function setup(
 	const auto: AutoTask = { roles: roles(), budget: { minutes: 40, tokens: 400_000 } };
 	let task = await store.createTask(project.id, 'Client details', 'claude');
 	task = await store.updateTask(task, { auto });
+	await options.before?.(repo);
 	const snapshots = await Snapshots.open(store, task);
 	await snapshots.capture('baseline');
 	const events: SessionEvent[] = [],
@@ -134,11 +139,14 @@ async function setup(
 		events.map((event, seq) => ({ schemaVersion: 1, seq, at: new Date().toISOString(), event }));
 	const context = (await readCrewContext(store, task))!;
 	context.worktree = options.worktree ?? true;
-	const make = () =>
+	const holds: Parameters<
+		NonNullable<ConstructorParameters<typeof AutoCrewHost>[0]['workspace']>['hold']
+	>[0][] = [];
+	const make = (worktree = context.worktree) =>
 		new TestAutoHost({
 			store,
 			key: task,
-			context: { ...context, spec: structuredClone(context.spec) } as CrewContext,
+			context: { ...context, worktree, spec: structuredClone(context.spec) } as CrewContext,
 			services: {
 				dataDir: store.root,
 				mcpEntry: resolve('apps/desktop/out/services/mcp-relay'),
@@ -158,6 +166,16 @@ async function setup(
 				droppedQuestions.push(id);
 			},
 			app: options.app ?? (() => null),
+			...(options.workspace
+				? {
+						workspace: {
+							hold: (work) => {
+								holds.push(work);
+							},
+							sessionId: () => null,
+						},
+					}
+				: {}),
 		});
 	const host = make();
 	cleanup.push(() => host.stop());
@@ -173,6 +191,7 @@ async function setup(
 		prompts,
 		records,
 		snapshots,
+		holds,
 		droppedQuestions,
 	};
 }
@@ -269,7 +288,10 @@ describe('spec/crew#auto-tools: the tool set of an Auto session', () => {
 		expect(claude).toContain('EnterPlanMode');
 		expect(codex).toContain('This app gives you');
 		const alone = (await readCrewContext(store, task))!;
-		expect(sessionBrief(alone, 'claude', { tools })).toContain('you cannot hire workers here');
+		// spec/crew#auto-move: a task in the project's checkout hires too; an approved hire moves it into a worktree.
+		const brief = sessionBrief(alone, 'claude', { tools });
+		expect(brief).toContain('the host moves the task into a worktree of its own');
+		expect(brief).toContain('How to hire');
 	});
 	it('a CLI task with auto stays one agent', async () => {
 		const { store, task } = await setup();
@@ -386,11 +408,11 @@ describe('spec/crew#auto-hire', () => {
 			restarted.decideHire({ id: hire.id, approved: true, parts: null })
 		).rejects.toThrow('no longer pending');
 	});
-	it('hiring needs a worktree', async () => {
+	it('a host that cannot move the task refuses a hire without a worktree', async () => {
 		const { host } = await setup({ worktree: false });
 		await expect(
 			host.tool('hire_workers', hireInput, new AbortController().signal)
-		).rejects.toThrow('Hiring needs this task to run in a worktree');
+		).rejects.toThrow('Hiring needs a worktree');
 	});
 	it('refuses an unknown role and names the roles', async () => {
 		const { host } = await setup();
@@ -890,3 +912,179 @@ describe('review fixes', () => {
 		expect(events.at(-1)).toMatchObject({ kind: 'crew.question.resolved', answer: null });
 	});
 });
+
+describe('spec/crew#auto-move: a hire moves a task without isolation into a worktree', () => {
+	const readme = (line2: string, line9: string) =>
+		['hello', line2, 'c', 'd', 'e', 'f', 'g', 'h', line9, 'j', ''].join('\n');
+	/** The project folder before the task: README edited at line 2, an untracked file and a .gitignore of the person's. */
+	const dirty = async (repo: string) => {
+		await writeFile(join(repo, 'README.md'), readme('b', 'i'));
+		await git(repo, 'add', '-A');
+		await git(repo, 'commit', '-q', '-m', 'readme');
+		await writeFile(join(repo, 'README.md'), readme('person edit', 'i'));
+		await writeFile(join(repo, 'scratch.txt'), 'mine\n');
+		await writeFile(join(repo, '.gitignore'), 'local.env\n');
+	};
+	/** The agent's turn: a new file, a changed file, a line of the person's dirty README, and an ignored file its edit tool wrote. */
+	async function agentTurn(repo: string, snapshots: Snapshots, events: SessionEvent[]) {
+		events.push({ kind: 'turn.started', text: 'go' } as SessionEvent);
+		await mkdir(join(repo, 'packages', 'types'), { recursive: true });
+		await writeFile(join(repo, 'packages', 'types', 'client.ts'), 'export type Client = {};\n');
+		await writeFile(join(repo, 'apps', 'api', 'clients.ts'), 'export const clients = [1];\n');
+		await writeFile(join(repo, 'README.md'), readme('person edit', 'agent line'));
+		await writeFile(join(repo, 'local.env'), 'SECRET=1\n');
+		events.push({
+			kind: 'tool.changed',
+			patch: {
+				id: 'edit-1',
+				category: 'edit',
+				status: 'completed',
+				locations: [{ path: join(repo, 'local.env'), line: null }],
+			},
+		} as SessionEvent);
+		const point = await snapshots.capture('turn');
+		events.push({ kind: 'checkpoint.created', checkpoint: point!.id });
+		events.push({ kind: 'turn.completed', reason: 'end_turn' } as SessionEvent);
+	}
+	const twoParts = { summary: hireInput.summary, parts: hireInput.parts.slice(0, 2) };
+	it('moves only the task’s own changes, keeps the person’s, and hires from the commit in the worktree', async () => {
+		const { repo, store, task, host, make, events, prompts, holds, snapshots } = await setup({
+			worktree: false,
+			workspace: true,
+			before: dirty,
+		});
+		const status = async () =>
+			(await git(repo, 'status', '--porcelain', '--untracked-files=all')).split('\n').sort();
+		const statusBefore = await status();
+		await agentTurn(repo, snapshots, events);
+		// The person adds a file of their own between the agent's turns.
+		await mkdir(join(repo, 'docs'));
+		await writeFile(join(repo, 'docs', 'person.md'), 'notes\n');
+		const call = host.tool('hire_workers', twoParts, new AbortController().signal);
+		const hire = await until(() => pendingHire(events));
+		await host.decideHire({ id: hire.id, approved: true, parts: null });
+		expect(await call).toMatchObject({ approved: true, moving: true });
+		expect(events.at(-1)).toMatchObject({
+			kind: 'workspace.move',
+			state: 'moving',
+			repos: ['repo'],
+		});
+		expect(pendingInputs(records(events)).crewHire).toBeNull();
+		expect(host.spawned).toHaveLength(0);
+		expect(holds).toHaveLength(1);
+		// The host's hold: the last checkpoint is taken outside the agent's turns.
+		const restart = await holds[0]!({
+			capture: async () => {
+				const point = await snapshots.capture('refresh');
+				events.push({ kind: 'checkpoint.created', checkpoint: point!.id });
+			},
+			detach: async () => {},
+		});
+		expect(restart).toBe(true);
+		const moved = await store.task(task);
+		expect(moved.launch).toMatchObject({
+			isolation: 'worktree',
+			branch: 'brigadir/client-details',
+			baseRef: 'main',
+		});
+		const worktree = (await store.projectForTask(task)).path;
+		expect(worktree).not.toBe(repo);
+		// The worktree: the agent's files, its README line merged onto HEAD without the person's line, nothing of the person's.
+		expect(await readFile(join(worktree, 'packages', 'types', 'client.ts'), 'utf8')).toBe(
+			'export type Client = {};\n'
+		);
+		expect(await readFile(join(worktree, 'apps', 'api', 'clients.ts'), 'utf8')).toBe(
+			'export const clients = [1];\n'
+		);
+		expect(await readFile(join(worktree, 'README.md'), 'utf8')).toBe(readme('b', 'agent line'));
+		for (const path of ['scratch.txt', '.gitignore', 'docs/person.md', 'local.env'])
+			await expect(readFile(join(worktree, path))).rejects.toThrow();
+		// The project folder is as it was before the task, plus what the person did meanwhile and what could not move.
+		expect(await status()).toEqual([...statusBefore, '?? docs/person.md'].sort());
+		expect(await readFile(join(repo, 'README.md'), 'utf8')).toBe(readme('person edit', 'i'));
+		await expect(readFile(join(repo, 'packages', 'types', 'client.ts'))).rejects.toThrow();
+		expect(await readFile(join(repo, 'local.env'), 'utf8')).toBe('SECRET=1\n');
+		// The next host starts in the worktree (its first checkpoint, then the crew host) and finishes the hire.
+		await (await Snapshots.open(store, task)).capture('baseline');
+		const next = make(true);
+		cleanup.push(() => next.stop());
+		await next.start();
+		await until(() =>
+			events.some((event) => event.kind === 'crew.hire.resolved') ? true : undefined
+		);
+		expect(next.spawned).toHaveLength(2);
+		const row = events.findLast((event) => event.kind === 'workspace.move');
+		expect(row).toMatchObject({
+			state: 'moved',
+			branch: 'brigadir/client-details',
+			base: 'main',
+			stayed: [
+				{ path: 'docs/person.md', reason: 'person' },
+				{ path: 'local.env', reason: 'ignored' },
+			],
+		});
+		expect(events.findLast((event) => event.kind === 'crew.hire.resolved')).toMatchObject({
+			approved: true,
+		});
+		expect(await git(worktree, 'status', '--porcelain')).toBe('');
+		expect(await git(worktree, 'log', '-1', '--format=%s')).toBe('Client details');
+		expect(prompts.at(-1)?.text).toContain('The task moved into a worktree');
+		// The task's diff counts from the worktree's start: exactly what moved.
+		await (await Snapshots.open(store, task)).capture('turn');
+		expect((await readChanges(store, task)).files.map((file) => file.path).sort()).toEqual([
+			'README.md',
+			'apps/api/clients.ts',
+			'packages/types/client.ts',
+		]);
+	}, 30_000);
+	it('a move that fails leaves everything where it was and the agent works alone', async () => {
+		const { repo, store, task, host, events, prompts, holds, snapshots } = await setup({
+			worktree: false,
+			workspace: true,
+			before: dirty,
+		});
+		await store.updateTask(task, {
+			launch: {
+				isolation: 'in-place',
+				branch: '',
+				baseRef: 'origin/main',
+				setupCommand: 'exit 3',
+				scopes: [],
+			},
+		});
+		await agentTurn(repo, snapshots, events);
+		const statusBefore = await git(repo, 'status', '--porcelain', '--untracked-files=all');
+		const call = host.tool('hire_workers', twoParts, new AbortController().signal);
+		const hire = await until(() => pendingHire(events));
+		await host.decideHire({ id: hire.id, approved: true, parts: null });
+		await call;
+		const restart = await holds[0]!({
+			capture: async () => {
+				await snapshots.capture('refresh');
+			},
+			detach: async () => {},
+		});
+		expect(restart).toBe(false);
+		expect(events.findLast((event) => event.kind === 'workspace.move')).toMatchObject({
+			state: 'failed',
+			message: expect.stringContaining('Setup command failed'),
+		});
+		expect(events.findLast((event) => event.kind === 'crew.hire.resolved')).toMatchObject({
+			approved: false,
+			reason: 'no-worktree',
+		});
+		expect(prompts.at(-1)?.text).toContain('could not move into a worktree');
+		expect((await store.task(task)).launch?.isolation).toBe('in-place');
+		expect(await git(repo, 'status', '--porcelain', '--untracked-files=all')).toBe(statusBefore);
+		expect(await readFile(join(repo, 'packages', 'types', 'client.ts'), 'utf8')).toBe(
+			'export type Client = {};\n'
+		);
+		expect(await git(repo, 'branch', '--list', 'brigadir/*')).toBe('');
+		await expect(
+			readFile(join(store.root, 'worktrees', task.projectId, task.id, 'README.md'))
+		).rejects.toThrow();
+		expect(host.spawned).toHaveLength(0);
+	}, 30_000);
+});
+const records = (events: SessionEvent[]): EventRecord[] =>
+	events.map((event, seq) => ({ schemaVersion: 1, seq, at: new Date().toISOString(), event }));

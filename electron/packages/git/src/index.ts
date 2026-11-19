@@ -23,3 +23,4 @@ export * from './merge-flow';
 export * from './blame';
 export * from './commit-message';
 export * from './branch-switch';
+export * from './workspace-move';

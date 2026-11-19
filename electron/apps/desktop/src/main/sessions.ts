@@ -101,6 +101,26 @@ export class Sessions {
 		this.attachments.set(name(key), promise);
 		return promise;
 	}
+	/**
+	 * spec/crew#auto-move: a host that stopped because its task moved into a worktree starts the next host itself, in the new folder. The window
+	 * follows it: once the next host is up it is attached and the task's records are read again.
+	 */
+	private async followMovedHost(key: TaskKey, instance: string) {
+		const store = await SessionStore.at(this.dataDir);
+		const last = (await this.journals.read(store, key)).records.at(-1)?.event;
+		if (last?.kind !== 'host.stopped' || last.reason !== 'moved') return;
+		const end = Date.now() + 90_000;
+		while (Date.now() < end) {
+			await delay(200);
+			if (this.clients.has(name(key))) return;
+			const identity = await readIdentity(store, key).catch(() => null);
+			if (!identity || identity.instance === instance) continue;
+			if (await this.attach(key)) {
+				this.publish(key, null);
+				return;
+			}
+		}
+	}
 	private async connect(key: TaskKey): Promise<HostClient | null> {
 		const store = await SessionStore.at(this.dataDir);
 		const identity = await readIdentity(store, key);
@@ -115,6 +135,7 @@ export class Sessions {
 						this.clients.delete(name(key));
 						this.onDetached(key);
 						this.publish(key, null);
+						void this.followMovedHost(key, identity.instance).catch(() => {});
 					}
 				},
 				(event) => this.terminalEvent(key, event),

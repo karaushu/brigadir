@@ -18,6 +18,8 @@ import {
 	planDifferenceText,
 	planPartCountLabel,
 	planSplitLabel,
+	moveRepoCount,
+	movePathsStayed,
 	t,
 	type CrewPlanDifference,
 	type AgentTask,
@@ -29,6 +31,8 @@ import {
 	type CrewSpecAgent,
 	type CrewTemplate,
 	type EventRecord,
+	type WorkspaceMoveEvent,
+	type WorkspaceStayed,
 	type Locale,
 	type SessionCommand,
 	findSpecAgent,
@@ -929,6 +933,91 @@ export function CrewEventRow({
 	// spec/chat-turns-plans-and-questions#hire-card: the decision shows as the folded card on its place (Conversation).
 	if (e.kind === 'crew.hire.requested' || e.kind === 'crew.hire.resolved') return null;
 	return null;
+}
+/** spec/crew#activity: the move into a worktree — moving, moved, some paths stayed, failed — shown for the newest event of its id. */
+export function WorkspaceMoveRow({
+	event,
+	owner,
+	locale,
+}: {
+	event: WorkspaceMoveEvent;
+	owner: AgentTask | undefined;
+	locale: Locale;
+}) {
+	const agent = autoRootName(owner?.provider ?? 'claude');
+	if (event.state === 'moving')
+		return (
+			<div className={styles.service} data-crew-row="workspace-move" data-state="moving">
+				<Glyph name="agent-spinner" size={12} />
+				<small>{t(locale, 'workspace')}</small>
+				<span className={styles.label}>{t(locale, 'Moving to a worktree')}</span>
+				{event.repos.length > 0 && <small>{event.repos.join(' · ')}</small>}
+			</div>
+		);
+	if (event.state === 'failed')
+		return (
+			<div className={styles.service} data-crew-row="workspace-move" data-state="failed">
+				<span className={styles.failed}>
+					<Glyph name="agent-failed" size={12} />
+				</span>
+				<small>{t(locale, 'workspace')}</small>
+				<span className={styles.label}>{t(locale, 'Could not move to a worktree')}</span>
+				{event.message && (
+					<small className={styles.error} title={event.message}>
+						{event.message}
+					</small>
+				)}
+			</div>
+		);
+	const stayed = event.stayed ?? [];
+	const reason = (item: WorkspaceStayed) =>
+		t(
+			locale,
+			item.reason === 'person'
+				? 'changed while {agent} worked'
+				: item.reason === 'moving'
+					? 'changed while moving'
+					: item.reason === 'conflict'
+						? 'conflicts with edits made before the task'
+						: item.reason === 'ignored'
+							? 'ignored by git'
+							: 'outside git'
+		).replace('{agent}', agent);
+	return (
+		<>
+			<div
+				className={styles.service}
+				data-crew-row="workspace-move"
+				data-state={stayed.length ? 'stayed' : 'moved'}>
+				<Glyph name="sidebar-worktree" size={12} />
+				<small>{t(locale, 'workspace')}</small>
+				<span className={styles.label}>{event.branch}</span>
+				{event.base && <small>{t(locale, 'from {base}').replace('{base}', event.base)}</small>}
+				{stayed.length ? (
+					<small className={styles.warn}>{movePathsStayed(locale, stayed.length)}</small>
+				) : (
+					<>
+						<small>{moveRepoCount(locale, event.repos.length)}</small>
+						<small className={styles.ok}>{t(locale, 'moved')}</small>
+					</>
+				)}
+			</div>
+			{stayed.length > 0 && (
+				<div className={styles.paths} data-move-paths>
+					{stayed.slice(0, 20).map((item) => (
+						<div key={item.path}>
+							{item.path} <span>· {reason(item)}</span>
+						</div>
+					))}
+					{stayed.length > 20 && (
+						<div>
+							<span>{t(locale, '{n} more').replace('{n}', String(stayed.length - 20))}</span>
+						</div>
+					)}
+				</div>
+			)}
+		</>
+	);
 }
 /** spec/crew#auto-model: `model · GPT-6 Astra · High · saved as role “Vision developer”`, `Keep Developer`, or `· chosen by Claude`. */
 function ModelResolvedRow({

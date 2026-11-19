@@ -282,6 +282,7 @@ export function HireSummary({
 	hire,
 	parts,
 	approved,
+	noWorktree = false,
 	hired,
 	at,
 	task,
@@ -292,6 +293,8 @@ export function HireSummary({
 	hire: AutoHire;
 	parts: readonly AutoHirePart[] | null;
 	approved: boolean;
+	/** spec/crew#auto-move: the move into a worktree failed, so nobody was hired. */
+	noWorktree?: boolean;
 	hired: readonly AutoHired[];
 	at: string;
 	task: AgentTask;
@@ -321,7 +324,10 @@ export function HireSummary({
 				approved ? (
 					items.filter((part) => hired.some((item) => item.partId === part.id)).map(who)
 				) : (
-					<small>{t(locale, '{agent} does it itself').replace('{agent}', agent)}</small>
+					<>
+						<small>{t(locale, '{agent} does it itself').replace('{agent}', agent)}</small>
+						{noWorktree && <small>{t(locale, 'no worktree')}</small>}
+					</>
 				)
 			}
 			at={at}

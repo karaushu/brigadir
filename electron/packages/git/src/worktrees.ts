@@ -19,6 +19,8 @@ export type WorktreeOptions = {
 	scopeIds?: string[];
 	setupCommand?: string;
 	copyEnvFiles?: boolean;
+	/** spec/tasks#worktree-move: each repo's own start commit by relative path; `baseRef` is then only the name shown. */
+	starts?: Record<string, string>;
 };
 type Repository = {
 	source: string;
@@ -229,7 +231,20 @@ export class Worktrees {
 						await mkdir(dirname(target), { recursive: true, mode: 0o700 });
 						if (await branchExists(repository.source, state.branch))
 							await gitText(repository.source, ['worktree', 'add', '--', target, state.branch]);
-						else {
+						else if (options.starts?.[repository.relativePath]) {
+							// spec/tasks#worktree-move: a running task's copy starts at its repo's own HEAD.
+							const start = options.starts[repository.relativePath]!;
+							if (!/^[0-9a-f]{40,64}$/.test(start)) throw new Error('Invalid start commit');
+							await gitText(repository.source, [
+								'worktree',
+								'add',
+								'-b',
+								state.branch,
+								'--',
+								target,
+								start,
+							]);
+						} else {
 							if (state.baseRef.startsWith('origin/'))
 								await gitText(repository.source, [
 									'fetch',

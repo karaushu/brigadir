@@ -60,7 +60,10 @@ import {
 	restoreProject,
 	rollbackMove,
 	saveMove,
+	stoppedRow,
+	type MoveCommand,
 	type MoveDocument,
+	type MoveHold,
 } from './workspace-move';
 /** spec/crew#auto-move: the stay reasons as the agent reads them. */
 const stayReason = {
@@ -80,9 +83,9 @@ export type AutoCrewDeps = CrewHostDeps & {
 	app(method: string, params: unknown): Promise<unknown> | null;
 	/** spec/crew#auto-move: the host's hold for moving the task into a worktree; absent where the host cannot restart (unit tests). */
 	workspace?: {
-		hold(
-			work: (hold: { capture(): Promise<void>; detach(): Promise<void> }) => Promise<boolean>
-		): void;
+		hold(work: (hold: MoveHold) => Promise<boolean>): void;
+		/** spec/crew#auto-move: starts the saved commands again in this host's folder; the ids that started. */
+		restartCommands?(commands: readonly MoveCommand[]): Promise<string[]>;
 		/** No prompt starts until `work` settles: the host in the worktree finishes the hire first. */
 		gate?(work: Promise<void>): void;
 		sessionId(): string | null;
@@ -500,15 +503,18 @@ export class AutoCrewHost extends CrewHost {
 		workspace.hold((hold) => this.runMove(doc, hold));
 	}
 	/** spec/crew#auto-move, steps 2–8, in the host that still runs in the project folder. True: the host restarts in the worktree. */
-	private async runMove(
-		doc: MoveDocument,
-		hold: { capture(): Promise<void>; detach(): Promise<void> }
-	): Promise<boolean> {
+	private async runMove(doc: MoveDocument, hold: MoveHold): Promise<boolean> {
 		const store = this.deps.store,
 			key = this.deps.key;
 		const sessionId =
 			(await store.task(key)).provider === 'claude' ? this.autoDeps.workspace?.sessionId() : null;
-		let current: MoveDocument = { ...doc, state: 'moving', ...(sessionId ? { sessionId } : {}) };
+		let current: MoveDocument = {
+			...doc,
+			state: 'moving',
+			...(sessionId ? { sessionId } : {}),
+			...(hold.stopped?.length ? { stopped: hold.stopped } : {}),
+			...(hold.restart?.length ? { restart: hold.restart } : {}),
+		};
 		try {
 			await saveMove(store, key, current);
 			await hold.capture();
@@ -536,6 +542,8 @@ export class AutoCrewHost extends CrewHost {
 		const store = this.deps.store,
 			key = this.deps.key;
 		await saveMove(store, key, { ...doc, state: 'failed', message });
+		// The task stays in the project folder: the saved commands the agent had started run there again.
+		const stopped = stoppedRow(doc, await this.restartCommands(doc));
 		await this.deps.emit({
 			kind: 'workspace.move',
 			id: doc.id,
@@ -543,6 +551,7 @@ export class AutoCrewHost extends CrewHost {
 			state: 'failed',
 			repos: doc.repos,
 			message,
+			...(stopped.length ? { stopped } : {}),
 		});
 		const hire = await this.pendingHire();
 		if (hire?.id === doc.hireId) {
@@ -564,6 +573,10 @@ export class AutoCrewHost extends CrewHost {
 			`The task could not move into a worktree: ${message}. The hire did not start and the task keeps running in the project folder, with your edits where they were. Do these parts yourself.`,
 			{ kind: 'hire-decision', hireId: doc.hireId, approved: false }
 		);
+	}
+	private async restartCommands(doc: MoveDocument) {
+		if (!doc.restart?.length) return [];
+		return (await this.autoDeps.workspace?.restartCommands?.(doc.restart).catch(() => [])) ?? [];
 	}
 	/** spec/crew#auto-move: what a host finds at its start. */
 	private async resumeMove(doc: MoveDocument) {
@@ -589,7 +602,9 @@ export class AutoCrewHost extends CrewHost {
 				({ event }) =>
 					event.kind === 'workspace.move' && event.id === current.id && event.state === 'moved'
 			);
-		if (!announced)
+		if (!announced) {
+			// spec/crew#auto-move: what the restart stopped; the saved commands the agent had started run again in the worktree.
+			const stopped = stoppedRow(current, await this.restartCommands(current));
 			await this.deps.emit({
 				kind: 'workspace.move',
 				id: current.id,
@@ -599,7 +614,9 @@ export class AutoCrewHost extends CrewHost {
 				...(current.branch ? { branch: current.branch } : {}),
 				...(current.base ? { base: current.base } : {}),
 				stayed: current.stayed ?? [],
+				...(stopped.length ? { stopped } : {}),
 			});
+		}
 		const stayed = current.stayed ?? [];
 		const preface = `The task moved into a worktree: ${current.to} on branch ${current.branch} (from ${current.base}). Your edits moved with it; work there from now on.${
 			stayed.length

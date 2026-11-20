@@ -134,7 +134,8 @@ async function setup(
 	await snapshots.capture('baseline');
 	const events: SessionEvent[] = [],
 		prompts: { text: string; marker: unknown }[] = [],
-		droppedQuestions: string[] = [];
+		droppedQuestions: string[] = [],
+		restarted: string[][] = [];
 	const records = (): EventRecord[] =>
 		events.map((event, seq) => ({ schemaVersion: 1, seq, at: new Date().toISOString(), event }));
 	const context = (await readCrewContext(store, task))!;
@@ -173,6 +174,10 @@ async function setup(
 								holds.push(work);
 							},
 							sessionId: () => null,
+							restartCommands: async (commands) => {
+								restarted.push(commands.map((item) => item.id));
+								return commands.map((item) => item.id);
+							},
 						},
 					}
 				: {}),
@@ -193,6 +198,7 @@ async function setup(
 		snapshots,
 		holds,
 		droppedQuestions,
+		restarted,
 	};
 }
 const until = async <T>(read: () => T | undefined, timeout = 5000): Promise<T> => {
@@ -1018,11 +1024,12 @@ describe('spec/crew#auto-move: a hire moves a task without isolation into a work
 	}
 	const twoParts = { summary: hireInput.summary, parts: hireInput.parts.slice(0, 2) };
 	it('moves only the task’s own changes, keeps the person’s, and hires from the commit in the worktree', async () => {
-		const { repo, store, task, host, make, events, prompts, holds, snapshots } = await setup({
-			worktree: false,
-			workspace: true,
-			before: dirty,
-		});
+		const { repo, store, task, host, make, events, prompts, holds, snapshots, restarted } =
+			await setup({
+				worktree: false,
+				workspace: true,
+				before: dirty,
+			});
 		const status = async () =>
 			(await git(repo, 'status', '--porcelain', '--untracked-files=all')).split('\n').sort();
 		const statusBefore = await status();
@@ -1049,6 +1056,13 @@ describe('spec/crew#auto-move: a hire moves a task without isolation into a work
 				events.push({ kind: 'checkpoint.created', checkpoint: point!.id });
 			},
 			detach: async () => {},
+			// What ran when the host closed the session and the consoles.
+			stopped: [
+				{ kind: 'command', name: 'Metro' },
+				{ kind: 'console', name: 'zsh' },
+				{ kind: 'background', name: 'tsc --watch' },
+			],
+			restart: [{ id: 'metro', name: 'Metro' }],
 		});
 		expect(restart).toBe(true);
 		const moved = await store.task(task);
@@ -1092,7 +1106,14 @@ describe('spec/crew#auto-move: a hire moves a task without isolation into a work
 				{ path: 'docs/person.md', reason: 'person' },
 				{ path: 'local.env', reason: 'ignored' },
 			],
+			// spec/crew#auto-move: the row names what stopped; the saved command the agent had started runs again in the worktree.
+			stopped: [
+				{ kind: 'command', name: 'Metro', restarted: true },
+				{ kind: 'console', name: 'zsh' },
+				{ kind: 'background', name: 'tsc --watch' },
+			],
 		});
+		expect(restarted).toEqual([['metro']]);
 		expect(events.findLast((event) => event.kind === 'crew.hire.resolved')).toMatchObject({
 			approved: true,
 		});
@@ -1108,7 +1129,7 @@ describe('spec/crew#auto-move: a hire moves a task without isolation into a work
 		]);
 	}, 30_000);
 	it('a move that fails leaves everything where it was and the agent works alone', async () => {
-		const { repo, store, task, host, events, prompts, holds, snapshots } = await setup({
+		const { repo, store, task, host, events, prompts, holds, snapshots, restarted } = await setup({
 			worktree: false,
 			workspace: true,
 			before: dirty,
@@ -1133,12 +1154,17 @@ describe('spec/crew#auto-move: a hire moves a task without isolation into a work
 				await snapshots.capture('refresh');
 			},
 			detach: async () => {},
+			stopped: [{ kind: 'command', name: 'Metro' }],
+			restart: [{ id: 'metro', name: 'Metro' }],
 		});
 		expect(restart).toBe(false);
+		// The task stays in the project folder: the command the agent had started runs there again.
 		expect(events.findLast((event) => event.kind === 'workspace.move')).toMatchObject({
 			state: 'failed',
 			message: expect.stringContaining('Setup command failed'),
+			stopped: [{ kind: 'command', name: 'Metro', restarted: true }],
 		});
+		expect(restarted).toEqual([['metro']]);
 		expect(events.findLast((event) => event.kind === 'crew.hire.resolved')).toMatchObject({
 			approved: false,
 			reason: 'no-worktree',

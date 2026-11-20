@@ -617,6 +617,10 @@ export class Terminals {
 			if (!entry.frozen) entry.terminal.dispose();
 		});
 	}
+	/** spec/crew#auto-move: a move that failed hands the folder back; consoles and commands may start again. */
+	reopen() {
+		this.closed = false;
+	}
 	closeAll() {
 		this.closed = true;
 		for (const entry of [...this.entries.values()]) this.close(entry);

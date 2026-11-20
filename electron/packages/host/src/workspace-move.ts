@@ -10,6 +10,7 @@ import {
 	isWorkspaceStayed,
 	suggestedBranch,
 	workspaceStayedLimit,
+	workspaceStoppedLimit,
 	type AutoHireDecision,
 	type Checkpoint,
 	type EventRecord,
@@ -19,6 +20,7 @@ import {
 	type TaskKey,
 	type TaskLaunch,
 	type WorkspaceStayed,
+	type WorkspaceStopped,
 } from '@brigadir/core';
 import {
 	ProcessCoordinator,
@@ -75,7 +77,31 @@ export type MoveDocument = {
 	message?: string;
 	/** A Claude session whose transcript follows the task into the worktree's folder. */
 	sessionId?: string;
+	/** What the host restart stops, and the saved commands the agent had started, which start again after the move. */
+	stopped?: WorkspaceStopped[];
+	restart?: MoveCommand[];
 };
+/** A saved project command the agent started with `commands_run`. */
+export type MoveCommand = { id: string; name: string };
+/** spec/crew#auto-move: what the move gets from the host that holds the task for it. */
+export type MoveHold = {
+	capture(): Promise<void>;
+	detach(): Promise<void>;
+	/** What stopped with the session and the consoles, read before they closed. */
+	stopped?: WorkspaceStopped[];
+	restart?: MoveCommand[];
+};
+/** The stopped items as the event names them: the saved commands that started again are marked. */
+export function stoppedRow(doc: MoveDocument, restarted: readonly string[]): WorkspaceStopped[] {
+	const again = new Set(
+		(doc.restart ?? []).filter((item) => restarted.includes(item.id)).map((item) => item.name)
+	);
+	return (doc.stopped ?? [])
+		.slice(0, workspaceStoppedLimit)
+		.map((item) =>
+			item.kind === 'command' && again.has(item.name) ? { ...item, restarted: true } : item
+		);
+}
 export const moveFile = 'workspace-move.json';
 const moveDocumentBytes = 64 * 1024 * 1024;
 const inRoot = (scope: Scope) =>

@@ -12,6 +12,8 @@ import {
 	samePullRequest,
 	waitsForPerson,
 	statusAfterStop,
+	workspaceStoppedLimit,
+	type WorkspaceStopped,
 	statusAfterTurn,
 	queuedCrewQuestion,
 	type TaskProposal,
@@ -501,7 +503,12 @@ export async function startHost(config: HostConfig) {
 				? new AutoCrewHost({
 						...deps,
 						app: (method, params) => (ui ? ui.request(method, params) : null),
-						workspace: { hold: holdWorkspace, gate: gateWorkspace, sessionId: () => sessionId() },
+						workspace: {
+							hold: holdWorkspace,
+							gate: gateWorkspace,
+							sessionId: () => sessionId(),
+							restartCommands,
+						},
 					})
 				: new CrewHost(deps);
 		await host.start();
@@ -584,10 +591,7 @@ export async function startHost(config: HostConfig) {
 	 * spec/crew#auto-move: work that needs the task with no session, no capture and no watcher — the move into a worktree. It runs once no turn
 	 * runs; returning true stops this host (`moved`) so the next one starts in the new folder.
 	 */
-	type WorkspaceWork = (hold: {
-		capture(): Promise<void>;
-		detach(): Promise<void>;
-	}) => Promise<boolean>;
+	type WorkspaceWork = (hold: MoveHold) => Promise<boolean>;
 	let workspaceDue: WorkspaceWork | null = null,
 		workspaceHeld = false,
 		/** spec/crew#auto-move: the host in the new folder finishes the hire before any prompt starts. */
@@ -645,6 +649,8 @@ export async function startHost(config: HostConfig) {
 			await startingAgent?.catch(() => {});
 			stopScopeWatch();
 			stopScopeWatch = () => {};
+			// spec/crew#auto-move: what stops with the session and the consoles, read while it still runs; the row names it.
+			const stopped = stoppedByMove();
 			// Consoles of the task stop with the session: nothing writes into the folder while it is captured and restored.
 			terminals.closeAll();
 			await scopeRefresh.catch(() => {});
@@ -657,6 +663,7 @@ export async function startHost(config: HostConfig) {
 				await old.closed.catch(() => {});
 			}
 			restart = await work({
+				...stopped,
 				capture: async () => {
 					await checkpoint('refresh');
 				},
@@ -677,8 +684,9 @@ export async function startHost(config: HostConfig) {
 				restartAfterStop = true;
 				setImmediate(() => void stop('moved'));
 			} else {
-				// The move failed and the task stays here: the watcher and the agent's session come back, then the queue goes on.
+				// The move failed and the task stays here: the consoles, the watcher and the agent's session come back, then the queue goes on.
 				workspaceHeld = false;
+				terminals.reopen();
 				if (!stopping) {
 					startScopeWatch();
 					void ensureAgent()
@@ -1939,6 +1947,43 @@ export async function startHost(config: HostConfig) {
 	}
 	/** spec/search-menus-and-commands#agent-command-tools: commands the person let the agent run in this task without their `agentRuns` mark, until the app restarts. */
 	const commandGrants = new Set<string>();
+	/** spec/crew#auto-move: the saved commands the agent started with `commands_run` in this host. */
+	const agentCommands = new Set<string>();
+	/** spec/crew#auto-move: the consoles, saved commands and background commands that run now; the ones the agent started to run again. */
+	function stoppedByMove(): { stopped: WorkspaceStopped[]; restart: MoveCommand[] } {
+		const stopped: WorkspaceStopped[] = [],
+			restart: MoveCommand[] = [];
+		for (const info of terminals.consoles()) {
+			if (info.exited) continue;
+			if (info.run) {
+				stopped.push({ kind: 'command', name: info.run.name });
+				const id = info.run.commandId;
+				if (id && agentCommands.has(id)) restart.push({ id, name: info.run.name });
+			} else stopped.push({ kind: 'console', name: info.title });
+		}
+		for (const command of [...liveBackground(records), ...liveBackgroundSubagents(records)])
+			stopped.push({ kind: 'background', name: command.name.slice(0, 200) });
+		return { stopped: stopped.slice(0, workspaceStoppedLimit), restart };
+	}
+	/** spec/crew#auto-move: the saved commands the agent had started, run again in this host's folder after a move (or a failed one). */
+	async function restartCommands(items: readonly MoveCommand[]) {
+		if (!modules.current().commands) return [];
+		terminals.reopen();
+		const commands = (await store.project(config.key.projectId)).commands ?? [],
+			started: string[] = [];
+		for (const item of items) {
+			const command = commands.find((value) => value.id === item.id);
+			if (!command) continue;
+			try {
+				await terminals.command({ kind: 'run', run: commandRunSpec(command) });
+				agentCommands.add(command.id);
+				started.push(command.id);
+			} catch {
+				/* A command that does not start stays stopped; the row says so. */
+			}
+		}
+		return started;
+	}
 	/** Polls the command tab until `done` or the time runs out; a cancelled call stops waiting, not the command. */
 	async function untilRun(
 		commandId: string,
@@ -2039,11 +2084,13 @@ export async function startHost(config: HostConfig) {
 				await store.setProjectCommandAgentRuns(config.key.projectId, command.id, true);
 		}
 		if (kind === 'stop') {
+			agentCommands.delete(command.id);
 			await terminals.command({ kind: 'stop', id: current!.id });
 			await untilRun(command.id, 6000, signal, (run) => run.exited);
 			return answer();
 		}
 		await terminals.command({ kind: 'run', run: commandRunSpec(command) });
+		agentCommands.add(command.id);
 		const wait = typeof params.wait === 'number' ? params.wait : 20;
 		await untilRun(command.id, wait * 1000, signal, (run) => run.exited || run.run?.port !== null);
 		const run = terminals.commandRun(command.id);
@@ -3884,4 +3931,4 @@ export async function startHost(config: HostConfig) {
 	};
 }
 import { relayContext } from './relay-context';
-import { finishSwitch } from './workspace-move';
+import { finishSwitch, type MoveCommand, type MoveHold } from './workspace-move';

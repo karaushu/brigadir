@@ -8,7 +8,8 @@
 		"./client": "./src/ui.ts",
 		"./peer": "./src/peer.ts",
 		"./mcp-list": "./src/mcp-list.ts",
-		"./login-shell": "./src/login-shell.ts"
+		"./login-shell": "./src/login-shell.ts",
+		"./brigadir-tools": "./src/brigadir-tools.ts"
 	},
 	"dependencies": {
 		"@brigadir/core": "workspace:*",

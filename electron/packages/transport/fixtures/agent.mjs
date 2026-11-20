@@ -23,6 +23,11 @@ const signedOut=()=>Boolean(process.env.BRIGADIR_TEST_AUTH_FILE)&&!existsSync(pr
 const crewCompaction=scenario==='crew-compaction';let crewSteer;
 // spec/crew#auto-hire `crew-steering`: the scripted crew agent with steering; a steer is heard at once (`injected`).
 const crewSteering=scenario==='crew-steering';
+// spec/reviews#plan-mode `crew-codex-plan`: the scripted crew agent with codex-acp's `Collaboration mode` (default/plan). In `plan` a turn presents
+// its plan as codex-acp does — `plan_update`, then `Implement this plan?` without text; `implement_plan` switches back to `default` and runs the script.
+const codexPlan=scenario==='crew-codex-plan';
+// `@stay-in-plan` (sticky): the approval leaves the session in `plan`; `@refuse-plan` (sticky): a switch into `plan` is refused.
+let stayInPlan=false,refusePlan=false;
 const steering=scenario==='steering'||scenario==='steering-late'||scenario==='steering-codex'||crewCompaction||crewSteering;let steerWaiter;
 const threadStatus=(client,type)=>update(client,{sessionUpdate:'session_info_update',_meta:{codex:{threadStatus:{type,...(type==='active'?{activeFlags:[]}:{})}}}});
 // spec/chat-turns-plans-and-questions#agent-started-turns `agent-turn`: Claude Code begins a turn on its own after a background task — the wire of a live
@@ -53,6 +58,8 @@ const planModes=scenario==='plan-modes',claudeModes=[['default','Manual'],['acce
 let currentMode=planModes?'auto':'manual';
 if(planModes)options.push({id:'mode',category:'mode',name:'Mode',type:'select',currentValue:currentMode,options:claudeModes.map(([value,name])=>({value,name}))});
 const syncMode=mode=>{currentMode=mode;options=options.map(option=>option.id==='mode'?{...option,currentValue:mode}:option);};
+if(codexPlan)options.push({id:'collaboration_mode',category:'collaboration_mode',name:'Collaboration mode',type:'select',currentValue:'default',options:[{value:'default',name:'Default'},{value:'plan',name:'Plan'}]});
+const collaboration=()=>options.find(option=>option.id==='collaboration_mode')?.currentValue;
 const session = () => ({ sessionId:'fixture-session', configOptions:options, modes:planModes?{currentModeId:currentMode,availableModes:claudeModes.map(([id,name])=>({id,name}))}:{currentModeId:'manual',availableModes:[{id:'manual',name:'Manual'}]} });
 const update = (client, payload) => client.notify(methods.client.session.update, {sessionId:'fixture-session',update:payload});
 // spec/chat#subagents: the SDK schema here drops capabilities it does not know; the raw `initialize` line shows what the client sent.
@@ -87,6 +94,7 @@ connection = agent({name:'fixture'})
  .onRequest(methods.agent.session.setMode, async ({params,client}) => {record('mode',params);if(planModes)syncMode(params.modeId); if(quotaRejected&&params.modeId==='manual'){quotaRejected=false;await update(client,{sessionUpdate:'usage_update',used:1,size:100,_meta:{'_claude/rateLimit':{status:'allowed',rateLimitType:'five_hour'}}});}return {};})
  .onRequest(methods.agent.session.setConfigOption, async ({params,client}) => {
   record('option',params);if(scenario==='ghost-option-fail')throw new Error('Option unavailable');
+  if(codexPlan&&refusePlan&&params.configId==='collaboration_mode'&&params.value==='plan')throw new Error('Plan mode unavailable');
   if(scenario==='ghost-notice'&&params.configId==='model')await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'**Auto mode unavailable:** the selected model does not support Auto mode; using Accept edits instead.'}});
   if(perModel&&params.configId==='effort'&&!options.find(option=>option.id==='effort')?.options.some(choice=>choice.value===params.value))throw new Error('Effort is not available for this model');
   options=perModel&&params.configId==='model'?withEffort(params.value):options.map(option=>option.id===params.configId?{...option,currentValue:params.value}:option);
@@ -187,7 +195,7 @@ connection = agent({name:'fixture'})
   if(scenario==='catalog')await update(client,{sessionUpdate:'usage_update',used:42,size:100});
   // spec/composer#agent-capsule: the agent announces /compact, so the context popover offers Compact.
   if(scenario==='catalog')await update(client,{sessionUpdate:'available_commands_update',availableCommands:[{name:'compact',description:'Summarise and free context',input:null}]});
-  if((scenario==='crew'||crewSteering)&&text.startsWith('Write only a commit message')){
+  if((scenario==='crew'||crewSteering||codexPlan)&&text.startsWith('Write only a commit message')){
    // spec/crew#accept: the one-shot commit message generator of crew acceptance. The answer takes `<type>: [<Area>]` from the repo's
    // recent commits, so a test sees the log reached the call; a part titled «no message» fails it to show the fallback.
    const material=JSON.parse(text.slice(text.indexOf('\n')+1)),changes=Array.isArray(material)?material:material.changes;
@@ -196,7 +204,7 @@ connection = agent({name:'fixture'})
    await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:`${style?.[1]??'feat'}: [${style?.[2]??'Fixture'}] ${material.task??'change'}\n\nFiles: ${files.join(', ')}`}});
    return {stopReason:'end_turn'};
   }
-  if(scenario==='crew'||crewSteering){
+  if(scenario==='crew'||crewSteering||codexPlan){
    // Scripted crew agent: `@call <tool> <json>` calls a brigadir MCP tool, `@write <path> <text>` writes inside cwd. Never a provider.
    const config=mcpServers.find(s=>s.name==='brigadir');let out='';
    let script=params.prompt.filter(item=>item.type==='text'&&!item.text.startsWith('<attached_context')).map(item=>item.text).join('\n');
@@ -208,14 +216,33 @@ connection = agent({name:'fixture'})
    if(own){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const title=script.split('\n')[1]??'';const finding=/^- id (\S+) \(/m.exec(script)?.[1];
     // spec/crew#reviewer: a task titled «hold the verdict» — the first reviewer to read a check holds it until its turn is cancelled; the check sent again is answered.
     if(/hold the verdict/i.test(title)){let first=true;try{mkdirSync(join(tmpdir(),`brigadir-fixture-hold-${own[2]}`));}catch{first=false;}if(first){record('held',{reviewId:own[2]});await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}}
-    script=own[3]==='first read'?(file&&!/clean/i.test(title)?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round 1: say hello instead"}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"${/remark/i.test(title)?',"note":"Ran the output check: it prints done."':''}}`)
-     :/dispute/i.test(title)&&finding?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"replyTo":"${finding}","text":"Still says done."}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"}`;}
+    // spec/reviews#reviewer-questions: a task titled «ask the author» — the first read asks the task's agent first (`unanswered`: a question nobody answers).
+    const ask=own[3]==='first read'&&/ask the author/i.test(title)?`@call ask_foreman {"question":"${/unanswered/i.test(title)?'Nobody answers this: ':''}Is out/result.txt meant to stay?"}\n`:'';
+    script=ask+(own[3]==='first read'?(file&&!/clean/i.test(title)?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round 1: say hello instead"}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"${/remark/i.test(title)?',"note":"Ran the output check: it prints done."':''}}`)
+     :/dispute/i.test(title)&&finding?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"replyTo":"${finding}","text":"Still says done."}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"}`);}
+   // spec/reviews#reviewer-questions: the task's agent answers its reviewer's question with prompt_task, unless the question says nobody answers.
+   const asked=/^Worker `[^`]*` asks \(questionId (\S+)\):\n(?!Nobody answers this)Is out\/result\.txt meant to stay\?[\s\S]*?prompt_task\(taskId "([^"]+)"/.exec(script);
+   // The first call names another task with the real questionId: the host refuses it, and the answer goes to the reviewer.
+   if(asked)script=`@call prompt_task {"taskId":"another-task","text":"Not for you.","questionId":"${asked[1]}"}\n@call prompt_task {"taskId":"${asked[2]}","text":"Yes, it stays: the person asked for it.","questionId":"${asked[1]}"}`;
    const check=/^Check task (\S+) of `[^`]*` \(reviewId (\S+), round (\d) of \d\)/.exec(script);
    if(check&&/hold the verdict/.test(script.split('\n')[1]??'')){await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}
    if(check){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const dispute=/dispute/i.test(script.split('\n')[1]??'');const comment=file&&(check[3]==='1'||dispute);
     script=comment?`@call submit_review {"taskId":"${check[1]}","reviewId":"${check[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round ${check[3]}: say hello instead"}]}`:`@call approve {"taskId":"${check[1]}","reviewId":"${check[2]}"}`;}
    // spec/smoke-run#limit: the host's ask for the smoke report is answered with one, every flow unchecked.
    if(/with smoke_report:/.test(script)&&!/^@/m.test(script))script='@call smoke_report {"steps":[{"step":"Clients list","result":"unchecked","note":"the run stopped first"}],"summary":"Stopped before the steps were done."}';
+   if(codexPlan&&/^@stay-in-plan$/m.test(script))stayInPlan=true;
+   if(codexPlan&&/^@refuse-plan$/m.test(script))refusePlan=true;
+   if(codexPlan&&collaboration()==='plan'&&!own&&!check){
+    record('plan-prompt',script);
+    const plan=`# Plan\n\n1. ${script.split('\n').find(line=>line.startsWith('@write '))?.slice(7)??'Nothing to write'}`;
+    await update(client,{sessionUpdate:'plan_update',plan:{type:'markdown',planId:'plan-1',content:plan}});
+    const result=await client.request(methods.client.session.requestPermission,{sessionId:'fixture-session',toolCall:{toolCallId:'plan-review:plan-1',title:'Implement this plan?',kind:'switch_mode',status:'pending'},
+     options:[{optionId:'implement_plan',kind:'allow_once',name:'Yes, implement this plan'},{optionId:'revise_plan',kind:'reject_once',name:'No, and tell Codex what to do differently'}]});
+    record('plan-result',result);
+    if(result.outcome.outcome!=='selected'||result.outcome.optionId!=='implement_plan'){await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'kept planning'}});return {stopReason:'end_turn'};}
+    if(!stayInPlan){options=options.map(option=>option.id==='collaboration_mode'?{...option,currentValue:'default'}:option);
+    await update(client,{sessionUpdate:'config_option_update',configOptions:options});}
+   }
    for(const line of script.split('\n')){
     if(line.startsWith('@sleep ')){await new Promise(resolve=>setTimeout(resolve,Number(line.slice(7))));continue;}
     if(line.startsWith('@write ')){const rest=line.slice(7);const space=rest.indexOf(' ');const path=space<0?rest:rest.slice(0,space);const full=join(process.cwd(),path);mkdirSync(dirname(full),{recursive:true});writeFileSync(full,(space<0?'':rest.slice(space+1))+'\n');out+=`wrote ${path}\n`;}

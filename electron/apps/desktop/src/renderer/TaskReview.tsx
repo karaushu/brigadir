@@ -465,6 +465,27 @@ export function ReviewEventRow({
 				</Row>
 			);
 		}
+		case 'plan.mode':
+			// spec/reviews#plan-mode: the host's switch and its way back; the person's own change has no row.
+			if (e.by !== 'host') return null;
+			return (
+				<Row state={e.on ? 'plan-mode' : 'plan-mode-off'} glyph="list">
+					<small>{t(locale, 'plan mode')}</small>
+					<span className={service.label}>
+						{e.name} · {e.valueName}
+					</span>
+					<small>
+						{t(
+							locale,
+							!e.on
+								? 'after the approved plan'
+								: e.class === 'medium'
+									? 'for a Medium task'
+									: 'for a Large task'
+						)}
+					</small>
+				</Row>
+			);
 		case 'task-review.findings':
 			return (
 				<Row

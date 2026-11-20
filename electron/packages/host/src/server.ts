@@ -153,6 +153,7 @@ import {
 	isCrewToolCall,
 	crewHiddenTools,
 	partBrief,
+	soloAnswerOnly,
 	type CrewContext,
 } from './crew';
 import {
@@ -163,6 +164,7 @@ import {
 	type PresentedPlan,
 } from './task-review';
 import { TaskClassLife, readSmallTaskLimit } from './task-class';
+import { PlanModeLife } from './plan-mode';
 import { SmokeLife, readSmokeMinutes } from './smoke';
 /** spec/smoke-run#start: the smoke run's tools and `ready_to_look`, also of a crew developer. */
 const smokeTools: ReadonlySet<string> = new Set(['smoke_start', 'smoke_report', 'ready_to_look']);
@@ -459,13 +461,25 @@ export async function startHost(config: HostConfig) {
 	/** spec/reviews#classes: a solo task or an Auto agent that writes code has a class; a foreman, a worker and a reviewer have none. */
 	const classTask =
 		(!crew || crew.role === 'auto') && task.readOnlyAgent !== true && !isMainTree(config.key);
+	/** spec/reviews#plan-mode: the host switches the session into its plan mode between turns while the class owes a plan. */
+	const planMode = new PlanModeLife({
+		records: () => records,
+		emit: (event) => emit(event),
+		eligible: classTask && task.transport !== 'terminal',
+		send: async (change) => {
+			if (!transport) throw new Error('Agent is not available');
+			await transport.send(change);
+		},
+		ask: (text) => command({ kind: 'prompt', text, crew: { kind: 'plan-ask' } }),
+		stopping: () => stopping,
+	});
 	const taskClass = new TaskClassLife({
 		records: () => records,
 		emit: (event) => emit(event),
 		eligible: classTask,
 		readOnly: task.readOnlyAgent === true,
 		auto: autoTask,
-		provider: task.provider ?? 'claude',
+		planMode: () => planMode.state(),
 		limit: () => readSmallTaskLimit(store.root),
 		// spec/smoke-run#brief
 		smoke: () => modules.current().browser || modules.current().simulator,
@@ -520,10 +534,10 @@ export async function startHost(config: HostConfig) {
 				}),
 			// spec/crew#ask-foreman, spec/chat-turns-plans-and-questions#plan-chat: a reviewer's question to an agent held by its plan for
 			// approval answers that plan with its reject option and runs before what is queued. Only an agent that answers questions
-			// (`prompt_task`) gets it: the Auto agent; a split waits in the crew host.
+			// (`prompt_task`) gets it: the Auto agent and a solo task's agent (spec/reviews#reviewer-questions); a split waits in the crew host.
 			answerPlan: (text: string, marker: Extract<SessionEvent, { kind: 'turn.started' }>['crew']) =>
 				serialPrompt(async () => {
-					if (!autoTask) return false;
+					if (!autoTask && crew) return false;
 					const plan = [...permissions.values()].find((item) => isPlanApproval(item.request)),
 						reject = plan ? planRejectOption(plan.request) : null;
 					if (!plan || !reject) return false;
@@ -964,6 +978,8 @@ export async function startHost(config: HostConfig) {
 			]);
 			transport.validateAttachments(attachments.map((value) => value.input));
 			pieces = await dueAssignment(c.kind === 'prompt' ? (c.assignment ?? null) : null);
+			// spec/reviews#plan-mode: between turns only — the session goes into its plan mode before a turn while the class owes a plan.
+			await planMode.beforeTurn();
 			await checkpoint('turn');
 			await emit({
 				kind: 'turn.started',
@@ -1084,7 +1100,12 @@ export async function startHost(config: HostConfig) {
 					record.event.prompt.id === id
 			)?.seq ?? -1;
 		const heldSeq = since(item.id),
-			before = queue.prompts.find((entry) => since(entry.id) > heldSeq)?.id;
+			// spec/reviews#plan-mode: the host's ask for an owed plan keeps its place in front.
+			before = queue.prompts.find(
+				(entry) =>
+					since(entry.id) > heldSeq &&
+					!(entry.command.kind === 'prompt' && entry.command.crew?.kind === 'plan-ask')
+			)?.id;
 		await emit({ kind: 'prompt.queued', prompt: item, ...(before ? { before } : {}) });
 	}
 	function scheduleHeld() {
@@ -1990,6 +2011,9 @@ export async function startHost(config: HostConfig) {
 		if (event.kind === 'crew.hire.resolved' && event.approved && event.hired.length)
 			void taskClass.hired().catch(() => {});
 		if (event.kind === 'crew.worker.dismissed') void taskClass.dismissed().catch(() => {});
+		// spec/reviews#plan-mode: back from the plan mode after an approval, and the ask for a plan still owed.
+		if (event.kind === 'turn.completed')
+			void planMode.turnEnded(event.reason === 'cancelled').catch(() => {});
 	}
 	/** The plan requests the review has heard of: the journal row and the waiting request come in either order (the transport writes the row first). */
 	const presentedPlans = new Set<string>();
@@ -2981,7 +3005,10 @@ export async function startHost(config: HostConfig) {
 						? (({ answersPlan: _answersPlan, ...rest }) => rest)(c)
 						: c;
 				// spec/reviews#plan-loop: the findings of a plan review answered the waiting plan, so they run before what is queued.
-				const front = c.kind === 'submitReview' && planAnswered.delete(c.review.id);
+				// spec/reviews#plan-mode: so does the host's ask for the plan a class owes.
+				const front =
+					(c.kind === 'submitReview' && planAnswered.delete(c.review.id)) ||
+					(c.kind === 'prompt' && c.crew?.kind === 'plan-ask');
 				// spec/crew#auto-budget: the person's message continues a worker stopped at its part budget, before what waited meanwhile; the
 				// stop is lifted once the message is taken.
 				const resumes = overBudget && c.kind === 'prompt' && !c.crew;
@@ -3046,7 +3073,18 @@ export async function startHost(config: HostConfig) {
 				kickPrompts();
 			});
 		if (busy) throw new Error('Wait for the active turn before changing options');
-		if (c.kind === 'setMode' || c.kind === 'setOption') modeReturn = null;
+		if (c.kind === 'setMode' || c.kind === 'setOption') {
+			modeReturn = null;
+			// spec/reviews#plan-mode: the person's own move off the plan mode the host set is kept. On the prompt chain, so no turn starts (and
+			// switches back) between the change and its record.
+			const change = c;
+			return serialPrompt(async () => {
+				if (busy) throw new Error('Wait for the active turn before changing options');
+				if (!transport) throw new Error('Agent is not available');
+				await transport.send(change);
+				await planMode.person(change).catch(() => {});
+			});
+		}
 		await transport.send(c);
 	}
 	/** spec/agents-and-providers#sign-in-recovery: the failed turn again, on a fresh adapter process (a process whose token refresh failed need not reread the
@@ -3101,8 +3139,13 @@ export async function startHost(config: HostConfig) {
 		if (method === 'crew_tool') {
 			if (!isCrewToolCall(params)) throw new Error('Invalid crew tool call');
 			if (stopping) throw new Error('Host is stopping');
-			// A solo task's crew host only runs its review: its own agent has no crew tools. A developer's crew host runs only its own review
-			// (spec/reviews#points): its crew tools go up to its foreman.
+			// spec/reviews#reviewer-questions: a solo task's agent answers its own reviewers' questions, and only those.
+			if (!crew && params.tool === 'prompt_task') {
+				if (!crewHost) throw new Error(soloAnswerOnly);
+				return crewHost.answerSelfQuestion(params.params);
+			}
+			// A solo task's crew host only runs its review: its own agent has no other crew tools. A developer's crew host runs only its own
+			// review (spec/reviews#points): its crew tools go up to its foreman.
 			if (crewHost && crew && crew.role !== 'developer' && params.tool !== 'ask_foreman')
 				return crewHost.tool(params.tool, params.params, signal);
 			if (crewWorker) return crewWorker.tool(params.tool, params.params, signal);

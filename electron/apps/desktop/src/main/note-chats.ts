@@ -98,10 +98,28 @@ export class NoteChats {
 		chat.busy = busy;
 		this.deps.send({ id: chat.id, busy });
 	}
+	private turns = new Map<string, Promise<void>>();
+	/**
+	 * spec/notifications-slack-notes-and-schedules#note-concurrent: resolves when the note's agent is not answering. A Slack addition waits for it,
+	 * so the agent's edit (and its Undo) holds only what the agent wrote, and the agent's own write does not overtake it.
+	 */
+	idle(id: string): Promise<void> {
+		return this.turns.get(id) ?? Promise.resolve();
+	}
 	async send(id: string, text: string, choice: NoteChatChoice) {
-		const store = await this.deps.store;
+		if (this.chats.get(id)?.busy || this.turns.has(id))
+			throw new Error('The agent is still answering');
+		let end = () => {};
+		this.turns.set(id, new Promise<void>((resolve) => (end = resolve)));
+		try {
+			await this.turn(id, text, choice, await this.deps.store);
+		} finally {
+			this.turns.delete(id);
+			end();
+		}
+	}
+	private async turn(id: string, text: string, choice: NoteChatChoice, store: NotesStore) {
 		let chat = this.chats.get(id);
-		if (chat?.busy) throw new Error('The agent is still answering');
 		const note = await store.read(id);
 		const file = await store.textPath(id);
 		if (!chat) {

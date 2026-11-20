@@ -33,7 +33,7 @@ describe('TaskClassLife (spec/reviews#classes)', () => {
 			auto?: boolean;
 			eligible?: boolean;
 			readOnly?: boolean;
-			provider?: 'claude' | 'codex';
+			planMode?: 'on' | 'available' | 'none';
 		} = {}
 	) {
 		const records: EventRecord[] = [],
@@ -52,7 +52,7 @@ describe('TaskClassLife (spec/reviews#classes)', () => {
 			eligible: options.eligible ?? true,
 			readOnly: options.readOnly ?? false,
 			auto: options.auto ?? false,
-			provider: options.provider ?? 'claude',
+			planMode: () => options.planMode ?? 'available',
 			limit: async () => ({ files: 3, lines: 100 }),
 			size: async () => options.size ?? { files: 1, lines: 5 },
 			start: async (input) => {
@@ -96,6 +96,28 @@ describe('TaskClassLife (spec/reviews#classes)', () => {
 			},
 		]);
 	});
+	it('a class that owes no plan never tells the agent to wait for the host (spec/reviews#plan-mode)', async () => {
+		const { value, emit } = life();
+		const first = await value.set({ class: 'medium', reason: 'touches the API' });
+		expect(first.next).toContain('Brigadir switches the session into plan mode');
+		await emit({
+			kind: 'permission.requested',
+			request: {
+				id: 'p1',
+				tool: {
+					id: 'plan',
+					title: 'Implement this plan?',
+					category: 'switch_mode',
+					status: 'pending',
+				},
+				options: [{ id: 'implement_plan', name: 'Yes', kind: 'allow_once' }],
+			} as never,
+		});
+		await emit({ kind: 'permission.resolved', id: 'p1', optionId: 'implement_plan' });
+		const raised = await value.set({ class: 'large', reason: 'two layers' });
+		expect(raised.next).toContain('no new plan for approval is asked now');
+		expect(raised.next).not.toContain('Brigadir switches');
+	});
 	it('refuses a bad call, a task that writes no code and a class below Large while workers run', async () => {
 		const { value, emit } = life({ auto: true });
 		await expect(value.set({ class: 'huge', reason: 'x' })).rejects.toThrow('small, medium, large');
@@ -114,18 +136,21 @@ describe('TaskClassLife (spec/reviews#classes)', () => {
 			'Workers run in this task: it stays Large until they are dismissed.'
 		);
 	});
-	it('the next step names the plan for each provider and, in an Auto task, the hire', () => {
+	it('the next step names the plan by the session plan mode (spec/reviews#plan-mode) and, in an Auto task, the hire', () => {
 		const limit = { files: 15, lines: 300 };
-		expect(classNext('medium', { provider: 'claude', auto: false, limit })).toContain(
-			'EnterPlanMode'
+		const available = classNext('medium', { planMode: 'available', auto: false, limit });
+		expect(available).toContain('EnterPlanMode, for example');
+		expect(available).toContain('Brigadir switches the session into plan mode');
+		expect(classNext('medium', { planMode: 'on', auto: false, limit })).toContain(
+			'you are in plan mode'
 		);
-		expect(classNext('medium', { provider: 'codex', auto: false, limit })).toContain(
+		expect(classNext('medium', { planMode: 'none', auto: false, limit })).toContain(
 			'write the plan in your reply'
 		);
-		const large = classNext('large', { provider: 'claude', auto: true, limit });
+		const large = classNext('large', { planMode: 'available', auto: true, limit });
 		expect(large).toContain('request_review');
 		expect(large).toContain('hire_workers');
-		expect(classNext('large', { provider: 'claude', auto: false, limit })).not.toContain(
+		expect(classNext('large', { planMode: 'available', auto: false, limit })).not.toContain(
 			'hire_workers'
 		);
 		expect(classBrief(true)).toContain('hire workers');

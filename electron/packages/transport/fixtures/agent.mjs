@@ -201,7 +201,8 @@ connection = agent({name:'fixture'})
      :/dispute/i.test(title)&&finding?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"replyTo":"${finding}","text":"Still says done."}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"}`);}
    // spec/reviews#reviewer-questions: the task's agent answers its reviewer's question with prompt_task, unless the question says nobody answers.
    const asked=/^Worker `[^`]*` asks \(questionId (\S+)\):\n(?!Nobody answers this)Is out\/result\.txt meant to stay\?[\s\S]*?prompt_task\(taskId "([^"]+)"/.exec(script);
-   if(asked)script=`@call prompt_task {"taskId":"${asked[2]}","text":"Yes, it stays: the person asked for it.","questionId":"${asked[1]}"}`;
+   // The first call names another task with the real questionId: the host refuses it, and the answer goes to the reviewer.
+   if(asked)script=`@call prompt_task {"taskId":"another-task","text":"Not for you.","questionId":"${asked[1]}"}\n@call prompt_task {"taskId":"${asked[2]}","text":"Yes, it stays: the person asked for it.","questionId":"${asked[1]}"}`;
    const check=/^Check task (\S+) of `[^`]*` \(reviewId (\S+), round (\d) of \d\)/.exec(script);
    if(check&&/hold the verdict/.test(script.split('\n')[1]??'')){await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}
    if(check){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const dispute=/dispute/i.test(script.split('\n')[1]??'');const comment=file&&(check[3]==='1'||dispute);

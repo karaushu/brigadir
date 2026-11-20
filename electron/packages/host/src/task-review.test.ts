@@ -651,6 +651,24 @@ it('a solo task’s agent answers its reviewer’s question with prompt_task, an
 	expect(read.event).toMatchObject({ findings: 1 });
 	const reviewerCall = (await crewCalls(log, 'ask_foreman'))[0];
 	expect(reviewerCall?.result?.content[0]?.text).toContain('Yes, it stays');
+	// With the review live: the real questionId with another task is refused, the reviewer's own answer goes through.
+	const [, wrongTask, own] = await crewCalls(log, 'prompt_task');
+	expect(wrongTask?.args).toMatchObject({ taskId: 'another-task' });
+	expect(wrongTask?.result?.isError).toBe(true);
+	expect(wrongTask?.result?.content[0]?.text).toContain('prompt_task answers only');
+	expect(own?.result?.isError).toBeFalsy();
+	// A question already answered takes no second answer.
+	const { question } = asked.event as { question: { id: string; workerTaskId: string } };
+	await client.command({
+		kind: 'prompt',
+		text: `@call prompt_task {"taskId":"${question.workerTaskId}","text":"Again","questionId":"${question.id}"}`,
+	});
+	const again = await until(async () => (await crewCalls(log, 'prompt_task'))[3]);
+	expect(again.result?.isError).toBe(true);
+	expect(again.result?.content[0]?.text).toContain('prompt_task answers only');
+	expect(
+		(await client.snapshot()).records.filter((r) => r.event.kind === 'crew.question.resolved')
+	).toHaveLength(1);
 }, 240_000);
 
 it('a reviewer’s question to a solo agent held by its plan answers the plan as plan chat does, and the agent presents it again (spec/reviews#reviewer-questions)', async () => {

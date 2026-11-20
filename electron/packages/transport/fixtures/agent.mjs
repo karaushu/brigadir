@@ -4,6 +4,7 @@ import { Readable, Writable } from 'node:stream';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {join} from 'node:path';
+import { tmpdir } from 'node:os';
 import { appendFileSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -189,6 +190,8 @@ connection = agent({name:'fixture'})
    // spec/reviews#loop: a task's own review says `first read` or `closure check`; a crew member's check says `round n of 2`.
    const own=/^Check task (\S+) of `[^`]*` \(reviewId (\S+), (first read|closure check)\)/.exec(script);
    if(own){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const title=script.split('\n')[1]??'';const finding=/^- id (\S+) \(/m.exec(script)?.[1];
+    // spec/crew#reviewer: a task titled «hold the verdict» — the first reviewer to read a check holds it until its turn is cancelled; the check sent again is answered.
+    if(/hold the verdict/i.test(title)){let first=true;try{mkdirSync(join(tmpdir(),`brigadir-fixture-hold-${own[2]}`));}catch{first=false;}if(first){record('held',{reviewId:own[2]});await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}}
     script=own[3]==='first read'?(file&&!/clean/i.test(title)?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round 1: say hello instead"}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"${/remark/i.test(title)?',"note":"Ran the output check: it prints done."':''}}`)
      :/dispute/i.test(title)&&finding?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"replyTo":"${finding}","text":"Still says done."}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"}`;}
    const check=/^Check task (\S+) of `[^`]*` \(reviewId (\S+), round (\d) of \d\)/.exec(script);

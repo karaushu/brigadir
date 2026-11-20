@@ -477,6 +477,7 @@ Routing (in the parent's host): a developer's report does not go to the parent u
 - Report and diff of a run are immutable; reviewers' `read_report`/`read_diff` read that snapshot.
 - Any newer report of the developer — done or not, with changes or without — supersedes a run still `reviewing`, and so does a tree change; an old verdict returns `stale_review`. OIDs are re-checked before handing the report up.
 - One reviewer serves one run at a time; the rest queue FIFO and survive a restart. Waiting on a question or permission is not a finished review.
+- A check whose reviewer turn ended without a verdict because it was cancelled (`Stop now` at the budget, a stop in the reviewer's chat), failed, or lost its host goes to that reviewer again — into a new host when the old one is gone — at most three times in all. A turn that ended by itself without a verdict is silence: it is not sent again.
 - State and the delivery queue are written before waking an agent; deliveries have ids and are idempotent; a different verdict on a closed `reviewId` is rejected; restart restores runs and never treats silence as approval. An unrecoverable session gives `needs-you`, keeping snapshot and verdicts. The member's next part starts again from round 1.
 - A task's own reviews — mid-task and before its pull request, a worker's part included — run their own loop ([Reviews](reviews.md#loop)); the per-part count applies only to this check edge.
 - Edges only between children of one parent: a reviewer from another branch would not see that branch's brief or zone.

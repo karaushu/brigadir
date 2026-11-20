@@ -588,3 +588,77 @@ it('a reviewer’s question to an Auto agent held by its plan answers the plan a
 	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
 	expect(read.event).toMatchObject({ point: 'plan', findings: 1 });
 }, 240_000);
+
+/** The reviewer's task of the review that `client` runs, once the crew created it. */
+async function reviewerOf(client: HostClient, task: TaskKey, name = 'Reviewer') {
+	const created = await find(
+		client,
+		(r) => r.event.kind === 'crew.worker.created' && r.event.name === name
+	);
+	return { projectId: task.projectId, id: (created.event as { taskId: string }).taskId };
+}
+/** The reviewer's own journal, read from disk. */
+const journalOf = async (store: SessionStore, key: TaskKey) =>
+	(await readFile(join(await store.taskDir(key), 'events.jsonl'), 'utf8').catch(() => ''))
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line) as EventRecord);
+/** The fixture reviewer holds its first read of a «hold the verdict» task until its turn is cancelled: it logs `held` once it waits. */
+const holding = (log: string, n = 1) =>
+	until(async () =>
+		(await readFile(log, 'utf8').catch(() => ''))
+			.split('\n')
+			.filter((line) => line.includes('"event":"held"')).length >= n
+			? true
+			: undefined
+	);
+
+// From the walkthrough's code audit: a check whose reviewer turn was cancelled was never sent again, and the review stood still.
+it('a check whose reviewer turn was cancelled goes to the reviewer again (spec/crew#reviewer)', async () => {
+	const { store, task } = await setup('hold the verdict');
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['crew', log]);
+	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(client, (r) => r.event.kind === 'turn.completed');
+	await client.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const key = await reviewerOf(client, task);
+	await holding(log);
+	// `Stop now` at the budget, or a stop in the reviewer's chat: its turn ends cancelled with no verdict.
+	const own = await connectHost((await readIdentity(store, key))!);
+	cleanup.push(async () => own.close());
+	await own.command({ kind: 'cancel' });
+	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(read.event).toMatchObject({ findings: 1, reviewers: ['Reviewer'] });
+	const turns = (await journalOf(store, key)).filter(
+		(r) => r.event.kind === 'turn.started' && r.event.text.startsWith('Check task')
+	);
+	expect(turns).toHaveLength(2);
+
+	// The reviewer's host dies in the middle of a check: a new host of the reviewer gets it.
+	const dead = await setup('hold the verdict');
+	const deadLog = join(dead.store.root, 'agents.log');
+	const second = (await launchHost(dead.store, dead.task, ['crew', deadLog])).client;
+	await second.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(second, (r) => r.event.kind === 'turn.completed');
+	await second.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const deadKey = await reviewerOf(second, dead.task);
+	await holding(deadLog);
+	process.kill((await readIdentity(dead.store, deadKey))!.pid, 'SIGKILL');
+	const again = await find(second, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(again.event).toMatchObject({ findings: 1 });
+	expect((await journalOf(dead.store, deadKey)).some((r) => r.event.kind === 'host.stopped')).toBe(
+		true
+	);
+}, 300_000);

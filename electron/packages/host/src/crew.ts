@@ -1844,6 +1844,9 @@ export class CrewHost {
 			if (!this.stopping) {
 				this.watchSlots();
 				this.awaitHost(key);
+				// spec/crew#reviewer: a reviewer host that died in the middle of a check gets the check again in a new host.
+				if (this.reviews.some((run) => run.state === 'reviewing' && run.dispatched.length))
+					void this.serial(() => this.dispatchReviews()).catch(() => {});
 			}
 		});
 		return link;
@@ -1855,7 +1858,13 @@ export class CrewHost {
 			record.event.kind === 'session.failed'
 		)
 			this.watchSlots();
-		if (record.event.kind === 'session.started' || record.event.kind === 'turn.completed')
+		// spec/crew#reviewer: a check whose reviewer turn failed or was cut off goes out again.
+		if (
+			record.event.kind === 'session.started' ||
+			record.event.kind === 'turn.completed' ||
+			record.event.kind === 'session.failed' ||
+			record.event.kind === 'host.stopped'
+		)
 			void this.serial(async () => {
 				await this.dispatchReviews();
 				if (record.event.kind === 'turn.completed') await this.retireReviewers();
@@ -2309,8 +2318,64 @@ export class CrewHost {
 				await gitText(target.path, ['read-tree', '-u', '--reset', item.result]);
 		}
 	}
+	/**
+	 * spec/crew#reviewer: a check whose reviewer turn ended without a verdict — cancelled (`Stop now` at the budget, a stop), failed, or cut
+	 * off with its host — is sent to that reviewer again, at most three times in all. A turn that ended by itself without a verdict is
+	 * silence: never an approval, and not sent again.
+	 */
+	private async reclaimChecks() {
+		let changed = false;
+		for (const run of this.reviews.filter((item) => item.state === 'reviewing'))
+			for (const reviewerId of [...run.dispatched]) {
+				const reviewer = this.workers.find(
+					(worker) => worker.nodeId === reviewerId && !worker.acceptedAt
+				);
+				if (!reviewer || run.verdicts.some((verdict) => verdict.reviewerNodeId === reviewerId))
+					continue;
+				if (!(await this.checkLost(run, this.workerKey(reviewer)))) continue;
+				run.dispatched = run.dispatched.filter((id) => id !== reviewerId);
+				changed = true;
+			}
+		if (changed) await this.saveReviews();
+	}
+	private async checkLost(run: ReviewRun, key: TaskKey) {
+		const records = (await this.journal(key).catch(() => null))?.records ?? [],
+			mark = `(reviewId ${run.reviewId}`,
+			starts = records.filter(
+				(record) => record.event.kind === 'turn.started' && record.event.text.includes(mark)
+			),
+			last = starts.at(-1);
+		if (starts.length >= 3) return false;
+		// The check still waits in the reviewer's queue, or was taken out of it unread.
+		const removed = new Set(
+			records.flatMap((record) => (record.event.kind === 'prompt.removed' ? [record.event.id] : []))
+		);
+		const queued = records.filter(
+			(record) =>
+				record.seq > (last?.seq ?? 0) &&
+				record.event.kind === 'prompt.queued' &&
+				record.event.prompt.command.kind === 'prompt' &&
+				record.event.prompt.command.text.includes(mark)
+		);
+		if (
+			queued.some(
+				(record) => record.event.kind === 'prompt.queued' && !removed.has(record.event.prompt.id)
+			)
+		)
+			return false;
+		if (!last) return queued.length > 0;
+		const end = records.find(
+			(record) =>
+				record.seq > last.seq &&
+				['turn.completed', 'session.failed', 'host.stopped'].includes(record.event.kind)
+		);
+		if (end) return end.event.kind !== 'turn.completed' || end.event.reason === 'cancelled';
+		// The turn has no end: lost only when no host of the reviewer runs.
+		return !(await this.link(key).catch(() => null));
+	}
 	/** One reviewer serves one check at a time; the rest wait FIFO and survive a restart (spec/crew#reviewer). */
 	private async dispatchReviews() {
+		await this.reclaimChecks();
 		for (const reviewerId of new Set(
 			this.reviews.filter((run) => run.state === 'reviewing').flatMap((run) => run.reviewerNodeIds)
 		)) {

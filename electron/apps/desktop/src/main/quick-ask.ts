@@ -68,6 +68,8 @@ type Thread = {
 	/** The session's own catalog, from `session.started` / `options.changed`. */
 	options: AgentOption[];
 	answering: boolean;
+	/** The turn's last answer text: its message, and whether a tool call came after it. */
+	said: { messageId: string | null; tool: boolean } | null;
 	tools: Map<string, { write: boolean; paths: Set<string> }>;
 	quota: boolean;
 	/** spec/composer-steering-queue-and-ghost#quick-question: when the rejected limit resets, Unix seconds; the popover shows it on the limit chip. */
@@ -164,6 +166,7 @@ export class QuickAsks {
 			context: null,
 			options: [],
 			answering: false,
+			said: null,
 			quota: false,
 			resetsAt: null,
 			tools: new Map(),
@@ -356,6 +359,7 @@ export class QuickAsks {
 				before = await this.latest(thread.key);
 			}
 			thread.answering = true;
+			thread.said = null;
 			thread.onEnd = (reason) => {
 				stopped = reason === 'cancelled';
 			};
@@ -427,9 +431,19 @@ export class QuickAsks {
 			event.role === 'assistant' &&
 			event.content.kind === 'text' &&
 			!event.subagentId
-		)
-			this.deps.send({ id: thread.id, kind: 'text', text: event.content.text });
-		else if (event.kind === 'tool.changed') {
+		) {
+			// The answer is one stream: a new message (or text after a tool call) starts its own paragraph, so a line
+			// such as Slack's `ACK: …` ends before the next message (spec/notifications-slack-notes-and-schedules#slack-agent).
+			const apart =
+				thread.said !== null && (thread.said.tool || event.messageId !== thread.said.messageId);
+			thread.said = { messageId: event.messageId, tool: false };
+			this.deps.send({
+				id: thread.id,
+				kind: 'text',
+				text: apart ? `\n\n${event.content.text}` : event.content.text,
+			});
+		} else if (event.kind === 'tool.changed') {
+			if (thread.said) thread.said.tool = true;
 			// An update carries only what changed: the kind and the paths come with the first event of the call.
 			const known = thread.tools.get(event.patch.id) ?? { write: false, paths: new Set<string>() };
 			known.write ||= quickAskWrites(event.patch);

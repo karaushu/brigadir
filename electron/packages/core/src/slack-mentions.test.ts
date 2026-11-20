@@ -167,6 +167,9 @@ it('writes replies, notes and buttons', () => {
 	).toBe(
 		'🤔 *Several projects match admin* — admin (admin-web) · admin (admin-api). Which project?'
 	);
+	expect(slackLocalize(slackReply.agentSilent, 'uk')).toBe(
+		'🤷 *Агент не відповів* — спитай у Бригадирі.'
+	);
 	// Names are never translated: a note titled like a fixed phrase stays as it is.
 	expect(slackLocalize(slackReply.noteChoice('Create note', null), 'uk')).toBe(
 		'Create note · Без проєкту'

@@ -543,6 +543,7 @@ const ukPhrases: [string, string][] = [
 	['Asking the agent of', 'Питаю агента задачі'],
 	['Passed to the agent of', 'Передав агенту задачі'],
 	['The agent did not answer', 'Агент не відповів'],
+	['ask in Brigadir', 'спитай у Бригадирі'],
 	['Task created', 'Задачу створено'],
 	['Note saved', 'Нотатку збережено'],
 	['create one?', 'створити?'],

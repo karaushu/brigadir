@@ -361,6 +361,12 @@ export function App() {
 	// spec/settings-modules-and-onboarding#brigadir-chat-entry: the Brigadir section — its chat in the main area, its list in the sidebar.
 	const brigadirOpen = !!brigadirRoute;
 	const brigadirList = useBrigadirList();
+	// spec/settings-modules-and-onboarding#brigadir-chat-entry: `Ask Brigadir` and `Set up with Brigadir` in Settings open the section; Settings closes.
+	const brigadirOpened = useRef(brigadirRoute);
+	useEffect(() => {
+		if (brigadirRoute && brigadirRoute !== brigadirOpened.current) setSettings(false);
+		brigadirOpened.current = brigadirRoute;
+	}, [brigadirRoute]);
 	/** spec/sidebar#rail-sections: the tile's dot — a setup the person began and left unfinished. */
 	const brigadirDot = !!brigadirList?.setups.some(
 		(setup) => !setup.done && setup.status !== 'Not set up'

@@ -112,7 +112,9 @@ type Row =
 	| { kind: 'setting'; key: string; setting: SettingEntry }
 	| { kind: 'pr'; key: string; hit: PRHit }
 	| { kind: 'command'; key: string; option: CommandOption }
-	| { kind: 'text'; key: string; match: TextMatch };
+	| { kind: 'text'; key: string; match: TextMatch }
+	/** spec/settings-modules-and-onboarding#brigadir-chat-entry: `Ask Brigadir: «…»`, last in All and Actions for any query. */
+	| { kind: 'brigadir'; key: string; query: string };
 type Item =
 	| {
 			type: 'group';
@@ -142,6 +144,7 @@ const rowGroup: Record<Row['kind'], AllGroup> = {
 	pr: 'prs',
 	command: 'commands',
 	text: 'text',
+	brigadir: 'actions',
 };
 /** spec/search-menus-and-commands#search-tabs: what was opened from the search in this run of the app, newest first. */
 type Recent =
@@ -503,6 +506,12 @@ export function Search({
 		);
 		(tab === 'all' ? archivedRows.slice(0, allGroupLimit) : archivedRows).forEach(push);
 	};
+	// spec/settings-modules-and-onboarding#brigadir-chat-entry: whatever the query, the last group asks Brigadir.
+	const askBrigadir = () => {
+		if (quick || !query.trim()) return;
+		group('brigadir', t(locale, 'Brigadir (section)'));
+		push({ kind: 'brigadir', key: 'b/ask', query: query.trim() });
+	};
 	if (tab === 'all') {
 		if (!query.trim()) {
 			const recent = recentRows();
@@ -547,6 +556,7 @@ export function Search({
 				list.slice(0, allGroupLimit).forEach(push);
 				if (name === 'agents') archiveGroup();
 			}
+		askBrigadir();
 	} else if (tab === 'agents') {
 		taskRows.forEach(push);
 		archiveGroup();
@@ -596,6 +606,7 @@ export function Search({
 			group('settings', t(locale, 'Settings'), String(settingRowsList.length));
 			settingRowsList.forEach(push);
 		}
+		askBrigadir();
 	} else if (tab === 'commands') {
 		const labels: Record<CommandOption['group'], MessageKey> = {
 			running: 'Running now',
@@ -699,6 +710,9 @@ export function Search({
 				openTaskPR(target, { scopeId: row.hit.scopeId, number: row.hit.pr.number });
 				show();
 				close();
+			} else if (row.kind === 'brigadir') {
+				close();
+				useWorkspace.getState().openBrigadir(null, row.query);
 			} else if (row.kind === 'action') {
 				remember({ kind: 'action', id: row.action.id });
 				close();
@@ -770,6 +784,9 @@ export function Search({
 			} else if (row.kind === 'setting') {
 				close();
 				openSettings(row.setting.tab, { setting: row.setting.id });
+			} else if (row.kind === 'brigadir') {
+				close();
+				useWorkspace.getState().openBrigadir(null, row.query);
 			} else await runOption(row.option, true);
 		} catch {
 			fail();
@@ -893,6 +910,16 @@ export function Search({
 					</span>
 					<small>{row.action.group}</small>
 					{row.action.shortcut && <kbd>{row.action.shortcut}</kbd>}
+				</>
+			);
+		if (row.kind === 'brigadir')
+			return (
+				<>
+					<Glyph name="helmet-chat" size={14} />
+					<span className={styles.title}>
+						{t(locale, 'Ask Brigadir: «{query}»').replace('{query}', row.query)}
+					</span>
+					<kbd>↩</kbd>
 				</>
 			);
 		if (row.kind === 'setting')

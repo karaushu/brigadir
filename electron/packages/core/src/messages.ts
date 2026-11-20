@@ -2472,6 +2472,17 @@ const uk = {
 	'Could not undo the change.': 'Не вдалося повернути зміну.',
 	'Rename…': 'Перейменувати…',
 	'Rename the chat': 'Перейменувати чат',
+	'Ask about tasks and code, change settings or set things up — in a chat.':
+		'Питай про задачі й код, змінюй налаштування чи підключай щось — у чаті.',
+	'Tasks and code': 'Задачі й код',
+	'What is up with my tasks? How is the main flow built?':
+		'Що з моїми задачами? Як побудовано основний сценарій?',
+	'Make the code font one size bigger. Three columns instead of two.':
+		'Збільш шрифт коду на 1. Три колонки замість двох.',
+	'Set up a Slack bot for me. Turn on access from my laptop.':
+		'Налаштуй Slack-бота для мене. Увімкни доступ з ноутбука.',
+	'The helmet in the rail opens it. In Search Everywhere, the last row asks Brigadir.':
+		'Каска в рейці відкриває його. У «Шукати всюди» останній рядок питає Бригадира.',
 	'Could not archive the chat.': 'Не вдалося архівувати чат.',
 	'Could not delete the chat.': 'Не вдалося видалити чат.',
 	'Could not rename the chat.': 'Не вдалося перейменувати чат.',

@@ -29,6 +29,7 @@ import { CliUpdatesRow } from './CliUpdatesRow';
 import { AppUpdateRow } from './AppUpdates';
 import { KeepAwakeRow } from './KeepAwakeRow';
 import { Glyph } from './ui/Glyph';
+import { useWorkspace } from './store';
 import { PopupClose } from './ui/PopupClose';
 import { useKeepFocusWhileBusy } from './ui/keep-focus';
 import {
@@ -243,6 +244,14 @@ export function LayoutSettings({
 				<header>
 					<div className={styles.titlebar}>
 						<h1>{t(locale, 'Settings')}</h1>
+						{/* spec/settings-modules-and-onboarding#brigadir-chat-entry: Settings closes and the Brigadir section opens. */}
+						<Button
+							size="s"
+							onClick={() => useWorkspace.getState().openBrigadir()}
+							data-ask-brigadir>
+							<Glyph name="helmet-chat" size={13} />
+							{t(locale, 'Ask Brigadir')}
+						</Button>
 						<PopupClose locale={locale} close={close} />
 					</div>
 					<div className={styles.tabbar}>

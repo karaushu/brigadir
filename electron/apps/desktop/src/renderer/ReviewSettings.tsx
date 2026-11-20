@@ -1,10 +1,16 @@
-import { smallTaskLimits, t, type AppSettings, type Locale } from '@brigadir/core';
+import {
+	smallTaskLimits,
+	smokeMinutesLimits,
+	t,
+	type AppSettings,
+	type Locale,
+} from '@brigadir/core';
 import { Stepper } from './ui/Controls';
 import { SettingsRow, SettingsSection } from './SettingsForm';
 import styles from './LayoutSettings.module.css';
 /**
  * spec/settings-modules-and-onboarding#settings-keys: the `Reviews` card of Settings ▸ Agents — the files and changed lines past which a small
- * task gets a mid-task review from the host (spec/reviews#tripwire).
+ * task gets a mid-task review from the host (spec/reviews#tripwire), and the minutes of a smoke run's limit (spec/smoke-run#limit).
  */
 export function ReviewSettings({
 	settings,
@@ -21,6 +27,7 @@ export function ReviewSettings({
 		set = (patch: Partial<typeof limit>) =>
 			update({ reviews: { ...settings.reviews, smallTask: { ...limit, ...patch } } }),
 		label = t(locale, 'Small task limit');
+	const smokeLabel = t(locale, 'Smoke run limit');
 	return (
 		<SettingsSection title={t(locale, 'Reviews')} disabled={busy}>
 			<SettingsRow
@@ -51,6 +58,24 @@ export function ReviewSettings({
 						decreaseLabel={`${t(locale, 'lines (limit)')} · ${t(locale, 'Decrease')}`}
 					/>
 					<span>{t(locale, 'lines (limit)')}</span>
+				</span>
+			</SettingsRow>
+			<SettingsRow
+				label={smokeLabel}
+				hint={t(locale, 'At the limit the run stops and the agent reports.')}>
+				<span className={styles.inline} data-smoke-limit data-size="m">
+					<Stepper
+						label={`${smokeLabel} · ${t(locale, 'min (limit)')}`}
+						min={smokeMinutesLimits.min}
+						max={smokeMinutesLimits.max}
+						step={smokeMinutesLimits.step}
+						value={settings.reviews.smokeMinutes}
+						disabled={busy}
+						onChange={(smokeMinutes) => update({ reviews: { ...settings.reviews, smokeMinutes } })}
+						increaseLabel={`${t(locale, 'min (limit)')} · ${t(locale, 'Increase')}`}
+						decreaseLabel={`${t(locale, 'min (limit)')} · ${t(locale, 'Decrease')}`}
+					/>
+					<span>{t(locale, 'min (limit)')}</span>
 				</span>
 			</SettingsRow>
 		</SettingsSection>

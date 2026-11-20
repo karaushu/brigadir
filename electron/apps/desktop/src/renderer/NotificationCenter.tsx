@@ -55,6 +55,8 @@ const ENTRY_GLYPH: Record<NoticeEntryKind, [GlyphName, string]> = {
 	worker: ['agent-question', 'var(--amber)'],
 	review: ['review', 'var(--amber)'],
 	page: ['browser', 'var(--fg2)'],
+	// spec/smoke-run#ready-surfaces
+	ready: ['simulator', 'var(--accent)'],
 	error: ['toast-error', 'var(--red)'],
 	warning: ['toast-warning', 'var(--amber)'],
 	info: ['toast-info', 'var(--accent)'],

@@ -491,6 +491,8 @@ export const TaskRow = memo(function TaskRow({
 					!!task.blockedBy?.length) && (
 					<small
 						data-task-activity
+						// spec/smoke-run#ready-surfaces: `Ready to look` reads in the accent; the card keeps its fill.
+						data-ready={activity?.kind === 'ready' || undefined}
 						title={
 							activity?.path
 								? [activity.title, activity.path].filter(Boolean).join(' · ')

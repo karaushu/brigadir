@@ -77,7 +77,8 @@ export type Project = {
 /** `plan` is a permission that is a plan for approval (spec/chat-turns-plans-and-questions#plan-approval). */
 /** `review`: a review's open findings wait for the person (spec/reviews#surfaces); `count` is how many. */
 export type TaskActivity = {
-	kind: 'tool' | 'permission' | 'question' | 'plan' | 'proposal' | 'review';
+	/** `ready`: spec/smoke-run#ready-surfaces — the agent's `Ready to look`, over the tool activity. */
+	kind: 'tool' | 'permission' | 'question' | 'plan' | 'proposal' | 'review' | 'ready';
 	title: string;
 	path: string | null;
 	count?: number;
@@ -308,7 +309,7 @@ export function isAgentTask(value: unknown): value is AgentTask {
 		(value.activity === undefined ||
 			value.activity === null ||
 			(isRecord(value.activity) &&
-				['tool', 'permission', 'question', 'plan', 'proposal', 'review'].includes(
+				['tool', 'permission', 'question', 'plan', 'proposal', 'review', 'ready'].includes(
 					value.activity.kind as string
 				) &&
 				(value.activity.count === undefined ||

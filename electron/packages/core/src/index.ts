@@ -13,6 +13,7 @@ export * from './event-validation';
 export * from './changes';
 export * from './review';
 export * from './design-review';
+export * from './smoke';
 export * from './files';
 export * from './file-kinds';
 export * from './syntax';

@@ -77,6 +77,22 @@ test('uses a bounded complete journal tail and never reads a linked journal', as
 			title: 'Edit',
 			path: 'file.ts',
 		});
+		// spec/smoke-run#ready-surfaces: a working task keeps `Ready to look` over its tools.
+		await appendFile(
+			path,
+			[
+				{
+					...events[1],
+					seq: 3,
+					event: { kind: 'task.ready', id: 'r', screen: 'Details', where: 'simulator' },
+				},
+				{ ...events[1], seq: 4 },
+			]
+				.map((record) => JSON.stringify(record) + '\n')
+				.join('')
+		);
+		expect((await read()).tasks[0]?.activity).toMatchObject({ kind: 'ready', title: 'Details' });
+		await writeFile(path, events.map((record) => JSON.stringify(record) + '\n').join(''));
 		await appendFile(path, '{"unfinished":');
 		expect((await read()).tasks[0]?.activity?.title).toBe('Edit');
 		await writeFile(

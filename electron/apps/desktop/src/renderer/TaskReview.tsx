@@ -41,6 +41,7 @@ import { openReviewLaunch } from './ReviewLaunch';
 import { useHelperSettings } from './HelperAgent';
 import { useForge } from './Forge';
 import { DeckFill, DeckList, DeckRow } from './ui/Deck';
+import { TextLink } from './ui/TextLink';
 import { Button, IconButton, Segments } from './ui/Controls';
 import { Glyph, type GlyphName } from './ui/Glyph';
 import { StepTrack } from './ui/StepTrack';
@@ -346,16 +347,13 @@ function CountLink({
 	gaps?: boolean;
 }) {
 	return (
-		<button
-			type="button"
-			className={styles.count}
-			onClick={() => openReviewStrip(task, true, point)}>
+		<TextLink onClick={() => openReviewStrip(task, true, point)}>
 			{legacy
 				? commentCount(locale, count)
 				: gaps
 					? gapCount(locale, count)
 					: findingCount(locale, count)}
-		</button>
+		</TextLink>
 	);
 }
 function Row({
@@ -1463,9 +1461,7 @@ export function PlanReviewLine({ task, locale }: { task: AgentTask; locale: Loca
 				<span className={styles.glyph} data-state={tone}>
 					<Glyph name={glyph} size={12} />
 				</span>
-				<button type="button" className={styles.count} onClick={expand}>
-					{words}
-				</button>
+				<TextLink onClick={expand}>{words}</TextLink>
 				{!taskReviewRunning(current) && current.state !== 'yours' && findings > 0 && (
 					<>
 						{' · '}

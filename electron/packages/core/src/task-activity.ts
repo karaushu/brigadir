@@ -6,6 +6,14 @@ type State = { activity: TaskActivity | null; toolId: string | null; request: Ta
 /** spec/chat#subagent-block: subagent names by id — a subagent's own calls read as `Subagent · <name>`, like the turn status row. */
 type Names = Map<string, string>;
 function next(state: State, event: SessionEvent, names: Names): State {
+	// spec/smoke-run#ready-surfaces: `Ready to look` stays over the tool activity until the turn ends or a request waits.
+	if (
+		state.activity?.kind === 'ready' &&
+		(event.kind === 'tool.changed' || event.kind === 'subagent.started')
+	) {
+		if (event.kind === 'subagent.started') names.set(event.id, event.name);
+		return state;
+	}
 	if (event.kind === 'subagent.started') {
 		names.set(event.id, event.name);
 		return {
@@ -65,6 +73,12 @@ function next(state: State, event: SessionEvent, names: Names): State {
 						}
 					: null;
 	if (request) return { activity: request, toolId: null, request };
+	if (event.kind === 'task.ready')
+		return {
+			...state,
+			activity: { kind: 'ready', title: event.screen.slice(0, 240), path: null },
+			toolId: null,
+		};
 	if (event.kind === 'tool.changed') {
 		const previous =
 				state.toolId === event.patch.id && state.activity?.kind === 'tool' ? state.activity : null,

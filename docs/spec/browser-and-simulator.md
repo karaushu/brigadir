@@ -9,6 +9,7 @@ Each task has its own browser and simulator, which open as tabs of the task's wo
 - They exist only inside a task. The project screen has no browser, because nothing there could receive an attachment.
 - Each one can be switched off as a module ([Modules](settings-modules-and-onboarding.md#modules)). A switched-off module removes its tabs, menu items, shortcuts and MCP tools. A call to a tool of a switched-off module returns a sentence saying so.
 - Each MCP tool needs the app window. When the window is closed, the tool answers with a sentence such as `The browser needs an open application window` or `The Brigadir window is closed, so the browser is not available.`. Calls are never queued.
+- A [smoke run](smoke-run.md#limit) that reached its limit, or that the person stopped, refuses every `browser_*` and `simulator_*` call of its task until the agent files the report.
 - Opening the browser or simulator from a device on another machine is covered in [Remote access](remote-access-and-mobile.md).
 
 <a id="browser"></a>

@@ -37,6 +37,8 @@ export type TaskClassDeps = {
 	provider: AgentProvider;
 	/** spec/reviews#tripwire: the limit as Settings has it now. */
 	limit(): Promise<SmallTaskLimit>;
+	/** spec/smoke-run#brief: the browser or the simulator is on, so the class's `next` names the smoke run. */
+	smoke?(): boolean;
 	/** spec/reviews#tripwire: the task's change from its change base, as the tripwire counts it. */
 	size(): Promise<{ files: number; lines: number }>;
 	/** The review start `request_review` uses; true when it recorded a review (running, or failed for want of a reviewer). */
@@ -58,6 +60,16 @@ export function classBrief(auto: boolean): string {
 }
 /** spec/reviews#class-tool: what the class asks of the agent now (English, rule 12). */
 export function classNext(
+	value: TaskClass,
+	options: { provider: AgentProvider; auto: boolean; limit: SmallTaskLimit; smoke?: boolean }
+): string {
+	// spec/smoke-run#brief: whatever the class, a change that shows in the app gets one smoke run before the review before the PR.
+	const smoke = options.smoke
+		? ' If your change shows in the running app, check it once with a smoke run (smoke_start, smoke_report) before the review before the pull request.'
+		: '';
+	return classNextOf(value, options) + smoke;
+}
+function classNextOf(
 	value: TaskClass,
 	options: { provider: AgentProvider; auto: boolean; limit: SmallTaskLimit }
 ): string {
@@ -118,6 +130,7 @@ export class TaskClassLife {
 					provider: this.deps.provider,
 					auto: this.deps.auto,
 					limit: await this.deps.limit(),
+					smoke: this.deps.smoke?.() ?? false,
 				}),
 			};
 		});

@@ -37,7 +37,8 @@ export class TaskActivities {
 		while (this.cache.size > 1024) this.cache.delete(this.cache.keys().next().value!);
 		if (
 			(task.status === 'needs-you' && activity?.kind === 'tool') ||
-			(task.status === 'working' && activity?.kind !== 'tool')
+			// spec/smoke-run#ready-surfaces: `Ready to look` is the one non-tool line of a working task.
+			(task.status === 'working' && activity?.kind !== 'tool' && activity?.kind !== 'ready')
 		)
 			activity = null;
 		return activity;

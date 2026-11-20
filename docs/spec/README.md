@@ -52,6 +52,9 @@ today, one file per area. Start with [Overview](overview.md).
 - [Reviews](reviews.md): reviews the host runs on a task at three points (plan, mid-task, before the PR): who
   reviews, the loop of one read, one fix and one closure check, findings, the Review strip with its step track, the
   `request_review` tool, task classes and the tripwire, the gate on `Create PR` and the data.
+- [Smoke run and Ready to look](smoke-run.md): one pass of an agent through the flows a change touches under a time
+  limit the host enforces (`smoke_start`, `smoke_report`, the deck row, the report in the review loop) and the agent's
+  `ready_to_look` notice with its chat row, sidebar line and OS notification.
 - [Design review](design-review.md): a screen checked against its Figma design node by node on the device — the
   `submit_design_review` contract, the screenshots the host keeps and verifies, the gate in reviews and the card.
 - [Diff and review](diff-and-review.md): snapshot-tree diff engine, task step boundaries, unified and side-by-side

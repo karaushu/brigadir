@@ -25,26 +25,6 @@
 .skipped > span {
 	flex: 1;
 }
-/* A comment count is a link: dotted at rest, solid on hover (spec/reviews#strip). */
-.count {
-	flex: none;
-	padding: 0;
-	border: 0;
-	background: none;
-	font: inherit;
-	color: inherit;
-	text-decoration: underline dotted;
-	text-underline-offset: 2px;
-	cursor: default;
-}
-.count:hover {
-	text-decoration-style: solid;
-}
-.count:focus-visible {
-	outline: 1.5px solid var(--accent);
-	outline-offset: 1px;
-	border-radius: 3px;
-}
 .main {
 	display: block;
 	min-width: 0;
@@ -262,7 +242,7 @@
 	min-width: 0;
 	color: var(--fg2);
 }
-.planState[data-state='yours'] > .count:first-of-type {
+.planState[data-state='yours'] > button:first-of-type {
 	color: var(--amber);
 }
 /* spec/reviews#class-row: the class row places its pills in the label; the arrow of a changed class is --fg3. */

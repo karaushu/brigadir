@@ -201,7 +201,10 @@ connection = agent({name:'fixture'})
    if(check&&/hold the verdict/.test(script.split('\n')[1]??'')){await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}
    if(check){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const dispute=/dispute/i.test(script.split('\n')[1]??'');const comment=file&&(check[3]==='1'||dispute);
     script=comment?`@call submit_review {"taskId":"${check[1]}","reviewId":"${check[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round ${check[3]}: say hello instead"}]}`:`@call approve {"taskId":"${check[1]}","reviewId":"${check[2]}"}`;}
+   // spec/smoke-run#limit: the host's ask for the smoke report is answered with one, every flow unchecked.
+   if(/with smoke_report:/.test(script)&&!/^@/m.test(script))script='@call smoke_report {"steps":[{"step":"Clients list","result":"unchecked","note":"the run stopped first"}],"summary":"Stopped before the steps were done."}';
    for(const line of script.split('\n')){
+    if(line.startsWith('@sleep ')){await new Promise(resolve=>setTimeout(resolve,Number(line.slice(7))));continue;}
     if(line.startsWith('@write ')){const rest=line.slice(7);const space=rest.indexOf(' ');const path=space<0?rest:rest.slice(0,space);const full=join(process.cwd(),path);mkdirSync(dirname(full),{recursive:true});writeFileSync(full,(space<0?'':rest.slice(space+1))+'\n');out+=`wrote ${path}\n`;}
     else if(line.startsWith('@call ')){
      const rest=line.slice(6);const space=rest.indexOf(' ');const name=space<0?rest:rest.slice(0,space);const args=space<0?{}:JSON.parse(rest.slice(space+1));

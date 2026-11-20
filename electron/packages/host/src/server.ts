@@ -29,6 +29,8 @@ import {
 	reduceRateLimits,
 	skipsAgentPermission,
 	browserShowCard,
+	runningHires,
+	smokeReviewParagraph,
 } from '@brigadir/core';
 import { AgentFiles } from './agent-files';
 import { ScopeLocks, type ScopeOwner } from './scope-locks';
@@ -162,6 +164,9 @@ import {
 	type PresentedPlan,
 } from './task-review';
 import { TaskClassLife, readSmallTaskLimit } from './task-class';
+import { SmokeLife, readSmokeMinutes } from './smoke';
+/** spec/smoke-run#start: the smoke run's tools and `ready_to_look`, also of a crew developer. */
+const smokeTools: ReadonlySet<string> = new Set(['smoke_start', 'smoke_report', 'ready_to_look']);
 import { readTaskSources, saveTaskSource, sourcePath } from './task-sources';
 import { saveShot, submitDesignReview } from './design-review';
 import {
@@ -388,6 +393,12 @@ export async function startHost(config: HostConfig) {
 		part: async () => (crewWorker ? ((await readPartBrief())?.part ?? null) : null),
 		planAsks: () => planAsksBrief(planAsks(records)),
 		// spec/design-review#design-source: Figma links of the task's prompt (a worker's part), its saved sources and the plans it presented.
+		// spec/reviews#smoke: with the browser or the simulator on, the reviewer reads the newest smoke report.
+		// A crew worker's part is not the integrated work: its reviewer gets no smoke paragraph (spec/reviews#smoke).
+		smoke: () =>
+			!crew?.parentKey && (modules.current().browser || modules.current().simulator)
+				? smokeReviewParagraph(records)
+				: '',
 		designLinks: async () => {
 			const texts = records.flatMap((record) => {
 				const event = record.event;
@@ -457,6 +468,8 @@ export async function startHost(config: HostConfig) {
 		auto: autoTask,
 		provider: task.provider ?? 'claude',
 		limit: () => readSmallTaskLimit(store.root),
+		// spec/smoke-run#brief
+		smoke: () => modules.current().browser || modules.current().simulator,
 		size: () => readChanges(store, config.key).then((value) => changeSize(value.files)),
 		// spec/reviews#tripwire: the start of `request_review`; it fired when it recorded a review (running, or failed with no reviewer).
 		start: (input) => taskReview.requestByHost(input).catch(() => false),
@@ -549,6 +562,48 @@ export async function startHost(config: HostConfig) {
 	}
 	// spec/settings-modules-and-onboarding#modules: the modules on in Settings decide which human tools the MCP sessions list; a switch reaches open sessions.
 	const modules = new ModuleSettings(store.root);
+	/** spec/smoke-run#start: a solo task's agent, an Auto agent and a crew developer run smoke runs and say `Ready to look`. */
+	const smokeRole =
+		task.readOnlyAgent !== true && (!crew || crew.role === 'auto' || crew.role === 'developer');
+	const smoke: SmokeLife = new SmokeLife({
+		records: () => records,
+		emit: (event) => emit(event),
+		eligible: smokeRole,
+		modules: () => modules.current(),
+		minutes: () => readSmokeMinutes(store.root),
+		// spec/smoke-run#who: an Auto task's hired worker leaves the smoke to the agent that hired it.
+		hiredWorker: async () =>
+			!!crew?.parentKey && !!(await store.task(crew.crewKey).catch(() => null))?.auto,
+		workersRun: () => autoTask && runningHires(records).length > 0,
+		busy: () => busy,
+		steer: (text) =>
+			serialPrompt(async () => {
+				if (!busy || steerPending || !transport?.steering) return false;
+				return steerTurn(text, [], {
+					kind: 'turn.started',
+					text: '',
+					origin: 'agent',
+					crew: { kind: 'smoke-report' },
+				});
+			}),
+		prompt: (text) => command({ kind: 'prompt', text, crew: { kind: 'smoke-report' } }),
+		dropAsks: () =>
+			serialPrompt(async () => {
+				for (const item of [...queue.prompts, ...(queue.held ?? [])])
+					if (item.command.kind === 'prompt' && item.command.crew?.kind === 'smoke-report')
+						await emit({ kind: 'prompt.removed', id: item.id });
+			}),
+		// spec/smoke-run#start: the host asks a GUI session for the report; a terminal session has no smoke run.
+		asks: task.transport !== 'terminal',
+		page: async (tab) => {
+			if (!ui) return null;
+			const state = await ui.request('browser', { kind: 'state', ...(tab ? { tab } : {}) });
+			return isRecord(state) && typeof state.url === 'string' && typeof state.tab === 'string'
+				? { tab: state.tab, url: state.url }
+				: null;
+		},
+		stopping: () => stopping,
+	});
 	// spec/browser-and-simulator#metro-port: a task with its own worktree takes its Metro port before its agent and terminals start — a crew
 	// worker's host too, which its foreman's host starts with the foreman's environment.
 	if (modules.current().simulator)
@@ -556,7 +611,11 @@ export async function startHost(config: HostConfig) {
 	// spec/crew#roles: the root foreman's `create_task` is hidden while its crew plan exists; open MCP sessions hear the change.
 	const hiddenListeners = new Set<() => void>();
 	const hiddenTools: HiddenToolSource = {
-		current: () => crewHiddenTools(crew, records),
+		// spec/smoke-run#start: a terminal session lists no smoke run tools (the host cannot ask it for the report).
+		current: () =>
+			task.transport === 'terminal'
+				? new Set([...crewHiddenTools(crew, records), 'smoke_start', 'smoke_report'])
+				: crewHiddenTools(crew, records),
 		subscribe(listener) {
 			hiddenListeners.add(listener);
 			return () => hiddenListeners.delete(listener);
@@ -1698,7 +1757,9 @@ export async function startHost(config: HostConfig) {
 					event.kind !== 'crew.hire.resolved' &&
 					event.kind !== 'crew.model.resolved' &&
 					event.kind !== 'crew.question.resolved') ||
-				event.kind === 'scope.violation'
+				event.kind === 'scope.violation' ||
+				// spec/smoke-run#ready-surfaces: `Ready to look` lights the unread dot.
+				event.kind === 'task.ready'
 			)
 				await store.updateTask(config.key, {
 					activitySeq: record.seq,
@@ -1784,6 +1845,9 @@ export async function startHost(config: HostConfig) {
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
 			if (event.kind === 'session.failed' && !stopping)
 				void taskReview.turnStopped().catch(() => {});
+			// spec/smoke-run#limit: a turn that ends with the smoke run open asks for the report once; a stopped turn drops the run.
+			if (event.kind === 'turn.completed' && !stopping)
+				void smoke.turnEnded(event.reason === 'cancelled', record.seq).catch(() => {});
 			// spec/reviews#tripwire, spec/reviews#class-raise, spec/reviews#large-review
 			if (!stopping) classEvent(event);
 			// spec/reviews#plan-start: a presented plan starts its review or answers one; an approval ends it.
@@ -2491,6 +2555,15 @@ export async function startHost(config: HostConfig) {
 			await taskReview.stop();
 			return;
 		}
+		// spec/smoke-run#limit: the person's `+5 min` and `Stop` on the deck row.
+		if (c.kind === 'extendSmoke') {
+			await smoke.extend(c.id);
+			return;
+		}
+		if (c.kind === 'stopSmoke') {
+			await smoke.stop(c.id);
+			return;
+		}
 		if (c.kind === 'decideReview') {
 			await taskReview.decide(c.decision);
 			return;
@@ -2882,9 +2955,15 @@ export async function startHost(config: HostConfig) {
 		if (
 			!humanToolsAllowed(crew?.role ?? null) &&
 			!isWorkspaceTool(method) &&
-			!ownReviewTool(crew?.role ?? null, method)
+			!ownReviewTool(crew?.role ?? null, method) &&
+			!(smokeRole && smokeTools.has(method))
 		)
 			throw new Error('Method is not available to this role');
+		// spec/smoke-run#limit: from the limit to the report the browser and the simulator answer only that the report is due.
+		smoke.gate(method);
+		if (method === 'smoke_start') return smoke.start(params);
+		if (method === 'smoke_report') return smoke.report(params);
+		if (method === 'ready_to_look') return smoke.ready(params);
 		// spec/pull-requests-and-ci#review-with-agent, spec/pull-requests-and-ci#review-drafts: the PR's drafts file in the project — the one every task shows in its PR panel and «Review ▾» form.
 		if (method === 'pr_comment') {
 			if (!modules.current().pullRequests) throw new Error(moduleOffMessages.pullRequests);
@@ -3472,6 +3551,7 @@ export async function startHost(config: HostConfig) {
 		clearTimeout(rateTimer);
 		clearInterval(idleTimer);
 		clearInterval(orphanTimer);
+		smoke.dispose();
 		stopScopeWatch();
 		try {
 			await scopeRefresh;
@@ -3936,6 +4016,8 @@ export async function startHost(config: HostConfig) {
 		void taskReview.turnStopped().catch(() => {});
 		// spec/reviews#classes: the class checks start once the review's record is loaded.
 		void taskClass.start().catch(() => {});
+		// spec/smoke-run#limit: a run that is open arms its limit for the time left, or stops if the limit passed meanwhile.
+		void smoke.load().catch(() => {});
 		// spec/reviews#plan-review: a root foreman's split that still waits after a restart.
 		if (foremanTask && !crew?.parentKey) {
 			const requested = records.findLast((record) => record.event.kind === 'crew.plan.requested');

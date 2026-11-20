@@ -33,34 +33,37 @@ export function taskActivityText(locale: Locale, task: AgentTask): string {
 				`${t(locale, 'Review')} · ${t(locale, '{count} open').replace('{count}', findingCount(locale, activity.count ?? 0))}`
 			: activity?.kind === 'plan'
 				? t(locale, 'Plan for approval')
-				: activity?.subagent
-					? `${t(locale, 'Subagent')} · ${activity.title}`
-					: activity
-						? [
-								activity.kind === 'tool'
-									? (mcpActivityTitle(locale, activity.title) ?? activity.title)
-									: t(
-											locale,
-											activity.kind === 'question'
-												? 'Question'
-												: activity.kind === 'proposal'
-													? 'New task'
-													: 'Permission'
-										),
-								activity.kind === 'tool' ? activity.path?.split(/[\\/]/).at(-1) : activity.title,
-							]
-								.filter(Boolean)
-								.join(' · ')
-						: // spec/sidebar#activity-line: the budget question waits — `{Provider} budget reached`.
-							task.tokenHold?.state === 'asked'
-							? t(locale, '{provider} budget reached').replace(
-									'{provider}',
-									t(locale, task.tokenHold.provider === 'claude' ? 'Claude' : 'Codex')
-								)
-							: t(
-									locale,
-									task.blockedBy?.length ? 'Waiting for the lock' : statusLabels[task.status]
-								);
+				: // spec/smoke-run#ready-surfaces: the agent's screen can be looked at.
+					activity?.kind === 'ready'
+					? t(locale, 'Ready to look')
+					: activity?.subagent
+						? `${t(locale, 'Subagent')} · ${activity.title}`
+						: activity
+							? [
+									activity.kind === 'tool'
+										? (mcpActivityTitle(locale, activity.title) ?? activity.title)
+										: t(
+												locale,
+												activity.kind === 'question'
+													? 'Question'
+													: activity.kind === 'proposal'
+														? 'New task'
+														: 'Permission'
+											),
+									activity.kind === 'tool' ? activity.path?.split(/[\\/]/).at(-1) : activity.title,
+								]
+									.filter(Boolean)
+									.join(' · ')
+							: // spec/sidebar#activity-line: the budget question waits — `{Provider} budget reached`.
+								task.tokenHold?.state === 'asked'
+								? t(locale, '{provider} budget reached').replace(
+										'{provider}',
+										t(locale, task.tokenHold.provider === 'claude' ? 'Claude' : 'Codex')
+									)
+								: t(
+										locale,
+										task.blockedBy?.length ? 'Waiting for the lock' : statusLabels[task.status]
+									);
 }
 /**
  * spec/tasks#worktree-preparation: in the sidebar, a «Preparing…» or «Queued» card shows the

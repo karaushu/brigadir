@@ -101,7 +101,7 @@ export class LiveAgents {
 				? [activity.title, activity.path].filter(Boolean).join(' · ').slice(0, 240)
 				: null,
 			attention:
-				task.status === 'needs-you' && activity?.kind !== 'tool'
+				task.status === 'needs-you' && activity?.kind !== 'tool' && activity?.kind !== 'ready'
 					? activity?.kind === 'plan'
 						? 'permission'
 						: activity?.kind === 'proposal' || activity?.kind === 'review'

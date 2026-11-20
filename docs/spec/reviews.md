@@ -208,6 +208,13 @@ design source, and no passed design review covers the state you read. …` with 
 a missing design review, is the reviewer's finding at the line that sets the property (or at the screen's file); the
 closure check approves only when a new `passed` design review covers the fix.
 
+<a id="smoke"></a>
+**Smoke.** A mid-task review or a review before the PR of a task with the browser or the simulator module adds the
+task's newest [smoke report](smoke-run.md#review) to the reviewer's prompt: a failed step the change since the report
+does not fix is a finding; with no report, a change that shows in the running app is a finding (`No smoke run checked
+this change in the running app.`) — the one wish for a check that is a finding, since the smoke is a required step. A
+crew reviewer of a part gets no smoke paragraph.
+
 <a id="remark"></a>
 **A remark.** `approve(taskId, reviewId, note?)` takes an optional `note` (up to 2000 characters): something the person
 should know that needs no fix — a risk to watch, the check the reviewer ran. It is stored with the approval, starts no
@@ -514,6 +521,8 @@ not list it. `reason` (1–200 characters) is one line on why, shown in the chat
 - Returns `{class, previous?, next}`; `next` (English) is what the class asks of the agent now:
   - Small: do the task without a plan card; a review runs before the PR; past the limit of files or changed lines
     (named with its numbers) the host starts a mid-task review by itself.
+  - Any class, with the browser or the simulator module on, adds: run one [smoke](smoke-run.md#who) before the review
+    before the PR when the change shows in the running app.
   - Medium and Large: save the ticket or the contract with `save_source`, then present a plan for approval before any
     edit — a Claude session with `EnterPlanMode` and `ExitPlanMode`; a Codex session, which cannot enter its plan mode by
     itself, writes the plan in its reply and ends its turn without edits. Large adds: call `request_review` after a layer

@@ -17,6 +17,35 @@ it('turns the usage of a prompt result into one record; a missing counter is 0, 
 	).toEqual({ kind: 'turn.usage', input: 10, output: 20, cacheRead: 0, cacheWrite: 0 });
 	expect(turnUsage(undefined)).toBeNull();
 });
+it('takes the per-model rows of the quota meta over the usage when there are any (spec/agents-and-providers#turn-usage)', () => {
+	const usage = { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedWriteTokens: 0 };
+	const row = (inputTokens: number, write: Record<string, number>) => ({
+		inputTokens,
+		outputTokens: 5,
+		cachedInputTokens: 100,
+		...write,
+	});
+	expect(
+		turnUsage(usage, {
+			quota: {
+				model_usage: [
+					{ model: 'a', token_count: row(10, { cachedWriteTokens: 7 }) },
+					{ model: 'b', token_count: row(1, { cacheWriteInputTokens: 2 }) },
+					{ model: 'c', token_count: null },
+				],
+			},
+		})
+	).toEqual({ kind: 'turn.usage', input: 11, output: 10, cacheRead: 200, cacheWrite: 9 });
+	// No rows: the usage, as before.
+	expect(turnUsage({ ...usage, inputTokens: 3 }, { quota: { model_usage: [] } })).toEqual({
+		kind: 'turn.usage',
+		input: 3,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+	});
+	expect(turnUsage(undefined, { quota: {} })).toBeNull();
+});
 for (const provider of ['claude', 'codex']) {
 	const fixture = JSON.parse(
 		readFileSync(new URL(`../fixtures/${provider}.json`, import.meta.url), 'utf8')

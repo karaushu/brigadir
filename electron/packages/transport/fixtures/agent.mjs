@@ -152,6 +152,19 @@ connection = agent({name:'fixture'})
    if(crewSteer==='adopt')await threadStatus(client,'idle');
    return {stopReason:'end_turn'};
   }
+  // spec/agents-and-providers#turn-usage: `/compact` as claude-agent-acp answers it — zeros in `usage`, the compaction's tokens in `_meta.quota.model_usage`;
+  // `/compact codex` — codex-acp's shape: one row equal to its `usage`, no tokens for the compaction.
+  if(scenario==='compaction'&&text.startsWith('/compact')){
+   const size=1000000;
+   await update(client,{sessionUpdate:'usage_update',used:153000,size});
+   await update(client,{sessionUpdate:'compaction_update',compactionId:'manual',status:'in_progress'});
+   await update(client,{sessionUpdate:'compaction_update',compactionId:'manual',status:'completed'});
+   await update(client,{sessionUpdate:'usage_update',used:14500,size});
+   if(text==='/compact codex'){const row={totalTokens:0,inputTokens:0,cachedInputTokens:0,cacheWriteInputTokens:0,outputTokens:0,reasoningOutputTokens:0};return {stopReason:'end_turn',usage:{totalTokens:0,inputTokens:0,cachedReadTokens:0,cachedWriteTokens:0,outputTokens:0},_meta:{quota:{token_count:row,model_usage:[{model:'gpt',token_count:row}]}}};}
+   const zero={inputTokens:0,outputTokens:0,cachedReadTokens:0,cachedWriteTokens:0,totalTokens:0};
+   const row=(input,read,write,output)=>({totalTokens:input+read+write+output,inputTokens:input,cachedInputTokens:read,cachedWriteTokens:write,outputTokens:output,reasoningOutputTokens:0});
+   return {stopReason:'end_turn',usage:zero,_meta:{quota:{token_count:row(0,0,0,0),model_usage:[{model:'claude-opus',token_count:row(9600,145000,200,3100)},{model:'claude-haiku',token_count:row(1200,0,0,20)}]}}};
+  }
   if(scenario==='compaction'&&text.startsWith('compact')){
    const id=text,size=1000000;
    await update(client,{sessionUpdate:'usage_update',used:text==='compact'?940000:300000,size});

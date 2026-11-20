@@ -28,7 +28,10 @@ Brigadir talks to coding agents through their ACP adapters (`claude-agent-acp`, 
 - **Parentage.** `_meta.claudeCode.parentToolUseId` (also on a subagent's message chunks) lives on the event record envelope, not on the event.
 - `usage.changed` carries `used`, `capacity` and the adapter's `cost`; cost is never displayed (see [usage](#usage-principles)).
 - <a id="context-compacted"></a>`context.compacted` says the agent compacted its context: `before` and `after` are the context sizes in tokens around the compaction, each a non-negative integer or null when the adapter gave none. It comes once per compaction that the adapter reports as completed ([compaction signal](#compaction-signal)), and the chat shows it as a [service row](chat.md#context-compacted). For a crew member, the host then gives the member's current assignment back ([Crew](crew.md#assignment-after-compaction)).
-- <a id="turn-usage"></a>`turn.usage` carries the tokens of one finished turn as the adapter reported them in the `session/prompt` result: `input`, `output`, `cacheRead`, `cacheWrite` (non-negative integers; a missing counter is 0). It is journaled just before that turn's `turn.completed`, and not at all when the result has no `usage`. The [token counter](#task-tokens) and the crew report ([Crew](crew.md#reports)) sum it.
+- <a id="turn-usage"></a>`turn.usage` carries the tokens of one finished turn from the `session/prompt` result: `input`, `output`, `cacheRead`, `cacheWrite` (non-negative integers; a missing counter is 0). It is journaled just before that turn's `turn.completed`, and not at all when the result reports nothing. The [token counter](#task-tokens) and the crew report ([Crew](crew.md#reports)) sum it.
+  - **Source.** When the result's `_meta.quota.model_usage` has rows, `turn.usage` is their sum (`inputTokens`, `outputTokens`, `cachedInputTokens` as cache reads, `cachedWriteTokens` or `cacheWriteInputTokens` as cache writes); otherwise it is the result's `usage`. claude-agent-acp builds those rows from the growth of the SDK's running `modelUsage` over the turn, so they hold every model call the turn made: its own loop, its compactions (automatic and `/compact`), subagents and the session title. Its `usage` holds the main loop only: a `/compact` turn reports zeros there, and a compaction costs about 10k new input, 3k output and a cache read of the whole context ([measured](#compaction-cost)). codex-acp gives one row equal to its `usage`; Codex reports no tokens for its compactions, so over ACP they are not counted.
+  - **Which turn.** A compaction counts in the turn whose prompt it ran under: a mid-turn one in that turn, one at the start of a turn in that turn, a `/compact` in its own turn.
+  - **Not counted.** A turn that ends without a prompt result (a host restart, a failed request) journals no `turn.usage`, with whatever it spent, a compaction included. The adapter's first reading after a `session/load` has no earlier reading to subtract from, so that turn's rows hold its main loop only, never the history before the load. A turn the agent began on its own ([agent-started turns](chat-turns-plans-and-questions.md#agent-started-turns)) has no prompt result and journals no `turn.usage`; Claude's own idle compaction (above 200k, about 54 minutes after the last request) is such a turn.
 
 <a id="acp-connection"></a>
 ### Connection lifecycle
@@ -137,6 +140,11 @@ Every GUI session gets one brief, built by `sessionBrief` (`packages/host/src/cr
 codex-acp completes a compaction when its `contextCompaction` item ends (`thread/compacted` from an older Codex). A compaction still running when the turn ends is finished `failed` or `cancelled`, so it gives no `context.compacted`.
 
 Journals written before the capability keep their `Compact conversation` tool rows.
+
+<a id="compaction-cost"></a>
+### What a compaction costs
+
+Measured on claude-agent-acp 0.109.0 (SDK 0.3.328) with Sonnet 5.5 and Haiku 5.5, from the per-turn `modelUsage` rows: a compaction of a 150–170k context, automatic in the middle of a turn or `/compact` between turns, reads the conversation from the prompt cache and costs about 10k new input (the summary instructions), 3k output and a cache read of the context; the retained context is 14–17k. `/compact` reads only the system prompt and tools from the cache when it follows a single long turn or a compaction of the same session. codex-acp reports no tokens for a compaction.
 
 <a id="codex-adapter"></a>
 ## Codex adapter: verified behaviour

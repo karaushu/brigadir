@@ -19,6 +19,7 @@ function fake(reply: (question: string) => string | 'fail' | 'hang') {
 	const log = {
 		asks: [] as { id: string; key: unknown; mode: string; provider?: string; effort?: string }[],
 		follows: [] as string[],
+		results: [] as (string[] | undefined)[],
 		stops: [] as string[],
 		closed: [] as string[],
 	};
@@ -47,9 +48,10 @@ function fake(reply: (question: string) => string | 'fail' | 'hang') {
 			});
 			turn(request.id, request.question);
 		},
-		followUp: async (_key, id, question) => {
+		followUp: async (_key, id, question, _language, results) => {
 			if (log.closed.includes(id)) throw new Error('This quick question is closed');
 			log.follows.push(id);
+			log.results.push(results);
 			turn(id, question);
 		},
 		stop: async (id) => {
@@ -115,4 +117,19 @@ it('stops a turn after five minutes and answers with what came, then closes the 
 	await vi.advanceTimersByTimeAsync(600_000);
 	expect(log.closed).toEqual(['s1']);
 	expect(sessions.session('C1', '1.0')).toBeNull();
+});
+
+it('tells the agent what its actions did with the next message of the thread, once (spec/notifications-slack-notes-and-schedules#slack-agent)', async () => {
+	const { log, deps } = fake(() => 'ok');
+	const sessions = new SlackSessions(deps);
+	expect(await sessions.askCode('p', input('make a task'))).toBe('ok');
+	sessions.actionResults(thread.channel, thread.ts, [
+		'⛔ *Could not do it* — fatal: couldn’t find remote ref main',
+	]);
+	await sessions.askCode('p', input('from master, please'));
+	await sessions.askCode('p', input('and?'));
+	expect(log.results).toEqual([
+		['⛔ *Could not do it* — fatal: couldn’t find remote ref main'],
+		undefined,
+	]);
 });

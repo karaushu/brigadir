@@ -71,7 +71,7 @@ import { ScopeControls } from './scope-controls';
 import { LaunchLocks } from './launch-locks';
 import { searchProjectFiles } from './project-files';
 import { readSlashCatalog } from './slash-catalog';
-import { LaunchSettingsStore } from './launch-settings';
+import { LaunchSettingsStore, unattendedBaseRef } from './launch-settings';
 import { Preparations } from './preparations';
 import { withAutoBranch, branchNamePrompt } from '@brigadir/core';
 import { TaskReads } from './task-reads';
@@ -1498,6 +1498,7 @@ const slack: Slack = new Slack({
 			});
 		},
 		sideSession: (channel, ts) => slackSessions.session(channel, ts),
+		actionResults: (channel, ts, said) => slackSessions.actionResults(channel, ts, said),
 		createTask: (input) => createSlackTask(input),
 		// spec/notifications-slack-notes-and-schedules#slack: a reply in the task's thread, and the buttons of Needs you and of a schedule's «Ask».
 		sendToTask: (key, text) => sendToTask(key, text),
@@ -1592,9 +1593,16 @@ async function createSlackTask(input: SlackTaskInput) {
 			if (folder && !scopes.some((scope) => scope.id === folder.id)) scopes.push(folder);
 		}
 	}
+	// No sheet shows the base here: a branch the agent named, else the remembered one while it still exists, else the repo's default.
+	const baseRef = await unattendedBaseRef(
+		(await store.project(input.projectId)).path,
+		defaults.baseRef,
+		input.baseRef ?? null
+	);
 	const launch = withAutoBranch(
 		await launchSettings.resolve(input.projectId, {
 			...defaults,
+			baseRef,
 			isolation: 'worktree',
 			branch: '',
 			scopes,
@@ -2093,7 +2101,8 @@ function knownModels() {
 }
 const slackSessions = new SlackSessions({
 	ask: (key, request, mode, thread, slack) => quickAsks.ask(key, request, mode, thread, slack),
-	followUp: (key, id, question, language) => quickAsks.followUp(key, id, question, language),
+	followUp: (key, id, question, language, results) =>
+		quickAsks.followUp(key, id, question, language, results),
 	stop: (id) => quickAsks.stop(id),
 	close: (id) => quickAsks.close(id),
 	listen: (id, listener) => {

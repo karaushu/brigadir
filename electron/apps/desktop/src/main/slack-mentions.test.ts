@@ -81,6 +81,7 @@ async function setup(
 	const calls: { method: string; body: Record<string, any>; auth: string }[] = [];
 	const sockets: FakeSocket[] = [];
 	const created: SlackTaskInput[] = [];
+	const outcomes: string[][] = [];
 	const notes: { project: string | null; text: string }[] = [];
 	// spec/notifications-slack-notes-and-schedules#slack-note: the notes `append` can find, and what was added to them.
 	const noteList: { id: string; title: string; project: string | null }[] = [];
@@ -178,6 +179,7 @@ async function setup(
 					...(agent?.ack ? { ack: agent.ack } : {}),
 				}),
 			sideSession: (channel, ts) => side.session(channel, ts),
+			actionResults: (_channel, _ts, said) => void outcomes.push(said),
 			createTask: async (input) => {
 				created.push(input);
 				return { projectId: input.projectId, id: 't9', title: input.title };
@@ -241,6 +243,7 @@ async function setup(
 		calls,
 		sockets,
 		created,
+		outcomes,
 		notes,
 		noteList,
 		appended,
@@ -285,7 +288,7 @@ it('opens Socket Mode with the app token, sealed apart, and reconnects when Slac
 });
 
 it('carries a mention to the agent and makes the task it asks for, with the thread as its context', async () => {
-	const { sockets, created, posts, settle, slack, quick } = await listening();
+	const { sockets, created, outcomes, posts, settle, slack, quick } = await listening();
 	codeReply = () =>
 		'Ставлю задачу.\nACTION create_task {"project": "business", "title": "Fix phone validation", "prompt": "Fix the phone validation on signup"}';
 	const envelope = mention('U2CD', 'fix the phone validation on signup');
@@ -313,6 +316,8 @@ it('carries a mention to the agent and makes the task it asks for, with the thre
 				.map((post) => post.body.text)
 				.slice(-2)
 		).toEqual(['Ставлю задачу.', '🆕 *Task created* — business\n📋 Task: Fix phone validation']);
+		// The agent's next message learns what its action did.
+		expect(outcomes).toEqual([['🆕 *Task created* — business\n📋 Task: Fix phone validation']]);
 		// The same envelope again (a late ack) is not a second task.
 		sockets[0]!.emit(envelope);
 		await settle();

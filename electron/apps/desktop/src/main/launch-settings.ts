@@ -34,6 +34,40 @@ export async function defaultBaseRef(path: string): Promise<string> {
 			return name;
 	return 'HEAD';
 }
+/** A base the repo can start from: a local ref, or a branch the remote has (the worktree fetches it). */
+async function baseExists(path: string, ref: string): Promise<boolean> {
+	if (
+		await gitText(path, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`])
+			.then(Boolean)
+			.catch(() => false)
+	)
+		return true;
+	if (!ref.startsWith('origin/')) return false;
+	return gitText(path, ['ls-remote', '--exit-code', '--heads', 'origin', ref.slice(7)], {
+		timeoutMs: 15_000,
+	})
+		.then(Boolean)
+		.catch(() => false);
+}
+/**
+ * spec/notifications-slack-notes-and-schedules#slack-agent: the base of a task made with no sheet to show it. The branch the agent named
+ * (`master` or `origin/master`) must exist, else an error names it; the project's remembered base that no longer exists gives way to the
+ * repo's default (spec/tasks#sheet-base-ref).
+ */
+export async function unattendedBaseRef(
+	path: string,
+	remembered: string,
+	named: string | null
+): Promise<string> {
+	if (named) {
+		const wanted = named.trim();
+		for (const ref of wanted.includes('/') ? [wanted] : [`origin/${wanted}`, wanted])
+			if (await baseExists(path, ref)) return ref;
+		throw new Error(`No branch ${wanted} in this repo`);
+	}
+	if (remembered && (await baseExists(path, remembered))) return remembered;
+	return defaultBaseRef(path);
+}
 export class LaunchSettingsStore {
 	private writes: Promise<unknown> = Promise.resolve();
 	private pending = 0;

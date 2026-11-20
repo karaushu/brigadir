@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { SessionStore } from '@brigadir/persistence';
-import { LaunchSettingsStore, defaultBaseRef } from './launch-settings';
+import { LaunchSettingsStore, defaultBaseRef, unattendedBaseRef } from './launch-settings';
 const roots: string[] = [];
 afterEach(async () => {
 	for (const root of roots.splice(0))
@@ -75,4 +75,30 @@ it('a project with no remembered base starts from its own default branch (spec/t
 	expect(await defaultBaseRef(repo)).toBe('HEAD');
 	await git(repo, 'remote', 'set-head', 'origin', 'develop');
 	expect(await defaultBaseRef(repo)).toBe('origin/develop');
+});
+it('a task with no sheet starts from the branch named, else a remembered base that still exists, else the default (spec/notifications-slack-notes-and-schedules#slack-agent)', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-unattended-base-'));
+	roots.push(root);
+	const repo = join(root, 'repo'),
+		remote = join(root, 'remote.git');
+	await mkdir(repo);
+	const git = (cwd: string, ...args: string[]) => promisify(execFile)('git', args, { cwd });
+	await git(root, 'init', '-q', '--bare', '-b', 'master', remote);
+	await git(repo, 'init', '-q', '-b', 'master');
+	await git(repo, 'config', 'user.name', 'Fixture');
+	await git(repo, 'config', 'user.email', 'fixture@example.invalid');
+	await writeFile(join(repo, 'file.txt'), 'x\n');
+	await git(repo, 'add', '.');
+	await git(repo, 'commit', '-q', '-m', 'Initial');
+	await git(repo, 'remote', 'add', 'origin', remote);
+	await git(repo, 'push', '-q', 'origin', 'master', 'master:release');
+	await git(repo, 'fetch', '-q', 'origin', 'master');
+	await git(repo, 'remote', 'set-head', 'origin', 'master');
+	// The remembered `origin/main` is not in this repo: its default instead of a failed fetch.
+	expect(await unattendedBaseRef(repo, 'origin/main', null)).toBe('origin/master');
+	expect(await unattendedBaseRef(repo, 'origin/master', null)).toBe('origin/master');
+	// A named branch: the remote's, even one not fetched yet; one nobody has is an error that names it.
+	expect(await unattendedBaseRef(repo, 'origin/main', 'master')).toBe('origin/master');
+	expect(await unattendedBaseRef(repo, 'origin/main', 'release')).toBe('origin/release');
+	await expect(unattendedBaseRef(repo, 'origin/master', 'main')).rejects.toThrow('No branch main');
 });

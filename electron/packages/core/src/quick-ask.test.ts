@@ -255,7 +255,9 @@ describe('a question from Slack about the code (spec/notifications-slack-notes-a
 			thread: 'U1 · 2026-10-30 10:00 UTC\nlogin breaks',
 		});
 		expect(prompt).toContain('Project: business — this directory.');
-		expect(prompt).toContain('Answer in Ukrainian, at most 12 short lines');
+		expect(prompt).toContain(
+			'Answer in the language their message is written in (Russian → Russian, Ukrainian → Ukrainian, English → English; when it is unclear, Ukrainian)'
+		);
 		expect(prompt).toContain('Never include code, diffs');
 		expect(prompt).toContain('Do not change any files');
 		expect(prompt).toContain('login breaks');
@@ -269,7 +271,7 @@ describe('a question from Slack about the code (spec/notifications-slack-notes-a
 			question: 'and where is the token checked?',
 			language: 'en',
 		});
-		expect(prompt).toContain('Answer in English, at most 12 short lines');
+		expect(prompt).toContain('when it is unclear, English), at most 12 short lines');
 		expect(prompt).toContain('Do not change any files');
 		expect(prompt).toContain('and where is the token checked?');
 	});

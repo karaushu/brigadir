@@ -334,4 +334,49 @@ describe('spec/sidebar#crew-card: Auto worker rows', () => {
 		});
 		expect(autoRoleLabel(undefined, spec.root.agents[0]!)).toBe('Developer 2');
 	});
+	it("show a reviewer by its own name and only the current review's reviewers (spec/reviews#surfaces)", () => {
+		const all = roles(),
+			developer = all.find((role) => role.id === 'developer')!,
+			reviewer = all.find((role) => role.id === 'reviewer') ?? developer;
+		const spec = autoSpec({ provider: 'claude' });
+		const review = (id: string, name: string) => ({
+			...reviewer,
+			id,
+			name,
+			role: 'reviewer' as const,
+			template: reviewer.id,
+			zone: [],
+			checkedBy: [],
+			agents: [],
+		});
+		spec.root.agents = [
+			{ ...developer, id: 'w1', name: 'Developer', template: developer.id, zone: ['a/**'] },
+			review('review-a-1', 'Codex'),
+			review('review-b-1', 'Codex 2'),
+		];
+		spec.root.checkedBy = ['review-b-1'];
+		const lead: AgentTask = {
+			id: 'lead',
+			projectId: 'p',
+			title: 'Lead',
+			status: 'working',
+			crew: spec,
+			auto: { roles: all, budget: { minutes: 40, tokens: 400_000 } },
+		};
+		const member = (id: string, node: string): AgentTask => ({
+			id,
+			projectId: 'p',
+			title: 'reviews the changes',
+			status: 'done',
+			crewTaskId: 'lead',
+			crewNodeId: node,
+			parentTaskId: 'lead',
+		});
+		const tasks = [lead, member('w', 'w1'), member('r1', 'review-a-1'), member('r2', 'review-b-1')];
+		expect(crewWorkerRows(lead, tasks).map((row) => [row.task.id, row.name])).toEqual([
+			['w', 'Developer'],
+			['r2', 'Codex 2'],
+		]);
+		expect(crewTaskLabel(tasks[3]!, tasks)).toBe('Codex 2 · reviews the changes');
+	});
 });

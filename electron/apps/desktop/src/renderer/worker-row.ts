@@ -1,4 +1,10 @@
-import type { CrewWorkerRow } from '@brigadir/core';
+import {
+	findingCount,
+	t,
+	type CrewWorkerRow,
+	type Locale,
+	type TaskReviewView,
+} from '@brigadir/core';
 /**
  * spec/sidebar#crew-card: how a worker row of a crew card reads. A dismissed Auto worker is quiet and shows its own `+N −M` in place of its
  * provider; a worker over its budget says `over budget` in place of its part.
@@ -21,4 +27,36 @@ export function workerRowState(row: Pick<CrewWorkerRow, 'task' | 'dismissed'>): 
 					}
 				: null,
 	};
+}
+/** spec/reviews#surfaces: `Review`, `N findings · waits`, `Approved`, `N open` (amber), `Accepted`, `Review stopped`, `Review did not start`. */
+export function reviewerState(
+	view: Pick<TaskReviewView, 'members'>,
+	taskId: string,
+	locale: Locale
+): { state?: string; stateTone?: 'amber' } {
+	const member = view.members.find((item) => item.taskId === taskId);
+	if (!member) return {};
+	switch (member.state) {
+		case 'starting':
+		case 'reading':
+		case 'checking':
+			return { state: t(locale, 'Review') };
+		case 'findings':
+			return { state: `${findingCount(locale, member.findings)} · ${t(locale, 'waits')}` };
+		case 'approved':
+			return { state: t(locale, 'Approved') };
+		case 'open':
+			return {
+				state: t(locale, '{count} open').replace('{count}', findingCount(locale, member.findings)),
+				stateTone: 'amber',
+			};
+		case 'accepted':
+			return { state: t(locale, 'Accepted') };
+		case 'stopped':
+			return { state: t(locale, 'Review stopped') };
+		case 'failed':
+			return { state: t(locale, 'Review did not start') };
+		default:
+			return {};
+	}
 }

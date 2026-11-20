@@ -474,13 +474,21 @@ export const isTaskReviewSpec = (value: unknown): value is CrewSpec =>
 // ── what the window reads (spec/reviews#strip) ────────────────────────────────
 
 export type TaskReviewMemberState =
-	'starting' | 'reading' | 'findings' | 'checking' | 'approved' | 'open' | 'stopped' | 'failed';
+	| 'starting'
+	| 'reading'
+	| 'findings'
+	| 'checking'
+	| 'approved'
+	| 'open'
+	| 'accepted'
+	| 'stopped'
+	| 'failed';
 export type TaskReviewMember = {
 	name: string;
 	provider: AgentProvider;
 	taskId: string | null;
 	state: TaskReviewMemberState;
-	/** Its findings in this review. */
+	/** Its findings in this review; while the person decides (`open`), those still open. */
 	findings: number;
 	/** When its current state began (a running read), for `reading · 1m 12s`. */
 	since: string | null;

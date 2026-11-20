@@ -657,6 +657,8 @@ function memberText(member: TaskReviewMember, locale: Locale, now: number) {
 			return t(locale, '{count} open').replace('{count}', findingCount(locale, member.findings));
 		case 'approved':
 			return t(locale, 'approved');
+		case 'accepted':
+			return t(locale, 'accepted');
 		case 'stopped':
 			return t(locale, 'stopped');
 		case 'failed':

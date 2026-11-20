@@ -280,10 +280,14 @@ you`; `review · <point> · did not start`; `review · <point> · changed after 
 - **Threads.** A reviewer's finding card shows the reviewer's provider glyph and name, the line link and its tag. Under
   it: the agent's reply, the reviewer's reason for `open`, and a footer — `Sent to <agent> · fixing` with `Log`,
   `<reviewer> closed it`, or `Your call` with `Open the review` (expands the strip).
-- **Sidebar.** Reviewers are rows under the task's card, like crew workers: `<reviewer> · Review`, `· N findings ·
-waits`, `· Approved`, `· N open` (amber). A review waiting for the person makes the task `needs-you` with the reason
-  line `Review · <N findings> open`; the card takes the `needs-you` fill. The rows stay until the next change after
-  the review, or the archive.
+- **Sidebar.** The current review's reviewers are rows under the task's card, like crew workers, under a solo task's,
+  an Auto task's or a crew's card alike; an earlier review's reviewers have no row. A row is named by the reviewer
+  (`Codex`, `Codex 2`), never by its role, and says the review's state, never the reviewer task's title: `<reviewer> ·
+  Review` while it reads or checks, `· N findings · waits` while the agent fixes (N = what it filed), `· Approved`,
+  `· N open` in amber with the amber `needs-you` glyph while the person decides (N = its findings still open, so it
+  agrees with the task's line), `· Accepted` after the person's `Accept`, `· Review stopped`, `· Review did not start`. A review
+  waiting for the person makes the task `needs-you` with the reason line `Review · <N findings> open`; the card takes
+  the `needs-you` fill. The rows stay until the next change after the review, or the archive.
 - **Notifications.** The review handing open findings to the person is a `needs-you` notice
   ([Notice kinds](notifications-slack-notes-and-schedules.md#notice-kinds)).
 

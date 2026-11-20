@@ -11,8 +11,6 @@ import {
 	t,
 	type AgentTask,
 	type Locale,
-	findingCount,
-	type TaskReviewView,
 } from '@brigadir/core';
 import { cardTree, statusLabels, taskActivityText } from './task-line';
 import { RateLimitTime } from './RateLimit';
@@ -30,7 +28,7 @@ import { Popover, useHoverPopover } from './ui/Popover';
 import { TaskPreviewContent } from './ui/TaskPreviewContent';
 import { collapseCrew, loadCollapsedCrews, useCrewCollapse } from './crew-collapse';
 import { useWaitsForSimulator } from './simulator-waiting';
-import { workerRowState } from './worker-row';
+import { reviewerState, workerRowState } from './worker-row';
 import styles from './App.module.css';
 /* The sidebar's task row and crew card (spec/sidebar#layout, spec/crew#task-type, spec/appearance#evolution-redesign). The intro's sample window shows the same card at rest
    (`preview`, spec/settings-modules-and-onboarding#intro-steps, rule 17): nothing read through main, the crew expanded. */
@@ -151,32 +149,6 @@ export function CrewCard({
 		</div>
 	);
 }
-/** spec/reviews#surfaces: `Review`, `N findings · waits`, `Approved`, `N open`. */
-function reviewerState(
-	view: TaskReviewView,
-	taskId: string,
-	locale: Locale
-): { state?: string; stateTone?: 'amber' } {
-	const member = view.members.find((item) => item.taskId === taskId);
-	if (!member) return {};
-	switch (member.state) {
-		case 'starting':
-		case 'reading':
-		case 'checking':
-			return { state: t(locale, 'Review') };
-		case 'findings':
-			return { state: `${findingCount(locale, member.findings)} · ${t(locale, 'waits')}` };
-		case 'approved':
-			return { state: t(locale, 'Approved') };
-		case 'open':
-			return {
-				state: t(locale, '{count} open').replace('{count}', findingCount(locale, member.findings)),
-				stateTone: 'amber',
-			};
-		default:
-			return {};
-	}
-}
 /** One worker line of a crew card; its own component so each line keeps its spec/notifications-slack-notes-and-schedules#macos-permission attention. */
 function WorkerRow({
 	row,
@@ -253,9 +225,10 @@ function WorkerRow({
 				)}
 				<span className={styles.workerIcon}>
 					<StatusIcon
-						status={worker.status}
+						// spec/reviews#surfaces: a reviewer whose findings wait for the person takes the amber glyph of its `N open`, not its task's check.
+						status={stateTone === 'amber' ? 'needs-you' : worker.status}
 						question={activity?.kind === 'question'}
-						label={t(locale, statusLabels[worker.status])}
+						label={t(locale, statusLabels[stateTone === 'amber' ? 'needs-you' : worker.status])}
 						size={13}
 					/>
 				</span>

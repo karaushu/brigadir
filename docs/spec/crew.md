@@ -123,6 +123,7 @@ Before every hire and before every `accept_task`, the agent's uncommitted edits 
 
 - Workers start from that commit, so they see the agent's work so far; `accept_task` squashes a part into a clean tree, so a conflict is a real conflict, not a dirty file in the way.
 - The snapshot engine diffs trees, not commits ([Diff and review](diff-and-review.md#snapshot-engine)): the task's `+N −M`, its Changes panel at `Task start` and its review are the same after the commit. With the diff base `Last commit` the agent's committed edits leave that view, as any commit does ([Diff base](diff-and-review.md#diff-base)).
+- A submodule pointer goes into the commit only when the task changed it: the submodule's commit differs from the one at the task's start, or the submodule commits in this same commit. A pointer the person held at another commit than the root records before the task stays theirs: the submodule keeps its commit, the root's index keeps the recorded one.
 - A commit that fails stops the hire or the accept with the git error; nothing is started or squashed.
 
 <a id="auto-guard"></a>

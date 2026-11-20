@@ -206,3 +206,64 @@ it('commits the reviewed blobs of a basket, not a later edit of the working tree
 		await rm(root, { recursive: true, force: true });
 	}
 });
+it('the agent’s own commit leaves out a submodule pointer the person held at another commit before the task (spec/crew#auto-commit)', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'brigadir-commit-gitlink-')),
+		root = join(dir, 'root'),
+		child = join(dir, 'source');
+	try {
+		await init(root);
+		await init(child);
+		await git(root, ['-c', 'protocol.file.allow=always', 'submodule', 'add', child, 'kit']);
+		await gitText(root, ['commit', '-am', 'Add module']);
+		const kit = join(root, 'kit');
+		await gitText(kit, ['config', 'user.name', 'Fixture']);
+		await gitText(kit, ['config', 'user.email', 'fixture@example.invalid']);
+		const recorded = await gitText(root, ['rev-parse', 'HEAD:kit']);
+		// The person moved the submodule to another commit before the task and did not record it.
+		await writeFile(join(kit, 'file.txt'), 'person\n');
+		await gitText(kit, ['commit', '-am', 'Person']);
+		const held = await gitText(kit, ['rev-parse', 'HEAD']);
+		const scopes = await discoverScopes(root);
+		// The task's start: each repo's tree as the snapshot engine takes it (the submodule's pointer is its HEAD).
+		const start = async (path: string) => {
+			const index = join(dir, `index-${path.split('/').at(-1)}`),
+				env = { GIT_INDEX_FILE: index };
+			await gitText(path, ['read-tree', 'HEAD'], { env });
+			await gitText(path, ['add', '-A'], { env });
+			return gitText(path, ['write-tree'], { env });
+		};
+		const snapshots = {
+			checkpoints: [
+				{
+					trees: await Promise.all(
+						scopes.map(async (scope) => ({ scopeId: scope.id, tree: await start(scope.path) }))
+					),
+				},
+			],
+		} as unknown as Parameters<typeof previewCommits>[1];
+		// The agent's edit in the root only.
+		await writeFile(join(root, 'agent.txt'), 'agent\n');
+		const preview = await previewCommits(scopes, snapshots);
+		const result = await commitPreview(preview, scopes, 'Agent', snapshots, {
+			taskGitlinksOnly: true,
+		});
+		expect(result.error).toBeNull();
+		expect(await gitText(root, ['show', '--name-only', '--format=', 'HEAD'])).toBe('agent.txt');
+		expect(await gitText(root, ['rev-parse', 'HEAD:kit'])).toBe(recorded);
+		expect(await gitText(kit, ['rev-parse', 'HEAD'])).toBe(held);
+		expect(await gitText(root, ['diff', '--cached', '--name-only'])).toBe('');
+		// A change the task makes in the submodule is the task's: its commit is recorded.
+		await writeFile(join(kit, 'file.txt'), 'agent\n');
+		const next = await previewCommits(scopes, snapshots);
+		const second = await commitPreview(next, scopes, 'Agent kit', snapshots, {
+			taskGitlinksOnly: true,
+		});
+		expect(second.error).toBeNull();
+		expect(second.committed.map((item) => item.name)).toEqual(['kit', '.']);
+		expect(await gitText(root, ['rev-parse', 'HEAD:kit'])).toBe(
+			await gitText(kit, ['rev-parse', 'HEAD'])
+		);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});

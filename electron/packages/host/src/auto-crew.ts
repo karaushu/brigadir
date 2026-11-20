@@ -813,7 +813,9 @@ export class AutoCrewHost extends CrewHost {
 			reason === 'hire' ? `${task.title} (before hiring: ${subject})` : task.title,
 			fallback
 		);
-		const result = await commitPreview(preview, scopes, message, snapshots);
+		const result = await commitPreview(preview, scopes, message, snapshots, {
+			taskGitlinksOnly: true,
+		});
 		if (result.error) throw new Error(`Committing your edits failed: ${result.error}`);
 		if (result.committed.length)
 			await this.deps.emit({

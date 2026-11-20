@@ -421,4 +421,9 @@ it('gives a plan reviewer the person’s answers to the plans since the last app
 	expect(long).toContain('1. Edge');
 	expect(long).not.toContain('Cover Edge too');
 	expect(long).toContain('1 earlier message is left out for length.');
+	// One answer longer than the limit is cut, never left out; the earlier ones fill what is left.
+	const huge = planAsksBrief([asks[0]!, { kind: 'edits', text: 'x'.repeat(30_000) }]);
+	expect(huge).toContain('[The message is cut here for length.]');
+	expect(huge).toContain('Cover Edge too');
+	expect(huge.length).toBeLessThan(21_000);
 });

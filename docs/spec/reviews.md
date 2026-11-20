@@ -61,8 +61,10 @@ provider's own option catalog.
 - **When the review ends** (`passed`, `accepted`, `stopped`, `failed`, a plan's approval included) the host stops its
   reviewers' hosts and removes their worktrees and branches; their tasks stay as the review's log, with their journals and
   the review's record. A branch goes only when another branch of the repo holds its commits (the reviewer writes none),
-  and a branch checked out elsewhere stays. The reviewers of a review still open keep theirs. A host that starts removes
-  what reviews that ended earlier left behind. Nothing of the person's is touched.
+  and a branch checked out elsewhere stays. A worktree whose files differ from the last round's snapshot (someone edited
+  or added a file there) stays with its branch, and so does one whose reviewer host still runs. The reviewers of a review
+  still open keep theirs. A host that starts removes what reviews that ended earlier left behind, branches of a removal
+  that stopped half-way included. Nothing of the person's is touched.
 - **Its tree is the round's snapshot.** Before a round the host sets every repo of the reviewer's worktree to the round's
   result tree (`git read-tree -u --reset <tree>`), so the files on disk are the task's state under review, uncommitted
   changes included.

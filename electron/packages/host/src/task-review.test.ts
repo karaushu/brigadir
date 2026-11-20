@@ -759,31 +759,59 @@ it('an ended review’s reviewer gives up its worktree and branch, keeping its t
 	expect((await git(repo, 'branch', '--list')).stdout).toContain('main');
 
 	// A review that ended while no host ran (here: marked ended on disk) leaves its reviewer's tree; the next host removes it.
-	const left = await setup('hold the verdict');
-	const log = join(left.store.root, 'agents.log');
-	const first = await launchHost(left.store, left.task, ['crew', log]);
-	await first.client.command({ kind: 'prompt', text: '@write out/result.txt done' });
-	await find(first.client, (r) => r.event.kind === 'turn.completed');
-	await first.client.command({
-		kind: 'startReview',
-		reviewers: [reviewer],
-		who: { kind: 'agent' },
-		instructions: '',
-		guidance: '',
-	});
-	const leftKey = await reviewerOf(first.client, left.task);
-	const leftTree = await reviewerTree(left.store, leftKey);
-	await holding(log);
-	first.child.kill('SIGKILL');
-	await new Promise((done) => first.child.once('exit', done));
-	const file = join(await left.store.taskDir(left.task), 'task-review.json');
-	const doc = JSON.parse(await readFile(file, 'utf8'));
-	await atomicJson(file, {
-		...doc,
-		review: { ...doc.review, state: 'stopped', finishedAt: new Date().toISOString() },
-	});
-	await launchHost(left.store, left.task, ['crew', log]);
+	const leftover = async (touch?: (tree: { path: string; branch: string }) => Promise<unknown>) => {
+		const left = await setup('hold the verdict');
+		const log = join(left.store.root, 'agents.log');
+		const first = await launchHost(left.store, left.task, ['crew', log]);
+		await first.client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+		await find(first.client, (r) => r.event.kind === 'turn.completed');
+		await first.client.command({
+			kind: 'startReview',
+			reviewers: [reviewer],
+			who: { kind: 'agent' },
+			instructions: '',
+			guidance: '',
+		});
+		const key = await reviewerOf(first.client, left.task);
+		const tree = await reviewerTree(left.store, key);
+		await holding(log);
+		first.child.kill('SIGKILL');
+		await new Promise((done) => first.child.once('exit', done));
+		await touch?.(tree);
+		const file = join(await left.store.taskDir(left.task), 'task-review.json');
+		const doc = JSON.parse(await readFile(file, 'utf8'));
+		await atomicJson(file, {
+			...doc,
+			review: { ...doc.review, state: 'stopped', finishedAt: new Date().toISOString() },
+		});
+		const client = (await launchHost(left.store, left.task, ['crew', log])).client;
+		return { ...left, key, tree, client };
+	};
+	const plain = await leftover();
 	// The reviewer's host, still holding its read, stops first.
-	await until(async () => ((await gone(left.repo, leftTree)) ? true : undefined), 60_000);
-	expect((await left.store.task(leftKey)).worktreeBranch).toBeUndefined();
+	await until(async () => ((await gone(plain.repo, plain.tree)) ? true : undefined), 60_000);
+	expect((await plain.store.task(plain.key)).worktreeBranch).toBeUndefined();
+	// Someone's edit in the reviewer's worktree keeps the worktree and its branch.
+	const edited = await leftover((tree) => writeFile(join(tree.path, 'notes.txt'), 'mine\n'));
+	await find(edited.client, (r) => r.event.kind === 'session.started');
+	await delay(3000);
+	expect(await readFile(join(edited.tree.path, 'notes.txt'), 'utf8')).toBe('mine\n');
+	expect((await git(edited.repo, 'branch', '--list', edited.tree.branch)).stdout.trim()).not.toBe(
+		''
+	);
+	// A commit only the reviewer's branch holds keeps the branch; the worktree goes.
+	const committed = await leftover((tree) =>
+		git(tree.path, 'commit', '-q', '--allow-empty', '-m', 'mine')
+	);
+	await until(
+		async () =>
+			(await git(committed.repo, 'worktree', 'list')).stdout.includes(committed.tree.path)
+				? undefined
+				: true,
+		60_000
+	);
+	await delay(1000);
+	expect(
+		(await git(committed.repo, 'branch', '--list', committed.tree.branch)).stdout.trim()
+	).not.toBe('');
 }, 300_000);

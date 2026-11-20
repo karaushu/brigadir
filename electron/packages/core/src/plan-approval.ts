@@ -228,7 +228,14 @@ export function planAsksBrief(asks: readonly PlanAsk[], limit = 20_000): string 
 	const blocks: string[] = [];
 	let size = 0;
 	for (const ask of [...asks].reverse()) {
-		const block = `<person_message kind="${ask.kind}">\n${ask.text.trim()}\n</person_message>`;
+		const wrap = (text: string) =>
+			`<person_message kind="${ask.kind}">\n${text}\n</person_message>`;
+		let block = wrap(ask.text.trim());
+		// The newest answer alone past the limit is cut, never left out.
+		if (!blocks.length && block.length > limit)
+			block = wrap(
+				`${ask.text.trim().slice(0, Math.max(0, limit - 200))}\n[The message is cut here for length.]`
+			);
 		if (size + block.length > limit) break;
 		blocks.unshift(block);
 		size += block.length;

@@ -394,6 +394,14 @@ export function staleIntroduced(
 	return stale ? stale.anchor.path : null;
 }
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const processAlive = (pid: number) => {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return isRecord(error) && error.code === 'EPERM';
+	}
+};
 const name = (key: TaskKey) => `${key.projectId}/${key.id}`;
 const slug = (text: string) =>
 	transliterate(text)
@@ -852,6 +860,21 @@ export class CrewHost {
 	/** spec/reviews#plan-review: the split that waits for the person, if any. */
 	async waitingPlan(): Promise<CrewPlan | null> {
 		return this.planWaiter?.plan ?? (await this.pendingPlan());
+	}
+	/** The turn that proposed this plan has ended (Codex may end a turn with the MCP call still pending). */
+	private planTurnEnded(planId: string) {
+		const records = this.deps.records(),
+			requested = records.findLastIndex(
+				({ event }) => event.kind === 'crew.plan.requested' && event.plan.id === planId
+			);
+		return (
+			requested >= 0 &&
+			records
+				.slice(requested + 1)
+				.some(({ event }) =>
+					['turn.completed', 'session.failed', 'host.stopped'].includes(event.kind)
+				)
+		);
 	}
 	async decidePlan(decision: CrewPlanDecision, review?: string) {
 		if (!isCrewPlanDecision(decision)) throw new Error('Invalid plan decision');
@@ -2346,9 +2369,9 @@ export class CrewHost {
 			starts = records.filter(
 				(record) => record.event.kind === 'turn.started' && record.event.text.includes(mark)
 			),
-			last = starts.at(-1);
-		if (starts.length >= 3) return false;
-		// The check still waits in the reviewer's queue, or was taken out of it unread.
+			last = starts.at(-1),
+			alive = async () => Boolean(await this.link(key).catch(() => null));
+		// The check still waits in the reviewer's queue: a host that is gone is started again to run it.
 		const removed = new Set(
 			records.flatMap((record) => (record.event.kind === 'prompt.removed' ? [record.event.id] : []))
 		);
@@ -2363,20 +2386,37 @@ export class CrewHost {
 			queued.some(
 				(record) => record.event.kind === 'prompt.queued' && !removed.has(record.event.prompt.id)
 			)
-		)
+		) {
+			if (!(await alive())) await this.spawn(key).catch(() => null);
 			return false;
-		if (!last) return queued.length > 0;
+		}
+		// Never started and not queued: taken out unread, or recorded as sent by a host that stopped before sending it.
+		if (!last) return true;
 		const end = records.find(
 			(record) =>
 				record.seq > last.seq &&
 				['turn.completed', 'session.failed', 'host.stopped'].includes(record.event.kind)
 		);
-		if (end) return end.event.kind !== 'turn.completed' || end.event.reason === 'cancelled';
-		// The turn has no end: lost only when no host of the reviewer runs.
-		return !(await this.link(key).catch(() => null));
+		const lost = end
+			? end.event.kind !== 'turn.completed' || end.event.reason === 'cancelled'
+			: !(await alive());
+		if (lost && starts.length >= 3) {
+			// spec/crew#reviewer: the check went out three times and never came back: the reviewer needs the person.
+			if ((await this.deps.store.task(key).catch(() => null))?.status !== 'needs-you')
+				await this.deps.store.setStatus(key, 'needs-you').catch(() => {});
+			return false;
+		}
+		return lost;
 	}
-	/** One reviewer serves one check at a time; the rest wait FIFO and survive a restart (spec/crew#reviewer). */
-	private async dispatchReviews() {
+	/** One reviewer serves one check at a time; the rest wait FIFO and survive a restart (spec/crew#reviewer). Dispatches run one after
+	 *  another: two callers must not both find a check unsent and send it twice. */
+	private dispatchTail: Promise<unknown> = Promise.resolve();
+	private dispatchReviews(): Promise<void> {
+		const result = this.dispatchTail.catch(() => {}).then(() => this.dispatchNow());
+		this.dispatchTail = result;
+		return result;
+	}
+	private async dispatchNow() {
 		await this.reclaimChecks();
 		for (const reviewerId of new Set(
 			this.reviews.filter((run) => run.state === 'reviewing').flatMap((run) => run.reviewerNodeIds)
@@ -2819,7 +2859,8 @@ export class CrewHost {
 		// spec/crew#ask-foreman: a reviewer of the task's own review asks while a waiting plan holds the author's turn — the question answers
 		// the plan as plan chat does, runs as the author's next turn, and the author presents the plan again.
 		if (this.checksSelf(worker.nodeId)) {
-			if (this.planWaiter || (await this.pendingPlan()))
+			// Only a `propose_plan` call that still holds the foreman's turn: after that turn ended the foreman is free to take the question.
+			if (this.planWaiter && !this.planTurnEnded(this.planWaiter.plan.id))
 				if (
 					await this.rejectPlanForReview(
 						`${prompt}\nYour split was sent back so that you can answer. After you answer, call propose_plan again with the split, unchanged unless the answer changes it.`
@@ -3920,21 +3961,59 @@ export class CrewHost {
 				store,
 				new ProcessCoordinator(join(dirname(this.deps.services.mcpEntry), 'process-owner'))
 			),
-			state = await trees.read(key);
-		if (!state || this.stopping) return;
-		const link = await this.link(key);
-		if (link) {
-			this.retired.add(worker.taskId);
-			await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
-			await Promise.race([link.closed, delay(15_000)]);
-			if (this.links.get(name(key)) === link) return;
+			// What is left to remove: the worktree, else the branches of a removal that stopped before them.
+			pending = await safePath(await store.taskDir(key), 'reviewer-cleanup.json'),
+			state = await trees.read(key),
+			left = state
+				? { branch: state.branch, sources: state.repositories.map((repo) => repo.source) }
+				: await readDocument(pending)
+						.then((doc) =>
+							typeof doc.branch === 'string' &&
+							Array.isArray(doc.sources) &&
+							doc.sources.every((item) => typeof item === 'string')
+								? { branch: doc.branch, sources: doc.sources as string[] }
+								: null
+						)
+						.catch(() => null);
+		if (!left || this.stopping) return;
+		if (state) {
+			const link = await this.link(key);
+			if (link) {
+				this.retired.add(worker.taskId);
+				await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
+				await Promise.race([link.closed, delay(15_000)]);
+				if (this.links.get(name(key)) === link) return;
+			}
+			// A host that did not answer may still run in the worktree; one that was told to stop gets a moment to exit.
+			const identity = await readIdentity(store, key).catch(() => null);
+			for (let wait = link ? 150 : 0; identity && processAlive(identity.pid) && wait > 0; wait--)
+				await delay(100);
+			if (identity && processAlive(identity.pid)) return;
+			// The reviewer's files are the last round's snapshot (index and files); anything else is someone's edit and keeps the worktree.
+			for (const repo of state.repositories) {
+				const target = await safePath(state.root, repo.relativePath);
+				const status = await gitText(target, [
+					'status',
+					'--porcelain=v1',
+					'--untracked-files=all',
+					'--ignore-submodules=all',
+				]).catch(() => null);
+				if (status === null) continue;
+				if (
+					status
+						.split('\n')
+						.some((line) => line.length > 1 && (line[1] !== ' ' || line.startsWith('??')))
+				)
+					return;
+			}
+			await atomicJson(pending, { schemaVersion: 1, ...left });
+			await trees.remove(key);
+			await store.clearPreparation(key);
 		}
-		await trees.remove(key);
-		await store.clearPreparation(key);
 		// The branch goes only when another branch holds its commits: the reviewer writes none, so it is the task's own history.
-		for (const repo of state.repositories) {
-			const ref = `refs/heads/${state.branch}`;
-			const holders = await gitText(repo.source, [
+		for (const source of left.sources) {
+			const ref = `refs/heads/${left.branch}`;
+			const holders = await gitText(source, [
 				'for-each-ref',
 				'--format=%(refname)',
 				'--contains',
@@ -3942,8 +4021,9 @@ export class CrewHost {
 				'refs/heads',
 			]).catch(() => '');
 			if (holders.split('\n').some((line) => line && line !== ref))
-				await gitText(repo.source, ['branch', '-D', '--', state.branch]).catch(() => {});
+				await gitText(source, ['branch', '-D', '--', left.branch]).catch(() => {});
 		}
+		await rm(pending, { force: true });
 	}
 	async stopWorkers() {
 		for (const worker of this.workers.filter((worker) => !crewWorkerClosed(worker))) {

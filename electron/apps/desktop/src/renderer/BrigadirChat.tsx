@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
 	brigadirCards,
+	mcpCall,
+	mcpVerb,
 	settingEdit,
+	type ToolPatch,
 	t,
 	type BrigadirCard,
 	type BrigadirChatRow,
@@ -23,7 +26,7 @@ import s from './BrigadirChat.module.css';
 
 type Part =
 	| { kind: 'text'; text: string; key: string }
-	| { kind: 'tool'; title: string; status: string; key: string }
+	| { kind: 'tool'; title: string; status: string; key: string; tool: ToolPatch }
 	| { kind: 'card'; id: string; key: string }
 	| { kind: 'row'; row: BrigadirChatRow; key: string };
 type Turn = { prompt: Extract<BrigadirChatRow, { kind: 'prompt' }> | null; parts: Part[] };
@@ -31,7 +34,7 @@ type Turn = { prompt: Extract<BrigadirChatRow, { kind: 'prompt' }> | null; parts
 function turns(rows: readonly BrigadirChatRow[]): Turn[] {
 	const out: Turn[] = [];
 	let turn: Turn | null = null;
-	const tools = new Map<string, { title: string; status: string; key: string }>(),
+	const tools = new Map<string, { title: string; status: string; key: string; tool: ToolPatch }>(),
 		cards = new Set<string>();
 	for (const row of rows) {
 		if (row.kind === 'prompt') {
@@ -57,14 +60,18 @@ function turns(rows: readonly BrigadirChatRow[]): Turn[] {
 			} else if (event.kind === 'tool.changed' && !event.patch.parentId) {
 				const known = tools.get(event.patch.id);
 				if (known) {
+					known.tool = { ...known.tool, ...event.patch };
 					if (event.patch.title) known.title = event.patch.title;
 					if (event.patch.status) known.status = event.patch.status;
 				} else {
+					// Claude's own loader of deferred tools says nothing to the person.
+					if (event.patch.title === 'ToolSearch') continue;
 					const part = {
 						kind: 'tool' as const,
 						title: event.patch.title ?? '',
 						status: event.patch.status ?? '',
 						key: `x${row.seq}`,
+						tool: event.patch,
 					};
 					tools.set(event.patch.id, part);
 					turn.parts.push(part);
@@ -141,6 +148,17 @@ export function BrigadirChat({
 		log = useRef<HTMLDivElement>(null),
 		field = useRef<HTMLTextAreaElement>(null);
 	const all = useMemo(() => turns(rows ?? []), [rows]);
+	/** Brigadir's own tools read as what they did (`Changed a setting`); another tool keeps its title. */
+	const toolTitle = (part: Extract<Part, { kind: 'tool' }>) => {
+		const call = mcpCall(part.tool);
+		return call
+			? mcpVerb(
+					locale,
+					call,
+					part.status === 'completed' ? 'done' : part.status === 'failed' ? 'failed' : 'running'
+				)
+			: part.title;
+	};
 	const cards = useMemo(
 		() => new Map(brigadirCards(rows ?? []).map((card) => [card.id, card])),
 		[rows]
@@ -258,7 +276,7 @@ export function BrigadirChat({
 										<div key={part.key} className={n.text}>
 											<MarkdownStill html={markdown.render(part.text)} />
 										</div>
-									) : part.kind === 'tool' ? (
+									) : part.kind === 'tool' && !toolTitle(part) ? null : part.kind === 'tool' ? (
 										<div key={part.key} className={n.tool} data-status={part.status}>
 											<Glyph
 												name={
@@ -270,7 +288,7 @@ export function BrigadirChat({
 												}
 												size={12}
 											/>
-											<span>{part.title}</span>
+											<span>{toolTitle(part)}</span>
 										</div>
 									) : part.kind === 'card' ? (
 										cards.get(part.id) && card(cards.get(part.id)!)

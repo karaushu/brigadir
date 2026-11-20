@@ -59,7 +59,7 @@ export function useBrigadirChat(id: string | null) {
 				const known = new Set(state.rows.map((row) => row.seq));
 				setRows([...state.rows, ...pending.filter((row) => !known.has(row.seq))]);
 				setBusy(state.busy);
-				setTitle(state.meta.title);
+				setTitle((current) => current || state.meta.title);
 			},
 			() => active && setRows([])
 		);

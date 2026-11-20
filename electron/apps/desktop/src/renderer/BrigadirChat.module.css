@@ -108,7 +108,8 @@
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	margin: 0 0 12px;
+	/* The inset and gap of ui/ChatCard, so a one-line card lines up with the full ones. */
+	margin: 0 16px 16px;
 	padding: 6px 8px 6px 12px;
 	border-radius: 12px;
 	background: var(--card);
@@ -225,7 +226,7 @@ li[data-state='current'] > .dot {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	margin: 0 0 12px;
+	margin: 0 16px 16px;
 	padding: 8px 8px 8px 14px;
 	border-radius: 12px;
 	background: var(--card);

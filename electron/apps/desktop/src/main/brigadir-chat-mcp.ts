@@ -1,5 +1,6 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { rm } from 'node:fs/promises';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { chmod, lstat, mkdir, rm } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { createServer, type Server, type Socket } from 'node:net';
 import { isRecord } from '@brigadir/core';
 import { serveBrigadirChat, type McpCall } from '@brigadir/host/brigadir-tools';
@@ -16,11 +17,28 @@ export class BrigadirChatMcp {
 	private readonly instance = randomBytes(12).toString('hex');
 	private readonly chats = new Map<string, { token: string; call: McpCall }>();
 	constructor(
-		private readonly socketPath: string,
+		private socketPath: string,
 		private readonly relay: string
 	) {}
 	private start() {
 		return (this.ready ??= (async () => {
+			// spec/architecture-and-platform#socket-protocol: a Unix socket path stays under 104 bytes; a long data folder moves it to /tmp, as a host's does.
+			if (Buffer.byteLength(this.socketPath) >= 104) {
+				const dir = join('/tmp', `brigadir.${process.getuid?.() ?? 'user'}`);
+				await mkdir(dir, { recursive: true, mode: 0o700 });
+				const info = await lstat(dir);
+				if (
+					info.isSymbolicLink() ||
+					!info.isDirectory() ||
+					(process.getuid && info.uid !== process.getuid())
+				)
+					throw new Error('Unsafe socket directory');
+				await chmod(dir, 0o700);
+				this.socketPath = join(
+					dir,
+					`chat-${createHash('sha256').update(this.socketPath).digest('hex').slice(0, 16)}.sock`
+				);
+			} else await mkdir(dirname(this.socketPath), { recursive: true, mode: 0o700 });
 			await rm(this.socketPath, { force: true });
 			this.server = createServer((socket) => this.accept(socket));
 			await new Promise<void>((resolve, reject) => {

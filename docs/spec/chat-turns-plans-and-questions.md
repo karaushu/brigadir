@@ -341,6 +341,11 @@ The question of a task that [reached its token budget](agents-and-providers.md#b
 
 While the budget question waits, the same question stands as the first row of the [deck](composer.md#queue-deck) over the composer, `amber` tone: pause glyph, `Budget reached`, then `Stop now`, `Finish turns` (the short label), and the `Raise to {n}` split button with the same menu. The row's chevron expands the provider breakdown of `Task usage` with the account lines and the sentence `Turns that run now finish; nothing new starts.` An answer in the strip or in the card closes both; the strip leaves the deck when nothing waits.
 
+<a id="budget-held"></a>
+### Held at the budget
+
+After `Finish turns, then stop` or `Stop now` the task stays held at its budget until the budget changes, and the deck keeps one `amber` row for it in the strip's place (`tokenHold` with state `finish` or `stop`): pause glyph, `Paused at the budget`, then the `Raise to {n}` split button with the same menu. A raise here changes the provider's budget (`setTokenBudget`), which lifts the hold and resumes what waits; `No limit for this task` removes it. The chevron expands the same breakdown as the strip. The row leaves the deck when the hold is lifted.
+
 <a id="later"></a>
 ## Later
 

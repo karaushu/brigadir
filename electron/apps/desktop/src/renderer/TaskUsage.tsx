@@ -587,6 +587,80 @@ export function BudgetStrip({
 		</>
 	);
 }
+/**
+ * spec/chat-turns-plans-and-questions#budget-held: after `Finish turns, then stop` or `Stop now` the task stays held at the budget; the deck keeps
+ * a row that says so, with the raise. Raising changes the budget (`setTokenBudget`), which lifts the hold; the chevron opens the breakdown.
+ */
+export function BudgetHeldStrip({
+	hold,
+	view,
+	locale,
+	disabled,
+	send,
+	open = false,
+}: {
+	hold: TokenHold;
+	view: TaskTokensView;
+	locale: Locale;
+	disabled: boolean;
+	send(command: SessionCommand): unknown;
+	/** Starts expanded (the tests: a server render cannot click the chevron). */
+	open?: boolean;
+}): ReactNode {
+	const [shown, setShown] = useState(open);
+	const tokens = Math.max(
+		hold.tokens,
+		view.sum.providers.find((item) => item.provider === hold.provider)?.tokens ?? 0
+	);
+	const raise = (decision: BudgetDecision, budget?: number) => {
+		void changeBudget(send, hold.provider, decision === 'unlimited' ? null : (budget ?? null), () =>
+			useWorkspace.getState().load()
+		);
+	};
+	return (
+		<>
+			<DeckList label={t(locale, 'Paused at the budget')} data-budget-strip="held">
+				<DeckRow
+					hover
+					tone="amber"
+					label={
+						<span className={s.stripGlyph}>
+							<Glyph name="pause" size={12} />
+						</span>
+					}
+					actions={
+						<>
+							<RaiseButton
+								question={hold}
+								tokens={tokens}
+								locale={locale}
+								disabled={disabled}
+								answer={raise}
+							/>
+							<IconButton
+								size="s"
+								label={t(locale, shown ? 'Collapse' : 'Expand')}
+								aria-expanded={shown}
+								onClick={() => setShown(!shown)}>
+								<Glyph name="chevron-down" size={12} />
+							</IconButton>
+						</>
+					}>
+					<DeckRowButton expanded={shown} onClick={() => setShown(!shown)}>
+						<p>
+							<b>{t(locale, 'Paused at the budget')}</b>
+						</p>
+					</DeckRowButton>
+				</DeckRow>
+			</DeckList>
+			{shown && (
+				<div className={s.stripDetails}>
+					<UsageBreakdown view={view} locale={locale} disabled />
+				</div>
+			)}
+		</>
+	);
+}
 /** spec/sidebar#card-tokens: the sum on a card's tree line — amber near a budget, red at it; never the budget itself. */
 export function CardTokens({ task, locale }: { task: AgentTask; locale: Locale }) {
 	const tasks = useWorkspace((state) => state.workspace?.tasks);

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { AgentTask, BudgetQuestion, TaskOwnTokens } from '@brigadir/core';
 import {
 	BudgetCard,
+	BudgetHeldStrip,
 	BudgetStrip,
 	MemberTokens,
 	TaskUsageCounterView,
@@ -226,6 +227,41 @@ it('the strip over the composer: Budget reached and the short answers', () => {
 	);
 	expect(open).toContain('Turns that run now finish; nothing new starts.');
 	expect(open).toContain('Details screen');
+});
+
+it('held at the budget after Finish turns: the deck row says so and keeps only the raise', () => {
+	const hold = {
+		id: 'q1',
+		provider: 'claude' as const,
+		tokens: 2_100_000,
+		budget: 2_000_000,
+		state: 'finish' as const,
+	};
+	const html = renderToStaticMarkup(
+		<BudgetHeldStrip
+			hold={hold}
+			view={view(crew({ claude: 2_000_000 }, 1_200_000, { tokenHold: hold }))}
+			locale="en"
+			disabled={false}
+			send={() => {}}
+		/>
+	);
+	expect(html).toContain('data-budget-strip="held"');
+	expect(html).toContain('data-tone="amber"');
+	expect(html).toContain('Paused at the budget');
+	expect(html).toContain('Raise to 3m');
+	expect(html).not.toContain('Stop now');
+	expect(html).not.toContain('Finish turns');
+	const uk = renderToStaticMarkup(
+		<BudgetHeldStrip
+			hold={hold}
+			view={view(crew({ claude: 2_000_000 }, 1_200_000, { tokenHold: hold }))}
+			locale="uk"
+			disabled={false}
+			send={() => {}}
+		/>
+	);
+	expect(uk).toContain('Пауза через бюджет');
 });
 
 it("a worker row shows the member's own count, ≈ while its turn runs", () => {

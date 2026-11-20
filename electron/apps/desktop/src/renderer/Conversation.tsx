@@ -139,6 +139,7 @@ import { DeckList, DeckRow } from './ui/Deck';
 import { BackgroundDeck } from './BackgroundDeck';
 import {
 	BudgetCard,
+	BudgetHeldStrip,
 	BudgetStrip,
 	TaskUsageCounterView,
 	budgetAnswerText,
@@ -364,6 +365,8 @@ export function Conversation({
 	const pending = useMemo(() => pendingInputs(records), [records]);
 	// spec/agents-and-providers#task-tokens: the counter, the budget card and strip read one view of the task's tokens.
 	const tokens = useTaskTokens(task, locale);
+	// spec/chat-turns-plans-and-questions#budget-held: held at the budget after the question was answered with `finish` or `stop`.
+	const heldAtBudget = tokens.hold && tokens.hold.state !== 'asked' ? tokens.hold : null;
 	// spec/chat-turns-plans-and-questions#turn-rail: one rail mark per prompt; the text is the prompt's own row (a human message or a crew event).
 	const railTurns = useMemo((): RailTurn[] => {
 		const texts = new Map<string, string>();
@@ -2016,8 +2019,18 @@ export function Conversation({
 					locale={locale}
 					send={send}
 					review={
-						reviewStrip || pending.budget ? (
+						reviewStrip || pending.budget || heldAtBudget ? (
 							<>
+								{/* spec/chat-turns-plans-and-questions#budget-held: after `Finish turns` or `Stop now` the deck says the task is held, with the raise. */}
+								{heldAtBudget && !pending.budget && (
+									<BudgetHeldStrip
+										hold={heldAtBudget}
+										view={tokens}
+										locale={locale}
+										disabled={sending}
+										send={send}
+									/>
+								)}
 								{/* spec/chat-turns-plans-and-questions#budget-strip: the budget question over the composer while it waits. */}
 								{pending.budget && (
 									<BudgetStrip

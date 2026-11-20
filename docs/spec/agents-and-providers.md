@@ -301,7 +301,7 @@ Rules that follow and are implemented:
 - **Answers** (`decideBudget`), journaled as `budget.decided` (`id`, `decision`, `budget` for a raise):
   - `raise` — `Raise to {n}`: the provider's budget becomes `n`, the next value above both the budget and the count (`1m`, `2m`, `3m`, `5m`, `10m`, `20m`, `50m`, `100m`); the split button's menu lists it and the next two, then `No limit for this task`. Everything held resumes.
   - `unlimited` — `No limit for this task`: the provider's budget is removed. Everything held resumes.
-  - `finish` — `Finish turns, then stop`: running turns finish; the task stays paused at its budget.
+  - `finish` — `Finish turns, then stop`: running turns finish; the task stays paused at its budget, and the deck says so ([held at the budget](chat-turns-plans-and-questions.md#budget-held)).
   - `stop` — `Stop now`: running turns of the root and of every member are cancelled; the task stays paused at its budget.
 - **Changing the budget in the popover** while the question waits answers it: a value above the count (or `No limit`) is a `raise` (`unlimited`), a value at or below it asks again with the new figures (a new `budget.reached`; the earlier card folds), so `Finish` and `Stop` hold at the budget that is set. After `finish` or `stop` the task stays paused until its budget for that provider changes; a change lifts the pause, and a count still at or above the new budget asks again.
 - **Resuming** runs everything that was held in its own order: the root's queue first in FIFO order, waiting hires in the order they waited, each member's queue in its FIFO order as the member sees the hold lift (within 3 s).

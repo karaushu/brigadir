@@ -175,6 +175,7 @@ const uk = {
 	'No limit for this task': 'Без ліміту для цієї задачі',
 	'Budget reached': 'Бюджет вичерпано',
 	'Budget question': 'Питання бюджету',
+	'Paused at the budget': 'Пауза через бюджет',
 	'Could not change the budget.': 'Не вдалося змінити бюджет.',
 	"Agent's default": 'Як задано в агенті',
 	'New sessions compact their context when it reaches this many tokens.':

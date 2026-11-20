@@ -92,7 +92,7 @@ provider's own option catalog.
   [Review with an agent](pull-requests-and-ci.md#review-launch) titled `Review before PR` with the note
   `<task title> · +N −M`: instructions, project review notes, `What` (`All changes · Since the last review`), `Who`
   (`Agent · Crew`; the agent capsule's inherited entry is `Auto` with the resolved reviewer as its detail — the
-  list's tail, and `Auto · Codex · gpt-5.5` on the closed popup; `What`'s caption is `From the task start · N files`) and
+  list's tail, and `Auto · Codex · gpt-5.5` on the closed popup; `What`'s caption is `From the task start · N files`, or `Changed since the review · N files` for `Since the last review`) and
   `Remember for code reviews` (action `taskReview`). `Starting…` on the button; a failure keeps the dialog with `Could
 not start the review: …` and `Retry`.
 - **The host** starts a `pre-pr` review when the person presses `Create PR` ([gate](#before-pr)), a `plan` review when a plan is

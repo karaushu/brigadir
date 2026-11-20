@@ -158,6 +158,7 @@ import {
 	useTaskTokens,
 } from './TaskUsage';
 import { steeringState } from './composer-steering';
+import { leadsCrew } from './worker-row';
 import { ReviewEventRow, ReviewProposalRow, ReviewStrip, useReviewStripShown } from './TaskReview';
 import { ReadyRow, SmokeEventRow, SmokeStrip, useSmokeRun } from './SmokeRun';
 import { DesignReviewRow } from './DesignReview';
@@ -1430,6 +1431,7 @@ export function Conversation({
 						question={asked?.kind === 'crew.question.requested' ? asked.question : null}
 						answer={e.answer}
 						answeredBy={e.answeredBy}
+						foreman={leadsCrew(task, workspaceTasks)}
 						locale={locale}
 						open={fold.open}
 						onToggle={fold.onToggle}

@@ -21,11 +21,13 @@ import s from './Cards.module.css';
 
 export function CrewQuestionCard({
 	question,
+	foreman,
 	locale,
 	disabled,
 	send,
 }: {
 	question: CrewQuestion;
+	/** spec/crew#ask-foreman: the task leads a named crew; otherwise its agent answers. */ foreman: boolean;
 	locale: Locale;
 	disabled: boolean;
 	send(command: SessionCommand): void;
@@ -47,7 +49,7 @@ export function CrewQuestionCard({
 					<p>{question.question}</p>
 				</div>
 				<footer className={s.planFoot}>
-					<small>{t(locale, 'waiting for the foreman')}</small>
+					<small>{t(locale, foreman ? 'waiting for the foreman' : 'waiting for the agent')}</small>
 				</footer>
 			</section>
 		);

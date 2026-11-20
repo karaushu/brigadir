@@ -54,6 +54,7 @@ import { CrewEditor } from './CrewEditor';
 import { markdown, MarkdownBlock, MarkdownStill } from './MarkdownBlock';
 import { primaryKey } from './ui/primary-key';
 import { PlanReviewLine } from './TaskReview';
+import { leadsCrew } from './worker-row';
 /** Built-in names are stored in English and shown in the interface language (spec/crew-templates-and-editor#builtin-templates); the phone shows them too. */
 export { crewLabel };
 export function crewModel(
@@ -800,7 +801,15 @@ export function CrewEventRow({
 	if (e.kind === 'crew.question.requested') {
 		const pending = pendingQuestions.find((item) => item.id === e.question.id);
 		if (!pending) return null;
-		return <CrewQuestionRow question={pending} locale={locale} disabled={disabled} send={send} />;
+		return (
+			<CrewQuestionRow
+				question={pending}
+				foreman={leadsCrew(owner, tasks)}
+				locale={locale}
+				disabled={disabled}
+				send={send}
+			/>
+		);
 	}
 	// spec/chat#tool-calls: the answer folds into its plate (CrewAnswerRow, with the fold state from Conversation).
 	if (e.kind === 'crew.question.resolved') return null;
@@ -1185,6 +1194,7 @@ export function CrewAnswerRow({
 	question,
 	answer,
 	answeredBy,
+	foreman,
 	locale,
 	open,
 	onToggle,
@@ -1192,6 +1202,7 @@ export function CrewAnswerRow({
 	question: CrewQuestion | null;
 	answer: string | null;
 	answeredBy: 'foreman' | 'human' | null;
+	/** spec/crew#ask-foreman: the task leads a named crew; otherwise its agent answered. */ foreman: boolean;
 	locale: Locale;
 	open: boolean;
 	onToggle(event: React.SyntheticEvent<HTMLDetailsElement>): void;
@@ -1199,7 +1210,14 @@ export function CrewAnswerRow({
 	const who =
 		answer === null
 			? t(locale, 'Interrupted')
-			: t(locale, answeredBy === 'human' ? 'answered by you' : 'answered by the foreman');
+			: t(
+					locale,
+					answeredBy === 'human'
+						? 'answered by you'
+						: foreman
+							? 'answered by the foreman'
+							: 'answered by the agent'
+				);
 	const head = (
 		<>
 			<Glyph name="question" size={12} />
@@ -1230,11 +1248,13 @@ export function CrewAnswerRow({
 /** Amber question row: the foreman answers; after five minutes the human may (spec/crew#ask-foreman). */
 export function CrewQuestionRow({
 	question,
+	foreman,
 	locale,
 	disabled,
 	send,
 }: {
 	question: CrewQuestion;
+	/** spec/crew#ask-foreman: the task leads a named crew; otherwise its agent answers. */ foreman: boolean;
 	locale: Locale;
 	disabled: boolean;
 	send(command: SessionCommand): void;
@@ -1250,7 +1270,9 @@ export function CrewQuestionRow({
 					<span>{crewLabel(locale, question.agent)} · </span>
 					{question.question}
 				</span>
-				{!escalated && <small>{t(locale, 'waiting for the foreman')}</small>}
+				{!escalated && (
+					<small>{t(locale, foreman ? 'waiting for the foreman' : 'waiting for the agent')}</small>
+				)}
 			</div>
 			{escalated && (
 				<div className={styles.escalation} data-size="m">

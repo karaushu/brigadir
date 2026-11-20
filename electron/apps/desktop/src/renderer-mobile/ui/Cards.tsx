@@ -23,6 +23,9 @@ const amber = (task: AgentTask) => task.status === 'needs-you';
 /** The foreman's card carries the attention of a worker that waits for the person (spec/crew#attention), as on the computer. */
 const mono = (task: AgentTask) =>
 	(task.status === 'working' || task.status === 'preparing') && task.activity?.kind === 'tool';
+/** spec/smoke-run#ready-surfaces: the working agent's screen can be looked at. */
+const ready = (task: AgentTask) =>
+	(task.status === 'working' || task.status === 'preparing') && task.activity?.kind === 'ready';
 export function Counts({ additions, deletions }: { additions: number; deletions: number }) {
 	return (
 		<span className={`mono ${s.counts}`}>
@@ -95,6 +98,8 @@ export const TaskCard = memo(function TaskCard({
 				<span
 					className={`ell ${s.line}${mono(task) ? ' mono' : ''}`}
 					data-amber={waits || task.status === 'rate-limited' || undefined}
+					// spec/smoke-run#ready-surfaces: `Ready to look` reads in the accent, as in the sidebar.
+					data-ready={(!waits && ready(task)) || undefined}
 					data-mono={mono(task) || undefined}>
 					{line}
 				</span>

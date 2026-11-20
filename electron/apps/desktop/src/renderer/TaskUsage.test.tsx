@@ -202,7 +202,7 @@ it('the budget card: the paused crew, the three answers with Raise to the next v
 			send={() => {}}
 		/>
 	);
-	expect(fewer).toContain('The task and its 1 worker are paused.');
+	expect(fewer).toContain('The task and its worker are paused.');
 	expect(solo).toContain('≈2m з 2m токенів');
 	expect(solo).toContain('Підняти до 3m');
 });

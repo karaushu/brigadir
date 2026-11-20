@@ -1123,7 +1123,7 @@ export type CrewLibrary = {
 	agents: AgentTemplate[];
 	crews: CrewTemplate[];
 	issues: import('./workspace').ReadIssue[];
-	/** spec/pull-requests-and-ci#review-crew: built-in crews hidden from the library; non-empty offers `Restore default crews`. */
+	/** spec/pull-requests-and-ci#review-crew: built-in crews hidden from the library; non-empty offers `Restore built-in crews`. */
 	hiddenCrews: string[];
 };
 /**

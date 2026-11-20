@@ -426,9 +426,7 @@ function ReviewLaunchDialog({
 							/>
 							<span className={styles.caption}>
 								{since === 'last' && task.last
-									? t(locale, 'Changed since round {round} of the last review: {files}')
-											.replace('{round}', String(task.last.round))
-											.replace('{files}', fileCount(locale, task.last.files))
+									? `${t(locale, 'Changed since the review')} · ${fileCount(locale, task.last.files)}`
 									: `${t(locale, 'From the task start')} · ${fileCount(locale, task.changes.files)}`}
 							</span>
 						</>

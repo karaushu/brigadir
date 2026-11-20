@@ -758,7 +758,7 @@ The phone is a remote control, not a development environment. It is for answerin
   - Permissions are answered with `answerPermission`.
   - The agent's plan approval is a permission card (`PermissionCard` `body` shows `planApprovalText` as chat Markdown), and `plan.document` shows the document.
   - The foreman's plan is answered with `decidePlan`.
-  - A crew worker's question shows "waiting for the foreman" until it escalates. After that it becomes a question card without `Skip` (`skip` prop) answered with `answerCrewQuestion`. `pendingInputs` counts `crew.question.escalated`.
+  - A crew worker's question shows "waiting for the foreman" — "waiting for the agent" in a task that leads no named crew — until it escalates. After that it becomes a question card without `Skip` (`skip` prop) answered with `answerCrewQuestion`. `pendingInputs` counts `crew.question.escalated`.
   - A task proposed by an agent shows `Decline` / `Create`.
 - **Steering** ([Steering and queue](composer-steering-queue-and-ghost.md)).
   - Tapping Send during a turn sends now.

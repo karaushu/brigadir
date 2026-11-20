@@ -169,7 +169,8 @@ while the browser or the simulator module is on.
   browser tab, in the work area.
 - **Sidebar:** the activity line reads `Ready to look` in `--accent`, over the tool activity, until the turn ends or a
   request of the agent waits ([Activity line](sidebar.md#activity-line)); the unread dot shows. The card's fill and
-  state glyph do not change: the task is still working, not `needs-you`.
+  state glyph do not change: the task is still working, not `needs-you`. The phone's task card reads the same line in
+  `--accent` too.
 - **OS notification:** its own notice kind `ready` ([Notice kinds](notifications-slack-notes-and-schedules.md#notice-kinds)),
   title the task's title, body `Ready to look: Details screen on iPhone 17 Pro.` (browser: `Ready to look: Details
   screen.`). A click opens the task and shows the screen as `Show` does. It is not `needs-you`: no badge, no

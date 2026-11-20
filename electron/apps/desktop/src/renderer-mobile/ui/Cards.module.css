@@ -67,6 +67,10 @@
 .line[data-amber] {
 	color: var(--amber-text);
 }
+/* spec/smoke-run#ready-surfaces: `Ready to look` reads in the accent; the card's fill and glyph stay. */
+.line[data-ready] {
+	color: var(--accent);
+}
 .line[data-mono] {
 	font-size: 12px;
 }

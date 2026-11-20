@@ -356,6 +356,8 @@ const uk = {
 	stopped: 'зупинено',
 	'waiting for the foreman': 'чекає бригадира',
 	'answered by the foreman': 'відповів бригадир',
+	'waiting for the agent': 'чекає агента',
+	'answered by the agent': 'відповів агент',
 	'answered by you': 'твоя відповідь',
 	approved: 'схвалено',
 	disputed: 'спір',
@@ -2614,8 +2616,6 @@ const uk = {
 	'Asking for a review': 'Просить ревʼю',
 	'Asked for a review': 'Попросив ревʼю',
 	'Could not ask for a review': 'Не вдалося попросити ревʼю',
-	'Changed since round {round} of the last review: {files}':
-		'Змінено після раунду {round} останнього ревʼю: {files}',
 	'Changed since the review': 'Змінено після ревʼю',
 	'Could not start the review': 'Не вдалося почати ревʼю',
 	Fixing: 'Виправляє',
@@ -5288,7 +5288,9 @@ export function tokenCount(locale: Locale, count: number): string {
 export function pausedWorkersText(locale: Locale, count: number): string {
 	const number = new Intl.NumberFormat(locale).format(count);
 	if (locale !== 'uk')
-		return `The task and its ${number} ${count === 1 ? 'worker' : 'workers'} are paused.`;
+		return count === 1
+			? 'The task and its worker are paused.'
+			: `The task and its ${number} workers are paused.`;
 	const word =
 		(
 			{ one: 'воркер', few: 'воркери', many: 'воркерів', other: 'воркера' } as Record<

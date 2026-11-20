@@ -69,7 +69,8 @@ provider's own option catalog.
   review stay in it unchecked. A foreman task adds the reviewers below its root; findings go to the foreman, which
   returns work to its workers. An Auto task keeps them in `reviewCrew` until its first hire and below the root of its
   crew from then on; its agent fixes the findings itself or hands them to the worker of that zone.
-- Reviewer tasks stay service rows under the task's card in the sidebar ([Surfaces](#surfaces)).
+- Reviewer tasks stay service rows under the task's card in the sidebar ([Surfaces](#surfaces)). A plan reviewer's task is
+  titled `reviews the plan`, a code reviewer's `reviews the changes`.
 
 <a id="start"></a>
 

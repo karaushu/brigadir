@@ -1166,14 +1166,17 @@ export class CrewHost {
 			(worker) => worker.nodeId === checker.id && !worker.acceptedAt
 		);
 		if (existing) return existing;
-		if (this.checksSelf(checker.id))
+		if (this.checksSelf(checker.id)) {
+			// spec/reviews#reviewer-sessions: the reviewer's task says what it reviews — the plan, or the changes.
+			const point = this.deps.self?.point() ?? 'pre-pr';
 			return this.spawnWorkerTask(
 				checker,
-				'reviews the changes',
-				`You review the changes of this task before its pull request. Reports to check arrive as prompts with a reviewId. Until then, wait; do not modify files.`,
+				point === 'plan' ? 'reviews the plan' : 'reviews the changes',
+				`You do the ${reviewPointPrompt[point]} of this task. ${point === 'plan' ? 'Plans' : 'Reports'} to check arrive as prompts with a reviewId. Until then, wait; do not modify files.`,
 				[],
 				true
 			);
+		}
 		const checks = this.node.agents
 			.filter((agent) => agent.checkedBy.includes(checker.id))
 			.map((agent) => agent.name);

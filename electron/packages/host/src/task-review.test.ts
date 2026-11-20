@@ -63,7 +63,7 @@ async function launch(store: SessionStore, key: TaskKey) {
 	return (await launchHost(store, key)).client;
 }
 /** The task's host and its client; `child` lets a test kill the host as a crash would. */
-async function launchHost(store: SessionStore, key: TaskKey) {
+async function launchHost(store: SessionStore, key: TaskKey, scenario: string[] = ['crew']) {
 	const config = join(await store.taskDir(key), 'config.json');
 	await atomicJson(config, {
 		schemaVersion: 1,
@@ -72,7 +72,7 @@ async function launchHost(store: SessionStore, key: TaskKey) {
 		mcpEntry: resolve('apps/desktop/out/services/mcp-relay'),
 		adapter: {
 			command: process.execPath,
-			args: [resolve('packages/transport/fixtures/agent.mjs'), 'crew'],
+			args: [resolve('packages/transport/fixtures/agent.mjs'), ...scenario],
 		},
 	});
 	const child = spawn(process.execPath, [resolve('apps/desktop/out/services/host.cjs'), config], {
@@ -447,3 +447,24 @@ it('a review waiting for a turn that fails, or for a turn a restart cut off, rea
 		return (await launchHost(store, task)).client;
 	});
 }, 360_000);
+
+// spec/reviews#plan-review, seen in the walkthrough (H): a plan reviewer's task was titled `reviews the changes`.
+it('a plan review reads the waiting plan; its reviewer’s task says it reviews the plan (spec/reviews#reviewer-sessions)', async () => {
+	const { store, task } = await setup('Keep the focus ring');
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['normal', log]);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await find(client, (r) => r.event.kind === 'permission.requested');
+	await client.command({
+		kind: 'startReview',
+		point: 'plan',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const created = await find(client, (r) => r.event.kind === 'crew.worker.created');
+	expect(created.event).toMatchObject({ name: 'Reviewer', title: 'reviews the plan' });
+	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(read.event).toMatchObject({ point: 'plan', findings: 1, gaps: 1 });
+}, 180_000);

@@ -11,6 +11,7 @@ import {
 	isTaskAgentRequest,
 	samePullRequest,
 	waitsForPerson,
+	statusAfterStop,
 	statusAfterTurn,
 	queuedCrewQuestion,
 	type TaskProposal,
@@ -1561,7 +1562,12 @@ export async function startHost(config: HostConfig) {
 				status = waitsForPerson(left) || left.crewQuestions.length ? 'needs-you' : 'done';
 			}
 			if (event.kind === 'session.failed') status = 'failed';
-			if (event.kind === 'host.stopped' && busy) status = 'interrupted';
+			// spec/crew#auto-hire: a hire card or a split outlives the turn the host stopped under.
+			if (event.kind === 'host.stopped' && busy)
+				status = statusAfterStop(
+					pendingInputs([...records, record]),
+					taskReview.document().review?.state === 'yours'
+				);
 			if (event.kind === 'crew.accepted' && event.conflicts.length) status = 'needs-you';
 			// spec/reviews#loop: the reviewers and the agent did not agree in two rounds; the person decides.
 			if (event.kind === 'review.finished' && event.state === 'disputed' && !busy)
@@ -3396,6 +3402,15 @@ export async function startHost(config: HostConfig) {
 		}
 	}
 	/** spec/architecture-and-platform#host-lifecycle: nothing to do for `idleMs` → the same graceful stop as Stop. The repo locks go with the host; the journal keeps the session. */
+	/** spec/architecture-and-platform#host-lifecycle: a hire card or a split waits for the person after its turn; it keeps the host, like a question. */
+	let cards = { at: -1, count: 0 };
+	function waitingCards() {
+		if (cards.at !== records.length) {
+			const inputs = pendingInputs(records);
+			cards = { at: records.length, count: (inputs.crewHire ? 1 : 0) + (inputs.crewPlan ? 1 : 0) };
+		}
+		return cards.count;
+	}
 	function idleState() {
 		return {
 			background: liveBackground(records).length > 0 || liveBackgroundSubagents(records).length > 0,
@@ -3408,7 +3423,8 @@ export async function startHost(config: HostConfig) {
 				permissions.size +
 				questions.size +
 				proposals.size +
-				(budget?.currentHold()?.state === 'asked' ? 1 : 0),
+				(budget?.currentHold()?.state === 'asked' ? 1 : 0) +
+				waitingCards(),
 			queued: queue.prompts.length,
 			quota: quotaBlocked(),
 			consoles: terminals.consolesAlive(),
@@ -3690,7 +3706,10 @@ export async function startHost(config: HostConfig) {
 			if (queue.prompts.length && !queue.paused && !quotaBlocked())
 				await emit({ kind: 'queue.paused' });
 			if (!['backlog', 'completed'].includes(task.status)) {
-				await store.setStatus(config.key, quotaBlocked() ? 'rate-limited' : 'interrupted');
+				await store.setStatus(
+					config.key,
+					quotaBlocked() ? 'rate-limited' : statusAfterStop(pendingInputs(records))
+				);
 				await store.updateTask(config.key, { activitySeq: records.at(-1)!.seq });
 			}
 		}

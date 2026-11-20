@@ -798,6 +798,19 @@ export function statusAfterTurn(
 		? 'needs-you'
 		: 'done';
 }
+/**
+ * spec/crew#auto-hire, spec/crew#plan, spec/architecture-and-platform#host-lifecycle: the task's status when its host stopped under a running turn
+ * (a stop, or a restart after the host exited). The turn is gone, but a hire card, a split, a worker's question, the budget question or a
+ * review's open findings still wait for the person, so the task needs them; otherwise the turn was interrupted.
+ */
+export function statusAfterStop(
+	inputs: PendingInputs,
+	reviewWaits = false
+): 'interrupted' | 'needs-you' {
+	return statusAfterTurn(undefined, inputs, reviewWaits) === 'needs-you'
+		? 'needs-you'
+		: 'interrupted';
+}
 export function waitsForPerson(inputs: PendingInputs) {
 	return (
 		inputs.questions.length > 0 ||

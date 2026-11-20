@@ -14,6 +14,7 @@ import {
 	staysWithLabel,
 	templateLookup,
 	waitsForPerson,
+	statusAfterStop,
 	statusAfterTurn,
 	type AgentTask,
 	type AutoHire,
@@ -81,6 +82,24 @@ describe('pending inputs of an Auto task (spec/crew#auto-hire, spec/crew#auto-mo
 		);
 		expect(statusAfterTurn('end_turn', decided, false)).toBe('done');
 		expect(statusAfterTurn('end_turn', decided, true)).toBe('needs-you');
+	});
+	it('a hire card or a split outlives a host that stops under its turn', () => {
+		const waiting = pendingInputs(
+			records(
+				{ kind: 'turn.started', text: 'Hire two workers.' },
+				{ kind: 'crew.hire.requested', hire },
+				{ kind: 'host.stopped', reason: 'The previous host exited during an active turn.' }
+			)
+		);
+		expect(statusAfterStop(waiting)).toBe('needs-you');
+		const idle = pendingInputs(
+			records(
+				{ kind: 'turn.started', text: 'Write it.' },
+				{ kind: 'host.stopped', reason: 'The previous host exited during an active turn.' }
+			)
+		);
+		expect(statusAfterStop(idle)).toBe('interrupted');
+		expect(statusAfterStop(idle, true)).toBe('needs-you');
 	});
 	it('drops a model question with the host: the agent asks again in its new session', () => {
 		const request = { id: 'm1', reason: 'No role fits.', role: 'Developer' };

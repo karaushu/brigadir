@@ -30,7 +30,7 @@ The GUI session host keeps its own FIFO of prompts. The adapter never receives c
 ### Pause and limits
 
 - `session.failed` pauses the queue only when it is not empty and no subscription rate limit is active. An empty queue has nothing to protect: a prompt sent after a failure into an empty queue starts at once.
-- If the host died during an active turn, the next host writes `host.stopped`, moves held messages into the FIFO, and pauses a non-empty queue. The task becomes `interrupted`, or `rate-limited` if a limit is active.
+- If the host died during an active turn, the next host writes `host.stopped`, moves held messages into the FIFO, and pauses a non-empty queue. The task becomes `interrupted`, `needs-you` if a card still waits for the person ([host lifecycle](architecture-and-platform.md#host-lifecycle)), or `rate-limited` if a limit is active.
 - While a rate limit blocks (`quotaBlocked`: a structured rate-limit window is live), nothing is dispatched. The queue continues after the reset, which comes from `rate-limit.expired` on a timer. Limits are never guessed from error text, and failed turns are never retried automatically.
 - CLI tasks keep their own TUI input and hook queues. Nothing is duplicated there.
 

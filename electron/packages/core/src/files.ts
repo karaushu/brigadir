@@ -154,6 +154,7 @@ export type WorkspaceAction =
 	| 'section-tasks'
 	| 'section-prs'
 	| 'section-brigadir'
+	| 'section-slack'
 	| 'layout-chat'
 	| 'layout-work'
 	| 'layout-panel'

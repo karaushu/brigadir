@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentProvider } from './agent';
 import type { Locale } from './messages';
+import { slackUserEvents, slackUserScopes } from './slack-inbox';
 
 /**
  * spec/settings-modules-and-onboarding#brigadir-chat: the Brigadir chat — the rail section's chats with Brigadir's own agent. Each chat is
@@ -63,7 +64,7 @@ export type BrigadirCard =
 			task?: { projectId: string; id: string };
 	  };
 export type BrigadirSetupKind = 'slack' | 'remoteAccess';
-export type BrigadirSecretKind = 'slackBotToken' | 'slackAppToken';
+export type BrigadirSecretKind = 'slackBotToken' | 'slackAppToken' | 'slackUserToken';
 export type BrigadirStep = { name: string; detail: string; done: boolean };
 export type BrigadirChatEntry =
 	| { kind: 'prompt'; text: string; choice?: BrigadirChatChoice }
@@ -240,7 +241,7 @@ export function slackManifest(name: string) {
 	return {
 		display_information: {
 			name: shown,
-			description: 'Brigadir on this computer: tasks, notes and answers in Slack.',
+			description: 'Brigadir on this computer: tasks, notes, answers and your mentions in Slack.',
 		},
 		features: {
 			app_home: {
@@ -250,9 +251,13 @@ export function slackManifest(name: string) {
 			},
 			bot_user: { display_name: shown, always_online: true },
 		},
-		oauth_config: { scopes: { bot: [...slackBotScopes] } },
+		// spec/todo-and-slack-inbox#slack-inbox-source: the Slack section reads Slack as the person — user scopes and user events.
+		oauth_config: { scopes: { bot: [...slackBotScopes], user: [...slackUserScopes] } },
 		settings: {
-			event_subscriptions: { bot_events: [...slackBotEvents] },
+			event_subscriptions: {
+				bot_events: [...slackBotEvents],
+				user_events: [...slackUserEvents],
+			},
 			interactivity: { is_enabled: true },
 			org_deploy_enabled: false,
 			socket_mode_enabled: true,

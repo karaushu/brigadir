@@ -73,14 +73,24 @@ then archived. It reads Slack as the person, so it needs the person's own token 
   `usergroups:read`, `search:read`. The app subscribes to the user events `message.channels`, `message.groups`,
   `message.im`, `message.mpim` over the same Socket Mode connection. The manifest the setup builds carries them; an app
   made before needs `Reinstall to Workspace`. The token is sealed like the bot's (`~/.brigadir/slack/user-token.json`,
-  `KeyVault`) and never reaches the renderer, a log or an agent.
+  `KeyVault`) only after `auth.test` accepts it, and never reaches the renderer, a log or an agent; the user scopes its
+  `x-oauth-scopes` lacks are named.
+- **Your account**: section of the [Slack settings popup](notifications-slack-notes-and-schedules.md#slack-bot) —
+  `User token` (field, `Connect`); connected: the person's name · team, `Disconnect`, `Replace token…`, the missing
+  scopes or `Slack refused the token · <code>`; and the switch `Count @here and @channel` (`settings.json`
+  `slack.countHere`, off). The Brigadir chat asks for the token with `secret_request {kind: "slackUserToken"}`.
+  IPC: `slack:user-connect`, `slack:user-disconnect`; `SlackState.account` carries the state, never the token.
+- **Socket Mode** runs while the module, the user token and the app-level token are there, also with `Create tasks from
+  Slack` off; a mention of the bot is handled only with that switch on. A DM counts for the section only when Slack
+  authorized the event for the person; the bot's own DM stays the bot's, and a DM of the person never reaches the bot.
 - **A mention** is a message from someone else that has the person's member ID, one of the person's user groups
   (`usergroups.users.list`), any message in a DM or a group DM with them, or a reply in a thread the person wrote in.
   `@here` and `@channel` count only with `Count @here and @channel` on (off by default). The bot's own posts never count.
 - **While the app was closed**: on start, `search.messages` with `<@member> after:<last seen day>` and `to:me` fills the
   gap, then events take over. `from:me` for the same days feeds `You did` in the day summary.
 - **Answered**: the person wrote in the mention's thread (a DM: in that DM) after it, or marked it `Done`. A mention the
-  person did not answer for 24 h is `Waiting`; one with no ask is `FYI` and needs no answer.
+  agent found an ask in is `Waiting` until then; before the agent's verdict, a mention the person did not answer for
+  24 h is `Waiting`. One with no ask (and `@here`) is `FYI` and needs no answer.
 
 <a id="slack-inbox-entry"></a>
 ### Entry, list and screen
@@ -92,7 +102,10 @@ then archived. It reads Slack as the person, so it needs the person's own token 
   author and `#channel` (`Direct message`), the summary line, the time; group `Days` — `Today`, `Yesterday`, then
   weekdays and dates, second line `5 mentions · 2 waiting`; group `Weeks` — `This week`, `Last week`, then `Nov 10–16`;
   group `In the archive` — one row per month older than 30 days, folded.
-- **Its screen**: the open mention, day or week. Opening the section shows `Today`.
+- **Its screen**: the open mention, day, week or archive month (its mentions, read-only). Opening the section shows
+  `Today`. IPC: `slack-inbox:read`, `slack-inbox:changed`, `slack-inbox:opened`, `slack-inbox:refresh`,
+  `slack-inbox:thread`, `slack-inbox:month`, `slack-inbox:done`, `slack-inbox:dismiss`, `slack-inbox:todo`,
+  `slack-inbox:untodo`; with the module off they answer `Slack is off in Settings.`
 - **No user token**: the screen shows the Slack glyph, `Connect your Slack account`, `Set up with Brigadir` (a new
   Brigadir chat with `Connect my Slack account for mentions`) and `Open Slack settings`.
 
@@ -114,10 +127,11 @@ then archived. It reads Slack as the person, so it needs the person's own token 
   channel and `Add to Todo`; `You did` — what the person wrote that day, grouped by thread (`Answered Olena in #b2c`,
   `Posted in #release`); `People` — a row of avatars, each with a badge: green tick — answered, amber dot — still
   waiting, the count of their mentions on hover; `Worth knowing` — 3–6 lines on decisions, releases, incidents and
-  questions in the threads the person was in. Summaries are built when the day has a new mention and the section is open,
-  on the first opening of the next day, and on `Refresh`.
+  questions in the threads the person was in. Summaries are built when the day has a new mention and the section is open
+  (a minute after it), on the first opening of the next day (every day since the last opening, at most a week back, that
+  grew after its summary), and on `Refresh`.
 - **Week** (`This week`, `Nov 10–16`): five to eight short lines, the counts (`32 mentions · 3 waiting`), the asks still
-  waiting with `Add to Todo`. Built on Monday's first opening and on `Refresh`.
+  waiting with `Add to Todo`. Built on the first opening of a new week (the week before) and on `Refresh`.
 - A summary is written in the interface language. Its header says when it was made (`Made at 18:40`).
 
 <a id="slack-inbox-agent"></a>
@@ -129,7 +143,8 @@ then archived. It reads Slack as the person, so it needs the person's own token 
   per week — the seven day summaries in.
 - The message text goes to the agent's provider; it is kept only in `~/.brigadir/slack-inbox/`.
 - The quota check of Helper calls applies; with no quota the list keeps working and the summary shows
-  `Summary not made: the agent is out of quota.` with `Retry`.
+  `Summary not made: the agent is out of quota.` with `Retry` (a call that gave nothing usable: `Could not make the
+  summary.`). While one is made: `Making the summary…`. `Refresh` also calls again for mentions the agent missed.
 
 <a id="slack-inbox-to-todo"></a>
 ### Add to Todo
@@ -140,14 +155,19 @@ then archived. It reads Slack as the person, so it needs the person's own token 
   `No project`; in that project the list the agent picks by name from the project's lists (a list for the release or
   the area the message is about), else the project's most recently changed list, else a new list `Inbox`.
 - The toast `Added to b2c › Release 1.15` has `Open` and `Undo`; the mention shows `In Todo` with the target.
-- With the Todo module off, the button is not shown.
+- With the Todo module off, the button is not shown. The section reaches Todo only through what the Todo module gives it
+  (add an item to a list by name, remove it for `Undo`, the lists with their projects and times); `Open` asks the Todo
+  section to show the list.
 
 <a id="slack-inbox-files"></a>
 ### Files and the archive
 
-- `~/.brigadir/slack-inbox/`: `mentions.jsonl` (normalized mentions: ts, channel, author, text, thread, kind, status,
-  agent result; appended, a change appends the new state), `days/<yyyy-mm-dd>.json`, `weeks/<yyyy>-W<ww>.json`,
-  `people.json` (names and avatars, 24 h), `state.json` (the last event and search day).
+- `~/.brigadir/slack-inbox/`: `mentions.jsonl` (normalized mentions: ts, channel, author, text, thread, kind, whether and
+  how it was answered, the agent's result, the suggestion, the to-do made, the messages around it; appended, a change
+  appends the new state; rewritten whole when old states are most of it), `days/<yyyy-mm-dd>.json` (the person's own
+  messages of the day and its summary), `weeks/<yyyy>-W<ww>.json`, `people.json` (names, 24 h; avatars are initials on
+  the palette), `state.json` (the last event, the last searched and opened days, the threads the person wrote in, their
+  user groups).
 - **A month, then the archive**: mentions, days and weeks older than 30 days leave `Mentions`, `Days` and `Weeks` and go
   to `In the archive`, one row per month, read-only; they do not count in the pill. To-dos made from them stay.
 

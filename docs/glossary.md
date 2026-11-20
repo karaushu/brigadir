@@ -688,6 +688,19 @@ of the OS. In both languages they are *Notifications* / «Сповіщення»
 | Turn on notifications | Увімкнути сповіщення | | |
 | Retry | Спробувати ще | A failure toast action. | «Повторити» |
 | Slack | Slack | | |
+| Mentions (Slack) | Згадки | The Slack section's group of the last 7 days: where people mentioned the person. | «теги», «повідомлення» |
+| Waiting | Чекає | A mention with an ask the person has not answered; the amber dot on the avatar. | «очікує» |
+| Answered | Відповів | The person wrote after the mention in its thread, or marked it `Done`; the green tick. | «оброблено» |
+| FYI | До відома | A mention with no ask. | «інфо» |
+| Asked of you | Просять тебе | The day summary's asks. | «запити» |
+| You did | Що ти зробив | The day summary's part about the person's own messages. | |
+| Worth knowing | Варто знати | The day summary's decisions, releases and incidents. | «новини» |
+| Made at 18:40 | Зроблено о 18:40 | When a summary was made. | «згенеровано» |
+| Add to Todo | Додати в Todo | A to-do from a mention, an ask or a suggestion. | «у список справ» |
+| In Todo · b2c › Inbox | У Todo · b2c › Inbox | Where a mention's to-do went. | |
+| Suggested to-do | Пропонована справа | The agent's to-do for a mention with an ask. | «задача» (a task is another thing) |
+| Your account (Slack) | Твій акаунт | The person's own Slack token for the Slack section. | «користувач» |
+| Count @here and @channel | Рахувати @here і @channel | Whether `@here` and `@channel` are mentions of the person. | |
 
 ## Agent tool calls
 

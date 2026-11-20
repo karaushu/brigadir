@@ -99,6 +99,7 @@ export function LayoutSettings({
 	keymapQuery,
 	remoteDialog,
 	remotePart,
+	module,
 }: {
 	locale: Locale;
 	close(): void;
@@ -112,6 +113,8 @@ export function LayoutSettings({
 		RemoteDialog | undefined;
 	/** spec/remote-access-and-mobile#remote-button: the part of remote access settings to show. */ remotePart?:
 		RemotePart | undefined;
+	/** spec/todo-and-slack-inbox#slack-inbox-entry: Modules with this module's popup open (`Open Slack settings`). */ module?:
+		ModuleSettingsTarget['module'] | undefined;
 }) {
 	const dialog = useRef<HTMLDialogElement>(null),
 		tabs = useRef<HTMLDivElement>(null),
@@ -121,7 +124,7 @@ export function LayoutSettings({
 	// spec/settings-modules-and-onboarding#module-settings-popup: a module's settings are a popup over Settings ▸ Modules, opened from the module's row; `remote` opens
 	// remote access's (a toast, the chip's menu, Search Everywhere).
 	const remoteFirst = initialTab === 'remote';
-	const [tab, setTab] = useState<Tab>(initialTab === 'remote' ? 'modules' : initialTab),
+	const [tab, setTab] = useState<Tab>(initialTab === 'remote' || module ? 'modules' : initialTab),
 		[moduleSettings, setModuleSettings] = useState<ModuleSettingsTarget | null>(
 			remoteFirst
 				? {
@@ -129,7 +132,9 @@ export function LayoutSettings({
 						...(remoteDialog ? { remoteDialog } : {}),
 						...(remotePart ? { remotePart } : {}),
 					}
-				: null
+				: module
+					? { module }
+					: null
 		),
 		[snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null),
 		[busy, setBusy] = useState(false),

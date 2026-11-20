@@ -97,6 +97,8 @@ export function useMenuContext(
 				sidebar: !!document.querySelector('[data-app-sidebar]'),
 				// spec/sidebar#section-rail: Pull requests is a section of the rail only while its module is on.
 				prSection: !!document.querySelector('[data-rail-section=prs]'),
+				// spec/todo-and-slack-inbox#slack-inbox-entry: Slack is a section of the rail only while its module is on.
+				slackSection: !!document.querySelector('[data-rail-section=slack]'),
 				document:
 					!!taskNode &&
 					taskNode.dataset.menuDocuments !== '0' &&

@@ -567,7 +567,11 @@ function SecretCard({
 	const [value, setValue] = useState('');
 	const label = t(
 		locale,
-		card.kind === 'slackBotToken' ? 'Bot token (field)' : 'App-level token (field)'
+		card.kind === 'slackBotToken'
+			? 'Bot token (field)'
+			: card.kind === 'slackUserToken'
+				? 'User token (field)'
+				: 'App-level token (field)'
 	);
 	const open = card.state === 'waiting' || card.state === 'error' || card.state === 'scopes';
 	const result =
@@ -612,7 +616,13 @@ function SecretCard({
 						type="password"
 						autoComplete="off"
 						spellCheck={false}
-						placeholder={card.kind === 'slackBotToken' ? 'xoxb-…' : 'xapp-…'}
+						placeholder={
+							card.kind === 'slackBotToken'
+								? 'xoxb-…'
+								: card.kind === 'slackUserToken'
+									? 'xoxp-…'
+									: 'xapp-…'
+						}
 						value={value}
 						aria-label={label}
 						onChange={(event) => setValue(event.currentTarget.value)}

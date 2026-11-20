@@ -27,3 +27,47 @@
 	height: 16px;
 	font-size: 9px;
 }
+/* spec/todo-and-slack-inbox#slack-inbox-entry: the Slack section's sizes — rows 24, the thread 28, People 32. */
+.avatar {
+	position: relative;
+	letter-spacing: 0.2px;
+}
+.avatar[data-size='xl'] {
+	width: 24px;
+	height: 24px;
+	font-size: calc(10px * var(--ui-scale));
+	font-weight: 600;
+}
+.avatar[data-size='xxl'] {
+	width: 28px;
+	height: 28px;
+	font-size: calc(11px * var(--ui-scale));
+	font-weight: 600;
+}
+.avatar[data-size='xxxl'] {
+	width: 32px;
+	height: 32px;
+	font-size: calc(13px * var(--ui-scale));
+	font-weight: 600;
+}
+/* The status on the avatar's corner, ringed in the surface it sits on (`--avatar-ring`, the window by default). */
+.badge {
+	position: absolute;
+	right: -3px;
+	bottom: -3px;
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 0 0 2px var(--avatar-ring, var(--win));
+	color: var(--on-amber);
+}
+.badge[data-badge='waiting'] {
+	background: var(--amber);
+}
+.badge[data-badge='answered'] {
+	background: var(--green);
+	color: var(--avatar-fg);
+}

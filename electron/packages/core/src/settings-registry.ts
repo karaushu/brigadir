@@ -251,6 +251,13 @@ export const settingEdits: readonly SettingEdit[] = [
 		get: (s) => s.slack.memberId,
 		set: (s, v) => ({ ...s, slack: { ...s.slack, memberId: String(v ?? '') } }),
 	},
+	{
+		key: 'slack.countHere',
+		id: 'module-slack',
+		kind: bool,
+		get: (s) => s.slack.countHere,
+		set: (s, v) => ({ ...s, slack: { ...s.slack, countHere: v as boolean } }),
+	},
 	...modules.map((module): SettingEdit => ({
 		key: `modules.${module}`,
 		id: `module-${module}`,
@@ -301,7 +308,9 @@ function info(edit: SettingEdit, settings: AppSettings): SettingInfo {
 				? 'Settings ▸ Modules ▸ Slack ▸ Agents can post without confirmation'
 				: edit.key === 'slack.memberId'
 					? 'Settings ▸ Modules ▸ Slack ▸ Your member ID'
-					: place(edit),
+					: edit.key === 'slack.countHere'
+						? 'Settings ▸ Modules ▸ Slack ▸ Count @here and @channel'
+						: place(edit),
 		values: kindText(edit.kind),
 		current: edit.get(settings),
 		confirm: Boolean(edit.confirm),

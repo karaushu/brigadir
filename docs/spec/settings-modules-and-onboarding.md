@@ -296,7 +296,7 @@ One typed list in `core/settings-registry.ts` describes every setting a person c
 | `settings_set {key, value}` | validates and saves; `confirm` entries first show a card with `Apply` · `Cancel` | the new value, or the refusal and its reason |
 | `settings_open {key}` | opens Settings at the row, lit as from Search Everywhere | `opened` |
 | `setup_start {kind}` | starts a guided setup (`slack`, `remoteAccess`) and shows its steps card | the steps and which are done |
-| `secret_request {kind}` | shows a secret card (`slackBotToken`, `slackAppToken`); the value goes from the field to main and the key store | the check's result: `connected as @<bot>`, missing scopes, or Slack's error — never the value |
+| `secret_request {kind}` | shows a secret card (`slackBotToken`, `slackAppToken`, `slackUserToken`); the value goes from the field to main and the key store | the check's result: `connected as @<bot>` (the person's name for a user token), missing scopes, or Slack's error — never the value |
 | `open_link {url}` | opens a link the setup built (Slack's app pages) in the browser, after the person clicks it | `opened` |
 | `create_task {projects, title, prompt, base}` | the [agent-created task](tasks.md#agent-created-tasks) card in the chat, `Start` · `Decline`; `base` as in [Slack](notifications-slack-notes-and-schedules.md#slack-agent) | the task's id, or `declined` |
 | `send_to_task {task, text}` | the message goes to that task's agent, as a steer from the person | `sent` or the refusal (gone, archived, busy) |
@@ -329,10 +329,12 @@ One typed list in `core/settings-registry.ts` describes every setting a person c
 `setup_start {kind: "slack"}`, from `Set up with Brigadir` or the person's words. Steps:
 
 1. **Name** — the agent asks what the bot is called (default `Brigadir`). The bot's name is set in Slack, and agents know the bot by it ([bot name](notifications-slack-notes-and-schedules.md#slack-bot-name)).
-2. **Create in Slack** — a link to `https://api.slack.com/apps?new_app=1&manifest_json=<manifest>` with that name, every bot scope Brigadir uses (`chat:write`, `users:read`, `channels:read`, `groups:read`, `app_mentions:read`, `channels:history`, `groups:history`, `im:history`), the bot events `app_mention`, `message.channels`, `message.groups`, `message.im`, Socket Mode, Interactivity and the app's Messages tab. The person picks the workspace and presses `Create`.
+2. **Create in Slack** — a link to `https://api.slack.com/apps?new_app=1&manifest_json=<manifest>` with that name, every bot scope Brigadir uses (`chat:write`, `users:read`, `channels:read`, `groups:read`, `app_mentions:read`, `channels:history`, `groups:history`, `im:history`), the bot events `app_mention`, `message.channels`, `message.groups`, `message.im`, the [Slack section's](todo-and-slack-inbox.md#slack-inbox-source) user scopes and user events, Socket Mode, Interactivity and the app's Messages tab. The person picks the workspace and presses `Create`.
 3. **Bot token** — `Install to Workspace`, then the secret card for `xoxb-…`. The check is `auth.test`; scopes missing from its `x-oauth-scopes` are named with a link to the app's `OAuth & Permissions` page and `Reinstall to Workspace`.
 4. **App-level token** — a link to the app's `Basic Information ▸ App-Level Tokens` (`connections:write`), then the secret card for `xapp-…`, checked with `apps.connections.open`. `Create tasks from Slack` turns on.
 5. **You** — the person's member ID (`Profile ▸ ⋯ ▸ Copy member ID`), saved as `slack.memberId`; the agent ends with a mention test: «Write @<bot> hi in any channel».
+
+The [Slack section](todo-and-slack-inbox.md#slack-inbox-source) is not a step: when the person wants it (`Connect my Slack account for mentions`), the agent asks for the app's User OAuth Token (`OAuth & Permissions`, after `Reinstall to Workspace` for an app made before) with `secret_request {kind: "slackUserToken"}`; missing user scopes are named with the link to that page.
 
 Every developer needs their own Slack app: Slack spreads one app's Socket Mode events across all its open connections, so with a shared app a mention would reach a random person's Brigadir. The agent says so when the person mentions a team.
 

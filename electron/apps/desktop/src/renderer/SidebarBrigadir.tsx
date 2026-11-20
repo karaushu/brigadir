@@ -14,6 +14,7 @@ import { Glyph, type GlyphName } from './ui/Glyph';
 import { SkeletonRows } from './ui/Loading';
 import { toastError } from './ui/Toast';
 import { RenameDialog } from './RenameTask';
+import { SidebarGroup } from './SidebarGroup';
 import { useBrigadirList } from './brigadir-data';
 import styles from './App.module.css';
 
@@ -75,34 +76,20 @@ export function SidebarBrigadir({
 	};
 	/** A group of the list in the project group's look; its name folds it (rule 15: the whole header). */
 	const group = (title: MessageKey, glyph: GlyphName, count: number, rows: React.ReactNode) => {
-		const shut = collapsed.includes(title),
-			name = t(locale, title),
-			fold = () =>
-				setCollapsed((list) => (shut ? list.filter((item) => item !== title) : [...list, title]));
+		const shut = collapsed.includes(title);
 		return (
-			<section className={styles.project} data-open={!shut} data-brigadir-group={title}>
-				<div className={styles.projectHeader}>
-					<button
-						className={styles.projectCollapse}
-						aria-label={`${t(locale, shut ? 'Expand project' : 'Collapse project')} · ${name}`}
-						aria-expanded={!shut}
-						onClick={fold}>
-						<Glyph name="sidebar-chevron" size={10} />
-					</button>
-					<span className={styles.projectIconButton} aria-hidden="true">
-						<Glyph name={glyph} size={14} />
-					</span>
-					<h3>
-						<button className={styles.projectSelect} aria-expanded={!shut} onClick={fold}>
-							{name}
-						</button>
-					</h3>
-					<span className={styles.sectionGroupCount}>{count}</span>
-				</div>
-				<div className={styles.projectDisclosure} data-open={!shut} inert={shut} aria-hidden={shut}>
-					<div>{rows}</div>
-				</div>
-			</section>
+			<SidebarGroup
+				locale={locale}
+				name={t(locale, title)}
+				glyph={glyph}
+				count={count}
+				shut={shut}
+				data-brigadir-group={title}
+				onFold={() =>
+					setCollapsed((list) => (shut ? list.filter((item) => item !== title) : [...list, title]))
+				}>
+				{rows}
+			</SidebarGroup>
 		);
 	};
 	const chatRow = (chat: BrigadirChatMeta) => (

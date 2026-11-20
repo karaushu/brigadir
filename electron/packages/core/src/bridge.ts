@@ -783,6 +783,25 @@ export type DesktopBridge = {
 	connectSlackApp(token: string): Promise<import('./slack').SlackState>;
 	disconnectSlackApp(): Promise<import('./slack').SlackState>;
 	onSlack(listener: (state: import('./slack').SlackState) => void): () => void;
+	/** spec/todo-and-slack-inbox#slack-inbox-source: the person's own token (`xoxp-…`); sealed after `auth.test`, never read back. */
+	connectSlackUser(token: string): Promise<import('./slack').SlackState>;
+	disconnectSlackUser(): Promise<import('./slack').SlackState>;
+	/** spec/todo-and-slack-inbox#slack-inbox: the Slack section — mentions, days, weeks, the archive's months; the token never comes here. */
+	readSlackInbox(): Promise<import('./slack-inbox').SlackInboxView>;
+	/** The section opened (summaries of past days and of last week are made on the first opening) or closed. */
+	slackInboxOpened(open: boolean): Promise<void>;
+	/** `Refresh`: Slack is read again; the open day or week (or today) is summarized again. */
+	refreshSlackInbox(target: import('./slack-inbox').SlackInboxTarget | null): Promise<void>;
+	/** The open mention's thread, read again from Slack (≤ 20 messages around it). */
+	slackInboxThread(id: string): Promise<import('./slack-inbox').SlackInboxMessage[]>;
+	/** A month of the archive, read-only. */
+	slackInboxMonth(month: string): Promise<import('./slack-inbox').SlackMentionRow[]>;
+	slackInboxDone(id: string): Promise<void>;
+	slackInboxDismiss(id: string): Promise<void>;
+	/** spec/todo-and-slack-inbox#slack-inbox-to-todo: the to-do made and where it went. */
+	slackInboxTodo(id: string): Promise<import('./slack-inbox').SlackTodoRef>;
+	slackInboxUndoTodo(id: string): Promise<void>;
+	onSlackInbox(listener: (view: import('./slack-inbox').SlackInboxView) => void): () => void;
 	saveSettings(settings: AppSettings): Promise<SettingsSnapshot>;
 	/** spec/appearance#evolution-redesign: `Remember for …` of the in-place capsule and `Reset` of Customize per action — one action's agent; null
 	 *  inherits again. Main changes only that entry of the settings it holds. */

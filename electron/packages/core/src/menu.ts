@@ -50,6 +50,8 @@ export const menuContextKeys = [
 	'reopenTab',
 	'commit',
 	'prSection',
+	/** spec/todo-and-slack-inbox#slack-inbox-entry: the rail has the Slack section (its module is on). */
+	'slackSection',
 	'noteChat',
 	'fileTree',
 	/** spec/tasks#move-to-worktree: the open task can move into a worktree now. */
@@ -233,6 +235,8 @@ export const menuCommands: readonly Command[] = [
 	workspace('View', 'Schedules', 'schedules', 'Ctrl+Command+4', 'always'),
 	// spec/settings-modules-and-onboarding#brigadir-chat-entry: Brigadir is the fifth section; not a module, so always there.
 	workspace('View', 'Brigadir (section)', 'section-brigadir', 'Ctrl+Command+5', 'always'),
+	// spec/todo-and-slack-inbox#slack-inbox-entry: Slack is the seventh section, while the Slack module is on.
+	workspace('View', 'Slack', 'section-slack', 'Ctrl+Command+7', 'slackSection'),
 	// spec/task-window-workspace#layout-switch: View ▸ Layout — the three switches of the task toolbar's Layout, ⌘1–⌘3 (the routes are ⇧⌘1 / ⇧⌘2),
 	// then Show all and Reset column widths.
 	workspace('Layout', 'Chat', 'layout-chat', 'CmdOrCtrl+1', 'task'),
@@ -417,6 +421,7 @@ export const menuCommandIcons: Readonly<Record<string, MenuIcon>> = {
 	'section-tasks': 'board',
 	'section-prs': 'pr-branch',
 	'section-brigadir': 'helmet-chat',
+	'section-slack': 'slack',
 	notes: 'note',
 	'note-new': 'note',
 	schedules: 'schedule',

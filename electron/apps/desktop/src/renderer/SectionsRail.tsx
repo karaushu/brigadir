@@ -6,7 +6,7 @@ import { Rail, RailSection } from './ui/Rail';
 import { useCommandShortcut } from './ui/use-command-shortcut';
 
 /** spec/sidebar#section-rail: the rail's sections — Tasks, Pull requests, Notes (spec/notifications-slack-notes-and-schedules#notes) and Schedules (spec/notifications-slack-notes-and-schedules#schedules). */
-export type SectionId = 'tasks' | 'prs' | 'notes' | 'schedules' | 'brigadir';
+export type SectionId = 'tasks' | 'prs' | 'notes' | 'schedules' | 'brigadir' | 'slack';
 
 /**
  * spec/sidebar#section-rail (rule 17): the sections rail as the window has it — Tasks · Pull requests · Notes · Schedules on
@@ -32,11 +32,13 @@ export function SectionsRail({
 		prs: boolean;
 		notes: boolean;
 		schedules: boolean;
+		/** spec/todo-and-slack-inbox#slack-inbox-entry: the Slack section while its module is on. */ slack?: boolean;
 	};
 	/** The open section, or none. */ selected: SectionId | null;
 	/** spec/sidebar#section-rail: Tasks — amber, tasks that wait; Pull requests — accent, PRs that wait for your review. */ counts?: {
 		tasks?: number;
 		prs?: number;
+		/** spec/todo-and-slack-inbox#slack-inbox-entry: amber — mentions waiting for an answer. */ slack?: number;
 	};
 	/** spec/notifications-slack-notes-and-schedules#schedules: the Schedules dot (a CSS colour); `null` keeps the slot so it fades out. */ scheduleDot?:
 		string | null;
@@ -95,6 +97,12 @@ export function SectionsRail({
 					{tile('brigadir', t(locale, 'Brigadir (section)'), 'section-brigadir', 'helmet-chat', {
 						...(brigadirDot ? { dot: 'var(--accent)' } : {}),
 					})}
+					{/* spec/todo-and-slack-inbox#slack-inbox-entry: Slack is the seventh section, ⌃⌘7, while the Slack module is on. */}
+					{modules.slack &&
+						tile('slack', t(locale, 'Slack'), 'section-slack', 'slack', {
+							count: counts?.slack ?? 0,
+							tone: 'amber',
+						})}
 				</>
 			}
 			tools={tools}

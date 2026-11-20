@@ -235,6 +235,8 @@ const pcKeys: Record<string, string> = {
 	'section-prs': 'Alt+2',
 	schedules: 'Alt+4',
 	'section-brigadir': 'Alt+5',
+	// spec/todo-and-slack-inbox#slack-inbox-entry: the Slack section, ⌃⌘7.
+	'section-slack': 'Alt+7',
 };
 const printable = (key: string) =>
 	/^[A-Z0-9]$/.test(key) ||

@@ -84,7 +84,15 @@ export type BrigadirChatDeps = {
 			token: string
 		): Promise<{ bot: string; team: string; scopes: string | null; appId: string | null }>;
 		connectApp(token: string): Promise<void>;
-		state(): { bot: boolean; app: boolean; memberId: boolean; listening: boolean };
+		/** spec/todo-and-slack-inbox#slack-inbox-source: the person's own token of the Slack section; who it is and the user scopes it lacks. */
+		connectUser(token: string): Promise<{ user: string; team: string; missing: string[] }>;
+		state(): {
+			bot: boolean;
+			app: boolean;
+			memberId: boolean;
+			listening: boolean;
+			user: boolean;
+		};
 	};
 	/** A short title for a chat from its first message; null — keep the first line. */
 	title?(text: string): Promise<string | null>;
@@ -811,6 +819,9 @@ export class BrigadirChats {
 			state.bot && !state.app
 				? "Next: tell them to open the app's Basic Information ▸ App-Level Tokens, generate one with connections:write, then ask for it with secret_request kind slackAppToken."
 				: '',
+			state.bot && !state.user
+				? "For the Slack section (the person's own mentions and day summaries): the app also needs its User OAuth Token. Tell them to open the app's OAuth & Permissions page, check that User Token Scopes list channels:history, groups:history, im:history, mpim:history, users:read, usergroups:read, search:read (an app made before needs them added and Reinstall to Workspace), then ask for the User OAuth Token (xoxp-…) with secret_request kind slackUserToken. Only when they want the section."
+				: '',
 			!state.memberId
 				? 'Last: their member ID (Profile ▸ ⋯ ▸ Copy member ID, starts with U) — ask them to paste it in the chat (it is not a secret) and save it with settings_set key slack.memberId.'
 				: '',
@@ -873,6 +884,28 @@ export class BrigadirChats {
 					return missing.length
 						? `Connected as @${bot.bot} in ${bot.team}, but the token lacks scopes: ${missing.join(', ')}. Tell the person to add them on the app's OAuth & Permissions page (the card has the link) and Reinstall to Workspace, then paste the new token: call secret_request again.`
 						: `Connected as @${bot.bot} in ${bot.team}.${bot.appId ? ` The app's pages: https://api.slack.com/apps/${bot.appId}/general` : ''}`;
+				}
+				if (kind === 'slackUserToken') {
+					const account = await this.deps.slack.connectUser(value.trim());
+					const setups = await this.readSetups();
+					const appId = setups.slack?.appId,
+						link = appId
+							? `https://api.slack.com/apps/${appId}/oauth`
+							: 'https://api.slack.com/apps';
+					await this.card(
+						chat,
+						account.missing.length
+							? {
+									...card,
+									state: 'scopes',
+									result: `${account.user} · ${account.team} · missing ${account.missing.join(', ')}`,
+									link,
+								}
+							: { ...card, state: 'connected', result: `${account.user} · ${account.team}` }
+					);
+					return account.missing.length
+						? `Connected as ${account.user} in ${account.team}, but the token lacks user scopes: ${account.missing.join(', ')}. Tell the person to add them under User Token Scopes on the app's OAuth & Permissions page (the card has the link) and Reinstall to Workspace, then paste the new User OAuth Token: call secret_request again.`
+						: `Connected as ${account.user} in ${account.team}. The Slack section now shows their mentions; Socket Mode brings new ones while the app-level token is connected.`;
 				}
 				await this.deps.slack.connectApp(value.trim());
 				await this.card(chat, { ...card, state: 'connected', result: 'Listening for mentions' });

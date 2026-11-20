@@ -787,9 +787,11 @@ import {
 export function statusAfterTurn(
 	reason: string | undefined,
 	inputs: PendingInputs,
-	reviewWaits: boolean
+	reviewWaits: boolean,
+	/** spec/chat-turns-plans-and-questions#turn-footer: the turn ended because its plan went back — no interruption. */
+	planReturned = false
 ): 'interrupted' | 'needs-you' | 'done' {
-	if (reason === 'cancelled') return 'interrupted';
+	if (reason === 'cancelled' && !planReturned) return 'interrupted';
 	return inputs.crewQuestions.length > 0 ||
 		inputs.budget !== null ||
 		inputs.crewHire !== null ||

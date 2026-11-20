@@ -279,6 +279,7 @@ Names" category of STE.
 | Plan further… | Планувати далі… | Reject the plan with text about what to change. | |
 | Send edits | Надіслати правки | Replaces `Approve plan` when the user edited the plan. | |
 | Plan approved / Plan rejected | План погоджено / План відхилено | | |
+| Plan sent back | План повернуто | The end of a turn whose plan went back for revision; not an interruption. | «Перервано» |
 | Revision | Ревізія | One version of a plan for approval; the agent makes a new one after `Plan further…`. | «версія» |
 | Changes · Plan | Зміни · План | The plan card's switch: what changed since the revision before, or the plan itself. | |
 | Rewritten | Переписано | Most lines of the plan changed since the revision before. | |
@@ -644,6 +645,7 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Task budget | Бюджет задачі | Tokens a task may use per provider before it pauses and asks. | |
 | Task usage | Токени задачі | The popover of a task's token counter: per provider, its budget and its agents. | «Використання» |
 | Budget reached | Бюджет вичерпано | A provider's count reached the task's budget; the task is paused. | «Ліміт вичерпано» (that is the subscription) |
+| Paused at the budget | Пауза через бюджет | The task stays held after `Finish turns, then stop` or `Stop now` until its budget changes. | |
 | No limit | Без ліміту | A provider without a task budget. | |
 | Context | Контекст | The context window of a session. | |
 | Initial setup | Початкові налаштування | | |

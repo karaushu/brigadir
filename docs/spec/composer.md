@@ -372,7 +372,7 @@ The selection panel and its actions (Comment, Attach comment, Attach comment and
 <a id="queue-deck"></a>
 ## Queue deck placement
 
-The queue deck (and the background commands deck) share `ui/Deck`, which stands on the island's top edge: the island overlaps the deck's last pixel, so the island's own top border is the line between them, and nothing of the deck hides under the glass. Deck rows, editing and pausing are specified in [Steering, queue and ghost](composer-steering-queue-and-ghost.md). While the [budget question](chat-turns-plans-and-questions.md#budget-strip) waits, its strip is the deck's first list.
+The queue deck (and the background commands deck) share `ui/Deck`, which stands on the island's top edge: the island overlaps the deck's last pixel, so the island's own top border is the line between them, and nothing of the deck hides under the glass. Deck rows, editing and pausing are specified in [Steering, queue and ghost](composer-steering-queue-and-ghost.md). While the [budget question](chat-turns-plans-and-questions.md#budget-strip) waits, its strip is the deck's first list. While the task is [held at its budget](chat-turns-plans-and-questions.md#budget-held) after the answer, its row takes that place.
 
 <a id="later"></a>
 ## Later

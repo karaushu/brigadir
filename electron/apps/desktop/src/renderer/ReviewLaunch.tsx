@@ -73,6 +73,13 @@ export type TaskReviewRequest = {
 	start(choice: TaskReviewChoice): Promise<string | null>;
 };
 
+/** spec/reviews#start: the reviewer `Auto` resolves to, or why none is available. */
+type AutoReviewer = { text: string; failure: boolean };
+/** spec/reviews#start: the closed `Who` popup on `Auto` names the resolved reviewer as its detail: `Auto · Codex · gpt-5.5`. */
+export function autoEntryText(locale: Locale, auto: AutoReviewer | null): string {
+	return auto && !auto.failure ? `${t(locale, 'Auto')} · ${auto.text}` : t(locale, 'Auto');
+}
+
 type LaunchStore = {
 	launch: ReviewLaunchRequest | null;
 	/** spec/pull-requests-and-ci#review-notes: the project whose notes are edited; `over` — opened from the launch dialog, which stays under it. */
@@ -162,7 +169,7 @@ function ReviewLaunchDialog({
 		[segment, setSegment] = useState<'agent' | 'crew' | null>(null),
 		[remember, setRemember] = useState(false),
 		// spec/reviews#start: a task's review offers `Auto` — the reviewer the app resolves (spec/reviews#who) — as its inherited entry.
-		[auto, setAuto] = useState<string | null>(null);
+		[auto, setAuto] = useState<AutoReviewer | null>(null);
 	useEffect(() => {
 		if (!task) return;
 		let live = true;
@@ -173,8 +180,11 @@ function ReviewLaunchDialog({
 					live &&
 					setAuto(
 						'failure' in value
-							? value.failure
-							: [providerName(value.provider), value.model].filter(Boolean).join(' · ')
+							? { text: value.failure, failure: true }
+							: {
+									text: [providerName(value.provider), value.model].filter(Boolean).join(' · '),
+									failure: false,
+								}
 					),
 				() => {}
 			);
@@ -312,7 +322,21 @@ function ReviewLaunchDialog({
 	return (
 		<ModalDialog
 			title={t(locale, task ? 'Review before PR' : 'Review with an agent')}
-			note={task ? task.title : `#${pr!.number} · ${request.title}`}
+			note={
+				task ? (
+					// spec/reviews#start: the note is the task and its changes, `<task title> · +N −M`.
+					<>
+						{task.title} ·{' '}
+						<ChangeCounts
+							additions={task.changes.additions}
+							deletions={task.changes.deletions}
+							locale={locale}
+						/>
+					</>
+				) : (
+					`#${pr!.number} · ${request.title}`
+				)
+			}
 			locale={locale}
 			width={520}
 			close={close}
@@ -401,20 +425,11 @@ function ReviewLaunchDialog({
 								]}
 							/>
 							<span className={styles.caption}>
-								{since === 'last' && task.last ? (
-									t(locale, 'Changed since round {round} of the last review: {files}')
-										.replace('{round}', String(task.last.round))
-										.replace('{files}', fileCount(locale, task.last.files))
-								) : (
-									<>
-										{`${t(locale, 'From the task start')} · ${fileCount(locale, task.changes.files)} `}
-										<ChangeCounts
-											additions={task.changes.additions}
-											deletions={task.changes.deletions}
-											locale={locale}
-										/>
-									</>
-								)}
+								{since === 'last' && task.last
+									? t(locale, 'Changed since round {round} of the last review: {files}')
+											.replace('{round}', String(task.last.round))
+											.replace('{files}', fileCount(locale, task.last.files))
+									: `${t(locale, 'From the task start')} · ${fileCount(locale, task.changes.files)}`}
 							</span>
 						</>
 					) : (
@@ -449,6 +464,7 @@ function ReviewLaunchDialog({
 							<Popup
 								label={t(locale, 'Agent')}
 								value={agentValue}
+								{...(agentValue === 'auto' ? { displayValue: autoEntryText(locale, auto) } : {})}
 								disabled={busy || !agents.length}
 								icon={
 									<Glyph
@@ -466,7 +482,7 @@ function ReviewLaunchDialog({
 													value: 'auto',
 													label: t(locale, 'Auto'),
 													icon: <Glyph name="review" size={12} />,
-													...(auto ? { tail: auto } : {}),
+													...(auto ? { tail: auto.text } : {}),
 												},
 											]
 										: []),

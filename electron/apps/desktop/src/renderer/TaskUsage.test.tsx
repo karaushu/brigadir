@@ -3,7 +3,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { AgentTask, BudgetQuestion, TaskOwnTokens } from '@brigadir/core';
 import {
 	BudgetCard,
+	BudgetHeldStrip,
 	BudgetStrip,
+	heldRow,
+	raiseHeld,
 	MemberTokens,
 	TaskUsageCounterView,
 	UsageBreakdown,
@@ -240,6 +243,68 @@ it('the strip over the composer: Budget reached and the short answers', () => {
 	);
 	expect(open).toContain('Turns that run now finish; nothing new starts.');
 	expect(open).toContain('Details screen');
+});
+
+it('held at the budget after Finish turns: the deck row says so and keeps only the raise', () => {
+	const hold = {
+		id: 'q1',
+		provider: 'claude' as const,
+		tokens: 2_100_000,
+		budget: 2_000_000,
+		state: 'finish' as const,
+	};
+	const html = renderToStaticMarkup(
+		<BudgetHeldStrip
+			hold={hold}
+			view={view(crew({ claude: 2_000_000 }, 1_200_000, { tokenHold: hold }))}
+			locale="en"
+			disabled={false}
+			send={() => {}}
+		/>
+	);
+	expect(html).toContain('data-budget-strip="held"');
+	expect(html).toContain('data-tone="amber"');
+	expect(html).toContain('Paused at the budget');
+	expect(html).toContain('Raise to 3m');
+	expect(html).not.toContain('Stop now');
+	expect(html).not.toContain('Finish turns');
+	const uk = renderToStaticMarkup(
+		<BudgetHeldStrip
+			hold={hold}
+			view={view(crew({ claude: 2_000_000 }, 1_200_000, { tokenHold: hold }))}
+			locale="uk"
+			disabled={false}
+			send={() => {}}
+		/>
+	);
+	expect(uk).toContain('Пауза через бюджет');
+	// `Stop now` holds the same way; the row is the hold's after `finish` or `stop` only, and leaves with it.
+	expect(heldRow({ ...hold, state: 'stop' })).toMatchObject({ state: 'stop' });
+	expect(heldRow(hold)).toBe(hold);
+	expect(heldRow({ ...hold, state: 'asked' })).toBeNull();
+	expect(heldRow(null)).toBeNull();
+});
+
+it('a raise from the held row changes the budget and reads the workspace again; No limit removes it', async () => {
+	const sent: unknown[] = [];
+	let reloads = 0;
+	const send = (command: unknown) => {
+		sent.push(command);
+		return true;
+	};
+	const reload = async () => {
+		reloads++;
+	};
+	await raiseHeld(send, { provider: 'claude' }, 'raise', 1_000_000, reload);
+	await raiseHeld(send, { provider: 'claude' }, 'unlimited', undefined, reload);
+	expect(sent).toEqual([
+		{ kind: 'setTokenBudget', provider: 'claude', budget: 1_000_000 },
+		{ kind: 'setTokenBudget', provider: 'claude', budget: null },
+	]);
+	expect(reloads).toBe(2);
+	// A command that did not go through reads nothing again.
+	await raiseHeld(() => false, { provider: 'claude' }, 'raise', 1_000_000, reload);
+	expect(reloads).toBe(2);
 });
 
 it("a worker row shows the member's own count, ≈ while its turn runs", () => {

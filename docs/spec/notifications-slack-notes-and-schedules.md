@@ -130,7 +130,7 @@ Rules:
 - A refusal by the person is not a failure: e.g. `add_folder` not applied shows `Did not add the folder` with the reason on a second line.
 - Every toast is also written to the [notification center](#notification-center) unless `log: false` (a CI run that main records itself).
 
-App-level toasts: notifications denied (above); GitHub (`ForgeToast`): `Install GitHub CLI (gh) to create pull requests.` / `Sign in with gh auth login to use GitHub.` / `GitHub status could not be read.` with `Retry`, resolved when the state is `ready` again; `Unavailable fonts: {fonts}. Using the system font.` once per set of missing fonts.
+App-level toasts: notifications denied (above); GitHub (`ForgeToast`): `Install GitHub CLI (gh) to create pull requests.` / `Sign in with gh auth login to use GitHub.` / `GitHub status could not be read.` with `Retry`, resolved when the state is `ready` again — raised only by GitHub's own failures, never by a local git failure ([GitHub status](pull-requests-and-ci.md#github-status)); `Unavailable fonts: {fonts}. Using the system font.` once per set of missing fonts.
 
 <a id="notice-chips"></a>
 ## Notice chips (class S)

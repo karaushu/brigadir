@@ -15,6 +15,7 @@ import {
 	workspaceStoppedLimit,
 	type WorkspaceStopped,
 	statusAfterTurn,
+	lastTurnPlanReturned,
 	queuedCrewQuestion,
 	type TaskProposal,
 	type TaskProposalResult,
@@ -1610,7 +1611,8 @@ export async function startHost(config: HostConfig) {
 				status = statusAfterTurn(
 					event.reason,
 					pendingInputs([...records, record]),
-					taskReview.document().review?.state === 'yours'
+					taskReview.document().review?.state === 'yours',
+					lastTurnPlanReturned([...records, record])
 				);
 			if (event.kind === 'crew.question.escalated' && !busy) status = 'needs-you';
 			if (
@@ -2677,7 +2679,9 @@ export async function startHost(config: HostConfig) {
 					!transport?.steering ||
 					queue.paused ||
 					quotaBlocked() ||
-					budget?.held()
+					budget?.held() ||
+					// spec/composer-steering-queue-and-ghost#steering-conditions: a waiting plan takes no steer; a message answers it instead.
+					[...permissions.values()].some((entry) => isPlanApproval(entry.request))
 				)
 					throw new Error('This message cannot go into the running turn');
 				await emit({ kind: 'prompt.held', prompt: item });

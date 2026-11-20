@@ -89,7 +89,8 @@ provider's own option catalog.
   once with the resolved reviewer; the others open the launch dialog of
   [Review with an agent](pull-requests-and-ci.md#review-launch) titled `Review before PR` with the note
   `<task title> · +N −M`: instructions, project review notes, `What` (`All changes · Since the last review`), `Who`
-  (`Agent · Crew`; the agent capsule's inherited entry is `Auto` with the resolved reviewer as its detail) and
+  (`Agent · Crew`; the agent capsule's inherited entry is `Auto` with the resolved reviewer as its detail — the
+  list's tail, and `Auto · Codex · gpt-5.5` on the closed popup; `What`'s caption is `From the task start · N files`) and
   `Remember for code reviews` (action `taskReview`). `Starting…` on the button; a failure keeps the dialog with `Could
 not start the review: …` and `Retry`.
 - **The host** starts a `pre-pr` review when the person presses `Create PR` ([gate](#before-pr)), a `plan` review when a plan is
@@ -240,6 +241,9 @@ the state in muted text, the **step track**, actions, chevron.
   fill; a hovered step `--tint`. Each step has the tooltip `Plan review`, `Mid-task review`, `Review before PR`
   (with its review's own state: `stopped`, `did not start` and `outdated` share the glyph, not the word). A click opens
   the strip on that step's findings.
+- **A narrow column** (the chat beside an open panel): the title and the state with its findings link keep their room;
+  the step track gives way first and hides while the text would be cut beside it, then the text ends with `…`. The
+  actions and the chevron stay. The steps stay reachable in the open strip's segments.
 - **A toned or hovered row fills the deck edge to edge** — horizontally across the deck's padding, and up to the deck's
   top edge when it is the deck's first row and down to the island's top border when it is the deck's last ([Queue deck placement](composer.md#queue-deck)).
 
@@ -290,10 +294,14 @@ you`; `review · <point> · did not start`; `review · <point> · changed after 
 - **Threads.** A reviewer's finding card shows the reviewer's provider glyph and name, the line link and its tag. Under
   it: the agent's reply, the reviewer's reason for `open`, and a footer — `Sent to <agent> · fixing` with `Log`,
   `<reviewer> closed it`, or `Your call` with `Open the review` (expands the strip).
-- **Sidebar.** Reviewers are rows under the task's card, like crew workers: `<reviewer> · Review`, `· N findings ·
-waits`, `· Approved`, `· N open` (amber). A review waiting for the person makes the task `needs-you` with the reason
-  line `Review · <N findings> open`; the card takes the `needs-you` fill. The rows stay until the next change after
-  the review, or the archive.
+- **Sidebar.** The current review's reviewers are rows under the task's card, like crew workers, under a solo task's,
+  an Auto task's or a crew's card alike; an earlier review's reviewers have no row, and a review that did not start has none. A row is named by the reviewer
+  (`Codex`, `Codex 2`), never by its role, and says the review's state, never the reviewer task's title: `<reviewer> ·
+  Review` while it reads or checks, `· N findings · waits` while the agent fixes (N = what it filed), `· Approved`,
+  `· N open` in amber with the amber `needs-you` glyph while the person decides (N = its findings still open, so it
+  agrees with the task's line), `· Accepted` after the person's `Accept`, `· Review stopped`, `· Review did not start`. A review
+  waiting for the person makes the task `needs-you` with the reason line `Review · <N findings> open`; the card takes
+  the `needs-you` fill. The rows stay until the next change after the review, or the archive.
 - **Notifications.** The review handing open findings to the person is a `needs-you` notice
   ([Notice kinds](notifications-slack-notes-and-schedules.md#notice-kinds)).
 

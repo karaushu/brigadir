@@ -2,6 +2,7 @@ import { promptDisplayText } from './prompt-tokens';
 import { activityRows } from './activity';
 import type { EventRecord } from './session';
 import type { ChangeRange } from './changes';
+import { isPlanApproval, planRejectOption } from './plan-approval';
 export type TurnSummary = {
 	id: string;
 	seq: number;
@@ -10,7 +11,11 @@ export type TurnSummary = {
 	at: string;
 	duration: number | null;
 	tools: number;
-	status: 'running' | 'done' | 'interrupted' | 'failed';
+	/**
+	 * spec/chat-turns-plans-and-questions#turn-footer: `returned` — the turn ended because its plan went back (plan chat, `Plan further…`, a plan
+	 * review's findings, `Fix N`): the normal end of a planning turn, not an interruption.
+	 */
+	status: 'running' | 'done' | 'returned' | 'interrupted' | 'failed';
 	range: ChangeRange | null;
 };
 type TurnFold = {
@@ -18,6 +23,10 @@ type TurnFold = {
 	checkpoint: number | null;
 	active: TurnSummary | undefined;
 	tools: Set<string>;
+	/** The running turn's plan approvals and their reject option. */
+	plans: Map<string, string | null>;
+	/** The running turn's plan went back. */
+	returned: boolean;
 };
 function foldTurns(state: TurnFold, records: readonly EventRecord[], from: number) {
 	const finish = (at: string, status: TurnSummary['status']) => {
@@ -37,6 +46,8 @@ function foldTurns(state: TurnFold, records: readonly EventRecord[], from: numbe
 		if (event.kind === 'turn.started') {
 			finish(at, 'interrupted');
 			state.tools = new Set();
+			state.plans = new Map();
+			state.returned = false;
 			state.active = {
 				id: String(seq),
 				seq,
@@ -58,8 +69,19 @@ function foldTurns(state: TurnFold, records: readonly EventRecord[], from: numbe
 			state.tools.add(event.patch.id);
 			state.active.tools = state.tools.size;
 		}
+		if (event.kind === 'permission.requested' && isPlanApproval(event.request))
+			state.plans.set(event.request.id, planRejectOption(event.request)?.id ?? null);
+		if (
+			event.kind === 'permission.resolved' &&
+			event.optionId !== null &&
+			state.plans.get(event.id) === event.optionId
+		)
+			state.returned = true;
 		if (event.kind === 'turn.completed')
-			finish(at, event.reason === 'cancelled' ? 'interrupted' : 'done');
+			finish(
+				at,
+				event.reason !== 'cancelled' ? 'done' : state.returned ? 'returned' : 'interrupted'
+			);
 		if (event.kind === 'session.failed') finish(at, 'failed');
 		if (event.kind === 'host.stopped') finish(at, 'interrupted');
 	}
@@ -69,7 +91,28 @@ const emptyFold = (): TurnFold => ({
 	checkpoint: null,
 	active: undefined,
 	tools: new Set(),
+	plans: new Map(),
+	returned: false,
 });
+/** spec/chat-turns-plans-and-questions#turn-footer: the last turn's plan went back — its `cancelled` end is not an interruption. */
+export function lastTurnPlanReturned(records: readonly EventRecord[]): boolean {
+	const plans = new Map<string, string | null>();
+	let start = records.length;
+	while (start > 0 && records[start - 1]!.event.kind !== 'turn.started') start--;
+	if (start === 0) return false;
+	for (let i = start; i < records.length; i++) {
+		const event = records[i]!.event;
+		if (event.kind === 'permission.requested' && isPlanApproval(event.request))
+			plans.set(event.request.id, planRejectOption(event.request)?.id ?? null);
+		if (
+			event.kind === 'permission.resolved' &&
+			event.optionId !== null &&
+			plans.get(event.id) === event.optionId
+		)
+			return true;
+	}
+	return false;
+}
 /** Both transports journal the same boundaries; checkpoint IDs, not wall clock, own the diff. */
 export function turnSummaries(records: readonly EventRecord[]): TurnSummary[] {
 	const state = emptyFold();

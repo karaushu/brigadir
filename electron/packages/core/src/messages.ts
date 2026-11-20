@@ -175,6 +175,7 @@ const uk = {
 	'No limit for this task': 'Без ліміту для цієї задачі',
 	'Budget reached': 'Бюджет вичерпано',
 	'Budget question': 'Питання бюджету',
+	'Paused at the budget': 'Пауза через бюджет',
 	'Could not change the budget.': 'Не вдалося змінити бюджет.',
 	"Agent's default": 'Як задано в агенті',
 	'New sessions compact their context when it reaches this many tokens.':
@@ -1569,6 +1570,7 @@ const uk = {
 	'The changes could not be read.': 'Не вдалося прочитати зміни.',
 	'The folder could not be read.': 'Не вдалося прочитати теку.',
 	'The data location is not allowed.': 'Це розташування даних недоступне.',
+	'Git could not read the repository.': 'Git не зміг прочитати репозиторій.',
 	// spec/architecture-and-platform#read-issues: what could not be read, beside the project and task.
 	'Task names': 'Назви задач',
 	'App data': 'Дані застосунку',
@@ -2329,6 +2331,7 @@ const uk = {
 	'What should change in the plan?': 'Що змінити в плані?',
 	'⌘↩ send · Esc cancel': '{shortcut} надіслати · Esc скасувати',
 	'Plan in revision': 'План на доопрацюванні',
+	'Plan sent back': 'План повернуто',
 	'The plan copy could not be opened.': 'Копію плану не вдалося відкрити.',
 	'Reject the plan and tell the agent what to change':
 		'Відхилити план і сказати агенту, що змінити',

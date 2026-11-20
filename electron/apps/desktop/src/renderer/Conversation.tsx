@@ -139,12 +139,15 @@ import { DeckList, DeckRow } from './ui/Deck';
 import { BackgroundDeck } from './BackgroundDeck';
 import {
 	BudgetCard,
+	BudgetHeldStrip,
 	BudgetStrip,
+	heldRow,
 	TaskUsageCounterView,
 	budgetAnswerText,
 	budgetTitle,
 	useTaskTokens,
 } from './TaskUsage';
+import { steeringState } from './composer-steering';
 import { ReviewEventRow, ReviewProposalRow, ReviewStrip, useReviewStripShown } from './TaskReview';
 import { DesignReviewRow } from './DesignReview';
 import styles from './Conversation.module.css';
@@ -364,6 +367,8 @@ export function Conversation({
 	const pending = useMemo(() => pendingInputs(records), [records]);
 	// spec/agents-and-providers#task-tokens: the counter, the budget card and strip read one view of the task's tokens.
 	const tokens = useTaskTokens(task, locale);
+	// spec/chat-turns-plans-and-questions#budget-held: held at the budget after the question was answered with `finish` or `stop`.
+	const heldAtBudget = heldRow(tokens.hold);
 	// spec/chat-turns-plans-and-questions#turn-rail: one rail mark per prompt; the text is the prompt's own row (a human message or a crew event).
 	const railTurns = useMemo((): RailTurn[] => {
 		const texts = new Map<string, string>();
@@ -425,13 +430,16 @@ export function Conversation({
 				record.event.prompt.id === lastTurn.event.queuedPromptId
 		);
 	// spec/composer-steering-queue-and-ghost#steering-hold: a queued message can still go into the running turn (the deck's «Send now»); a new one does when nothing is queued.
-	const steering =
-		busy &&
-		!adopted &&
-		session?.kind === 'session.started' &&
-		session.steering === true &&
-		!queue.paused &&
-		!rateLimit;
+	const { steering, sendNow } = steeringState({
+		busy,
+		adopted,
+		steering: session?.kind === 'session.started' && session.steering === true,
+		paused: queue.paused,
+		rateLimited: Boolean(rateLimit),
+		// spec/agents-and-providers#budget-reached: the hold is the root's and covers every member.
+		budgetHeld: Boolean(tokens.root.tokenHold),
+		planWaiting: pending.permissions.some((request) => isPlanApproval(request)),
+	});
 	const steers = steering && !queue.prompts.length;
 	const optionsEvent = records.findLast(
 		(r) => r.event.kind === 'options.changed' || r.event.kind === 'session.started'
@@ -2016,8 +2024,18 @@ export function Conversation({
 					locale={locale}
 					send={send}
 					review={
-						reviewStrip || pending.budget ? (
+						reviewStrip || pending.budget || heldAtBudget ? (
 							<>
+								{/* spec/chat-turns-plans-and-questions#budget-held: after `Finish turns` or `Stop now` the deck says the task is held, with the raise. */}
+								{heldAtBudget && !pending.budget && (
+									<BudgetHeldStrip
+										hold={heldAtBudget}
+										view={tokens}
+										locale={locale}
+										disabled={sending}
+										send={send}
+									/>
+								)}
 								{/* spec/chat-turns-plans-and-questions#budget-strip: the budget question over the composer while it waits. */}
 								{pending.budget && (
 									<BudgetStrip
@@ -2090,7 +2108,7 @@ export function Conversation({
 										}
 										actions={
 											<>
-												{steering && item.command.kind === 'prompt' && (
+												{sendNow && item.command.kind === 'prompt' && (
 													<Button
 														size="s"
 														appearance="primary"

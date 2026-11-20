@@ -165,7 +165,10 @@ Every design review is a card of the filing task's chat ([`ChatCard`](appearance
 
 - **Per node:** a chip (`link` glyph, the node's name) and the node id (mono, `--fg3`); under it the preview pair —
   two tiles side by side, 86 px tall, `--tint` with a 1 px `--sep` inset frame and a 7 px radius, the image fitted
-  (cropped to the node's `area` when it has one), and a caption: `Figma` (bold) and the node id; `Device` (bold) and
+  (cropped to the node's `area` when it has one) — both images of the pair at one scale: they show the same node, so
+  they take one width, as wide as the tile allows while the image with the narrower aspect ratio still fits its
+  height, and a device crop of another shape is taller or shorter than its Figma half, never smaller; a pair with
+  one image missing fits each tile on its own — and a caption: `Figma` (bold) and the node id; `Device` (bold) and
   the shot id. Then the node's rows.
 - **The table:** four columns, `Property` · `Expected` · `On device` · the tag, a 10 px `--fg3` header; rows 28 px with
   a hairline on top, values in mono 11 px. A matching row ends with `check-pass` in `--green`. A mismatch: the
@@ -190,7 +193,7 @@ Every design review is a card of the filing task's chat ([`ChatCard`](appearance
 ### The viewer
 
 A popover over the chat, 500 px wide: the head is the node's name, its id (mono, `--fg3`) and `Esc`
-([`PopupClose`](appearance.md#popup-close)); the body has the two images 170 px tall, captions `Figma · <id>` and
+([`PopupClose`](appearance.md#popup-close)); the body has the two images in tiles 170 px tall, at one scale as in the card, captions `Figma · <id>` and
 `Device · <shot> · <device> · <time>`, the mismatched rows' areas outlined on the device image, and the node's rows.
 `Esc`, a click outside or `PopupClose` closes it, and focus returns to the tile.
 

@@ -3189,9 +3189,11 @@ void app.whenReady().then(async () => {
 	registerRead('browser:live', () => browsers.liveTasks());
 	registerRead('simulator:toolchain', () => simulators.found());
 	registerRead('workspace:read', async () => {
-		const workspace = projectIcons.decorate(
-			await taskLabels.decorate(
-				await taskActivities.decorate(await taskDiffs.decorate(await sessions.workspace()))
+		const workspace = forge.decorate(
+			projectIcons.decorate(
+				await taskLabels.decorate(
+					await taskActivities.decorate(await taskDiffs.decorate(await sessions.workspace()))
+				)
 			)
 		);
 		try {

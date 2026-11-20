@@ -179,7 +179,7 @@ it('keeps the provider tool name and exit code for the one-line tool row (spec/a
 		'exitCode'
 	);
 });
-it('maps a markdown plan document and its removal; other plan forms stay unhandled (spec/chat-turns-plans-and-questions#plan-approval)', () => {
+it('maps a markdown plan document and its removal, the items form to the checklist; a file stays unhandled (spec/chat-turns-plans-and-questions#plan-approval)', () => {
 	expect(
 		mapUpdate({
 			sessionUpdate: 'plan_update',
@@ -196,6 +196,26 @@ it('maps a markdown plan document and its removal; other plan forms stay unhandl
 			plan: { type: 'file', planId: 'p2', uri: 'file:///tmp/plan.md' },
 		} as SessionUpdate)
 	).toEqual({ kind: 'unhandled', name: 'plan_update:file' });
+	// Claude's todo list arrives as the `items` form: the step checklist, never `unhandled` in the journal.
+	expect(
+		mapUpdate({
+			sessionUpdate: 'plan_update',
+			plan: {
+				type: 'items',
+				planId: 'todos',
+				entries: [
+					{ content: 'Read the store', priority: 'medium', status: 'completed' },
+					{ content: 'Write the summary', priority: 'medium', status: 'in_progress' },
+				],
+			},
+		} as SessionUpdate)
+	).toEqual({
+		kind: 'plan.changed',
+		entries: [
+			{ text: 'Read the store', priority: 'medium', status: 'completed' },
+			{ text: 'Write the summary', priority: 'medium', status: 'in_progress' },
+		],
+	});
 });
 it('marks a subagent tool with the parent tool call (spec/composer-steering-queue-and-ghost#steering-hold)', () => {
 	expect(

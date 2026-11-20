@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { lstat, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+	isGitScope,
 	isMainTree,
 	isRecord,
 	repoBlockers,
@@ -22,6 +23,7 @@ import {
 	type GitPublishState,
 	type ForgePush,
 	type HelperRun,
+	type WorkspaceSnapshot,
 } from '@brigadir/core';
 import {
 	SessionStore,
@@ -94,6 +96,14 @@ function safeRemote(value: string | null) {
 		return value;
 	}
 }
+const folderGone = async (path: string) => {
+	try {
+		await lstat(path);
+		return false;
+	} catch (error) {
+		return isRecord(error) && error.code === 'ENOENT';
+	}
+};
 export class ForgeActions {
 	private repositories = new Map<string, ForgeRepository>();
 	private snapshots = new Map<string, ForgeSnapshot>();
@@ -125,19 +135,53 @@ export class ForgeActions {
 	cancelAll() {
 		for (const controller of this.generators.values()) controller.abort();
 	}
+	/**
+	 * spec/pull-requests-and-ci#github-status, spec/architecture-and-platform#read-issues: GitHub's own failures (gh, network, auth) stay in the snapshot
+	 * and its toast; a read that throws failed locally (git, the task's snapshots) and is a read issue of the task until a read succeeds.
+	 */
+	private localFailures = new Map<string, TaskKey>();
+	/** The latest read of each task: an older read's outcome never overwrites a newer one's. */
+	private generations = new Map<string, number>();
 	/** `fresh` — window focus, an explicit refresh or our own operation: auth, PR and checks skip the cache. */
 	read(key: TaskKey, remote: boolean, fresh = false): Promise<ForgeSnapshot> {
 		const id = keyName(key),
 			existing = this.reads.get(id);
 		if (existing) return remote ? existing.then(() => this.read(key, true, fresh)) : existing;
-		const work = this.readNow(key, remote, fresh);
+		const work = this.readNow(key, remote, fresh),
+			generation = (this.generations.get(id) ?? 0) + 1;
 		this.reads.set(id, work);
+		this.generations.set(id, generation);
 		void work
+			.then(
+				() => {
+					if (this.generations.get(id) === generation) this.localFailures.delete(id);
+				},
+				async () => {
+					// spec/architecture-and-platform#read-issues: a project whose folder is gone has nothing to read; that is no read issue.
+					const project = await SessionStore.at(this.dataDir)
+							.then((store) => store.project(key.projectId))
+							.catch(() => null),
+						gone = project ? await folderGone(project.path) : false;
+					if (this.generations.get(id) !== generation) return;
+					if (gone) this.localFailures.delete(id);
+					else this.localFailures.set(id, { projectId: key.projectId, id: key.id });
+				}
+			)
 			.finally(() => {
 				if (this.reads.get(id) === work) this.reads.delete(id);
 			})
 			.catch(() => {});
 		return work;
+	}
+	/** spec/architecture-and-platform#read-issues: the tasks whose repository state git could not read, while the task still exists. */
+	decorate(workspace: WorkspaceSnapshot): WorkspaceSnapshot {
+		for (const key of this.localFailures.values())
+			if (workspace.tasks.some((task) => task.projectId === key.projectId && task.id === key.id))
+				workspace.issues.push({
+					path: `projects/${key.projectId}/tasks/${key.id}/git`,
+					code: 'git_failed',
+				});
+		return workspace;
 	}
 	// GitHub answers are cached per repo, shared by tasks: repo metadata 10 min; auth `ready` 5 min, PR and checks 20 s —
 	// for task switches (`fresh` skips them). One identical request in flight; the gh process limit is in Forge. Errors are not cached.
@@ -176,8 +220,9 @@ export class ForgeActions {
 		// spec/pull-requests-and-ci#github-status: a local read keeps GitHub's last answer; with none yet (the first reads came during
 		// preparation) it reads GitHub once instead of reporting an unknown state as a failure.
 		if (!previous) remote = true;
+		// A folder outside git has no branch or remote to read: it has no part in a pull request (spec/projects-and-board#external-folders).
 		const scopes = (await Snapshots.open(store, key)).current.scopes.filter(
-			(scope) => scope.available !== false
+			(scope) => scope.available !== false && isGitScope(scope)
 		);
 		let auth = previous?.auth ?? 'error',
 			error: string | null = null;

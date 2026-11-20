@@ -157,14 +157,42 @@ describe('what the window reads (spec/reviews#strip, spec/reviews#before-pr)', (
 			({ verdicts: [item], state: 'approved', round: 1, dispatched: ['n1'] }) as never;
 		const review = { state: 'passed' } as never;
 		expect(
-			memberState(review, run(verdict(true, 'Ran shout("Ann"): HELLO, ANN.')), 'n1', null, 0)
+			memberState(review, run(verdict(true, 'Ran shout("Ann"): HELLO, ANN.')), 'n1', null, [])
 		).toEqual({
 			state: 'approved',
 			findings: 0,
 			since: '2026-01-01T00:00:00.000Z',
 			note: 'Ran shout("Ann"): HELLO, ANN.',
 		});
-		expect(memberState(review, run(verdict(true)), 'n1', null, 0)).not.toHaveProperty('note');
+		expect(memberState(review, run(verdict(true)), 'n1', null, [])).not.toHaveProperty('note');
+	});
+	it("a reviewer's count while the person decides is its open findings, the task line's count; after Accept it reads accepted (spec/reviews#surfaces)", () => {
+		const verdict = {
+			reviewerNodeId: 'n1',
+			reviewer: 'Codex',
+			approved: false,
+			comments: 2,
+			at: '2026-01-01T00:00:00.000Z',
+		};
+		const run = { verdicts: [verdict], state: 'done', round: 2, dispatched: ['n1'] } as never;
+		const filed = [{ state: 'fixed' as const }, { state: 'open' as const }];
+		expect(memberState({ state: 'yours' } as never, run, 'n1', null, filed)).toMatchObject({
+			state: 'open',
+			findings: 1,
+		});
+		expect(memberState({ state: 'fixing' } as never, run, 'n1', null, filed)).toMatchObject({
+			state: 'findings',
+			findings: 2,
+		});
+		expect(memberState({ state: 'accepted' } as never, run, 'n1', null, filed)).toMatchObject({
+			state: 'accepted',
+		});
+		expect(memberState({ state: 'stopped' } as never, run, 'n1', 'failed', filed)).toMatchObject({
+			state: 'stopped',
+		});
+		expect(memberState({ state: 'reading' } as never, null, 'n1', 'failed', [])).toMatchObject({
+			state: 'failed',
+		});
 	});
 	it('Create PR during a mid-task review expands that review instead of starting one', async () => {
 		const { store, key } = await task();

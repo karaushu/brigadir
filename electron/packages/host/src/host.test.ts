@@ -1006,6 +1006,19 @@ it('sends a queued message now: it leaves the FIFO, is held and goes at the boun
 		'no longer queued'
 	);
 }, 20000);
+it('refuses Send now while a plan waits for approval (spec/composer-steering-queue-and-ghost#steering-conditions)', async () => {
+	const { store, task } = await setup('codex'),
+		{ client } = await launch(store, task, 'steering');
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await event(client, 'permission.requested');
+	await client.command({ kind: 'prompt', text: 'after the plan' });
+	const queued = await event(client, 'prompt.queued');
+	const id = queued.event.kind === 'prompt.queued' ? queued.event.prompt.id : '';
+	await expect(client.command({ kind: 'steerQueuedPrompt', id })).rejects.toThrow(
+		'cannot go into the running turn'
+	);
+	await client.command({ kind: 'cancel' });
+}, 20000);
 it('puts a held message in front of what was queued after it when the turn ends (spec/composer-steering-queue-and-ghost#steering-hold)', async () => {
 	const { store, task } = await setup('codex'),
 		{ client } = await launch(store, task, 'steering');

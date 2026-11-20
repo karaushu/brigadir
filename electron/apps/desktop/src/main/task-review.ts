@@ -3,6 +3,7 @@ import {
 	emptyTaskReviewView,
 	isRecord,
 	isReviewRun,
+	isTaskReviewAgent,
 	providerName,
 	readTaskReviewDocument,
 	resolveCrewAgent,
@@ -169,11 +170,13 @@ export async function readTaskReview(
 			sources,
 			beforePR: gate(taskReviewAt(doc, 'pre-pr')),
 		};
+	// spec/reviews#reviewer-sessions: the host adds a review's reviewers to the task's crew when it has one (a foreman, an Auto task after a hire),
+	// else to its review crew; the current review's reviewers are the root's checkers among them.
 	const task = await store.task(key),
-		spec = task.reviewCrew ?? task.crew,
+		spec = task.crew ?? task.reviewCrew,
 		nodes = (spec?.root.checkedBy ?? [])
 			.map((id) => spec!.root.agents.find((agent) => agent.id === id))
-			.filter((agent): agent is CrewSpecAgent => Boolean(agent));
+			.filter((agent): agent is CrewSpecAgent => Boolean(agent) && isTaskReviewAgent(agent!));
 	const workers = await json(store, key, 'crew-workers.json'),
 		records = (Array.isArray(workers?.workers) ? workers.workers : []).filter(isRecord);
 	const runsDoc = await json(store, key, 'crew-reviews.json'),
@@ -240,7 +243,7 @@ export async function readTaskReview(
 										item.reviewId === current.id &&
 										item.reviewer === node.name &&
 										item.kind !== 'gap'
-								).length
+								)
 							),
 							...(worker?.status === 'failed' && worker.failure ? { failure: worker.failure } : {}),
 						};
@@ -272,18 +275,29 @@ export async function readTaskReview(
 		beforePR: gate(taskReviewAt(doc, 'pre-pr')),
 	};
 }
+/**
+ * spec/reviews#surfaces: a reviewer's state in this review. `findings` counts what it filed, except while the person decides (`open`), where it
+ * counts the findings still open, as the task's line does; after the person's `Accept` it reads `accepted`.
+ */
 export function memberState(
 	review: TaskReview,
 	run: ReviewRun | null,
 	nodeId: string,
 	status: string | null,
-	findings: number
+	filed: readonly Pick<TaskReviewCommentRow, 'state'>[]
 ): Pick<TaskReviewMember, 'state' | 'findings' | 'since' | 'note'> {
-	const verdict = run?.verdicts.find((item) => item.reviewerNodeId === nodeId);
-	if (status === 'failed') return { state: 'failed', findings, since: null };
+	const verdict = run?.verdicts.find((item) => item.reviewerNodeId === nodeId),
+		findings = filed.length;
+	// A stopped review stops its reviewers too: one cut off by the stop reads `stopped`, not `did not start`.
 	if (review.state === 'stopped') return { state: 'stopped', findings, since: null };
+	if (status === 'failed') return { state: 'failed', findings, since: null };
+	if (review.state === 'accepted') return { state: 'accepted', findings, since: null };
 	if (review.state === 'yours' && verdict && !verdict.approved)
-		return { state: 'open', findings, since: verdict.at };
+		return {
+			state: 'open',
+			findings: filed.filter((item) => item.state === 'open' || item.state === 'new').length,
+			since: verdict.at,
+		};
 	if (verdict?.approved)
 		return {
 			state: 'approved',

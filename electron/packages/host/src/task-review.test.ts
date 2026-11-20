@@ -838,6 +838,59 @@ it('a crew developer answers its own reviewer’s question with prompt_task, and
 	expect(read.event).toMatchObject({ findings: 1 });
 }, 240_000);
 
+it('a reviewer’s question to a crew developer held by its plan answers the plan as plan chat does, and the developer presents it again (spec/reviews#reviewer-questions)', async () => {
+	const { store, task } = await developerTask('Keep the focus ring');
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['normal', log]);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await presented(client, 1);
+	await client.command({
+		kind: 'prompt',
+		text: planFeedbackPrompt('Safari only; ask the author first'),
+		answersPlan: true,
+	});
+	await presented(client, 2);
+	await client.command({ kind: 'prompt', text: 'Then update the changelog.' });
+	await client.command({
+		kind: 'startReview',
+		point: 'plan',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const asked = await find(client, (r) => r.event.kind === 'crew.question.requested', 90_000);
+	const plan = (await client.snapshot()).records
+		.filter((r) => r.event.kind === 'permission.requested')
+		.at(-1)!;
+	const rejected = await find(
+		client,
+		(r) =>
+			r.event.kind === 'permission.resolved' &&
+			r.event.id === (plan.event as { request: { id: string } }).request.id
+	);
+	expect(rejected.event).toMatchObject({ optionId: 'reject' });
+	const turn = await find(
+		client,
+		(r) => r.seq > asked.seq && r.event.kind === 'turn.started' && r.event.crew?.kind === 'question'
+	);
+	const text = turn.event.kind === 'turn.started' ? turn.event.text : '';
+	expect(text).toMatch(/^Reviewer `/);
+	expect(text).toContain('Your plan was sent back so that you can answer');
+	expect(
+		(await client.snapshot()).records.some(
+			(r) =>
+				r.seq > asked.seq &&
+				r.seq < turn.seq &&
+				r.event.kind === 'turn.started' &&
+				r.event.text.includes('Then update the changelog.')
+		)
+	).toBe(false);
+	const answered = await find(client, (r) => r.event.kind === 'crew.question.resolved', 60_000);
+	expect(answered.event).toMatchObject({ answeredBy: 'foreman' });
+	await presented(client, 3);
+}, 240_000);
+
 it('a reviewer’s question the crew developer leaves unanswered goes to the person after the wait (spec/crew#ask-foreman)', async () => {
 	const { store, task } = await developerTask('Write the output, ask the author, unanswered');
 	const previous = process.env.BRIGADIR_TEST_QUESTION_ESCALATION_MS;

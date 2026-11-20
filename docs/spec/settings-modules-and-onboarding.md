@@ -264,11 +264,12 @@ A chat with Brigadir itself: the person says what they want of the app in their 
 <a id="brigadir-chat-entry"></a>
 ### Where it is
 
-- **Rail and panel**: a `Brigadir` button (glyph `helmet-chat`: the helmet with a chat bubble) in the sections rail, right under `Schedules`, shows and hides the **Brigadir panel** on the right of the window, 420 px, beside whatever is open (a task, the PR list, notes). The panel is not modal: `Esc`, a click outside, another task or another section leave it open; only the rail button, its menu item and the panel's own hide button close it. Open or closed is remembered with the window layout. The button is pressed (`aria-pressed`) while the panel is shown.
-- **Search Everywhere**: the `Brigadir` group, last in `All`, `Settings` and `Actions`, holds one row `Ask Brigadir: «<query>»` for any query; `↩` on it closes the search, opens the panel and sends the query as a message.
-- **Menu**: `View ▸ Show Brigadir` / `Hide Brigadir` (`brigadir-panel`), no shortcut by default. The Settings window's header has `Ask Brigadir` beside `Esc`: it closes Settings and opens the panel.
-- **Module popups**: a module whose setup takes steps outside the app (Slack, Remote access) has `Set up with Brigadir` in its popup; it opens the panel with that setup started.
-- **Panel header**: the helmet, `Brigadir`, the second line `Settings and setup`, `New chat` and the hide button. The chat uses the task chat's row engine ([rule 6](../../AGENTS.md), [chat](chat.md#row-engine)) and composer, with no turn rail, deck or workspace.
+- **Rail section**: `Brigadir` is a section of the sections rail like Pull requests, Notes and Schedules ([sidebar](sidebar.md#rail-sections)): a tile under `Schedules` with the glyph `helmet-chat` (the helmet with a chat bubble), `⌃⌘5` · `Alt+5`, `View ▸ Brigadir` (`section-brigadir`). It is not a module and has no off switch.
+- **Its list** (the sidebar, in the shared list look): group `Setups` — one row per guided setup with its state as the second line (`3 of 5 · Bot token`, `Not set up`, the current value when done); a click starts or continues it in the chat. Group `Recent changes` — the chat's last 20 changes, `<label>` over `<old> → <new> · <time>`; a click opens Settings at the row. The filter row has `New chat` (`+`).
+- **Its screen** (the main area): the chat, with the header `Brigadir` · `Settings and setup`, `Open Settings` and `New chat`. It uses the task chat's row engine ([rule 6](../../AGENTS.md), [chat](chat.md#row-engine)) and composer, without the turn rail, deck or task toolbar. Leaving for Tasks brings back the task that was open, as Pull requests does.
+- **Search Everywhere**: the `Brigadir` group, last in `All`, `Settings` and `Actions`, holds one row `Ask Brigadir: «<query>»` for any query; `↩` on it closes the search, opens the section and sends the query as a message.
+- **Elsewhere**: the Settings window's header has `Ask Brigadir` beside `Esc` (closes Settings, opens the section); a module whose setup takes steps outside the app (Slack, Remote access) has `Set up with Brigadir` in its popup (opens the section with that setup started).
+- Not persisted in `sidebarSection`: like Notes and Schedules it is a screen of its own.
 
 <a id="brigadir-chat-session"></a>
 ### The agent
@@ -323,7 +324,6 @@ Every developer needs their own Slack app: Slack spreads one app's Socket Mode e
 <a id="later"></a>
 ## Later
 - More Brigadir chat setups: notifications and sounds, a project's Slack channel, an agent provider's sign-in.
-- A history of the Brigadir chat's changes (each `<label> · <old> → <new>`, with its time) to find what was changed after `New chat`.
 
 - A per-project override of a module's global switch in `project.json`.
 - Agent templates that hide disabled providers.

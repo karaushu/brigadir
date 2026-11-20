@@ -69,12 +69,17 @@ const inScope = (note: NoteSummary, scope: NoteScope) =>
 			: note.project === scope.project;
 const SAVE_DELAY = 500;
 type SaveState = 'saved' | 'saving' | 'failed';
-/** One note: its text as the editor holds it, saved 500 ms after the last edit (spec/notifications-slack-notes-and-schedules#notes). */
+/**
+ * One note: its text as the editor holds it, saved 500 ms after the last edit (spec/notifications-slack-notes-and-schedules#notes). A save
+ * carries `base`, the file's text the edits started from; main merges a file changed since (a Slack append, the note's agent,
+ * another window) and the merged text comes back (spec/notifications-slack-notes-and-schedules#note-concurrent).
+ */
 function useNoteText(id: string | null, locale: Locale) {
 	const [doc, setDoc] = useState<NoteDocument | null>(null),
 		[text, setText] = useState(''),
 		[save, setSave] = useState<SaveState>('saved');
 	const pending = useRef<{ id: string; text: string } | null>(null),
+		base = useRef<{ id: string; text: string } | null>(null),
 		timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 	const flush = useCallback(async () => {
 		clearTimeout(timer.current);
@@ -82,7 +87,21 @@ function useNoteText(id: string | null, locale: Locale) {
 		if (!next) return;
 		pending.current = null;
 		try {
-			await window.brigadir.writeNote(next.id, next.text);
+			const from = base.current?.id === next.id ? base.current.text : null,
+				written = await window.brigadir.writeNote(next.id, next.text, from);
+			// Another note opened meanwhile keeps its own base.
+			if (base.current?.id === next.id) {
+				// `pending` was cleared above; a newer edit may have set it while the save ran.
+				const typed = pending.current as { id: string } | null;
+				if (typed?.id === next.id) {
+					// Typed on while it saved: the next save merges from what this one sent.
+					base.current = { id: next.id, text: next.text };
+				} else {
+					base.current = { id: next.id, text: written.text };
+					if (written.text !== next.text)
+						setText((current) => (current === next.text ? written.text : current));
+				}
+			}
 			if (!pending.current) setSave('saved');
 		} catch {
 			pending.current ??= next;
@@ -102,6 +121,7 @@ function useNoteText(id: string | null, locale: Locale) {
 				.readNote(id)
 				.then((note) => {
 					if (!active || pending.current?.id === id) return;
+					base.current = { id, text: note.text };
 					setDoc(note);
 					setText(note.text);
 					if (initial) setSave('saved');

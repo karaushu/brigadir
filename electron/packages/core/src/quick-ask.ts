@@ -338,7 +338,7 @@ export function quickCodePrompt(input: {
 		'- To change something in work a task above covers, hand it to that task’s agent: `ACTION send_to_task {"task": "<task id>", "text": "<what to change>"}`.',
 		'- New work no task covers: `ACTION create_task {"projects": ["<project name>", …], "title": "<at most 80 characters, in their language>", "prompt": "<the request, complete on its own>"}` — the main project first; the others join as folders.',
 		'- Why something was done or what was decided in one task: `ACTION ask_task {"task": "<task id>", "question": "<the question>"}`.',
-		'- Save this thread as a note: `ACTION note {"kind": "thread"}`, or a summary of it: `ACTION note {"kind": "summary"}`.',
+		'- Notes: this thread as it is — `ACTION note {"kind": "thread"}`; a summary of it — `ACTION note {"kind": "summary"}`; only the words they asked to save («save a note: …») — `ACTION note {"kind": "text", "text": "<their words, copied exactly as written, never translated or rephrased>", "title": "<the title they gave, else a short one in their language>"}`. To add to the end of an existing note instead of making a new one, add `"append": "<the note name they gave>"`; for a project other than this channel’s, add `"project": "<project name>"`. Brigadir finds the note and the project and asks them itself when the name is unclear.',
 		'- Tell them here later when a PR’s CI ends, a PR is merged or a task is done: `ACTION watch {"kinds": ["ci", "merged", "done"]}` (the ones they asked for); stop: `ACTION unwatch {}`.',
 		'- Each ACTION goes on its own line at the very end; Brigadir runs it and says so in the thread. When it is unclear what they want or which project, ask them in one short line instead.',
 		...quickSlackRules(language),

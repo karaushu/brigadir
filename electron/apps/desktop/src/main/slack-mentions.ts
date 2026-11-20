@@ -2,13 +2,19 @@ import { randomUUID } from 'node:crypto';
 import {
 	isRecord,
 	slackActionOf,
+	slackPlain,
 	slackActions,
 	slackAllowed,
 	slackButtons,
 	slackFindTasks,
 	slackMentionText,
+	slackFindNotes,
+	slackNoteAddition,
 	slackNoteText,
 	slackNoteTitle,
+	slackProjectsNamed,
+	slackVerbatim,
+	type SlackNoteRef,
 	slackLanguage,
 	slackLocalize,
 	slackNamedProject,
@@ -90,6 +96,10 @@ export type SlackBrigadir = SlackAnswering & {
 	/** The plan N of M and the CI state of a task, from its journal and the watched runs. */
 	status(task: SlackTaskInfo): Promise<Pick<SlackStatusInput, 'plan' | 'ci'>>;
 	createNote(project: string | null, text: string): Promise<void>;
+	/** spec/notifications-slack-notes-and-schedules#slack-note: every note, for `append` to find one by its title. */
+	notes(): Promise<SlackNoteRef[]>;
+	/** The addition goes to the end of the note, after a blank line; an open note in the app takes it without losing an edit. */
+	appendNote(id: string, addition: string): Promise<void>;
 };
 export type SlackMentionDeps = SlackBrigadir & {
 	api(
@@ -124,6 +134,21 @@ type WatchPick = {
 };
 /** A watch request as far as it is known; a button fills in what was ambiguous. */
 type WatchDraft = { kinds: SlackWatchKind[]; pr?: WatchPick; task?: SlackTaskInfo };
+/**
+ * spec/notifications-slack-notes-and-schedules#slack-note: a note request as far as it is known. `text` — the person's own words, already found
+ * in the message; `projectId` — set once the project is known (`null` — no project); `noteId` / `create` — set once the note to add
+ * to is known, or `Create note` was chosen.
+ */
+type NoteDraft = {
+	kind: 'thread' | 'summary' | 'text';
+	text: string | null;
+	title: string | null;
+	append: string | null;
+	project: string | null;
+	projectId?: string | null;
+	noteId?: string;
+	create?: true;
+};
 /** One mention, as the handlers need it. `replyTs` — the thread the bot answers in (the mention's own, or its root). */
 type Mention = {
 	user: string;
@@ -147,6 +172,7 @@ type Pending = {
 	at: number;
 	tasks?: TaskKey[];
 	drafts?: WatchDraft[];
+	notes?: NoteDraft[];
 };
 const pendingMs = 5 * 60_000,
 	seenLimit = 300;
@@ -261,6 +287,9 @@ export class SlackMentions {
 			if (kind === slackActions.watch) {
 				const draft = pending.drafts?.[Number(taskId)];
 				if (draft) await this.watch(mention, draft);
+			} else if (kind === slackActions.note) {
+				const draft = pending.notes?.[Number(taskId)];
+				if (draft) await this.note(mention, draft);
 			}
 		} catch (error) {
 			await this.reply(mention, slackReply.failed(reason(error))).catch(() => {});
@@ -604,12 +633,7 @@ export class SlackMentions {
 		try {
 			if (action.kind === 'create_task') {
 				const projects = await this.deps.projects().catch(() => []),
-					find = (name: string) =>
-						projects.find((item) =>
-							[item.id, item.name, item.folder ?? ''].some(
-								(value) => value.toLowerCase() === name.toLowerCase()
-							)
-						),
+					find = (name: string) => slackProjectsNamed(name, projects)[0],
 					unknown = action.projects.find((name) => !find(name)),
 					ids = [...new Set(action.projects.map((name) => find(name)?.id ?? ''))];
 				if (unknown !== undefined || !ids.length)
@@ -636,7 +660,7 @@ export class SlackMentions {
 						result === 'sent' ? slackReply.handedTo(task.title) : slackAnswerReply[result]
 					);
 				}
-			} else if (action.kind === 'note') await this.note(mention, action.note);
+			} else if (action.kind === 'note') await this.noteAsked(mention, action);
 			else if (action.kind === 'watch' && this.deps.watch)
 				await this.watch(mention, { kinds: action.kinds });
 			else if (action.kind === 'unwatch' && this.deps.unwatch) await this.unwatch(mention);
@@ -661,43 +685,162 @@ export class SlackMentions {
 		if (said) await this.reply({ channel: mention.channel, replyTs: mention.replyTs }, said);
 		else await this.reply(mention, slackReply.agentSilent);
 	}
-	private async note(mention: Mention, kind: 'thread' | 'summary') {
+	/** spec/notifications-slack-notes-and-schedules#slack-note: the agent's `note` action; the person's own words are found in the message first. */
+	private async noteAsked(mention: Mention, action: Extract<SlackAgentStep, { kind: 'note' }>) {
 		if (!this.deps.notesOn()) {
 			await this.ephemeral(mention, slackReply.notesOff);
 			return;
 		}
+		let text: string | null = null;
+		if (action.note === 'text') {
+			text = slackVerbatim(action.text ?? '', [
+				mention.text,
+				...mention.thread.map((message) => slackPlain(message.text)),
+			]);
+			if (!text) {
+				await this.reply(mention, slackReply.noteTextMissing);
+				return;
+			}
+		}
+		await this.note(mention, {
+			kind: action.note,
+			text,
+			title: action.title,
+			append: action.append,
+			project: action.project,
+		});
+	}
+	/**
+	 * A note request: the project (named, else the mention's), then the note to add to (when `append`), then the save. What is
+	 * unclear is asked with buttons that carry the request; nothing is guessed.
+	 */
+	private async note(mention: Mention, start: NoteDraft) {
+		if (!this.deps.notesOn()) {
+			await this.ephemeral(mention, slackReply.notesOff);
+			return;
+		}
+		let draft = start;
+		const projects = await this.deps.projects().catch(() => []),
+			projectName = (id: string | null) =>
+				id === null ? null : (projects.find((item) => item.id === id)?.name ?? id);
+		if (draft.projectId === undefined) {
+			if (draft.project) {
+				const found = slackProjectsNamed(draft.project, projects);
+				if (!found.length) {
+					await this.reply(
+						mention,
+						slackReply.unknownProject(
+							draft.project,
+							projects.map((item) => item.name)
+						)
+					);
+					return;
+				}
+				if (found.length > 1) {
+					await this.chooseNote(
+						mention,
+						slackReply.severalProjects(
+							draft.project,
+							found.map((item) => (item.folder ? `${item.name} (${item.folder})` : item.name))
+						),
+						found.slice(0, 5).map((item) => ({
+							label: item.folder ? `${item.name} · ${item.folder}` : item.name,
+							draft: { ...draft, projectId: item.id },
+						}))
+					);
+					return;
+				}
+				draft = { ...draft, projectId: found[0]!.id };
+			} else draft = { ...draft, projectId: mention.projectId };
+		}
+		let target: SlackNoteRef | null = null;
+		if (draft.append && !draft.create) {
+			const all = await this.deps.notes(),
+				pool = draft.project ? all.filter((note) => note.project === draft.projectId) : all;
+			const found = draft.noteId
+				? pool.filter((note) => note.id === draft.noteId)
+				: slackFindNotes(draft.append, pool);
+			if (!found.length) {
+				await this.chooseNote(mention, slackReply.noNote(draft.append), [
+					{ label: slackReply.createNote, draft: { ...draft, create: true } },
+				]);
+				return;
+			}
+			if (found.length > 1) {
+				await this.chooseNote(
+					mention,
+					slackReply.severalNotes(
+						draft.append,
+						found.map((note) => ({ title: note.title, project: projectName(note.project) }))
+					),
+					found.slice(0, 5).map((note) => ({
+						label: `${note.title} · ${projectName(note.project) ?? 'No project'}`,
+						draft: { ...draft, noteId: note.id },
+					}))
+				);
+				return;
+			}
+			target = found[0]!;
+		}
+		const body = await this.noteBody(mention, draft);
+		if (body === null) return;
+		const channel =
+				(await this.deps.channelName(mention.channel).catch(() => null)) ?? mention.channel,
+			permalink = await this.permalink(mention.channel, mention.replyTs);
+		if (target) {
+			await this.deps.appendNote(target.id, slackNoteAddition({ channel, permalink, body }));
+			await this.reply(mention, slackReply.noteAdded(projectName(target.project), target.title));
+			return;
+		}
+		const projectId = draft.projectId ?? null,
+			title =
+				(draft.create ? draft.append : null) ??
+				draft.title ??
+				(draft.text !== null ? slackTaskTitle(draft.text) : null) ??
+				slackNoteTitle(mention.text, mention.thread[0]?.text ?? null);
+		await this.deps.createNote(projectId, slackNoteText({ title, channel, permalink, body }));
+		await this.reply(mention, slackReply.noteSaved(projectName(projectId), title));
+	}
+	/** What the note holds: the person's words, the thread verbatim, or its summary by the helper agent; `null` — said why. */
+	private async noteBody(mention: Mention, draft: NoteDraft): Promise<string | null> {
+		if (draft.kind === 'text') return draft.text ?? '';
 		const messages = mention.thread.length
 				? mention.thread
 				: [{ user: mention.user, ts: mention.ts, text: mention.text }],
 			thread = slackThreadText(messages);
-		let body = thread;
-		if (kind === 'summary') {
-			const summary = await this.deps.helper(slackSummaryPrompt(thread), 6000).catch(() => null);
-			if (!summary?.trim()) {
-				await this.reply(mention, slackReply.failed('the helper agent is off in Brigadir'));
-				return;
-			}
-			body = summary;
+		if (draft.kind === 'thread') return thread;
+		const summary = await this.deps.helper(slackSummaryPrompt(thread), 6000).catch(() => null);
+		if (!summary?.trim()) {
+			await this.reply(mention, slackReply.failed('the helper agent is off in Brigadir'));
+			return null;
 		}
-		const title = slackNoteTitle(mention.text, mention.thread[0]?.text ?? null),
-			channel = (await this.deps.channelName(mention.channel).catch(() => null)) ?? mention.channel;
-		await this.deps.createNote(
-			mention.projectId,
-			slackNoteText({
-				title,
-				channel,
-				permalink: await this.permalink(mention.channel, mention.replyTs),
-				body,
-			})
+		return summary;
+	}
+	private chooseNote(
+		mention: Mention,
+		text: string,
+		options: { label: string; draft: NoteDraft }[]
+	) {
+		return this.buttons(
+			mention,
+			text,
+			options.map((option, index) => ({
+				action: slackActions.note,
+				label: option.label,
+				task: String(index),
+			})),
+			undefined,
+			undefined,
+			options.map((option) => option.draft)
 		);
-		await this.reply(mention, slackReply.noteSaved(title));
 	}
 	private async buttons(
 		mention: Mention,
 		text: string,
 		buttons: { action: SlackButton['action']; label: string; task?: string }[],
 		tasks?: TaskKey[],
-		drafts?: WatchDraft[]
+		drafts?: WatchDraft[],
+		notes?: NoteDraft[]
 	): Promise<string> {
 		this.prune();
 		const id = randomUUID().replace(/-/g, '').slice(0, 16);
@@ -706,6 +849,7 @@ export class SlackMentions {
 			at: this.now(),
 			...(tasks ? { tasks } : {}),
 			...(drafts ? { drafts } : {}),
+			...(notes ? { notes } : {}),
 		};
 		this.pending.set(id, pending);
 		await this.deps.api('chat.postMessage', {

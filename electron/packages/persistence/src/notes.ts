@@ -133,6 +133,19 @@ export class NotesStore {
 			return (await stat(file)).mtime.toISOString();
 		});
 	}
+	/**
+	 * spec/notifications-slack-notes-and-schedules#note-concurrent: read, change and write the text in one turn of the write queue, so no other
+	 * write lands between the read and the write. The written text and its time.
+	 */
+	edit(id: string, change: (text: string) => string) {
+		return this.serial(async () => {
+			const file = await this.path(id, '.md');
+			const text = change(await readFile(file, 'utf8'));
+			if (Buffer.byteLength(text) > noteMaxBytes) throw new ReadFailure('invalid_document');
+			await atomicText(file, text);
+			return { text, updatedAt: (await stat(file)).mtime.toISOString() };
+		});
+	}
 	private update(id: string, change: (meta: NoteMeta) => NoteMeta) {
 		return this.serial(async () => {
 			await stat(await this.path(id, '.md'));

@@ -7,8 +7,13 @@ import {
 	slackButtons,
 	slackFindTasks,
 	slackMentionText,
+	slackFindNotes,
+	slackNoteAddition,
+	slackNoteAppended,
 	slackNoteText,
 	slackProjectPrefix,
+	slackProjectsNamed,
+	slackVerbatim,
 	slackReply,
 	slackThreadText,
 	type SlackTaskInfo,
@@ -135,7 +140,35 @@ it('writes replies, notes and buttons', () => {
 	expect(slackReply.taskWaiting('business', 'Fix')).toBe(
 		'⏳ *Waiting for approval in Brigadir* — business\n📋 Task: Fix'
 	);
-	expect(slackReply.noteSaved('Release plan')).toBe('📝 *Note saved* — Release plan');
+	expect(slackReply.noteSaved('admin', 'Release plan')).toBe(
+		'📝 *Note saved* — admin\n🗒️ Note: Release plan'
+	);
+	expect(slackLocalize(slackReply.noteAdded(null, 'Плани'), 'uk')).toBe(
+		'📝 *Додано до нотатки* — Без проєкту\n🗒️ Нотатка: Плани'
+	);
+	expect(
+		slackLocalize(
+			slackReply.severalNotes('план', [
+				{ title: 'План релізу', project: 'admin' },
+				{ title: 'План', project: null },
+			]),
+			'uk'
+		)
+	).toBe(
+		'🤔 *Підходить кілька нотаток «план»* — План релізу (admin) · План (Без проєкту). Яку нотатку?'
+	);
+	expect(slackReply.severalProjects('admin', ['admin (admin-web)', 'admin (admin-api)'])).toBe(
+		'🤔 *Several projects match admin* — admin (admin-web) · admin (admin-api). Which project?'
+	);
+	expect(slackLocalize(slackReply.noNote('Ideas'), 'uk')).toBe(
+		'🔎 *Немає нотатки «Ideas»* — створити?'
+	);
+	expect(
+		slackNoteAppended(
+			'# Plan\n\n- ship\n\n\n',
+			slackNoteAddition({ channel: '#deploys', permalink: null, body: 'freeze at noon' })
+		)
+	).toBe('# Plan\n\n- ship\n\nFrom Slack: #deploys thread\n\nfreeze at noon\n');
 	expect(
 		slackNoteText({
 			title: 'Release plan',
@@ -198,6 +231,8 @@ describe('the Slack agent’s answer (spec/notifications-slack-notes-and-schedul
 				'`ACTION create_task {"project": "admin", "title": "Нова кнопка", "prompt": "Add a button"}`',
 				'ACTION watch {"kinds": ["ci", "merged"]}',
 				'ACTION note {"kind": "summary"}',
+				'ACTION note {"kind": "text", "text": "  купити  молоко ", "title": "Покупки", "append": "Списки", "project": "home"}',
+				'ACTION note {"kind": "text"}',
 				'ACTION create_task {"title": "no project"}',
 				'ACTION send_to_task {broken',
 			].join('\n')
@@ -207,7 +242,57 @@ describe('the Slack agent’s answer (spec/notifications-slack-notes-and-schedul
 			{ kind: 'send_to_task', task: 't1', text: 'Make the button blue' },
 			{ kind: 'create_task', projects: ['admin'], title: 'Нова кнопка', prompt: 'Add a button' },
 			{ kind: 'watch', kinds: ['ci', 'pr-merged'] },
-			{ kind: 'note', note: 'summary' },
+			{
+				kind: 'note',
+				note: 'summary',
+				text: null,
+				title: null,
+				append: null,
+				project: null,
+			},
+			{
+				kind: 'note',
+				note: 'text',
+				text: '  купити  молоко ',
+				title: 'Покупки',
+				append: 'Списки',
+				project: 'home',
+			},
 		]);
+	});
+});
+
+describe('notes from Slack', () => {
+	it('finds the person’s words as they wrote them, spacing, quotes and case aside', () => {
+		const message = 'save a note: Deploy “after” 6 pm —\n  ask Olha first';
+		expect(slackVerbatim('deploy "after" 6 pm - ask olha first', [message])).toBe(
+			'Deploy “after” 6 pm —\n  ask Olha first'
+		);
+		expect(slackVerbatim('Купити молоко', ['', 'тред: купити   молоко!'])).toBe('купити   молоко');
+		expect(slackVerbatim('Buy milk tomorrow', [message])).toBeNull();
+		expect(slackVerbatim('   ', [message])).toBeNull();
+	});
+	it('names notes by exact title first, else by a part of it; several stay several', () => {
+		const notes = [
+			{ id: 'n1', title: 'Release plan', project: 'p1' },
+			{ id: 'n2', title: 'Release plan v2', project: null },
+			{ id: 'n3', title: '', project: null },
+			{ id: 'n4', title: 'Ideas', project: 'p2' },
+		];
+		expect(slackFindNotes('«release plan»', notes).map((note) => note.id)).toEqual(['n1']);
+		expect(slackFindNotes('release', notes).map((note) => note.id)).toEqual(['n1', 'n2']);
+		expect(slackFindNotes('roadmap', notes)).toEqual([]);
+		expect(slackFindNotes('', notes)).toEqual([]);
+	});
+	it('names projects by name, id or folder, case aside', () => {
+		const list = [
+			{ id: 'p1', name: 'admin', folder: 'admin-web' },
+			{ id: 'p2', name: 'Admin', folder: 'admin-api' },
+			{ id: 'p3', name: 'business' },
+		];
+		expect(slackProjectsNamed('ADMIN', list).map((item) => item.id)).toEqual(['p1', 'p2']);
+		expect(slackProjectsNamed('admin-api', list).map((item) => item.id)).toEqual(['p2']);
+		expect(slackProjectsNamed('p3', list).map((item) => item.id)).toEqual(['p3']);
+		expect(slackProjectsNamed('shop', list)).toEqual([]);
 	});
 });

@@ -662,3 +662,55 @@ it('a check whose reviewer turn was cancelled goes to the reviewer again (spec/c
 		true
 	);
 }, 300_000);
+
+// From the walkthrough's code audit: the first verdict of a round with two reviewers waited in memory; a restart before the second lost it.
+it('a restart between the verdicts of two reviewers keeps the first one’s findings in the batch (spec/crew#reviewer)', async () => {
+	const second = resolveCrewAgent(
+		{ id: 'second', name: 'Second', template: 'reviewer', provider: 'claude' },
+		{ lookup: templateLookup([...builtinAgentTemplates]), defaultProvider: 'claude' },
+		[],
+		false
+	);
+	const { store, task } = await setup('hold the verdict');
+	const log = join(store.root, 'agents.log');
+	const first = await launchHost(store, task, ['crew', log]);
+	await first.client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(first.client, (r) => r.event.kind === 'turn.completed');
+	await first.client.command({
+		kind: 'startReview',
+		reviewers: [reviewer, second],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const keys = [
+		await reviewerOf(first.client, task),
+		await reviewerOf(first.client, task, 'Second'),
+	];
+	// One reviewer holds its read; the other's verdict is in.
+	await holding(log);
+	const runs = join(await store.taskDir(task), 'crew-reviews.json');
+	await until(async () => {
+		const doc = JSON.parse(await readFile(runs, 'utf8').catch(() => '{"reviews":[]}'));
+		return doc.reviews.some((run: { verdicts: unknown[] }) => run.verdicts.length === 1)
+			? true
+			: undefined;
+	});
+	first.child.kill('SIGKILL');
+	await new Promise((done) => first.child.once('exit', done));
+	const client = (await launchHost(store, task, ['crew', log])).client;
+	// The held reviewer's turn is cancelled; its check goes out again and it answers.
+	for (const key of keys) {
+		const own = await connectHost((await readIdentity(store, key))!);
+		cleanup.push(async () => own.close());
+		await own.command({ kind: 'cancel' });
+	}
+	const batch = await find(
+		client,
+		(r) => r.event.kind === 'turn.started' && !!r.event.review,
+		90_000
+	);
+	expect(batch.event.kind === 'turn.started' && batch.event.text).toMatch(
+		/left 2 findings in the review before the pull request/
+	);
+}, 300_000);

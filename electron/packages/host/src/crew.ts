@@ -2608,8 +2608,8 @@ export class CrewHost {
 			approved: false,
 			comments: comments.length + insist.length,
 			at: new Date().toISOString(),
+			...(comments.length ? { commentIds: comments.map((comment) => comment.id) } : {}),
 		});
-		this.pendingBatches.set(`${run.reviewId}/${reviewer.nodeId}`, comments);
 		await this.saveReviews();
 		// One row per verdict only when several reviewers share a round; a single reviewer's verdict is the round's summary row. A task's own
 		// review has its own rows (spec/reviews#strip).
@@ -2628,15 +2628,17 @@ export class CrewHost {
 		await this.settleRun(run);
 		return { sent: comments.length, reviewId: run.reviewId };
 	}
-	private pendingBatches = new Map<string, ReviewComment[]>();
 	/** All verdicts in: comments go to the developer as one batch (round 1), or the dispute goes up (round 2); approvals go up as the report (spec/crew#reviewer). */
 	private async settleRun(run: ReviewRun) {
 		if (run.state !== 'reviewing' || run.verdicts.length < run.reviewerNodeIds.length) return;
 		const worker = this.worker(run.taskId);
-		const comments = run.reviewerNodeIds.flatMap(
-			(id) => this.pendingBatches.get(`${run.reviewId}/${id}`) ?? []
+		// The verdicts name their comments on disk: a verdict given before a restart keeps its batch.
+		const comments = await this.storedComments(
+			worker,
+			run.reviewerNodeIds.flatMap(
+				(id) => run.verdicts.find((verdict) => verdict.reviewerNodeId === id)?.commentIds ?? []
+			)
 		);
-		for (const id of run.reviewerNodeIds) this.pendingBatches.delete(`${run.reviewId}/${id}`);
 		if (this.isSelf(worker)) return this.settleSelf(run, worker, comments);
 		if (run.verdicts.every((verdict) => verdict.approved)) {
 			// Re-check the trees: nothing may slip in after the last approval.
@@ -3386,6 +3388,17 @@ export class CrewHost {
 			});
 		}
 		return comments;
+	}
+	/** The stored comments with these ids, in this order. */
+	private async storedComments(worker: CrewWorkerRecord, ids: readonly string[]) {
+		if (!ids.length) return [];
+		const path = await safePath(
+			await this.deps.store.taskDir(this.workerKey(worker)),
+			'review.json'
+		);
+		const doc = await readDocument(path, 16 * 1024 * 1024).catch(() => null);
+		const all = Array.isArray(doc?.comments) ? (doc.comments as ReviewComment[]) : [];
+		return ids.flatMap((id) => all.filter((comment) => comment.id === id));
 	}
 	private async storeComments(worker: CrewWorkerRecord, comments: ReviewComment[]) {
 		const path = await safePath(

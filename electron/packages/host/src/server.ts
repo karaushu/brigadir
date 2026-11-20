@@ -64,6 +64,8 @@ import {
 	outputTail,
 	isPlanApproval,
 	planApprovalText,
+	planAsks,
+	planAsksBrief,
 	planChatPrompt,
 	planRejectOption,
 	splitPlanMarkdown,
@@ -148,7 +150,13 @@ import {
 	partBrief,
 	type CrewContext,
 } from './crew';
-import { TaskReviewLife, ownReviewCrew, ownReviewTool, type PresentedPlan } from './task-review';
+import {
+	TaskReviewLife,
+	closureWaitsForCrew,
+	ownReviewCrew,
+	ownReviewTool,
+	type PresentedPlan,
+} from './task-review';
 import { TaskClassLife, readSmallTaskLimit } from './task-class';
 import { readTaskSources, saveTaskSource, sourcePath } from './task-sources';
 import { saveShot, submitDesignReview } from './design-review';
@@ -278,7 +286,7 @@ export async function startHost(config: HostConfig) {
 		emit: (event) => emit(event),
 		records: () => records,
 		busy: () => busy,
-		foreman: foremanTask,
+		foreman: closureWaitsForCrew(crew?.role ?? null),
 		existing: () => crewHost,
 		settled: () => crewHost?.settled() ?? true,
 		submitReview: (text, review, round) =>
@@ -374,6 +382,7 @@ export async function startHost(config: HostConfig) {
 			].join('');
 		},
 		part: async () => (crewWorker ? ((await readPartBrief())?.part ?? null) : null),
+		planAsks: () => planAsksBrief(planAsks(records)),
 		// spec/design-review#design-source: Figma links of the task's prompt (a worker's part), its saved sources and the plans it presented.
 		designLinks: async () => {
 			const texts = records.flatMap((record) => {
@@ -492,6 +501,29 @@ export async function startHost(config: HostConfig) {
 				serialPrompt(async () => {
 					for (const item of queuedCrewQuestion(queue, questionId))
 						await emit({ kind: 'prompt.removed', id: item.id });
+				}),
+			// spec/crew#ask-foreman, spec/chat-turns-plans-and-questions#plan-chat: a reviewer's question to an agent held by its plan for
+			// approval answers that plan with its reject option and runs before what is queued. Only an agent that answers questions
+			// (`prompt_task`) gets it: the Auto agent; a split waits in the crew host.
+			answerPlan: (text: string, marker: Extract<SessionEvent, { kind: 'turn.started' }>['crew']) =>
+				serialPrompt(async () => {
+					if (!autoTask) return false;
+					const plan = [...permissions.values()].find((item) => isPlanApproval(item.request)),
+						reject = plan ? planRejectOption(plan.request) : null;
+					if (!plan || !reject) return false;
+					await plan.finish(reject.id);
+					const before = queue.prompts[0]?.id;
+					await emit({
+						kind: 'prompt.queued',
+						prompt: {
+							id: randomUUID(),
+							command: { kind: 'prompt', text, ...(marker ? { crew: marker } : {}) },
+							attachments: [],
+						},
+						...(before ? { before } : {}),
+					});
+					kickPrompts();
+					return true;
 				}),
 		};
 		// spec/crew#auto: the Auto agent's host hires through cards and asks the app about models.
@@ -1702,7 +1734,11 @@ export async function startHost(config: HostConfig) {
 						peer.close();
 					}
 				}
+			if (event.kind === 'turn.started' && event.review && !stopping)
+				void taskReview.batchTaken(event.review.id).catch(() => {});
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
+			if (event.kind === 'session.failed' && !stopping)
+				void taskReview.turnStopped().catch(() => {});
 			// spec/reviews#tripwire, spec/reviews#class-raise, spec/reviews#large-review
 			if (!stopping) classEvent(event);
 			// spec/reviews#plan-start: a presented plan starts its review or answers one; an approval ends it.
@@ -3783,6 +3819,8 @@ export async function startHost(config: HostConfig) {
 			if (spec) crewHost = await crewHostFor(selfContext(spec));
 		}
 		await taskReview.load();
+		// spec/reviews#loop: no turn runs after a restart; a review that waited for the old host's turn reads now.
+		void taskReview.turnStopped().catch(() => {});
 		// spec/reviews#classes: the class checks start once the review's record is loaded.
 		void taskClass.start().catch(() => {});
 		// spec/reviews#plan-review: a root foreman's split that still waits after a restart.

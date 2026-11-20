@@ -79,8 +79,12 @@ export function ownReviewCrew(
 ): CrewSpec | null {
 	return task.reviewCrew && (role === null || role === 'developer') ? task.reviewCrew : null;
 }
+/** spec/reviews#loop: a named crew's foreman hands fixes to its workers, so its closure check waits for them; an Auto agent fixes the
+ *  findings itself, so its closure check opens when its own fixing turn ends, whatever its workers do. */
+export const closureWaitsForCrew = (role: string | null) => role === 'foreman';
 /** What the crew host offers the task's review: its rounds on the task itself (`checkSelf`), the agent's replies and the stop. */
-export type SelfReviewHost = Pick<CrewHost, 'checkSelf' | 'replySelf' | 'stopSelf' | 'selfTrees'>;
+export type SelfReviewHost = Pick<CrewHost, 'checkSelf' | 'replySelf' | 'stopSelf' | 'selfTrees'> &
+	Partial<Pick<CrewHost, 'dropReviewers'>>;
 export type TaskReviewDeps = {
 	store: SessionStore;
 	key: TaskKey;
@@ -128,6 +132,8 @@ export type TaskReviewDeps = {
 	foreman: boolean;
 	/** spec/design-review#design-source: the Figma links of the task's prompt, saved sources and plans. */
 	designLinks?(): Promise<string[]>;
+	/** spec/reviews#plan-inputs: the person's answers to the plans since the last approved one, for the plan reviewer's prompt. */
+	planAsks?(): string;
 };
 /**
  * spec/reviews#loop: the task side of its reviews — the agent's proposal, the review the person, the agent or the host started, and where it is
@@ -160,6 +166,8 @@ export class TaskReviewLife {
 				throw error;
 		}
 		this.host = this.deps.existing();
+		// spec/reviews#reviewer-sessions: leftovers of reviews that ended earlier go once, at the start.
+		void this.host?.dropReviewers?.().catch(() => {});
 		// spec/reviews#data: a version-1 review read while the agent fixed has no batch id; the journal holds the batch it was sent.
 		const review = this.doc.review;
 		if (review?.state === 'fixing' && !review.batch) {
@@ -508,6 +516,13 @@ export class TaskReviewLife {
 			if (await this.step({ kind: 'answered' })) await this.round();
 		});
 	}
+	/** spec/reviews#start: the turn a review waits for ended without `turn.completed` — it failed, or the host restarted under it: the review
+	 *  reads now. */
+	turnStopped() {
+		return this.serial(async () => {
+			if (this.doc.review?.state === 'waiting' && this.host) await this.read();
+		});
+	}
 	/** A turn took the last batch; this runs when a turn ends, so that turn or a later one has ended. */
 	private taken(batch: string | undefined) {
 		if (!batch) return false;
@@ -549,6 +564,8 @@ export class TaskReviewLife {
 			state,
 			...(approval ? { approval: true, open: approval.open } : {}),
 		});
+		// spec/reviews#reviewer-sessions: the ended review's reviewers give up their worktrees and branches.
+		void this.host?.dropReviewers?.().catch(() => {});
 	}
 	// ── the plan review (spec/reviews#plan-review) ─────────────────────────────
 
@@ -634,7 +651,16 @@ export class TaskReviewLife {
 					findings: (review.findings ?? []).map((item) =>
 						open.includes(item) ? { ...item, accepted: true } : item
 					),
-					...(review.plan ? { plan: { ...review.plan, approved: true } } : {}),
+					// The batch was taken out of the queue above.
+					...(review.plan
+						? {
+								plan: {
+									...review.plan,
+									approved: true,
+									...(review.plan.queued ? { queued: false } : {}),
+								},
+							}
+						: {}),
 				});
 				await this.finished(state, { open: open.length });
 				return;
@@ -657,14 +683,43 @@ export class TaskReviewLife {
 		if (review.plan?.kind === 'split' && !review.plan.queued) {
 			const sent = review.plan.sentAt;
 			if (sent === undefined) return false;
-			return (
-				presenting ||
-				this.deps
-					.records()
-					.some((record) => record.seq > sent && record.event.kind === 'turn.completed')
-			);
+			return presenting || this.taken(review.batch) || this.splitAnswerEnded(review.plan.id, sent);
 		}
 		return this.taken(review.batch);
+	}
+	/**
+	 * spec/reviews#plan-loop: the split's rejection carried the batch, and the foreman's turn that read it ended — the turn whose
+	 * `propose_plan` returned it, or, when that turn had ended before, the turn of the decision prompt. Another turn of the foreman (a
+	 * message of the person's, a report) is not its answer.
+	 */
+	private splitAnswerEnded(planId: string, sent: number) {
+		const records = this.deps.records(),
+			after = (seq: number, kind: string) =>
+				records.some((record) => record.seq > seq && record.event.kind === kind);
+		const resolved = records.find(
+			(record) =>
+				record.seq > sent &&
+				record.event.kind === 'crew.plan.resolved' &&
+				record.event.id === planId &&
+				!record.event.approved
+		);
+		if (!resolved) return false;
+		const decision = (event: SessionEvent) => {
+			const marker =
+				event.kind === 'turn.started'
+					? event.crew
+					: event.kind === 'prompt.queued'
+						? event.prompt.command.crew
+						: undefined;
+			return marker?.kind === 'plan-decision' && marker.planId === planId;
+		};
+		const prompted = records.find(
+			(record) =>
+				record.seq > resolved.seq && record.event.kind === 'turn.started' && decision(record.event)
+		);
+		if (prompted) return after(prompted.seq, 'turn.completed');
+		if (records.some((record) => record.seq > resolved.seq && decision(record.event))) return false;
+		return after(resolved.seq, 'turn.completed');
 	}
 	/** spec/reviews#plan-loop: the author answered — the closure check reads the revision against the one the reviewer read. */
 	private async planClosure() {
@@ -732,6 +787,14 @@ export class TaskReviewLife {
 			await this.deps.dropBatch(batch.id).catch(() => {});
 		await this.update({ plan: { ...review.plan, queued: how === 'queued' } });
 	}
+	/** spec/reviews#data: a turn of the author took a review batch — a plan batch that was queued no longer waits in the queue. */
+	batchTaken(batch: string) {
+		return this.serial(async () => {
+			const review = this.doc.review;
+			if (review?.plan?.queued && review.batch === batch)
+				await this.update({ plan: { ...review.plan, queued: false } });
+		});
+	}
 	/** The batch the author may still get: the plan review is with the author and this is its last batch. */
 	planBatchLive(batch: string) {
 		const review = this.doc.review;
@@ -796,7 +859,7 @@ export class TaskReviewLife {
 	private async planPrompt(taskId: string, reviewId: string, round: number, reviewer: string) {
 		const review = this.doc.review,
 			plan = review?.plan,
-			brief = await this.deps.brief().catch(() => ''),
+			brief = `${await this.deps.brief().catch(() => '')}${this.deps.planAsks?.() ?? ''}`,
 			guidance = review?.guidance ?? '',
 			what = plan?.kind === 'split' ? "the foreman's split of task" : 'the plan of task';
 		if (round <= 1)
@@ -897,6 +960,7 @@ export class TaskReviewLife {
 	hooks(): SelfReviewHooks {
 		return {
 			id: () => this.doc.review?.id ?? '',
+			live: () => taskReviewLive(this.doc.review),
 			point: () => this.doc.review?.point ?? 'pre-pr',
 			base: () => this.doc.review?.base ?? null,
 			guidance: () => this.doc.review?.guidance ?? '',

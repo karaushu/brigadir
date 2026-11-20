@@ -58,6 +58,13 @@ provider's own option catalog.
   `readOnlyAgent`): isolated in a worktree on branch `<task branch>-<reviewer slug>` (the
   [worker naming rule](crew.md#workers)), the task's repos, no setup command and no `.env` copying. Writes are refused
   ("You check the work and do not write code.").
+- **When the review ends** (`passed`, `accepted`, `stopped`, `failed`, a plan's approval included) the host stops its
+  reviewers' hosts and removes their worktrees and branches; their tasks stay as the review's log, with their journals and
+  the review's record. A branch goes only when another branch of the repo holds its commits (the reviewer writes none),
+  and a branch checked out elsewhere stays. A worktree whose files differ from the last round's snapshot (someone edited
+  or added a file there) stays with its branch, and so does one whose reviewer host still runs. The reviewers of a review
+  still open keep theirs. A host that starts removes what reviews that ended earlier left behind, branches of a removal
+  that stopped half-way included. Nothing of the person's is touched.
 - **Its tree is the round's snapshot.** Before a round the host sets every repo of the reviewer's worktree to the round's
   result tree (`git read-tree -u --reset <tree>`), so the files on disk are the task's state under review, uncommitted
   changes included.
@@ -69,7 +76,8 @@ provider's own option catalog.
   review stay in it unchecked. A foreman task adds the reviewers below its root; findings go to the foreman, which
   returns work to its workers. An Auto task keeps them in `reviewCrew` until its first hire and below the root of its
   crew from then on; its agent fixes the findings itself or hands them to the worker of that zone.
-- Reviewer tasks stay service rows under the task's card in the sidebar ([Surfaces](#surfaces)).
+- Reviewer tasks stay service rows under the task's card in the sidebar ([Surfaces](#surfaces)). A plan reviewer's task is
+  titled `reviews the plan`, a code reviewer's `reviews the changes`.
 
 <a id="start"></a>
 
@@ -92,7 +100,7 @@ not start the review: …` and `Retry`.
   returns at once with `proposed: true`; the proposal stays until the person starts the review or dismisses it with
   `Not now`. Refused while a review runs: `A review of this task is already running.`
 - A review the person starts, or a review before the PR the host starts, while the task's agent is in a turn waits for
-  that turn to end and reads its snapshot. A mid-task review — the agent's or the host's — reads at once (the host takes
+  that turn to end and reads its snapshot. A turn that fails, or that a host restart cuts off, has ended too. A mid-task review — the agent's or the host's — reads at once (the host takes
   a checkpoint first) while the agent works on. A plan review reads at once: the agent's turn waits for the plan's
   answer.
 
@@ -139,7 +147,8 @@ then checks only whether each finding is closed.` and, for a `mid` review, `Then
    the finding's thread.
 3. **Check closure once.** The turn that took the batch ends → the host opens a closure check from the new snapshot. A
    foreman hands fixes to its workers: its closure check opens at the first turn end after the batch at which its crew
-   has no open work (an objection without edits leaves none, so it opens at once). The check:
+   has no open work (an objection without edits leaves none, so it opens at once). An [Auto](crew.md#auto) agent fixes
+   the findings itself: its closure check opens when its fixing turn ends, whatever its workers still do. The check:
    `Check task <id> of \`Task agent\` (reviewId …, closure check)` with the reviewer's own findings, their state
 (`fixed`, the agent's objection) and the instruction: for each finding decide whether it is closed — an objection the
 reviewer accepts counts as closed; call `approve`when all are closed and the fix introduced no problem; otherwise`submit_review`with one item`{replyTo: <findingId>, text: why it is still open}`per open finding and, only for a
@@ -158,10 +167,11 @@ problem the fix brought in) is accepted.`), a `replyTo` that is not this reviewe
    recorded as accepted and their threads resolved.
 
 - **Stop.** `Stop` (strip) cancels the open round and shuts the reviewers down; their tasks stay as the review's log until
-  the task is archived or deleted. The review ends `stopped`.
+  the task is archived or deleted, and their worktrees and branches go ([Reviewer sessions](#reviewer-sessions)). The
+  review ends `stopped`.
 - **Restart.** The review's record and its runs are on disk; after a host restart the review continues from its state:
-  a round being read is dispatched again, a batch waiting for the agent's turn stays queued, a review waiting for the
-  person keeps waiting.
+  a round being read is dispatched again, a review that waited for the agent's turn reads (no turn runs after a
+  restart), a batch waiting for the agent's turn stays queued, a review waiting for the person keeps waiting.
 - **Outdated.** A later change of the task's tree (agent or person) makes a passed or accepted review before the PR
   `outdated`: it covers only the snapshot it read. A mid-task review stays as it ended: the agent works on after it.
 - **A mid-task review that ends** `passed` with no findings, or `accepted`, while the task's agent waits prompts it once
@@ -345,6 +355,11 @@ workers`) stays available all the time.
 A reviewer on any provider reads everything through host tools; it needs no connector of its own.
 
 - **The task's prompt** (and, for a crew, nothing of the workers: they have not started).
+- **The person's answers to the plan** after that prompt, oldest first, in every round: each `Plan further…` text, each
+  `Send edits` version and each message in [chat while the plan waits](chat-turns-plans-and-questions.md#plan-chat),
+  since the last approved plan, read back from the prompts that carried them. They are marked as the person's own words and as part of
+  what was asked: where they differ from the task's prompt the later message decides, and a plan that follows them is
+  not `contradicts` or `out-of-scope`. Past 20 000 characters the newest stay and the prompt says how many were left out.
 - **The plan**: `read_plan(taskId, reviewId)` → `{revision, text}`: the plan's Markdown as presented (a split is
   rendered as Markdown: the summary, then per part its number, title, executor with its role, provider and model, files,
   scopes and prompt, then the crew's roster). In a closure check it adds `read` (the revision the first read had), `previous` (the
@@ -417,7 +432,9 @@ to fix N findings of the plan review that are still open…` with the reviewer's
    `read_plan` with the revision diff. The reviewer answers `approve`, or `submit_plan_review` with
    `{replyTo: <findingId>, text}` per finding still open and `{kind, text, where?, introduced: true}` only for a
    problem the revision brought in; gaps are not asked again. The host refuses other items with the messages of the code
-   loop. When the author's turn ends without presenting the plan again, the check runs on the plan as it was.
+   loop. When the author's turn ends without presenting the plan again, the check runs on the plan as it was. A
+   foreman's turn is the one that read the split's rejection — the turn whose `propose_plan` returned it, or the turn of
+   the decision prompt when that turn had already ended; another turn of the foreman meanwhile is not its answer.
 4. **The person decides** while the plan waits: the open findings stand in the strip with `Fix {n}` / `Accept`.
    `Fix {n}` answers the waiting plan and sends the batch again (step 2), then one more closure check. `Accept` closes
    the review as `accepted`; the plan keeps waiting for approval. A revision presented while the person decides (from

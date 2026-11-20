@@ -230,6 +230,9 @@ the state in muted text, the **step track**, actions, chevron.
   fill; a hovered step `--tint`. Each step has the tooltip `Plan review`, `Mid-task review`, `Review before PR`
   (with its review's own state: `stopped`, `did not start` and `outdated` share the glyph, not the word). A click opens
   the strip on that step's findings.
+- **A narrow column** (the chat beside an open panel): the title and the state with its findings link keep their room;
+  the step track gives way first and hides while the text would be cut beside it, then the text ends with `…`. The
+  actions and the chevron stay. The steps stay reachable in the open strip's segments.
 - **A toned or hovered row fills the deck edge to edge** — horizontally across the deck's padding, and up to the deck's
   top edge when it is the deck's first row and down to the island's top border when it is the deck's last ([Queue deck placement](composer.md#queue-deck)).
 

@@ -414,3 +414,14 @@ describe('class rows', () => {
 		).toBe('review mid-task Codex · after the hired parts started');
 	});
 });
+
+it('in a narrow column the step track gives way to the title and its line (spec/reviews#strip)', async () => {
+	const { trackYields } = await import('./TaskReview');
+	// The text fits: the track stays.
+	expect(trackYields(false, 180, 200, 70)).toBe(false);
+	// The text is cut: the track hides.
+	expect(trackYields(false, 230, 200, 70)).toBe(true);
+	// Hidden, the column grew by the track: it comes back only when the text fits beside it.
+	expect(trackYields(true, 230, 270, 70)).toBe(true);
+	expect(trackYields(true, 190, 270, 70)).toBe(false);
+});

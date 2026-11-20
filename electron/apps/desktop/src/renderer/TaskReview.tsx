@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { create } from 'zustand';
 import {
 	commentCount,
@@ -695,6 +695,35 @@ function stepState(review: TaskReview | null): MessageKey {
  * spec/reviews#strip: the strip's row and its open sections, from props only (the strip and its tests). `onDecide`, `onStop`, `onRetry`,
  * `onAgain` and `onCreatePR` act; `onToggle` opens or closes, `onStep` picks a point.
  */
+/**
+ * spec/reviews#strip: in a narrow column the title and its line keep their room and the step track gives way. `need` is the text's full width,
+ * `room` its column now and `track` the track's width with its gap; a hidden track comes back only when the text still fits beside it.
+ */
+export function trackYields(hidden: boolean, need: number, room: number, track: number): boolean {
+	return hidden ? need > room - track : need > room;
+}
+function useTrackYields() {
+	const text = useRef<HTMLParagraphElement>(null),
+		track = useRef(0),
+		[hidden, setHidden] = useState(false);
+	const check = () => {
+		const node = text.current;
+		if (!node) return;
+		const group = node.closest('li')?.querySelector<HTMLElement>('[role="group"]');
+		if (group) track.current = group.offsetWidth + 2;
+		setHidden((now) => trackYields(now, node.scrollWidth, node.clientWidth, track.current));
+	};
+	// The text changes with the state: measure after every render, and when the column resizes.
+	useLayoutEffect(check);
+	useEffect(() => {
+		const node = text.current;
+		if (!node) return;
+		const observer = new ResizeObserver(check);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, [text.current]);
+	return [text, hidden] as const;
+}
 export function ReviewStripView({
 	task,
 	view,
@@ -741,6 +770,7 @@ export function ReviewStripView({
 }) {
 	const review = view.review,
 		state = reviewStripState(view);
+	const [text, trackHidden] = useTrackYields();
 	if (!review || !state) return null;
 	const counts = taskReviewCounts(view, review.id),
 		agent = agentName(task),
@@ -847,11 +877,13 @@ export function ReviewStripView({
 					}
 					actions={
 						<>
-							<StepTrack
-								label={t(locale, 'Review steps')}
-								steps={steps}
-								onPick={(id) => onStep(id as ReviewPoint)}
-							/>
+							{!trackHidden && (
+								<StepTrack
+									label={t(locale, 'Review steps')}
+									steps={steps}
+									onPick={(id) => onStep(id as ReviewPoint)}
+								/>
+							)}
 							{taskReviewRunning(review) && state !== 'failed' && (
 								<Button size="s" variant="ghost" disabled={disabled} onClick={onStop}>
 									{t(locale, 'Stop')}
@@ -910,7 +942,7 @@ export function ReviewStripView({
 						className={styles.main}
 						aria-expanded={shown}
 						onClick={() => onToggle(!shown)}>
-						<p>
+						<p ref={text}>
 							<b>{title}</b> <span className={styles.muted}>{line}</span>
 						</p>
 					</button>

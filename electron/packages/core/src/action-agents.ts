@@ -39,7 +39,14 @@ export const helperActions = [
  * question about the code or a task, inherits the Default agent (a task's question — the task's own provider).
  */
 export const slackAgentActions = ['slackAnswers', 'slackCode'] as const;
-export const agentActions = [...taskActions, ...helperActions, ...slackAgentActions] as const;
+/** spec/settings-modules-and-onboarding#brigadir-chat-session: the agent of the Brigadir chats; inherits the Default agent. */
+export const brigadirActions = ['brigadirChat'] as const;
+export const agentActions = [
+	...taskActions,
+	...helperActions,
+	...slackAgentActions,
+	...brigadirActions,
+] as const;
 export type TaskAction = (typeof taskActions)[number];
 export type HelperAction = (typeof helperActions)[number];
 export type SlackAgentAction = (typeof slackAgentActions)[number];
@@ -55,7 +62,7 @@ export function isTaskAction(action: AgentAction): action is TaskAction {
 }
 /** The actions that inherit the Default agent (a session: effort null is the model's own); the rest inherit the Helper agent. */
 export function inheritsDefaultAgent(action: AgentAction): boolean {
-	return isTaskAction(action) || action === 'slackCode';
+	return isTaskAction(action) || action === 'slackCode' || action === 'brigadirChat';
 }
 export function isActionAgents(value: unknown): value is ActionAgents {
 	return (

@@ -284,6 +284,7 @@ export const noteMenuIcons = {
 export const brigadirChatMenuIcons = {
 	rename: 'edit',
 	archive: 'archive-box',
+	restore: 'archive-restore',
 	delete: 'trash',
 } as const satisfies Record<string, MenuIcon>;
 /** spec/notifications-slack-notes-and-schedules#schedules: a schedule's row menu in the Schedules section, and the menu bar's Schedules items. */

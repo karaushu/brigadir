@@ -298,3 +298,25 @@ li[data-state='current'] > .dot {
 	-webkit-box-orient: vertical;
 	overflow: hidden;
 }
+
+/* A watched event of a task: a dot in its tone, the text, its run or PR and the task. */
+.eventDot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	flex: none;
+	background: var(--accent);
+}
+.eventDot[data-tone='green'] {
+	background: var(--green);
+}
+.eventDot[data-tone='red'] {
+	background: var(--red);
+}
+.eventDot[data-tone='amber'] {
+	background: var(--amber);
+}
+.link > svg {
+	color: var(--fg2);
+	flex: none;
+}

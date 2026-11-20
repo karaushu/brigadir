@@ -139,6 +139,7 @@ export const actionNames: Record<AgentAction, MessageKey> = {
 	promptHint: 'Prompt hint',
 	slackAnswers: 'Slack: answers',
 	slackCode: 'Slack: code questions',
+	brigadirChat: 'Brigadir chat',
 };
 /** spec/appearance#evolution-redesign: the checkbox of a capsule — only the actions that have one. */
 const rememberLabels: Partial<Record<AgentAction, MessageKey>> = {

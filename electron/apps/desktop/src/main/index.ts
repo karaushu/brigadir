@@ -18,9 +18,12 @@ import { relayToLoopback } from '@brigadir/remote';
 import {
 	settingEdit,
 	settingLocation,
+	brigadirTitleOf,
+	brigadirTitlePrompt,
 	slackActive,
 	slackFactsText,
 	type SlackTaskFacts,
+	type SlackNotice,
 	agentOptionKind,
 	catalogOptions,
 	ghostModelPlan,
@@ -1878,7 +1881,7 @@ async function slackTaskNotice(
 			const ask = appliedSettings.slack.events.needsYou
 				? await slackAsk(kind, key, request).catch(() => undefined)
 				: undefined;
-			slack.post(
+			postNotice(
 				{ kind: 'needsYou', repo, branch, task: ref, reason, ...(ask ? { ask } : {}) },
 				key.projectId
 			);
@@ -1888,9 +1891,9 @@ async function slackTaskNotice(
 				last = slackDoneAt.get(id) ?? 0;
 			if (read || Date.now() - last < 10 * 60_000) return;
 			slackDoneAt.set(id, Date.now());
-			slack.post({ kind: 'taskDone', repo, branch, task: ref, summary: null }, key.projectId);
+			postNotice({ kind: 'taskDone', repo, branch, task: ref, summary: null }, key.projectId);
 		} else if (kind === 'failed' && task.scheduleRun)
-			slack.post(
+			postNotice(
 				{ kind: 'scheduleFailed', schedule: ref.title, project: repo, reason: 'The run failed.' },
 				key.projectId
 			);
@@ -1910,7 +1913,7 @@ async function slackRun(event: CIFinished, detail: CIRunDetail) {
 		task = watch.taskId
 			? await slackTask({ projectId: watch.projectId, id: watch.taskId }).catch(() => null)
 			: null;
-	slack.post(
+	postNotice(
 		{
 			kind: 'ci',
 			state: event.state,
@@ -2083,6 +2086,13 @@ function slackAskAgent(
 		choice: slackCodeChoice() ?? {},
 		context: thread?.context ?? null,
 	});
+}
+/** The Brigadir chats' watches hear a task's events too (spec/settings-modules-and-onboarding#brigadir-chat-tools); set once the chats exist. */
+let brigadirNotice: ((notice: SlackNotice) => void) | null = null;
+/** A task's event: to Slack (when its kind is on there) and to the Brigadir chats that watch the task. */
+function postNotice(notice: SlackNotice, projectId: string | null) {
+	slack.post(notice, projectId);
+	brigadirNotice?.(notice);
 }
 /** spec/settings-modules-and-onboarding#brigadir-chat-session: Brigadir's tasks as the Slack agent gets them — the newest of every project (≤ 40), plan and CI for 15. */
 async function brigadirFacts() {
@@ -2367,7 +2377,7 @@ boards.onCompleted = (key) => {
 	void slackTask(key)
 		.then(({ task, ref, repo, branch }) => {
 			if (task.scheduleRun?.quiet) return;
-			slack.post({ kind: 'taskCompleted', repo, branch, task: ref }, key.projectId);
+			postNotice({ kind: 'taskCompleted', repo, branch, task: ref }, key.projectId);
 		})
 		.catch(() => {});
 };
@@ -3954,7 +3964,7 @@ void app.whenReady().then(async () => {
 		facts: () => brigadirFacts(),
 		choice: () => {
 			const run = actionChoice(
-				'slackCode',
+				'brigadirChat',
 				null,
 				appliedSettings.actionAgents,
 				appliedSettings.agents.enabled,
@@ -3965,6 +3975,15 @@ void app.whenReady().then(async () => {
 				: { provider: appliedSettings.agents.provider, model: null };
 		},
 		today: () => new Date().toString().replace(/ \(.*\)$/, ''),
+		// spec/settings-modules-and-onboarding#brigadir-chat-entry: the Helper agent names a chat after its first message.
+		title: async (text) => {
+			const signal = AbortSignal.timeout(30_000),
+				target = await ghostTarget(signal);
+			if (!target || quotaExhausted(quota.read(), target.provider)) return null;
+			return brigadirTitleOf(
+				await writeHintOneShot(brigadirTitlePrompt(text), signal, target, 120)
+			);
+		},
 		createTask: async (input) => {
 			const created = await createSlackTask({
 				projectId: input.projectId,
@@ -3989,6 +4008,11 @@ void app.whenReady().then(async () => {
 				context: null,
 			}),
 		openTask: (key) => openTask(key),
+		createNote: async (project, text) => {
+			const id = await (await sharedNotesStore()).create(project, text);
+			clients.broadcast('notes:changed', { id, kind: 'created' });
+			return id;
+		},
 		openExternal: (url) => void shell.openExternal(url),
 		slack: {
 			connectBot: (token) => slack.connectBot(token),
@@ -4004,6 +4028,53 @@ void app.whenReady().then(async () => {
 				}
 			: undefined,
 	});
+	brigadirNotice = (notice) => {
+		if (
+			notice.kind === 'needsYou' ||
+			notice.kind === 'scheduleFailed' ||
+			!('task' in notice) ||
+			!notice.task
+		)
+			return;
+		const locale = currentLocale(),
+			task = { projectId: notice.task.projectId, id: notice.task.id };
+		const event =
+			notice.kind === 'ci'
+				? {
+						text: `${t(locale, notice.state === 'pass' ? 'CI passed' : notice.state === 'fail' ? 'CI failed' : 'CI cancelled')} · ${notice.repo} (${notice.branch})`,
+						tone:
+							notice.state === 'pass'
+								? ('green' as const)
+								: notice.state === 'fail'
+									? ('red' as const)
+									: ('amber' as const),
+						link: notice.link,
+					}
+				: notice.kind === 'prMerged'
+					? {
+							text: `${t(locale, 'PR merged')} · #${notice.number} · ${notice.repo}`,
+							tone: 'accent' as const,
+							link: notice.url,
+						}
+					: notice.kind === 'taskDone'
+						? {
+								text: `${t(locale, 'Turn ended')} · ${notice.task.title}`,
+								tone: 'accent' as const,
+								link: null,
+							}
+						: {
+								text: `${t(locale, 'Task completed')} · ${notice.task.title}`,
+								tone: 'green' as const,
+								link: null,
+							};
+		void brigadirChats
+			.notice({
+				kind: notice.kind as 'ci' | 'prMerged' | 'taskDone' | 'taskCompleted',
+				task,
+				...event,
+			})
+			.catch(() => {});
+	};
 	app.on('will-quit', () => {
 		brigadirChats.closeAll();
 		void brigadirMcp.close();
@@ -4024,14 +4095,18 @@ void app.whenReady().then(async () => {
 	);
 	handle('brigadir:undo', (chat: string, card: string) => brigadirChats.undo(chat, card));
 	handle('brigadir:open-link', (chat: string, card: string) => brigadirChats.openLink(chat, card));
-	handleClient('brigadir:menu', async (client) => {
-		const locale = currentLocale();
+	handle('brigadir:unarchive', (id: string) => brigadirChats.unarchive(id));
+	handleClient('brigadir:menu', async (client, id: string) => {
+		const locale = currentLocale(),
+			archived = await brigadirChats.archivedChat(id);
 		return (await ui.menu(client, [
 			{ id: 'rename', label: t(locale, 'Rename…'), icon: brigadirChatMenuIcons.rename },
-			{ id: 'archive', label: t(locale, 'Archive'), icon: brigadirChatMenuIcons.archive },
+			archived
+				? { id: 'restore', label: t(locale, 'Restore'), icon: brigadirChatMenuIcons.restore }
+				: { id: 'archive', label: t(locale, 'Archive'), icon: brigadirChatMenuIcons.archive },
 			null,
 			{ id: 'delete', label: t(locale, 'Delete…'), icon: brigadirChatMenuIcons.delete },
-		])) as 'rename' | 'archive' | 'delete' | null;
+		])) as 'rename' | 'archive' | 'restore' | 'delete' | null;
 	});
 	handle('notes:chat-read', (id: string) => noteChats.read(id));
 	handle('notes:chat-send', (id: string, text: string, choice: NoteChatChoice) => {
@@ -4236,7 +4311,7 @@ void app.whenReady().then(async () => {
 		// spec/notifications-slack-notes-and-schedules#slack: PR merged — a reply in the task's thread, broadcast to the project's channel.
 		if (appliedSettings.modules.slack && slack.state().state !== 'off') {
 			const task = await slackTask(key).catch(() => null);
-			slack.post(
+			postNotice(
 				{
 					kind: 'prMerged',
 					repo: merged.repository,
@@ -4912,7 +4987,7 @@ void app.whenReady().then(async () => {
 						void SessionStore.at(process.env.BRIGADIR_DATA_DIR)
 							.then((store) => store.project(notice.schedule.projectId))
 							.then((project) =>
-								slack.post(
+								postNotice(
 									{
 										kind: 'scheduleFailed',
 										schedule: notice.schedule.name,
@@ -4937,7 +5012,7 @@ void app.whenReady().then(async () => {
 						void SessionStore.at(process.env.BRIGADIR_DATA_DIR)
 							.then((store) => store.project(notice.schedule.projectId))
 							.then((project) =>
-								slack.post(
+								postNotice(
 									{
 										kind: 'scheduleAsk',
 										projectId: project.id,

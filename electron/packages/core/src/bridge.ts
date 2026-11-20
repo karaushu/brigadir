@@ -235,8 +235,11 @@ export type DesktopBridge = {
 	/** spec/settings-modules-and-onboarding#brigadir-chat: the chats of the Brigadir section (newest first) and the setups' states. */
 	readBrigadirChats(): Promise<{
 		chats: import('./brigadir-chat').BrigadirChatMeta[];
+		archived: import('./brigadir-chat').BrigadirChatMeta[];
 		setups: import('./brigadir-chat').BrigadirSetupState[];
 	}>;
+	/** `Restore` of an archived chat. */
+	unarchiveBrigadirChat(id: string): Promise<void>;
 	readBrigadirChat(id: string): Promise<import('./brigadir-chat').BrigadirChatState>;
 	createBrigadirChat(): Promise<import('./brigadir-chat').BrigadirChatMeta>;
 	sendBrigadirChat(id: string, text: string): Promise<void>;
@@ -253,7 +256,7 @@ export type DesktopBridge = {
 	): Promise<boolean>;
 	undoBrigadirCard(chat: string, card: string): Promise<void>;
 	/** A chat row's menu: what the person chose. */
-	brigadirChatMenu(id: string): Promise<'rename' | 'archive' | 'delete' | null>;
+	brigadirChatMenu(id: string): Promise<'rename' | 'archive' | 'restore' | 'delete' | null>;
 	openBrigadirLink(chat: string, card: string): Promise<void>;
 	onBrigadirEvent(
 		listener: (event: import('./brigadir-chat').BrigadirChatEvent) => void

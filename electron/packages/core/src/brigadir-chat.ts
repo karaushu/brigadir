@@ -41,6 +41,17 @@ export type BrigadirCard =
 			detail: string;
 			opened: boolean;
 	  }
+	/** A note the agent saved; `Open note` shows it on the Notes screen. */
+	| { type: 'note'; id: string; note: string; title: string; project: string | null }
+	/** A watched event of a task: CI ended, its PR merged, a turn ended, the task completed. */
+	| {
+			type: 'event';
+			id: string;
+			text: string;
+			tone: 'green' | 'red' | 'amber' | 'accent';
+			link: string | null;
+			task: { projectId: string; id: string } | null;
+	  }
 	| {
 			type: 'task';
 			id: string;
@@ -85,11 +96,16 @@ export type BrigadirSetupState = {
 export type BrigadirChatEvent =
 	| { kind: 'row'; id: string; row: BrigadirChatRow }
 	| { kind: 'busy'; id: string; busy: boolean }
-	| { kind: 'list'; chats: BrigadirChatMeta[]; setups: BrigadirSetupState[] };
+	| {
+			kind: 'list';
+			chats: BrigadirChatMeta[];
+			archived: BrigadirChatMeta[];
+			setups: BrigadirSetupState[];
+	  };
 export const brigadirChatLimits = { message: 20_000, title: 80 } as const;
 const record = (value: unknown): value is Record<string, unknown> =>
 	typeof value === 'object' && value !== null && !Array.isArray(value);
-const cardTypes = new Set(['setting', 'steps', 'secret', 'link', 'task']);
+const cardTypes = new Set(['setting', 'steps', 'secret', 'link', 'task', 'note', 'event']);
 export function isBrigadirChatRow(value: unknown): value is BrigadirChatRow {
 	if (!record(value) || !Number.isSafeInteger(value.seq) || typeof value.at !== 'string')
 		return false;
@@ -170,11 +186,27 @@ export function brigadirChatPrompt(input: {
 		'How to work:',
 		'- Answer from the tasks above when they tell enough. Otherwise find it yourself: read the code and run commands that only read (git log, git show, gh pr list, gh run list, gh run view). Never tell the person to check what you can check. You may not edit files or run anything that changes state: such commands are declined.',
 		'- To change Brigadir, use settings_set; to see the keys, settings_find. Change only what was asked. To set up Slack or remote access, use setup_start and follow the steps it returns; ask for every token with secret_request, never in the chat.',
-		'- New work: create_task. A change to work a task covers: send_to_task. Why something was done in a task: ask_task.',
+		"- New work: create_task. A change to work a task covers: send_to_task. Why something was done in a task: ask_task. To save their words or a summary as a note: note. To tell them here later when a task's CI ends, its PR is merged or it is done: watch.",
 		'- Only what a tool returned happened: never say a setting changed, a task was made or a token connected before the tool said so. When a tool fails, say so in one line and what to do.',
 		`- Answer in the language the person writes in (when it is unclear, ${fallback}), short, in Markdown. Code only where it helps.`,
 		`Message:\n${cut(input.text, 20_000)}`,
 	].join('\n\n');
+}
+/** spec/settings-modules-and-onboarding#brigadir-chat-entry: the Helper agent names a chat from its first message (English prompt, rule 12). */
+export function brigadirTitlePrompt(text: string): string {
+	return [
+		'Name this chat in 2 to 6 words, in the language the message is written in. Write only the name: no quotes, no period, no emoji.',
+		`Message:\n${cut(text, 2000)}`,
+	].join('\n\n');
+}
+/** The Helper agent's name, cleaned; null when it gave nothing usable. */
+export function brigadirTitleOf(said: string | null): string | null {
+	const line = (said ?? '')
+		.trim()
+		.split('\n')[0]!
+		.replace(/^["'«“]+|["'»”.]+$/g, '')
+		.trim();
+	return line && line.length <= brigadirChatLimits.title ? line : null;
 }
 /** A later message of the same chat: the refreshed tasks, then the message. */
 export function brigadirChatFollowUp(input: { text: string; facts: string }): string {

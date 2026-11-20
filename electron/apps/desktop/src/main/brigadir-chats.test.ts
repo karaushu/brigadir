@@ -20,7 +20,8 @@ async function setup(over: Partial<BrigadirChatDeps> = {}) {
 	let settings: AppSettings = structuredClone(defaultAppSettings);
 	const events: BrigadirChatEvent[] = [],
 		created: unknown[] = [],
-		opened: string[] = [];
+		opened: string[] = [],
+		notes: string[] = [];
 	const slackState = { bot: false, app: false, memberId: false, listening: false };
 	const deps: BrigadirChatDeps = {
 		root,
@@ -51,6 +52,10 @@ async function setup(over: Partial<BrigadirChatDeps> = {}) {
 		sendToTask: async () => 'sent',
 		askTask: async () => 'because',
 		openTask: () => {},
+		createNote: async (_project, text) => {
+			notes.push(text);
+			return 'n1';
+		},
 		openExternal: (url) => opened.push(url),
 		slack: {
 			connectBot: async (token) => {
@@ -92,6 +97,7 @@ async function setup(over: Partial<BrigadirChatDeps> = {}) {
 		events,
 		created,
 		opened,
+		notes,
 		get settings() {
 			return settings;
 		},
@@ -209,4 +215,46 @@ it('lists chats newest first and drops archived ones', async () => {
 	expect((await test.chats.list()).chats.map((chat) => chat.id)).toEqual([test.chat.id]);
 	await test.chats.remove(test.chat.id);
 	expect((await test.chats.list()).chats).toEqual([]);
+});
+
+it('saves notes and tells the chat about a watched task once per kind (spec/settings-modules-and-onboarding#brigadir-chat-tools)', async () => {
+	const test = await setup();
+	expect(await test.tool('note', { text: 'купити молоко', title: 'Покупки' })).toEqual({
+		note: 'n1',
+		saved: true,
+	});
+	expect(test.notes).toEqual(['# Покупки\n\nкупити молоко']);
+	expect((await test.cards()).at(-1)).toMatchObject({ type: 'note', note: 'n1', title: 'Покупки' });
+	await expect(test.tool('note', { text: 'x', project: 'nope' })).rejects.toThrow(
+		'No project nope'
+	);
+	expect(String(await test.tool('watch', { task: 't1', kinds: ['ci', 'done'] }))).toContain(
+		'ci, done'
+	);
+	const event = {
+		task: { projectId: 'p1', id: 't1' },
+		text: 'CI passed · b2c (main)',
+		tone: 'green' as const,
+		link: 'https://github.com/x',
+	};
+	await test.chats.notice({ kind: 'ci', ...event });
+	await test.chats.notice({ kind: 'ci', ...event });
+	await test.chats.notice({ kind: 'prMerged', ...event, text: 'PR merged' });
+	expect(
+		(await test.cards())
+			.filter((card) => card.type === 'event')
+			.map((card) => card.type === 'event' && card.text)
+	).toEqual(['CI passed · b2c (main)']);
+	expect(await test.tool('unwatch', {})).toBe('Stopped watching.');
+	await test.chats.notice({ kind: 'taskDone', ...event, text: 'Turn ended' });
+	expect((await test.cards()).filter((card) => card.type === 'event')).toHaveLength(1);
+});
+
+it('keeps archived chats apart and restores them', async () => {
+	const test = await setup();
+	await test.chats.archive(test.chat.id);
+	expect((await test.chats.list()).archived.map((chat) => chat.id)).toEqual([test.chat.id]);
+	expect(await test.chats.archivedChat(test.chat.id)).toBe(true);
+	await test.chats.unarchive(test.chat.id);
+	expect((await test.chats.list()).chats.map((chat) => chat.id)).toEqual([test.chat.id]);
 });

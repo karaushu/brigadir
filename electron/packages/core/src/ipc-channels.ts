@@ -535,6 +535,13 @@ export const ipcTable = {
 		arity: 1,
 		validate: (a) => a.length === 1 && isId(a[0]),
 	},
+	unarchiveBrigadirChat: {
+		kind: 'invoke',
+		channel: 'brigadir:unarchive',
+		class: 'client',
+		arity: 1,
+		validate: (a) => a.length === 1 && isId(a[0]),
+	},
 	deleteBrigadirChat: {
 		kind: 'invoke',
 		channel: 'brigadir:delete',

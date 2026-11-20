@@ -28,6 +28,7 @@ import {
 	type ForgePush,
 	type HelperRun,
 	type WorkspaceSnapshot,
+	type ReadIssueCode,
 } from '@brigadir/core';
 import {
 	SessionStore,
@@ -35,6 +36,7 @@ import {
 	readDocument,
 	atomicJson,
 	safePath,
+	WorkspaceNotReady,
 } from '@brigadir/persistence';
 import {
 	Snapshots,
@@ -80,6 +82,8 @@ async function revision(cwd: string, ref: string) {
 	return isSha(value) ? value : null;
 }
 const keyName = (key: TaskKey) => `${key.projectId}/${key.id}`;
+/** spec/architecture-and-platform#read-issues: why a task's local read failed. */
+type ForgeIssueCode = Extract<ReadIssueCode, 'git_failed' | 'worktree_not_ready'>;
 /** One hidden card per repo (its GitHub URL, else origin) and branch — the same in a task's worktree and in the main tree. */
 const suggestionKey = (repo: string, branch: string) => `${repo}#${branch}`;
 /** spec/pull-requests-and-ci#ready-card: GitHub's own default title for a branch of several commits — its last segment in words. */
@@ -162,7 +166,7 @@ export class ForgeActions {
 	 * spec/pull-requests-and-ci#github-status, spec/architecture-and-platform#read-issues: GitHub's own failures (gh, network, auth) stay in the snapshot
 	 * and its toast; a read that throws failed locally (git, the task's snapshots) and is a read issue of the task until a read succeeds.
 	 */
-	private localFailures = new Map<string, TaskKey>();
+	private localFailures = new Map<string, { key: TaskKey; code: ForgeIssueCode }>();
 	/** The latest read of each task: an older read's outcome never overwrites a newer one's. */
 	private generations = new Map<string, number>();
 	/** `fresh` — window focus, an explicit refresh or our own operation: auth, PR and checks skip the cache. */
@@ -179,7 +183,7 @@ export class ForgeActions {
 				() => {
 					if (this.generations.get(id) === generation) this.localFailures.delete(id);
 				},
-				async () => {
+				async (error: unknown) => {
 					// spec/architecture-and-platform#read-issues: a project whose folder is gone has nothing to read; that is no read issue.
 					const project = await SessionStore.at(this.dataDir)
 							.then((store) => store.project(key.projectId))
@@ -187,7 +191,11 @@ export class ForgeActions {
 						gone = project ? await folderGone(project.path) : false;
 					if (this.generations.get(id) !== generation) return;
 					if (gone) this.localFailures.delete(id);
-					else this.localFailures.set(id, { projectId: key.projectId, id: key.id });
+					else
+						this.localFailures.set(id, {
+							key: { projectId: key.projectId, id: key.id },
+							code: error instanceof WorkspaceNotReady ? 'worktree_not_ready' : 'git_failed',
+						});
 				}
 			)
 			.finally(() => {
@@ -196,13 +204,16 @@ export class ForgeActions {
 			.catch(() => {});
 		return work;
 	}
-	/** spec/architecture-and-platform#read-issues: the tasks whose repository state git could not read, while the task still exists. */
+	/**
+	 * spec/architecture-and-platform#read-issues: the tasks whose repository state could not be read, while the task still exists — `Git` when
+	 * git failed, `Worktree` when a worktree task's worktree is not ready after its preparation.
+	 */
 	decorate(workspace: WorkspaceSnapshot): WorkspaceSnapshot {
-		for (const key of this.localFailures.values())
+		for (const { key, code } of this.localFailures.values())
 			if (workspace.tasks.some((task) => task.projectId === key.projectId && task.id === key.id))
 				workspace.issues.push({
-					path: `projects/${key.projectId}/tasks/${key.id}/git`,
-					code: 'git_failed',
+					path: `projects/${key.projectId}/tasks/${key.id}/${code === 'worktree_not_ready' ? 'worktree' : 'git'}`,
+					code,
 				});
 		return workspace;
 	}

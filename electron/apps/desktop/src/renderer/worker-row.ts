@@ -73,3 +73,10 @@ export function currentReviewerRows<Row extends Pick<CrewWorkerRow, 'task' | 're
 		(row) => !row.reviewer || members.some((member) => member.taskId === row.task.id)
 	);
 }
+/**
+ * spec/reviews#surfaces: a solo task has its reviewer card only while the current review counts reviewers — before its first review and after
+ * one that did not start it is a plain task row. A crew's card always stays.
+ */
+export function reviewCardShown(task: { crew?: unknown }, rows: readonly unknown[]): boolean {
+	return Boolean(task.crew) || rows.length > 0;
+}

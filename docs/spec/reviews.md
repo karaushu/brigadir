@@ -172,6 +172,18 @@ problem the fix brought in) is accepted.`), a `replyTo` that is not this reviewe
 - **Stop.** `Stop` (strip) cancels the open round and shuts the reviewers down; their tasks stay as the review's log until
   the task is archived or deleted, and their worktrees and branches go ([Reviewer sessions](#reviewer-sessions)). The
   review ends `stopped`.
+- <a id="reviewer-questions"></a>**A reviewer's question.** A reviewer asks the task's agent with
+  [`ask_foreman`](crew.md#ask-foreman); the question arrives as a prompt with its `questionId`, and the agent answers with
+  `prompt_task(taskId, text, questionId)`, which returns the text into the reviewer's call. A foreman and an Auto agent
+  have `prompt_task` among their crew tools. A solo task's agent has it from its first session too, in a form of its
+  own: `taskId` (the reviewer's task), `text` and `questionId`, all required; the host takes only an answer to an open
+  question from a reviewer of the task's own review and refuses anything else (`prompt_task answers only a question
+  from a reviewer of this task's review.`), so it never prompts another task. **Why from the first session:** a review
+  starts in the middle of the agent's session, and Codex does not read the tool list again. The solo agent's session
+  brief says it: `When a reviewer of this task asks you a question, answer it with prompt_task and the questionId from
+  the question message; the reviewer waits for your answer.` A question held by the agent's plan for approval answers
+  that plan ([plan chat](chat-turns-plans-and-questions.md#plan-chat)) and runs in front of the queue. A question the
+  agent leaves unanswered for five minutes goes to the person ([`ask_foreman`](crew.md#ask-foreman)).
 - **Restart.** The review's record and its runs are on disk; after a host restart the review continues from its state:
   a round being read is dispatched again, a review that waited for the agent's turn reads (no turn runs after a
   restart), a batch waiting for the agent's turn stays queued, a review waiting for the person keeps waiting.
@@ -308,7 +320,10 @@ you`; `review · <point> · did not start`; `review · <point> · changed after 
   (`Codex`, `Codex 2`), never by its role, and says the review's state, never the reviewer task's title: `<reviewer> ·
   Review` while it reads or checks, `· N findings · waits` while the agent fixes (N = what it filed), `· Approved`,
   `· N open` in amber with the amber `needs-you` glyph while the person decides (N = its findings still open, so it
-  agrees with the task's line), `· Accepted` after the person's `Accept`, `· Review stopped`, `· Review did not start`. A review
+  agrees with the task's line), `· Accepted` after the person's `Accept`, `· Review stopped`, `· Review did not start`
+  (a reviewer counted by a review that then failed). A solo task has its reviewer card, with the reviewer count, only
+  while the current review counts reviewers: before its first review, and after a review that did not start, it is a
+  plain task row until the next review starts. A review
   waiting for the person makes the task `needs-you` with the reason line `Review · <N findings> open`; the card takes
   the `needs-you` fill. The rows stay until the next change after the review, or the archive.
 - **Notifications.** The review handing open findings to the person is a `needs-you` notice

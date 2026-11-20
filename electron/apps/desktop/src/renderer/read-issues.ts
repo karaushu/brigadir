@@ -15,6 +15,7 @@ const reasons: Record<ReadIssueCode, MessageKey> = {
 	unreadable: 'The file could not be read.',
 	unsafe_path: 'The data location is not allowed.',
 	git_failed: 'Git could not read the repository.',
+	worktree_not_ready: 'The worktree is not ready.',
 };
 const taskFiles: Record<string, MessageKey> = {
 	'task.json': 'Task',
@@ -23,6 +24,8 @@ const taskFiles: Record<string, MessageKey> = {
 	'host.json': 'Agent',
 	// spec/architecture-and-platform#read-issues: the repository state of the task (branch, base, remote), read with git.
 	git: 'Git',
+	// spec/architecture-and-platform#read-issues: a worktree task whose worktree is not ready after its preparation.
+	worktree: 'Worktree',
 };
 const rootFiles: Record<string, MessageKey> = {
 	projects: 'Projects',

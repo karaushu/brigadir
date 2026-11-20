@@ -221,6 +221,15 @@ export function crewBrief(context: CrewContext, tools?: WorkspaceTools): string 
 		? foremanBrief(context.spec, context.node.id, tools)
 		: workerContext(context.spec, context.node.id, tools);
 }
+/** spec/crew#ask-foreman: five minutes; host tests shorten it with `BRIGADIR_TEST_QUESTION_ESCALATION_MS`, nothing else sets it. */
+const questionEscalationMs =
+	Number(process.env.BRIGADIR_TEST_QUESTION_ESCALATION_MS) || crewQuestionEscalationMs;
+/** spec/reviews#reviewer-questions: what a solo agent's `prompt_task` answers when it is not an answer to its own reviewer (English, rule 12). */
+export const soloAnswerOnly =
+	"prompt_task answers only a question from a reviewer of this task's review.";
+/** spec/reviews#reviewer-questions: a solo task's agent answers its reviewers' questions. */
+export const reviewQuestionsBrief =
+	'When a reviewer of this task asks you a question, answer it with prompt_task and the questionId from the question message; the reviewer waits for your answer.';
 /** spec/chat-turns-plans-and-questions#checklist-tools: English by rule 12; the adapter turns the checklist into ACP `plan`, the chat shows it as the plan row. */
 export const checklistBrief =
 	'For work with three or more steps, keep a step checklist with your todo, task or plan tool (`update_plan` in Codex) and mark each step as you finish it; the person sees that checklist in the chat, so do not repeat it as a list in your messages.';
@@ -310,6 +319,7 @@ export function sessionBrief(
 		context?.role === 'auto' ? (options.role ?? '') : '',
 		context ? crewBrief(context, options.tools) : (options.role ?? ''),
 		checklistBrief,
+		context ? '' : reviewQuestionsBrief,
 		worktreeBrief,
 		provider === 'claude' && (!context || context.role === 'auto') ? planApprovalBrief : '',
 		human ? contextBrief : '',
@@ -2914,7 +2924,7 @@ export class CrewHost {
 				question: text,
 				options,
 				createdAt: new Date(now).toISOString(),
-				escalateAt: new Date(now + crewQuestionEscalationMs).toISOString(),
+				escalateAt: new Date(now + questionEscalationMs).toISOString(),
 				state: 'pending',
 			};
 		this.questions.push(question);
@@ -2967,6 +2977,27 @@ export class CrewHost {
 		);
 		timer.unref?.();
 		this.escalations.set(question.id, timer);
+	}
+	/**
+	 * spec/reviews#reviewer-questions: a solo task's agent answers a question of its own review's reviewer through `prompt_task`; nothing else
+	 * goes through it, so it never prompts another task.
+	 */
+	async answerSelfQuestion(params: unknown) {
+		const input = isRecord(params) ? params : {},
+			text = typeof input.text === 'string' ? input.text : '';
+		if (!text.trim()) throw new Error('text is required');
+		const question = this.questions.find(
+			(item) =>
+				item.id === input.questionId &&
+				item.workerTaskId === input.taskId &&
+				(item.state === 'pending' || item.state === 'escalated')
+		);
+		const worker = question
+			? this.workers.find((item) => item.taskId === question.workerTaskId)
+			: undefined;
+		if (!question || !worker || !this.checksSelf(worker.nodeId)) throw new Error(soloAnswerOnly);
+		await this.answerQuestion(question.id, text, 'foreman');
+		return { answered: question.id };
 	}
 	/** First valid answer wins: the foreman via prompt_task or the human after escalation (spec/crew#ask-foreman). */
 	async answerQuestion(id: string, answer: string, by: 'foreman' | 'human') {

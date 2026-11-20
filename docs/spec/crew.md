@@ -146,9 +146,9 @@ Each hired part has a budget: working minutes and tokens. Defaults come from Set
 
 - **Working minutes** are minutes inside the worker's turns (from `turn.started` to its end; a running turn counts until now), not the time it waits for a review. **Tokens** are the worker task's own figure of the [task counter](agents-and-providers.md#task-tokens), one implementation with the task budget: input, cache writes and output of its finished turns, plus the running turn's estimate from the growth of its context; cache reads do not count.
 - While the task is held at its [token budget](#budget-pause), waiting hires do not launch; an approved hire's workers wait with them.
-- The agent's host checks every 30 s. A part over either budget goes to the person instead of running on: the host records `exceededAt`, journals `crew.budget.exceeded` in its own journal, and tells the worker's host, which stops the running turn, journals the same event and sets its task `needs-you` with `overBudget`. The sidebar row says `over budget`.
+- The agent's host checks every 30 s. A part over either budget goes to the person instead of running on: the host records `exceededAt`, journals `crew.budget.exceeded` in its own journal, and tells the worker's host, which sets its task `needs-you` with `overBudget` first, then stops the running turn and journals the same event. The sidebar row says `over budget`. While `overBudget` is set nothing starts by itself on the worker: neither its queue (the person's queued messages, reports, review findings) nor a service prompt; they wait.
 - The stop is sent at every check until the worker's host takes it (`budgetStopped`), so a disconnect or a restart of either host does not let the part run on.
-- The person continues the worker with a message (its next turn clears `overBudget`; the budget is not checked again) or dismisses it. Until then `prompt_task` and `submit_review` from the agent to that worker are refused.
+- The person continues the worker with a message: it runs at once, before what waited, and its turn clears `overBudget` (a turn the agent begins on its own does not); the queue then goes on, and the budget is not checked again. Or the person dismisses the worker. Until then `prompt_task` and `submit_review` from the agent to that worker are refused.
 
 <a id="auto-roles"></a>
 ### Roles to hire from

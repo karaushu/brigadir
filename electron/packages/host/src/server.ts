@@ -565,6 +565,8 @@ export async function startHost(config: HostConfig) {
 	let turnGen = 0;
 	/** A steer is out: the turn it aims at leaves `busy` to it, so nothing slips into the moment an adopted turn begins. */
 	let steerPending = false;
+	/** spec/crew#auto-budget: this worker was stopped at its part budget; nothing starts by itself until the person's message continues it. */
+	let overBudget = task.overBudget === true;
 	/** spec/composer-steering-queue-and-ghost#steering-hold: when each held message was sent, the window timer of Claude, and the tools of subagents (no step boundary). */
 	const heldAt = new Map<string, number>();
 	let heldTimer: ReturnType<typeof setTimeout> | undefined;
@@ -768,6 +770,7 @@ export async function startHost(config: HostConfig) {
 				!transport ||
 				queue.paused ||
 				quotaBlocked() ||
+				overBudget ||
 				!queue.prompts.length ||
 				(await budgetBlocks())
 			)
@@ -1588,7 +1591,13 @@ export async function startHost(config: HostConfig) {
 				});
 			}
 			// spec/crew#auto-budget: the person's next turn on a worker over its budget takes the part over; the budget is not checked again.
-			if (event.kind === 'turn.started' && (await store.task(config.key)).overBudget)
+			// A turn the agent began on its own is not the person's.
+			if (
+				event.kind === 'turn.started' &&
+				event.origin !== 'agent' &&
+				!overBudget &&
+				(await store.task(config.key)).overBudget
+			)
 				await store.updateTask(config.key, { overBudget: false });
 			// spec/crew#auto-guard: after each turn of the Auto agent the host looks for its own changes inside the zones it hired out.
 			if (event.kind === 'turn.completed' && autoTask)
@@ -2345,12 +2354,14 @@ export async function startHost(config: HostConfig) {
 		}
 		// spec/crew#auto-budget: the part went over its budget; the turn stops and the worker waits for the person.
 		if (c.kind === 'overBudget') {
+			// The flag goes first: the end of the stopped turn must not start what is queued.
+			overBudget = true;
+			await store.updateTask(config.key, { overBudget: true });
 			if (busy) {
 				await command({ kind: 'cancel' });
 				for (let waited = 0; busy && waited < 30_000; waited += 200)
 					await new Promise((resolve) => setTimeout(resolve, 200));
 			}
-			await store.updateTask(config.key, { overBudget: true });
 			await emit({
 				kind: 'crew.budget.exceeded',
 				taskId: config.key.id,
@@ -2628,9 +2639,13 @@ export async function startHost(config: HostConfig) {
 						: c;
 				// spec/reviews#plan-loop: the findings of a plan review answered the waiting plan, so they run before what is queued.
 				const front = c.kind === 'submitReview' && planAnswered.delete(c.review.id);
+				// spec/crew#auto-budget: the person's message continues a worker stopped at its part budget, before what waited meanwhile.
+				const resumes = overBudget && c.kind === 'prompt' && !c.crew;
+				if (resumes) overBudget = false;
 				if (
 					!busy &&
-					!queue.prompts.length &&
+					!overBudget &&
+					(!queue.prompts.length || resumes) &&
 					!queue.paused &&
 					!quotaBlocked() &&
 					!workspaceDue &&
@@ -2675,7 +2690,7 @@ export async function startHost(config: HostConfig) {
 					scheduleHeld();
 					return;
 				}
-				const before = front ? queue.prompts[0]?.id : undefined;
+				const before = front || resumes ? queue.prompts[0]?.id : undefined;
 				await emit({ kind: 'prompt.queued', prompt, ...(before ? { before } : {}) });
 				kickPrompts();
 			});

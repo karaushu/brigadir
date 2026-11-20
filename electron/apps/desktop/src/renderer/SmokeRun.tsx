@@ -183,7 +183,7 @@ export function SmokeEventRow({
 					<Glyph name={glyph} size={12} />
 				</span>
 				<small>{t(locale, 'smoke')}</small>
-				<span className={styles.time}>
+				<span className={service.label}>
 					{event.stopped === 'limit'
 						? t(locale, '{n} min').replace('{n}', String(Math.round(event.elapsedMs / minute)))
 						: formatDuration(locale, event.elapsedMs)}
@@ -261,7 +261,7 @@ export function ReadyRow({
 		<div className={service.service} data-ready-row={event.where}>
 			<Glyph name={event.where === 'simulator' ? 'simulator' : 'browser'} size={12} />
 			<small>{t(locale, 'ready')}</small>
-			<span className={styles.time}>{event.screen}</span>
+			<span className={service.label}>{event.screen}</span>
 			{place && <small>{place}</small>}
 			<small>
 				<TextLink

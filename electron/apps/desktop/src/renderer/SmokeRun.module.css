@@ -42,11 +42,6 @@
 .glyph[data-tone='red'] {
 	color: var(--red);
 }
-/* The row's own words: the time, the screen — at the row's text size, kept whole. */
-.time {
-	flex: none;
-	white-space: nowrap;
-}
 /* The report's summary is the agent's text under the row, like a message. */
 .summary {
 	margin: 2px 16px 10px;

@@ -121,7 +121,8 @@ it('a host that exits while the hire card waits leaves the task needs-you, with 
 	await until(async () =>
 		(await journal(store, task)).find((record) => record.event.kind === 'crew.hire.requested')
 	);
-	expect((await store.task(task)).status).toBe('needs-you');
+	// The status follows the journal row.
+	await until(async () => ((await store.task(task)).status === 'needs-you' ? true : undefined));
 	first.child.kill('SIGKILL');
 	await until(async () =>
 		first.child.exitCode !== null || first.child.signalCode ? true : undefined

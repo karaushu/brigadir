@@ -103,6 +103,9 @@ const readOnlyTools = new Set([
  * spec/agents-and-providers#tools-awareness: when to call each tool, added after what it does. One table, so the descriptions below stay as their
  * features wrote them; a tool whose own description already says when (`commands_list`, `editor_state`, `pr_state`) has no entry.
  */
+/** spec/notifications-slack-notes-and-schedules#slack-bot-name: `slack_post`'s when-to-use line names the bot as Slack shows it. */
+const slackPostWhen = (bot: string | null) =>
+	`${slackRule(bot)} Never read a Slack token from env files or call the Slack API yourself.`;
 const whenToUse: Record<string, string> = {
 	editor_restart_language_servers:
 		'Call it when the person sees errors in the editor that are already fixed, or after you replace node_modules or change tsconfig/jsconfig. Do not install packages again or replace node_modules only to refresh the editor.',
@@ -140,7 +143,7 @@ const whenToUse: Record<string, string> = {
 	propose_review:
 		'Call it once the work of this task is done and your own checks passed, before the person creates a pull request. Do not call it while a review runs, after a small question, or for work that is not finished.',
 	add_folder: 'Use it when the work needs files outside the project, such as a sibling repository.',
-	slack_post: `${slackRule} Never read a Slack token from env files or call the Slack API yourself.`,
+	slack_post: slackPostWhen(null),
 	browser_open:
 		'Use it after you change anything a person sees in a web app: open the local page and check it yourself instead of asking the person to.',
 	browser_state: 'Call it to see which page is open and whether it finished loading.',
@@ -1064,12 +1067,14 @@ export function mcpTools(
 	modules: AppModules = defaultModules,
 	review = false,
 	/** spec/crew#roles: tools the session does not have right now (`create_task` while the root foreman's crew plan exists). */
-	hidden: ReadonlySet<string> = noHidden
+	hidden: ReadonlySet<string> = noHidden,
+	/** spec/notifications-slack-notes-and-schedules#slack-bot-name: the Slack bot's name, for `slack_post`. */
+	slackBot: string | null = null
 ): Served {
 	const key = `${role ?? ''}|${Object.entries(modules)
 		.filter(([, on]) => on)
 		.map(([name]) => name)
-		.join(',')}|${review}|${[...hidden].sort().join(',')}`;
+		.join(',')}|${review}|${[...hidden].sort().join(',')}|${slackBot ?? ''}`;
 	const cached = served.get(key);
 	if (cached) return cached;
 	// spec/agents-and-providers#tools-awareness: a crew worker keeps the browser, the simulator and the project commands; the person's other tools stay up the tree.
@@ -1107,16 +1112,19 @@ export function mcpTools(
 		hidden,
 		tools: new Map(tools.map((tool) => [tool.name, tool])),
 		list: {
-			tools: tools.map((tool) => ({
-				name: tool.name,
-				description:
-					(tool.when ?? whenToUse[tool.name])
-						? `${tool.description} ${tool.when ?? whenToUse[tool.name]}`
-						: tool.description,
-				inputSchema: z.toJSONSchema(tool.schema, { target: 'draft-7', io: 'input' }),
-				...(readOnlyTools.has(tool.name) ? { annotations: { readOnlyHint: true } } : {}),
-				execution: { taskSupport: 'forbidden' },
-			})),
+			tools: tools.map((tool) => {
+				const when =
+					tool.name === 'slack_post'
+						? slackPostWhen(slackBot)
+						: (tool.when ?? whenToUse[tool.name]);
+				return {
+					name: tool.name,
+					description: when ? `${tool.description} ${when}` : tool.description,
+					inputSchema: z.toJSONSchema(tool.schema, { target: 'draft-7', io: 'input' }),
+					...(readOnlyTools.has(tool.name) ? { annotations: { readOnlyHint: true } } : {}),
+					execution: { taskSupport: 'forbidden' },
+				};
+			}),
 		},
 	};
 	served.set(key, value);
@@ -1125,6 +1133,8 @@ export function mcpTools(
 /** Where a session reads the modules that are on and learns about a switch (`ModuleSettings` in the host). */
 export type ModuleSource = {
 	current(): AppModules;
+	/** spec/notifications-slack-notes-and-schedules#slack-bot-name: the Slack bot's name; absent or `null` — unknown. */
+	slackBot?(): string | null;
 	subscribe(listener: (value: AppModules) => void): () => void;
 };
 const fixedModules: ModuleSource = { current: () => defaultModules, subscribe: () => () => {} };
@@ -1205,7 +1215,8 @@ export function serveMcp(
 	review = false,
 	hidden: HiddenToolSource = nothingHidden
 ): (chunk: string) => void {
-	const tools = () => mcpTools(role, modules.current(), review, hidden.current()),
+	const tools = () =>
+			mcpTools(role, modules.current(), review, hidden.current(), modules.slackBot?.() ?? null),
 		running = new Map<string | number, AbortController>();
 	const send = (value: unknown) => {
 		if (socket.destroyed) return;
@@ -1238,7 +1249,10 @@ export function serveMcp(
 		if (method === 'initialize') {
 			const requested = isRecord(params) ? params.protocolVersion : undefined;
 			// spec/agents-and-providers#tools-awareness: what the agent has besides its own tools, from the modules on now and the role of the session.
-			const instructions = toolsInstructions(role, modules.current());
+			const instructions = toolsInstructions(role, {
+				...modules.current(),
+				slackBot: modules.slackBot?.() ?? null,
+			});
 			return {
 				protocolVersion:
 					typeof requested === 'string' && versions.includes(requested) ? requested : versions[0],

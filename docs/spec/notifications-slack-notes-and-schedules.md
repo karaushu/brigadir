@@ -293,12 +293,21 @@ Posts Brigadir's events to Slack through the person's own CI bot (the same bot a
 ### Agents post as the bot
 
 - MCP tool `slack_post` (module Slack; foreman and solo agents): `text` (mrkdwn, ≤ 12 000 characters), `channel` (`#name`, a name, or an ID `C…`/`G…`/`D…`; default: this task's Slack thread), `thread` (a message `ts` or permalink to answer in; with no channel it is the task's thread). The message goes from Brigadir's bot through main: the agent never gets the token. Every Slack message of a task goes through it, also when the person only says to write or reply in Slack: the tool's description, the MCP `instructions` and the first-prompt brief say so ([Agents know their tools](agents-and-providers.md#tools-awareness)). Another Slack tool or connector of the agent posts under the person's own name, so the agent sends with it only when the person asks in words for a message from themselves; reading Slack with it stays free. When `slack_post` cannot post, the agent tells the reason and does not post as the person instead. The agent never reads a Slack token from env files.
-- **Bot name**: `<bot>` below is the name Slack shows for the bot — its display or real name from `users.info` (`users:read`), else the username of `auth.test`.
+- **Bot name**: `<bot>` below is the name Slack shows for the bot — its display or real name from `users.info` (`users:read`), else the username of `auth.test`. See [The bot's name](#slack-bot-name).
 - **Consent**: a call asks with a permission card `Post to Slack as <bot> · <channel>` showing the text, `Allow` · `Always allow` · `Deny`; Deny → `posted: false` with the reason. `Always allow` posts and turns on `agents.slackPostWithoutAsking`.
 - **Without asking**: with `agents.slackPostWithoutAsking` on (**Settings ▸ Modules ▸ Slack settings**, section `Agents`: «Agents can post without confirmation», off by default — "No permission card before an agent's message. The message still shows in the chat.") every task's agents post at once; the call shows as its MCP row with the text.
 - **Channel**: an ID is used as is; a name goes through the learned name → ID map, then `conversations.list` (public and private channels the bot can see), else Slack gets the name.
 - **Answer**: `posted: true` with `channel`, `ts` and `permalink`; or `posted: false` with the reason. `channel_not_found` / `not_in_channel` → `The bot @<bot> is not in <channel>. Ask the person to run /invite @<bot> in that channel, then call slack_post again.`; module off → `Slack is off in Settings.`; no bot token → `Brigadir has no Slack bot token.`
 - A message the bot cannot post is not queued: the agent gets the reason now.
+
+<a id="slack-bot-name"></a>
+### The bot's name
+
+The bot is the person's own Slack app, so its name and picture are set in Slack, not in Brigadir; mentions are matched by the bot's user ID, so any name works. Agents know the bot by that name:
+
+- Main learns the name each time it checks the token (`auth.test`, then `users.info`) and writes it to `~/.brigadir/slack-bot.json` (`{"name": "Jarvis", "schemaVersion": 1}`; `null` when Slack is off or has no token). A name changed in Slack is picked up at the next token check (app start, a new token, the module switched on).
+- Task hosts read the file with the modules and follow its changes: the MCP `instructions`, the first-prompt brief and `slack_post`'s description add `In Slack this bot is @<name>: when the person asks <name> (or @<name>) to post, write, reply or tell something in Slack, that is slack_post.` Open sessions get `tools/list_changed`. Without a name the rule says only «Brigadir's bot».
+- The [Slack agent](#slack-agent) is told it is `@<name>` in Slack, the name people call it by in a thread.
 
 <a id="notes"></a>
 ## Notes module

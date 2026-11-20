@@ -91,6 +91,7 @@ import {
 	planDifferences,
 	toolAllowed,
 	toolsBrief,
+	type BriefTools,
 	workerContext,
 	type CrewProcessRole,
 	type CrewToolName,
@@ -298,7 +299,7 @@ export const subagentBrief =
  *  modules on (spec/agents-and-providers#tools-awareness); `cli` — the agent runs in the terminal (spec/terminal-and-cli-agents#cli-start). */
 export type BriefOptions = {
 	commands?: boolean;
-	tools?: WorkspaceTools;
+	tools?: BriefTools;
 	cli?: boolean;
 	/** spec/agents-and-providers#subagent-model: the setting is on for this session. */ subagents?: boolean;
 	/** spec/tasks#agent-context: the role text of a task without a crew. */ role?: string;

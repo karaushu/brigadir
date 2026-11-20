@@ -15,12 +15,17 @@ import { readDocument, safePath } from '@brigadir/persistence';
  */
 export class ModuleSettings {
 	private value: AppModules = { ...defaultModules };
+	/** spec/notifications-slack-notes-and-schedules#slack-bot-name: the Slack bot's name from `slack-bot.json`, written by the app; `null` — unknown. */
+	private bot: string | null = null;
 	private listeners = new Set<(value: AppModules) => void>();
 	private watcher: FSWatcher | null = null;
 	private timer: NodeJS.Timeout | null = null;
 	constructor(private root: string) {}
 	current() {
 		return this.value;
+	}
+	slackBot() {
+		return this.bot;
 	}
 	async load() {
 		let next: AppModules = { ...defaultModules };
@@ -31,8 +36,16 @@ export class ModuleSettings {
 		} catch {
 			/* No settings: the defaults. */
 		}
-		if (sameModules(next, this.value)) return false;
+		let bot: string | null = null;
+		try {
+			const doc = await readDocument(await safePath(this.root, 'slack-bot.json'));
+			if (typeof doc.name === 'string' && doc.name.trim()) bot = doc.name.trim().slice(0, 80);
+		} catch {
+			/* No bot name yet. */
+		}
+		if (sameModules(next, this.value) && bot === this.bot) return false;
 		this.value = next;
+		this.bot = bot;
 		for (const listener of this.listeners) listener(next);
 		return true;
 	}
@@ -41,7 +54,7 @@ export class ModuleSettings {
 		if (this.watcher) return;
 		try {
 			this.watcher = watch(this.root, { persistent: false }, (_event, name) => {
-				if (name !== 'settings.json') return;
+				if (name !== 'settings.json' && name !== 'slack-bot.json') return;
 				if (this.timer) clearTimeout(this.timer);
 				this.timer = setTimeout(() => {
 					this.timer = null;

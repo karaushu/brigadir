@@ -108,6 +108,8 @@ export class Slack {
 	private botUser: string | null = null;
 	/** spec/notifications-slack-notes-and-schedules#slack-agent-post: the bot's name as Slack shows it (display name), else its username. */
 	private botName: string | null = null;
+	/** The name last written to `slack-bot.json`; `undefined` — not written in this run. */
+	private published: string | null | undefined = undefined;
 	private appToken: string | null | undefined = undefined;
 	private readonly socket: SlackSocket;
 	private readonly mentions: SlackMentions | null;
@@ -271,12 +273,14 @@ export class Slack {
 			this.token = null;
 			this.queue = [];
 			this.set({ state: 'off' });
+			await this.publishName(null);
 			await this.listen();
 			return this.state();
 		}
 		this.token = await this.findToken();
 		if (!this.token) {
 			this.set({ state: 'off' });
+			await this.publishName(null);
 			await this.listen();
 			return this.state();
 		}
@@ -294,6 +298,7 @@ export class Slack {
 				team: typeof auth.team === 'string' ? auth.team : '',
 			});
 			this.flush();
+			await this.publishName(await this.shownName());
 		} catch (error) {
 			this.fail(error);
 		}
@@ -674,6 +679,23 @@ export class Slack {
 			permalink = null;
 		}
 		return { posted: true, channel, ts, permalink };
+	}
+	/** spec/notifications-slack-notes-and-schedules#slack-bot-name: the bot's name while it is on, `null` — no bot. */
+	async botHandle(): Promise<string | null> {
+		return this.current.state === 'on' ? this.shownName() : null;
+	}
+	/** spec/notifications-slack-notes-and-schedules#slack-bot-name: `slack-bot.json` tells the task hosts what their agents call the bot. */
+	private async publishName(name: string | null) {
+		if (name === this.published) return;
+		try {
+			await atomicJson(await safePath(await this.deps.dataRoot(), 'slack-bot.json'), {
+				schemaVersion: 1,
+				name,
+			});
+			this.published = name;
+		} catch {
+			/* Agents keep calling it Brigadir's bot. */
+		}
 	}
 	/** The name people see and type after `@` in Slack: the bot user's display or real name (`users.info`), else the username of `auth.test`. */
 	private async shownName(): Promise<string> {

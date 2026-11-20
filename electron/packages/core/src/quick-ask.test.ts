@@ -265,6 +265,15 @@ describe('a question from Slack about the code (spec/notifications-slack-notes-a
 		expect(
 			quickCodePrompt({ question: 'q', language: 'en', project: 'b', facts: '- task t1 "Button"' })
 		).toContain('- task t1 "Button"');
+		// spec/notifications-slack-notes-and-schedules#slack-bot-name: the agent is the bot people call by name.
+		expect(
+			quickCodePrompt({ question: 'q', language: 'en', project: 'b', bot: '@Jarvis' })
+		).toMatch(
+			/^You are @Jarvis in Slack, Brigadir’s agent in Slack: a teammate wrote to you there and calls you by that name\./
+		);
+		expect(quickCodePrompt({ question: 'q', language: 'en', project: 'b' })).toMatch(
+			/^You are Brigadir’s agent in Slack: a teammate wrote to you there\./
+		);
 	});
 	it('keeps the same rules on a follow-up', () => {
 		const prompt = quickSlackFollowUpPrompt({

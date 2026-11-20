@@ -97,7 +97,11 @@ export class QuickAsks {
 		mode: QuickAskMode = 'selection',
 		slackThread: string | null = null,
 		/** spec/notifications-slack-notes-and-schedules#slack-agent: every project the Slack agent may look in, and Brigadir's tasks as text. */
-		context: { projects?: { name: string; path: string }[]; facts?: string } = {}
+		context: {
+			projects?: { name: string; path: string }[];
+			facts?: string;
+			bot?: string | null;
+		} = {}
 	): Promise<void> {
 		const projects = context.projects ?? [];
 		const slack = mode !== 'selection';
@@ -251,6 +255,7 @@ export class QuickAsks {
 							today: slackToday(new Date()),
 							...(projects.length ? { projects } : {}),
 							...(context.facts ? { facts: context.facts } : {}),
+							...(context.bot ? { bot: context.bot } : {}),
 						})
 					: mode === 'aboutTask'
 						? quickTaskPrompt({

@@ -1,4 +1,5 @@
-import { open, readFile, stat, unlink } from 'node:fs/promises';
+import { link, open, readFile, rename, stat, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 
 import { isRecord, type TaskKey } from '@brigadir/core';
@@ -64,6 +65,22 @@ export async function readMetroPorts(root: string): Promise<Record<string, numbe
 	}
 	return ports;
 }
+/**
+ * A stale lock is renamed to a name of this process before it goes: of several processes that found it stale only one rename succeeds. The
+ * renamed file must still be that stale lock; one renamed a moment after another process took a fresh lock is put back.
+ */
+async function takeStale(path: string, ino: number) {
+	const aside = `${path}.${process.pid}-${randomUUID()}`;
+	try {
+		await rename(path, aside);
+	} catch {
+		return;
+	}
+	const taken = await stat(aside).catch(() => null);
+	if (taken && (taken.ino !== ino || Date.now() - taken.mtimeMs <= staleLockMs))
+		await link(aside, path).catch(() => {});
+	await unlink(aside).catch(() => {});
+}
 /** Runs `work` while this process holds the lock file; a lock left by a process that died goes after 15 s. */
 async function locked<T>(root: string, work: () => Promise<T>, waitMs = 20_000): Promise<T> {
 	const path = await safePath(root, lockFile),
@@ -75,11 +92,8 @@ async function locked<T>(root: string, work: () => Promise<T>, waitMs = 20_000):
 			break;
 		} catch (error) {
 			if (!isRecord(error) || error.code !== 'EEXIST') throw error;
-			const age = await stat(path).then(
-				(info) => Date.now() - info.mtimeMs,
-				() => 0
-			);
-			if (age > staleLockMs) await unlink(path).catch(() => {});
+			const info = await stat(path).catch(() => null);
+			if (info && Date.now() - info.mtimeMs > staleLockMs) await takeStale(path, info.ino);
 			else if (Date.now() > until) throw new Error('The Metro ports are locked.');
 			else await new Promise((resolve) => setTimeout(resolve, 25));
 		}

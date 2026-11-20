@@ -4,6 +4,7 @@ import {
 	crewAgentsPerNodeLimit,
 	crewName,
 	foremanTemplateId,
+	reviewerTemplateId,
 	isCrewName,
 	isCrewSpec,
 	isWhenToUse,
@@ -281,15 +282,18 @@ export function composeCrew(spec: CrewSpec, input: unknown, newId: () => string)
  */
 export function specAsTemplate(spec: CrewSpec, known: (id: string) => boolean): CrewTemplate {
 	const node = (agent: CrewSpecAgent, isRoot: boolean): CrewAgent => {
+		// A role gone from the library: a checker keeps the Reviewer's rights (a node without a role is a developer).
 		const template = isRoot
 			? foremanTemplateId
 			: agent.template && known(agent.template)
 				? agent.template
-				: null;
+				: agent.role === 'reviewer'
+					? reviewerTemplateId
+					: null;
 		// The rules of its rights come back with the node's role at the next resolve; only the role's own text is kept.
 		const own = ownInstructions(agent.role, agent.instructions).trim();
 		const extra =
-			template === null && own
+			template !== agent.template && !isRoot && own
 				? [own, agent.extraInstructions.trim()].filter(Boolean).join('\n\n')
 				: agent.extraInstructions;
 		const choices = agent.requestedChoices,

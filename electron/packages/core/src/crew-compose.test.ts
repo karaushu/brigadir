@@ -312,9 +312,14 @@ describe('records with a crew', () => {
 		const template = specAsTemplate(composedSpec(spec, crew), (id) => !!lookup(id));
 		expect(template.root.template).toBe(foremanTemplateId);
 		expect(resolveCrew(template, { lookup, defaultProvider: 'claude' }).root.agents).toEqual(crew);
-		// A template gone from the library keeps what the agent was told as its addition.
-		const orphan = specAsTemplate(composedSpec(spec, crew), (id) => id !== 'ux-designer').root
-			.agents![1]!;
-		expect(orphan).toMatchObject({ template: null, extraInstructions: 'Check the UI.' });
+		// A template gone from the library keeps what the agent was told as its addition; a checker stays a checker, its rules given once.
+		const reopened = specAsTemplate(composedSpec(spec, crew), (id) => id !== 'ux-designer'),
+			orphan = reopened.root.agents![1]!;
+		expect(orphan).toMatchObject({ template: 'reviewer', extraInstructions: 'Check the UI.' });
+		const look = resolveCrew(reopened, { lookup, defaultProvider: 'claude' }).root.agents[1]!;
+		expect(look.role).toBe('reviewer');
+		expect(`${look.instructions}\n\n${look.extraInstructions}`).toBe(
+			roleInstructions('reviewer', 'Check the UI.')
+		);
 	});
 });

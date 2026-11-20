@@ -718,3 +718,31 @@ it('makes one When to use line of free text', () => {
 	expect(isWhenToUse(long)).toBe(true);
 	expect(long.endsWith('word…')).toBe(true);
 });
+// spec/crew-templates-and-editor#schema: an older Senior developer joined the rules and its own text with a space.
+it('removes the rules of the rights however an older role joined them, and a resolved node has room for them', () => {
+	const rules = crewRightsInstructions.developer;
+	expect(ownInstructions('developer', `${rules} Your parts are the hard ones.`)).toBe(
+		'Your parts are the hard ones.'
+	);
+	expect(ownInstructions('developer', `${rules}Tail`)).toBe(`${rules}Tail`);
+	// spec/crew-templates-and-editor#limits: a role at the instructions limit still resolves to a valid snapshot.
+	const big: AgentTemplate = {
+		id: 'big',
+		name: 'Big',
+		role: 'developer',
+		instructions: 'x'.repeat(100_000),
+		builtin: false,
+	};
+	expect(isAgentTemplate(big)).toBe(true);
+	const spec = resolveCrew(
+		{
+			...starterCrewTemplate,
+			root: {
+				...starterCrewTemplate.root,
+				agents: [{ id: 'a', name: 'A', template: 'big' }],
+			},
+		},
+		{ lookup: templateLookup([big]), defaultProvider: 'claude' }
+	);
+	expect(isCrewSpec(spec)).toBe(true);
+});

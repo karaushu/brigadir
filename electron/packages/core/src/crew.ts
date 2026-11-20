@@ -92,6 +92,8 @@ export type CrewTemplateDocument = { schemaVersion: 2; template: CrewTemplate };
 export const crewWhenToUseLimit = 240;
 export const crewNameLimit = 80,
 	crewInstructionsLimit = 100_000,
+	/** spec/crew-templates-and-editor#limits: a resolved node's text holds its rights' rules besides the role's own. */
+	crewResolvedInstructionsLimit = 120_000,
 	crewZoneLimit = 256,
 	crewZonePathLimit = 1024,
 	crewAgentsPerNodeLimit = 64,
@@ -137,7 +139,10 @@ export function ownInstructions(role: CrewRole, text: string): string {
 		trimmed = text.trim();
 	if (!rules) return text;
 	if (trimmed === rules) return '';
-	return trimmed.startsWith(`${rules}\n\n`) ? trimmed.slice(rules.length).trim() : text;
+	// Older built-ins joined the rules and their own text with a space (Senior developer) or a blank line.
+	return trimmed.startsWith(rules) && /^\s/.test(trimmed.slice(rules.length))
+		? trimmed.slice(rules.length).trim()
+		: text;
 }
 /** spec/crew-templates-and-editor#builtin-templates: the check is against the design source, node by node, with evidence from the running app (spec/crew#smoke). */
 const designerInstructions = [
@@ -808,7 +813,7 @@ function isSpecAgentShape(
 		(value.whenToUse === undefined || isWhenToUse(value.whenToUse)) &&
 		(value.summary === undefined || isWhenToUse(value.summary)) &&
 		(value.whenToUse === undefined || value.summary === undefined) &&
-		text(value.instructions, crewInstructionsLimit) &&
+		text(value.instructions, crewResolvedInstructionsLimit) &&
 		text(value.extraInstructions, crewInstructionsLimit) &&
 		isZone(value.zone) &&
 		Array.isArray(value.checkedBy) &&

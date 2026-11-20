@@ -43,7 +43,7 @@ import { OptionCard } from './ui/OptionCard';
 import { MenuItem, MenuPopover, MenuSeparator } from './ui/Popover';
 import { effortOptions } from './ui/EffortIcon';
 import { optionChoices } from './ui/OptionIcon';
-import { templateWork } from './template-work';
+import { roleProviderOff, templateWork } from './template-work';
 import styles from './TemplatesSettings.module.css';
 import { SkeletonText } from './ui/Loading';
 type Selection = { kind: 'agent' | 'crew'; id: string };
@@ -399,16 +399,8 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 				</button>
 			);
 		});
-	// spec/crew-templates-and-editor#provider-off: the provider of a role that Settings ▸ Agents turned off; Auto does not hire it.
-	const providerOff = (item: AgentTemplate) => {
-		const value = item.provider ?? defaultProvider;
-		return enabledProviders[value]
-			? null
-			: t(locale, '{provider} is off').replace(
-					'{provider}',
-					value === 'codex' ? 'Codex' : 'Claude'
-				);
-	};
+	const providerOff = (item: AgentTemplate) =>
+		roleProviderOff(locale, item, enabledProviders, defaultProvider);
 	// spec/crew-templates-and-editor#agent-cards: a built-in card is the role guide; an own one shows the model it names. Both carry the role's When to use.
 	const agentCards = (items: AgentTemplate[]) =>
 		items.map((item) => {

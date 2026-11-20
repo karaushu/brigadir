@@ -186,7 +186,7 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		await expect(settings.getByText('built-in', { exact: true })).toBeVisible();
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toBeDisabled();
 		// A built-in's When to use is the app's line, locked like its name; Reviewer has no instructions beyond its rights.
-		await expect(settings.getByRole('textbox', { name: 'When to use' })).toBeDisabled();
+		await expect(settings.getByRole('textbox', { name: 'When to use' })).not.toBeEditable();
 		await expect(settings.getByRole('textbox', { name: 'When to use' })).toHaveValue(
 			'Checks the work, writes no code'
 		);

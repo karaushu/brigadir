@@ -70,7 +70,7 @@ A crew agent's role text is its rights' rules, then the role's instructions, joi
 Role and crew files are `{ schemaVersion: 2, template }`. A file with `schemaVersion: 1` loads unchanged in meaning and is written as version 2 at its next save (`upgradeAgentTemplateDocument`, `upgradeCrewTemplateDocument`):
 
 - its `summary` (the line's former name) becomes `whenToUse`, in a role and in every node of a crew;
-- an own role whose instructions begin with the rules of its rights (a duplicate of Developer or Reviewer, a node saved as a role) loses that copy, so the rules are not given twice; any other text stays as written.
+- an own role whose instructions begin with the rules of its rights followed by a space or a line break (a duplicate of Developer, Reviewer or Senior developer, a node saved as a role) loses that copy, so the rules are not given twice; any other text stays as written.
 
 The same holds for an imported file and for a schedule's one-off crew. A task's crew snapshot is never rewritten: an older one keeps the line as `summary`, read as When to use (`specWhenToUse`), and its instructions as resolved then.
 
@@ -143,7 +143,7 @@ Rules:
 - Built-in When to use lines are stored in English, given to agents in English, and shown in the interface language through the message catalog.
 - Foreman, Developer and Reviewer have no fixed model: empty `choices` means the provider's default model at launch. Senior developer, Tester, Technical writer and Security reviewer ship with a model (and the first and the last with an effort), like the nodes of the Review crew; the values are catalog ids, and a catalog without them shows the usual amber substitution (see [Choices at launch](#launch-check)).
 - A person **can change the provider, model and effort of every built-in role**, Senior developer and the specialists included. The name, rights, When to use and instructions stay the app's. The overlay is stored in `templates/builtin/<id>.json` as `{ schemaVersion: 1, template: { id, provider?, choices?, choiceNames? } }` and replaces the app's provider and choices whole. Saving an overlay equal to the app's values deletes the file. **Reset** in the library does that; it is offered while the role differs from the app's values. See also the built-in role overlay in [Agents and providers](agents-and-providers.md).
-- A person **can edit a built-in crew in place**: its agents, their templates, models, zones, additions and check edges. The id and the name stay the app's. The edited crew is stored whole in `templates/builtin/<id>.json` as `{ schemaVersion: 1, template }`, a crew document under the built-in id with `builtin: true`, and stands in for the app's crew everywhere a crew is picked by id: the launch sheet, the PR review, schedules. Saving a tree equal to the app's deletes the file. **Reset** in the library does that; it is offered while the tree differs from the app's. A file that is not a valid crew, or fails `crewIssues` against the agent library, is reported as an issue and the app's crew is used. **Save as crew template** from the editor still saves a copy under a new id.
+- A person **can edit a built-in crew in place**: its agents, their templates, models, zones, additions and check edges. The id and the name stay the app's. The edited crew is stored whole in `templates/builtin/<id>.json` as `{ schemaVersion: 2, template }` ([Documents and older files](#schema)), a crew document under the built-in id with `builtin: true`, and stands in for the app's crew everywhere a crew is picked by id: the launch sheet, the PR review, schedules. Saving a tree equal to the app's deletes the file. **Reset** in the library does that; it is offered while the tree differs from the app's. A file that is not a valid crew, or fails `crewIssues` against the agent library, is reported as an issue and the app's crew is used. **Save as crew template** from the editor still saves a copy under a new id.
 - Deleting a built-in crew only **hides** it (`templates/builtin/hidden-crews.json`, `{ schemaVersion: 1, crews: [...] }`); its edits stay on disk. **Restore built-in crews** brings every hidden crew back, edited as it was.
 
 <a id="unshipped-crew-ids"></a>
@@ -186,7 +186,7 @@ JSON is validated at the persistence boundary and on import. A TypeScript type a
 | --- | --- |
 | Agent or crew name | 1–80 chars after trim, no `\r`, `\n` or `\0` |
 | `whenToUse` | ≤ 240 chars, single line |
-| `instructions`, `extraInstructions` | ≤ 100,000 chars |
+| `instructions`, `extraInstructions` | ≤ 100,000 chars; a resolved node's `instructions` (rights' rules and the role's) ≤ 120,000 |
 | `zone` | ≤ 256 entries, each path ≤ 1024 chars |
 | Children per node, `checkedBy` per node | ≤ 64 |
 | Nodes per crew | ≤ 256 (structural depth ≤ 32) |
@@ -360,7 +360,7 @@ Roles and crews are **global, not per project**. Repository-specific knowledge (
 - `−` deletes an own role or crew, or hides a built-in crew. It is disabled for built-in roles.
 - Detail header: **Reset** (only on a customized built-in role or an edited built-in crew), **Duplicate** (adds ` 2` to the name), **Edit…** (crews, built-in ones included; disabled while the crew has issues) and **Export…**. A built-in template carries the tag `built-in`.
 - **Role detail**, the editor of one role: Name, **When to use** (one line, ≤ 240 chars, line breaks become spaces, placeholder "One line, in English."; a built-in's is the app's line in the interface language, read-only like its name), Provider (a provider turned off in Settings ▸ Agents is disabled unless the role already uses it; changing the provider clears the choices), Model, Effort, Mode, **Rights ▸ Checker** (switch between `developer` and `reviewer`; caption "Reads reports and changes, submits reviews, and approves work. Writes no code."; not shown for a foreman), and **Instructions** (caption "Agent role, in English", placeholder `Optional`). A built-in with no instructions of its own (Foreman, Developer, Reviewer) has no Instructions block.
-- <a id="provider-off"></a>**A role whose provider is off** in Settings ▸ Agents: its card ends with `{provider} is off` in the warning colour, and its detail shows the same line under Provider. Auto does not hire it ([Roles to hire from](crew.md#auto-roles)), and a crew node with it shows the usual launch check.
+- <a id="provider-off"></a>**A role whose provider is off** in Settings ▸ Agents: its card ends with `{provider} is off` in the warning colour, and its detail shows the same line under Provider. Auto does not hire it ([Roles to hire from](crew.md#auto-roles)).
 
 <a id="agent-cards"></a>
 ### Role cards

@@ -1,4 +1,10 @@
-import { isMessageKey, t, type AgentTemplate, type Locale } from '@brigadir/core';
+import {
+	isMessageKey,
+	t,
+	type AgentProvider,
+	type AgentTemplate,
+	type Locale,
+} from '@brigadir/core';
 
 /**
  * spec/crew-templates-and-editor#agent-cards: a role's When to use, for its card and its row in the `@` menu — a built-in's line in the
@@ -18,4 +24,19 @@ export function templateWork(
 				? 'Checks the work, writes no code'
 				: 'Writes code'
 	);
+}
+/** spec/crew-templates-and-editor#provider-off: the line of a role whose provider Settings ▸ Agents turned off; Auto does not hire it. */
+export function roleProviderOff(
+	locale: Locale,
+	template: Pick<AgentTemplate, 'provider'>,
+	enabled: Record<AgentProvider, boolean>,
+	defaultProvider: AgentProvider
+): string | null {
+	const provider = template.provider ?? defaultProvider;
+	return enabled[provider]
+		? null
+		: t(locale, '{provider} is off').replace(
+				'{provider}',
+				provider === 'codex' ? 'Codex' : 'Claude'
+			);
 }

@@ -148,7 +148,13 @@ import {
 	partBrief,
 	type CrewContext,
 } from './crew';
-import { TaskReviewLife, ownReviewCrew, ownReviewTool, type PresentedPlan } from './task-review';
+import {
+	TaskReviewLife,
+	closureWaitsForCrew,
+	ownReviewCrew,
+	ownReviewTool,
+	type PresentedPlan,
+} from './task-review';
 import { TaskClassLife, readSmallTaskLimit } from './task-class';
 import { readTaskSources, saveTaskSource, sourcePath } from './task-sources';
 import { saveShot, submitDesignReview } from './design-review';
@@ -278,7 +284,7 @@ export async function startHost(config: HostConfig) {
 		emit: (event) => emit(event),
 		records: () => records,
 		busy: () => busy,
-		foreman: foremanTask,
+		foreman: closureWaitsForCrew(crew?.role ?? null),
 		existing: () => crewHost,
 		settled: () => crewHost?.settled() ?? true,
 		submitReview: (text, review, round) =>

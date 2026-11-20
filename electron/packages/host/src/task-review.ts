@@ -79,6 +79,9 @@ export function ownReviewCrew(
 ): CrewSpec | null {
 	return task.reviewCrew && (role === null || role === 'developer') ? task.reviewCrew : null;
 }
+/** spec/reviews#loop: a named crew's foreman hands fixes to its workers, so its closure check waits for them; an Auto agent fixes the
+ *  findings itself, so its closure check opens when its own fixing turn ends, whatever its workers do. */
+export const closureWaitsForCrew = (role: string | null) => role === 'foreman';
 /** What the crew host offers the task's review: its rounds on the task itself (`checkSelf`), the agent's replies and the stop. */
 export type SelfReviewHost = Pick<CrewHost, 'checkSelf' | 'replySelf' | 'stopSelf' | 'selfTrees'>;
 export type TaskReviewDeps = {

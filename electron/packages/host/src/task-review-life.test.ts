@@ -21,6 +21,7 @@ import {
 } from '@brigadir/core';
 import {
 	TaskReviewLife,
+	closureWaitsForCrew,
 	ownReviewCrew,
 	ownReviewTool,
 	type PresentedPlan,
@@ -629,6 +630,19 @@ describe('fixes of an independent review of the loop', () => {
 		await h.emit({ kind: 'turn.started', text: 'report' });
 		await h.emit({ kind: 'turn.completed', reason: 'end_turn' });
 		await h.life.turnEnded();
+		expect(h.doc().review!.state).toBe('verifying');
+		expect(h.state.checks).toBe(2);
+	});
+	// Seen in the walkthrough's code audit (Q): an Auto task's own review waited for every hired worker before its closure check.
+	it('an Auto task’s closure check opens when its agent’s fixing turn ends, while its workers still work', async () => {
+		expect(closureWaitsForCrew('foreman')).toBe(true);
+		expect(closureWaitsForCrew('auto')).toBe(false);
+		expect(closureWaitsForCrew(null)).toBe(false);
+		const h = await setup({ foreman: closureWaitsForCrew('auto') });
+		await h.life.start(start());
+		await h.firstRead(1);
+		h.state.settled = false;
+		await h.answer();
 		expect(h.doc().review!.state).toBe('verifying');
 		expect(h.state.checks).toBe(2);
 	});

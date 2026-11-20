@@ -139,7 +139,8 @@ then checks only whether each finding is closed.` and, for a `mid` review, `Then
    the finding's thread.
 3. **Check closure once.** The turn that took the batch ends → the host opens a closure check from the new snapshot. A
    foreman hands fixes to its workers: its closure check opens at the first turn end after the batch at which its crew
-   has no open work (an objection without edits leaves none, so it opens at once). The check:
+   has no open work (an objection without edits leaves none, so it opens at once). An [Auto](crew.md#auto) agent fixes
+   the findings itself: its closure check opens when its fixing turn ends, whatever its workers still do. The check:
    `Check task <id> of \`Task agent\` (reviewId …, closure check)` with the reviewer's own findings, their state
 (`fixed`, the agent's objection) and the instruction: for each finding decide whether it is closed — an objection the
 reviewer accepts counts as closed; call `approve`when all are closed and the fix introduced no problem; otherwise`submit_review`with one item`{replyTo: <findingId>, text: why it is still open}`per open finding and, only for a

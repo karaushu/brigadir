@@ -187,8 +187,11 @@ describe('what the window reads (spec/reviews#strip, spec/reviews#before-pr)', (
 		expect(memberState({ state: 'accepted' } as never, run, 'n1', null, filed)).toMatchObject({
 			state: 'accepted',
 		});
-		expect(memberState({ state: 'stopped' } as never, run, 'n1', null, filed)).toMatchObject({
+		expect(memberState({ state: 'stopped' } as never, run, 'n1', 'failed', filed)).toMatchObject({
 			state: 'stopped',
+		});
+		expect(memberState({ state: 'reading' } as never, null, 'n1', 'failed', [])).toMatchObject({
+			state: 'failed',
 		});
 	});
 	it('Create PR during a mid-task review expands that review instead of starting one', async () => {

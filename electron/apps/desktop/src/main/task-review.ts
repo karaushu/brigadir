@@ -288,8 +288,9 @@ export function memberState(
 ): Pick<TaskReviewMember, 'state' | 'findings' | 'since' | 'note'> {
 	const verdict = run?.verdicts.find((item) => item.reviewerNodeId === nodeId),
 		findings = filed.length;
-	if (status === 'failed') return { state: 'failed', findings, since: null };
+	// A stopped review stops its reviewers too: one cut off by the stop reads `stopped`, not `did not start`.
 	if (review.state === 'stopped') return { state: 'stopped', findings, since: null };
+	if (status === 'failed') return { state: 'failed', findings, since: null };
 	if (review.state === 'accepted') return { state: 'accepted', findings, since: null };
 	if (review.state === 'yours' && verdict && !verdict.approved)
 		return {

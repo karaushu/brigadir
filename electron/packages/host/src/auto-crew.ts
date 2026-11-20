@@ -421,6 +421,14 @@ export class AutoCrewHost extends CrewHost {
 			return;
 		}
 		const hired = decision.approved ? await this.executeHire(pending.id, parts) : [];
+		// spec/crew#auto-hire: workers an interrupted approval created for parts that are not hired now (`Do it yourself`) are discarded.
+		for (const worker of this.workers.filter(
+			(item) =>
+				item.hireId === pending.id &&
+				!crewWorkerClosed(item) &&
+				!hired.some((value) => value.taskId === item.taskId)
+		))
+			await this.dismiss(worker, 'discarded');
 		await atomicJson(await this.file(hireFile), { schemaVersion: 1, hire: pending, decision });
 		await this.deps.emit({
 			kind: 'crew.hire.resolved',
@@ -666,14 +674,26 @@ export class AutoCrewHost extends CrewHost {
 	 * spec/crew#auto-hire: commit the agent's edits, add the parts to the crew and start one worker task per part. A worker carries its hire
 	 * and part from the moment its record is written, so a decision made again after a crash starts only the parts that have no worker yet.
 	 */
+	/** spec/crew#auto-hire: a worker of a hire that waits for the person (it was being decided when the host stopped) starts only with the decision. */
+	protected override async parked(worker: CrewWorkerRecord) {
+		if (!worker.hireId) return false;
+		return (await this.pendingHire())?.id === worker.hireId;
+	}
 	private async executeHire(hireId: string, parts: readonly AutoHirePart[]): Promise<AutoHired[]> {
 		const hireable = autoHireable(parts);
 		if (!hireable.length) return [];
 		const started = new Map(
 			this.workers
-				.filter((worker) => worker.hireId === hireId && worker.planPartId)
+				.filter(
+					(worker) => worker.hireId === hireId && worker.planPartId && !crewWorkerClosed(worker)
+				)
 				.map((worker) => [worker.planPartId!, worker])
 		);
+		// The workers this hire created before the host stopped waited for the decision; they start now.
+		for (const worker of started.values()) {
+			const task = await this.deps.store.task(this.workerKey(worker)).catch(() => null);
+			if (task?.status === 'queued' && !task.hasStarted) this.launchLater(worker);
+		}
 		const pending = hireable.filter((part) => !started.has(part.id));
 		if (pending.length) {
 			if (!this.deps.context.worktree) throw new Error('Hiring needs this task in a worktree.');

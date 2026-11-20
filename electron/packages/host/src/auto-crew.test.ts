@@ -776,6 +776,59 @@ describe('review fixes', () => {
 		).toEqual(host.spawned);
 		expect((await store.task(task)).crew?.root.agents).toHaveLength(2);
 	});
+	it('3b: workers an interrupted approval created wait for the decision; Do it yourself discards them', async () => {
+		const { host, make, events, store, task } = await setup();
+		void host.tool('hire_workers', hireInput, signal()).catch(() => {});
+		const hire = await until(() => pendingHire(events));
+		host.failAfter = 1;
+		await expect(host.decideHire({ id: hire.id, approved: true, parts: null })).rejects.toThrow(
+			'crashed'
+		);
+		const [created] = host.spawned,
+			key = { projectId: task.projectId, id: created! };
+		await host.stop();
+		await store.setStatus(key, 'queued');
+		const restarted = make(),
+			launched: string[] = [];
+		cleanup.push(() => restarted.stop());
+		restarted['launchWorker'] = async (worker: CrewWorkerRecord) => {
+			launched.push(worker.taskId);
+		};
+		await restarted.start();
+		await restarted['serial'](async () => {});
+		expect(restarted['waiting']).toEqual([]);
+		expect(launched).toEqual([]);
+		await restarted.decideHire({ id: hire.id, approved: false, parts: null });
+		expect(events.findLast((event) => event.kind === 'crew.worker.dismissed')).toMatchObject({
+			taskId: created,
+			reason: 'discarded',
+		});
+		expect((await store.task(key)).status).toBe('completed');
+		expect(launched).toEqual([]);
+	});
+	it('3c: approved after the restart, the worker the interrupted approval created starts', async () => {
+		const { host, make, events, store, task } = await setup();
+		void host.tool('hire_workers', hireInput, signal()).catch(() => {});
+		const hire = await until(() => pendingHire(events));
+		host.failAfter = 1;
+		await expect(host.decideHire({ id: hire.id, approved: true, parts: null })).rejects.toThrow(
+			'crashed'
+		);
+		const [created] = host.spawned;
+		await host.stop();
+		await store.setStatus({ projectId: task.projectId, id: created! }, 'queued');
+		const restarted = make(),
+			launched: string[] = [];
+		cleanup.push(() => restarted.stop());
+		restarted['launchWorker'] = async (worker: CrewWorkerRecord) => {
+			launched.push(worker.taskId);
+		};
+		restarted['hasSlot'] = async () => true;
+		await restarted.start();
+		await restarted.decideHire({ id: hire.id, approved: true, parts: null });
+		await until(() => (launched.includes(created!) ? true : undefined));
+		expect(restarted.spawned).toHaveLength(1);
+	});
 	it('4: a dismissed worker does not start from its slot', async () => {
 		const { host, store, task } = await hiredFixture();
 		const worker = host['workers'][0]!,

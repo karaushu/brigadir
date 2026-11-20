@@ -264,17 +264,19 @@ A chat with Brigadir itself: the person says what they want of the app in their 
 <a id="brigadir-chat-entry"></a>
 ### Where it is
 
-- **Sidebar**: a `Brigadir` row (helmet glyph) above the projects. It opens the chat in the main area in place of a task, with the same row engine ([rule 6](../../AGENTS.md), [chat](chat.md#row-engine)) and composer as a task chat, without the task toolbar, workspace or diff.
-- **Search Everywhere**: when a query finds no setting or action, or always as the last row of the `Settings` and `Actions` tabs, `Ask Brigadir: «<query>»` opens the chat and sends the query as the first message.
-- **Menu**: `Help ▸ Ask Brigadir…` (`ask-brigadir`), no shortcut by default; the Settings window's header has `Ask Brigadir` beside `Esc`, which closes Settings and opens the chat.
-- **Module popups**: a module whose setup takes steps outside the app (Slack, Remote access) has `Set up with Brigadir` in its popup; it opens the chat with that setup started.
+- **Rail and panel**: a `Brigadir` button (glyph `helmet-chat`: the helmet with a chat bubble) in the sections rail, right under `Schedules`, shows and hides the **Brigadir panel** on the right of the window, 420 px, beside whatever is open (a task, the PR list, notes). The panel is not modal: `Esc`, a click outside, another task or another section leave it open; only the rail button, its menu item and the panel's own hide button close it. Open or closed is remembered with the window layout. The button is pressed (`aria-pressed`) while the panel is shown.
+- **Search Everywhere**: the `Brigadir` group, last in `All`, `Settings` and `Actions`, holds one row `Ask Brigadir: «<query>»` for any query; `↩` on it closes the search, opens the panel and sends the query as a message.
+- **Menu**: `View ▸ Show Brigadir` / `Hide Brigadir` (`brigadir-panel`), no shortcut by default. The Settings window's header has `Ask Brigadir` beside `Esc`: it closes Settings and opens the panel.
+- **Module popups**: a module whose setup takes steps outside the app (Slack, Remote access) has `Set up with Brigadir` in its popup; it opens the panel with that setup started.
+- **Panel header**: the helmet, `Brigadir`, the second line `Settings and setup`, `New chat` and the hide button. The chat uses the task chat's row engine ([rule 6](../../AGENTS.md), [chat](chat.md#row-engine)) and composer, with no turn rail, deck or workspace.
 
 <a id="brigadir-chat-session"></a>
 ### The agent
 
 - The agent of the action `Brigadir chat` in Customize per action, else the Helper agent. It runs in `~/.brigadir/assistant/` with no project folder; every permission of its own tools (files, shell, web) is declined, so only Brigadir's MCP tools below act.
 - Its prompt (English, [rule 12](../../AGENTS.md)): what it is for, the [settings registry](#settings-registry) as a list (key, label, tab, type, allowed values, current value), and the setup guides. It answers in the language the person writes in.
-- One conversation, kept as normalized events in `~/.brigadir/assistant/events.jsonl` ([rule 2](../../AGENTS.md)); `New chat` in its header starts a new one. The conversation is the person's: it is not a task, has no board column, branch or PR.
+- **One chat.** The conversation is kept as normalized events in `~/.brigadir/assistant/events.jsonl` ([rule 2](../../AGENTS.md)) and survives a restart. `New chat` deletes it and starts an empty one with a fresh agent session; settings already changed and secrets already sealed stay, since they live in Brigadir, not in the chat. The chat is not a task: no board column, branch or PR.
+- **A setup outlives its chat.** Each setup's progress (which steps are done, the Slack app id) is kept in `~/.brigadir/assistant/setups.json`. A new chat's prompt lists the setups left unfinished, and the agent's first line offers to go on: `Continue the Slack setup (3 of 5)?`.
 
 <a id="settings-registry"></a>
 ### Settings registry
@@ -321,6 +323,7 @@ Every developer needs their own Slack app: Slack spreads one app's Socket Mode e
 <a id="later"></a>
 ## Later
 - More Brigadir chat setups: notifications and sounds, a project's Slack channel, an agent provider's sign-in.
+- A history of the Brigadir chat's changes (each `<label> · <old> → <new>`, with its time) to find what was changed after `New chat`.
 
 - A per-project override of a module's global switch in `project.json`.
 - Agent templates that hide disabled providers.

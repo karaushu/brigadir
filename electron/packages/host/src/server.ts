@@ -2557,7 +2557,9 @@ export async function startHost(config: HostConfig) {
 					!transport?.steering ||
 					queue.paused ||
 					quotaBlocked() ||
-					budget?.held()
+					budget?.held() ||
+					// spec/composer-steering-queue-and-ghost#steering-conditions: a waiting plan takes no steer; a message answers it instead.
+					[...permissions.values()].some((entry) => isPlanApproval(entry.request))
 				)
 					throw new Error('This message cannot go into the running turn');
 				await emit({ kind: 'prompt.held', prompt: item });

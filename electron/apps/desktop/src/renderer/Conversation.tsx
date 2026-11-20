@@ -146,6 +146,7 @@ import {
 	budgetTitle,
 	useTaskTokens,
 } from './TaskUsage';
+import { steeringState } from './composer-steering';
 import { ReviewEventRow, ReviewProposalRow, ReviewStrip, useReviewStripShown } from './TaskReview';
 import { DesignReviewRow } from './DesignReview';
 import styles from './Conversation.module.css';
@@ -428,13 +429,15 @@ export function Conversation({
 				record.event.prompt.id === lastTurn.event.queuedPromptId
 		);
 	// spec/composer-steering-queue-and-ghost#steering-hold: a queued message can still go into the running turn (the deck's «Send now»); a new one does when nothing is queued.
-	const steering =
-		busy &&
-		!adopted &&
-		session?.kind === 'session.started' &&
-		session.steering === true &&
-		!queue.paused &&
-		!rateLimit;
+	const { steering, sendNow } = steeringState({
+		busy,
+		adopted,
+		steering: session?.kind === 'session.started' && session.steering === true,
+		paused: queue.paused,
+		rateLimited: Boolean(rateLimit),
+		budgetHeld: Boolean(tokens.hold),
+		planWaiting: pending.permissions.some((request) => isPlanApproval(request)),
+	});
 	const steers = steering && !queue.prompts.length;
 	const optionsEvent = records.findLast(
 		(r) => r.event.kind === 'options.changed' || r.event.kind === 'session.started'
@@ -2103,7 +2106,7 @@ export function Conversation({
 										}
 										actions={
 											<>
-												{steering && item.command.kind === 'prompt' && (
+												{sendNow && item.command.kind === 'prompt' && (
 													<Button
 														size="s"
 														appearance="primary"

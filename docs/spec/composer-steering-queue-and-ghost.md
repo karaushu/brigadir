@@ -42,7 +42,7 @@ The deck stands over the composer island in the shared `ui/Deck` component, toge
 - **Only the person's messages have rows.** Crew service prompts (`command.crew`: a worker's question or report, a plan decision, the findings of a [review](reviews.md#loop) the host sends to the agent) wait in the same FIFO but get no row on desktop or phone (`isOwnQueuedPrompt`). They already appear as their own rows in the activity.
 - The first row carries `Queued · N`. N counts the person's rows only. A queued review shows as `Review`.
 - When the queue is paused, a header shows `The queue is paused.` and `Resume queue`. This also appears when only service prompts are queued, so the queue can still be resumed.
-- Row actions sit at the right edge of the row, in this order: `Send now` (only for a `prompt` while steering is available), then edit (`Edit queued message` / `Edit queued review`) and `Remove queued message`. Edit and Remove stay in the same place on every row.
+- Row actions sit at the right edge of the row, in this order: `Send now` (only for a `prompt` while steering is available: not while a plan waits for approval, nor while the task is [held at its budget](agents-and-providers.md#budget-reached)), then edit (`Edit queued message` / `Edit queued review`) and `Remove queued message`. Edit and Remove stay in the same place on every row.
 - Edit is allowed only after a successful removal:
   - For a prompt, it appends the text and attachments to the current draft and focuses the composer. If the draft cannot hold the message (over 1,000,000 characters or more than 10 attachments), it fails with `The draft cannot hold this queued message.`
   - For a queued review, it reopens the Review sheet with the original comments instead of turning the generated batch into plain text.
@@ -62,7 +62,7 @@ When the agent advertises steering, a message the person sends during a GUI turn
 - The agent advertised `initialize._meta.steering.supported = true`. The transport passes this on as `session.started.steering: true`. There is no registry of our own.
 - A plan waiting for approval is the exception: Enter rejects the plan request and queues the message for the agent (see [Chat while the plan waits](chat-turns-plans-and-questions.md#plan-chat)).
 - Only the person's own composer message steers: the `prompt` command with `steer: true`. This flag cannot be combined with `crew`. Foreman prompts to workers, answers to questions restored after a restart, plan refusals, merge prompts and other app prompts have no flag and always go through the FIFO.
-- All of these must also hold: our own `session/prompt` is running, the FIFO is empty and not paused, and no rate limit blocks.
+- All of these must also hold: our own `session/prompt` is running, the FIFO is empty and not paused, no rate limit blocks, and the task is not [held at its budget](agents-and-providers.md#budget-reached).
 - Everything else goes through the FIFO: worker reports and questions, `submitReview`, and anything sent while the queue is not empty. Pressing Enter behind a non-empty queue queues the message, so queue order is never broken.
 - CLI tasks are not affected; the CLI reads input itself.
 
@@ -80,7 +80,7 @@ Neither adapter can withdraw a message once it is injected. To keep it editable,
 3. Once one held message of this turn has gone to the FIFO, the rest of this turn's held messages follow it there, even at a later boundary. The agent never reads a later message before an earlier one.
 4. When a held message moves to the FIFO (turn end, declined steer, restart), it is inserted **before** everything queued after its own `prompt.held` (`prompt.queued {before}`). A worker report, a review, or a later message from the person cannot overtake it.
 5. Remove and Edit use the existing `removeQueuedPrompt` command and the `prompt.removed` event, which accept a held message too. After `prompt.steered`, the command fails with "no longer queued" (`The message has already left the queue.`). These actions are serialized with dispatch, so a message cannot be removed and sent at the same time.
-6. `steerQueuedPrompt {id}` (the deck's `Send now`) moves a queued `prompt` from the FIFO into the hold. It is allowed only while a turn runs with steering, the queue is not paused, no limit blocks, and the item is not a crew prompt.
+6. `steerQueuedPrompt {id}` (the deck's `Send now`) moves a queued `prompt` from the FIFO into the hold. It is allowed only while a turn runs with steering, the queue is not paused, no limit or budget hold blocks, no plan waits for approval, and the item is not a crew prompt.
 
 Why the 5 s window for Claude: Claude interrupts generation on a steer and moves a running foreground tool to the background. Holding until the next boundary can cost Claude anywhere from the rest of a tool run to a whole generation, which is tens of seconds. The window caps that cost at about the length of an "undo send". The window is a host policy keyed by `task.provider` and based on measurements. Re-measure it whenever an adapter changes.
 
@@ -139,7 +139,7 @@ Adapter behaviour as measured:
 | --- | --- | --- | --- |
 | Turn runs, steering available, field empty | `Stop` (primary) | — | `↩ send now · ⌘↩ to the queue` |
 | Turn runs, steering available, field has text | `Stop` (secondary) + `Send` (primary) | `Send now · ↩ · To the queue · ⌘↩` | — |
-| Turn runs, no steering, or the queue is not empty, paused, or limited, or the turn was adopted | `Stop` + `Send` (aria `Add to queue`) | `Add to queue` | `↩ to the queue` |
+| Turn runs, no steering, or the queue is not empty, paused, limited or held at the budget, or the turn was adopted | `Stop` + `Send` (aria `Add to queue`) | `Add to queue` | `↩ to the queue` |
 | Idle | `Send` | `Send` | `{send} send · {newline} new line · @ files · / commands` |
 
 - `Stop` tooltip: `Stop · ⌘.`. All shortcuts in tooltips and placeholders come from the keymap and are spelled for the platform.

@@ -1,5 +1,15 @@
 import { it, expect } from 'vitest';
-import { resolveCrew, templateLookup, findSpecAgent, type CrewTemplate } from '@brigadir/core';
+import {
+	autoSpec,
+	builtinAgentTemplates,
+	crewPalette,
+	defaultAutoBudget,
+	resolveCrew,
+	templateLookup,
+	findSpecAgent,
+	type AgentTemplate,
+	type CrewTemplate,
+} from '@brigadir/core';
 import {
 	checklistBrief,
 	commandsBrief,
@@ -154,6 +164,48 @@ it('keeps the briefs of a solo agent, a foreman and a worker as goldens (spec/ag
 	await expect(sessionBrief(worker, 'claude', options)).toMatchFileSnapshot(
 		'../fixtures/briefs/worker-claude.txt'
 	);
+});
+
+// spec/crew#auto-roles: the Auto agent's palette, as the brief gives it — each role with its rights, When to use and model — is a golden too.
+it('keeps the brief of an Auto agent with the built-in roles and an own one as a golden (spec/crew#auto-brief)', async () => {
+	const own: AgentTemplate = {
+		id: 'vision',
+		name: 'Vision developer',
+		role: 'developer',
+		provider: 'codex',
+		choices: { configOptions: { model: 'gpt-6-astra', reasoning_effort: 'high' } },
+		choiceNames: { model: 'GPT-6 Astra', reasoning_effort: 'High' },
+		whenToUse: 'Parts that work from screenshots',
+		instructions: '',
+		builtin: false,
+	};
+	const agents = [...builtinAgentTemplates, own];
+	const roles = crewPalette(
+		agents,
+		{ lookup: templateLookup(agents), defaultProvider: 'claude' },
+		[]
+	).templates;
+	const spec = autoSpec({ provider: 'claude', createdAt: '2026-10-01T10:00:00.000Z' });
+	const auto: CrewContext = {
+		role: 'auto',
+		crewKey: key,
+		spec,
+		node: spec.root,
+		parent: null,
+		parentKey: null,
+		isRoot: true,
+		auto: { roles, budget: defaultAutoBudget },
+		worktree: true,
+	};
+	const brief = sessionBrief(auto, 'claude', { commands: true, tools: allOn, classes: 'auto' });
+	expect(brief).toContain(
+		'`Tester` (writes code; when to use: Writes tests, changes no production code; Claude · Sonnet)'
+	);
+	expect(brief).toContain(
+		'`Vision developer` (writes code; when to use: Parts that work from screenshots; Codex · GPT-6 Astra · High)'
+	);
+	expect(brief).not.toMatch(/`Foreman` \(/);
+	await expect(brief).toMatchFileSnapshot('../fixtures/briefs/auto-claude.txt');
 });
 
 // spec/agents-and-providers#subagent-model

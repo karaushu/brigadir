@@ -328,10 +328,12 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Reset | Скинути | Return provider, model, and effort to the defaults. | |
 | Save as crew template / Save as agent template | Зберегти як шаблон бригади / Зберегти як шаблон агента | | |
 | Save branch as template | Зберегти гілку як шаблон | A branch of the crew tree, not a git branch. | |
-| New agent / New crew | Новий агент / Нова бригада | | |
-| Instructions | Інструкції | The role text of an agent template, in English. | «промпт» |
-| Specialty | Спеціалізація | One sentence for the foreman: what the agent is good at. | «Опис» |
-| Role / No role | Роль / Без ролі | The agent template a task without a crew gives its agent, on the New task sheet; also what an Auto task hires a part with: a worker row is `{role} · {part}`. | «шаблон», «профіль» |
+| New role / New crew | Нова роль / Нова бригада | The `+ ▾` items of the role library. | «Новий агент», «Новий профіль» |
+| Instructions | Інструкції | A role's optional short text in English, beyond the rules of its rights. | «промпт» |
+| When to use | Коли брати | A role's one line, in English, by which the Auto agent, a foreman and the person pick it. | «Спеціалізація», «Опис» |
+| Role / No role | Роль / Без ролі | A profile in the library: provider, model, effort, rights, When to use, optional instructions. What an Auto task hires a part with (a worker row is `{role} · {part}`), what a task without a crew gives its agent on the New task sheet. | «шаблон», «профіль», «персона» |
+| Roles | Ролі | The library's group of roles in Settings ▸ Templates. | «Агенти» |
+| Rights | Права | What a role may do: the tool set of a developer, a checker or a foreman. | «дозволи» |
 | Zone | Зона | The files an agent owns. | |
 | Subordinates | Підлеглі | The agents under a lead in the crew tree. | «сабагенти» |
 | Checker | Перевіряльник | An agent that reviews others and writes no code. | |
@@ -340,7 +342,7 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | round {n} of 2 | коло {n} з 2 | One fix-and-report exchange between an agent and its checker. | |
 | delegates and accepts | делегує й приймає | The solid line of the crew tree. | |
 | Remove with subordinates | Прибрати з підлеглими | | |
-| Restore default crews | Повернути типові бригади | | |
+| Restore built-in crews | Повернути вбудовані бригади | | «типові бригади» |
 | Review crew | Бригада ревʼю | The default crew: a foreman and two reviewers. | |
 | Crew log | Записи бригади | Notes the crew agents leave for each other. One item is a «запис». | «дошка», «нотатки» |
 | report | звіт | The structured summary of a worker. | |

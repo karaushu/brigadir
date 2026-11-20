@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from 'vitest';
-import type { Schedule } from '@brigadir/core';
+import { starterCrewTemplate, type Schedule } from '@brigadir/core';
 import { SchedulesStore } from './schedules';
 const schedule = (patch: Partial<Schedule> = {}): Schedule => ({
 	id: 's_abcdef123456',
@@ -76,6 +76,40 @@ test('skips a broken schedule and a torn last run line', async () => {
 		await expect(
 			store.save({ ...schedule(), rule: { kind: 'hourly', minute: 99 } })
 		).rejects.toThrow();
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+// spec/crew-templates-and-editor#schema
+test('reads a one-off crew saved with the former name of When to use', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'schedules-crew-'));
+	try {
+		const dir = join(root, 'projects', 'business', 'schedules', 's_abcdef123456');
+		await mkdir(dir, { recursive: true });
+		const crew = {
+			...starterCrewTemplate,
+			root: {
+				...starterCrewTemplate.root,
+				agents: [{ id: 'a', name: 'A', template: 'developer', summary: 'API routes' }],
+			},
+		};
+		await writeFile(
+			join(dir, 'schedule.json'),
+			JSON.stringify({
+				schemaVersion: 1,
+				schedule: schedule({ task: { ...schedule().task, crew: { template: crew } as never } }),
+			})
+		);
+		const read = await new SchedulesStore(root).read('business', 's_abcdef123456');
+		expect(read.task.crew).toEqual({
+			template: {
+				...crew,
+				root: {
+					...crew.root,
+					agents: [{ id: 'a', name: 'A', template: 'developer', whenToUse: 'API routes' }],
+				},
+			},
+		});
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

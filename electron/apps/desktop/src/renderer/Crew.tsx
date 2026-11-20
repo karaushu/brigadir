@@ -7,6 +7,7 @@ import {
 	withoutTaskReviewers,
 	resolveCrew,
 	specAsTemplate,
+	specWhenToUse,
 	templateLookup,
 	type CrewLibrary,
 	commentCount,
@@ -284,9 +285,9 @@ export function PlanCard({
 											)}
 										</small>
 									)}
-									{agent.summary && (
-										<span className={styles.memberSummary} title={agent.summary}>
-											{agent.summary}
+									{specWhenToUse(agent) && (
+										<span className={styles.memberSummary} title={specWhenToUse(agent)}>
+											{specWhenToUse(agent)}
 										</span>
 									)}
 									{agent.zone.length > 0 && (

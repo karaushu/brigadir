@@ -17,7 +17,9 @@ import {
 	builtinCrewTemplates,
 	starterCrewTemplate,
 	builtinCrewCustomized,
-	crewSummaryLimit,
+	crewRightsInstructions,
+	crewWhenToUseLimit,
+	isMessageKey,
 	crewAgents,
 	crewDepth,
 	crewIssues,
@@ -38,11 +40,12 @@ import { Button, IconButton, Popup, Segments, Switch } from './ui/Controls';
 import { TextArea, TextInput } from './ui/Input';
 import { Glyph } from './ui/Glyph';
 import { LevelDots } from './ui/LevelDots';
+import { ReadOnlyDetails } from './ui/ReadOnlyDetails';
 import { OptionCard } from './ui/OptionCard';
 import { MenuItem, MenuPopover, MenuSeparator } from './ui/Popover';
 import { effortOptions } from './ui/EffortIcon';
 import { optionChoices } from './ui/OptionIcon';
-import { templateWork } from './template-work';
+import { roleProviderOff, templateWork } from './template-work';
 import styles from './TemplatesSettings.module.css';
 import { SkeletonText } from './ui/Loading';
 type Selection = { kind: 'agent' | 'crew'; id: string };
@@ -257,7 +260,7 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 		if (kind === 'agent') {
 			const item: AgentTemplate = {
 				id,
-				name: t(locale, 'New agent'),
+				name: t(locale, 'New role'),
 				role: 'developer',
 				instructions: '',
 				builtin: false,
@@ -398,11 +401,14 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 				</button>
 			);
 		});
-	// spec/crew-templates-and-editor#agent-cards: a built-in card is the role guide; an own one shows its specialty and the model it names.
+	const providerOff = (item: AgentTemplate) =>
+		roleProviderOff(locale, item, enabledProviders, defaultProvider);
+	// spec/crew-templates-and-editor#agent-cards: a built-in card is the role guide; an own one shows the model it names. Both carry the role's When to use.
 	const agentCards = (items: AgentTemplate[]) =>
 		items.map((item) => {
 			const guide = item.builtin ? roleGuide.find((role) => role.id === item.id) : undefined,
-				names = Object.values(item.choiceNames ?? {});
+				names = Object.values(item.choiceNames ?? {}),
+				off = providerOff(item);
 			return (
 				<OptionCard
 					key={item.id}
@@ -424,6 +430,11 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 							{t(locale, guide.hint)}
 							{/* The model each enabled provider has for this work, by its catalog name. */}
 							<RolePicks id={item.id} enabled={enabledProviders} catalogs={catalogs} />
+							{off && (
+								<span className={styles.off} data-provider-off>
+									{off}
+								</span>
+							)}
 						</>
 					) : (
 						<span className={styles.picks} data-role-picks>
@@ -434,6 +445,11 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 								/>
 								{names.length ? names.join(' · ') : t(locale, 'Default model')}
 							</span>
+							{off && (
+								<span className={styles.off} data-provider-off>
+									{off}
+								</span>
+							)}
 						</span>
 					)}
 				</OptionCard>
@@ -443,8 +459,8 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 		<div className={styles.root} data-templates>
 			<div className={styles.list}>
 				<div ref={listItems} className={styles.items}>
-					<div className={styles.groupTitle}>{t(locale, 'Agents')}</div>
-					<div className={styles.cards} role="radiogroup" aria-label={t(locale, 'Agents')}>
+					<div className={styles.groupTitle}>{t(locale, 'Roles')}</div>
+					<div className={styles.cards} role="radiogroup" aria-label={t(locale, 'Roles')}>
 						{library && agentCards(library.agents)}
 					</div>
 					<div className={styles.groupTitle}>{t(locale, 'Crews')}</div>
@@ -479,7 +495,7 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 								onSelect={() => {
 									void create('agent');
 								}}>
-								{t(locale, 'New agent')}
+								{t(locale, 'New role')}
 							</MenuItem>
 							<MenuItem
 								onSelect={() => {
@@ -504,10 +520,10 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 										onSelect={() => {
 											void run(
 												() => window.brigadir.restoreCrewTemplates(),
-												'Could not restore the default crews.'
+												'Could not restore the built-in crews.'
 											);
 										}}>
-										{t(locale, 'Restore default crews')}
+										{t(locale, 'Restore built-in crews')}
 									</MenuItem>
 								</>
 							) : null}
@@ -568,31 +584,27 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 									}
 								/>
 							</div>
-							{/* spec/crew-templates-and-editor#roster: what the foreman reads about agents of this template; a built-in's is the app's, shown as text. */}
-							{agent.role !== 'foreman' && (!agent.builtin || agent.summary) && (
-								<div className={styles.row} data-size="m">
-									<span className={styles.label}>{t(locale, 'Specialty')}</span>
-									{agent.builtin ? (
-										// The app's line reads in full: text, not a field cut at its width.
-										<span className={styles.value}>{agent.summary}</span>
-									) : (
-										<TextInput
-											aria-label={t(locale, 'Specialty')}
-											value={agent.summary ?? ''}
-											maxLength={crewSummaryLimit}
-											placeholder={t(
-												locale,
-												'What the foreman reads about this agent. In English.'
-											)}
-											onChange={(event) => {
-												const { summary: _, ...rest } = agent;
-												const summary = event.target.value.replace(/[\r\n]+/g, ' ');
-												saveAgent(summary ? { ...rest, summary } : rest);
-											}}
-										/>
-									)}
-								</div>
-							)}
+							{/* spec/crew-templates-and-editor#template-library: the line the Auto agent, a foreman and the person pick the role by; a built-in's is the app's, translated and locked like its name. */}
+							<div className={styles.row} data-size="m">
+								<span className={styles.label}>{t(locale, 'When to use')}</span>
+								<TextInput
+									aria-label={t(locale, 'When to use')}
+									className={styles.whenToUse}
+									readOnly={agent.builtin}
+									value={
+										agent.builtin && agent.whenToUse && isMessageKey(agent.whenToUse)
+											? t(locale, agent.whenToUse)
+											: (agent.whenToUse ?? '')
+									}
+									maxLength={crewWhenToUseLimit}
+									placeholder={t(locale, 'One line, in English.')}
+									onChange={(event) => {
+										const { whenToUse: _, ...rest } = agent;
+										const line = event.target.value.replace(/[\r\n]+/g, ' ');
+										saveAgent(line ? { ...rest, whenToUse: line } : rest);
+									}}
+								/>
+							</div>
 							<div className={styles.row} data-size="m">
 								<span className={styles.label}>{t(locale, 'Provider')}</span>
 								<Segments
@@ -622,6 +634,14 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 									}
 								/>
 							</div>
+							{providerOff(agent) && (
+								<div className={styles.row} data-size="m">
+									<span className={styles.label} />
+									<small className={styles.off} data-provider-off>
+										{providerOff(agent)}
+									</small>
+								</div>
+							)}
 							<div className={styles.row} data-size="m">
 								<span className={styles.label}>{t(locale, 'Model')}</span>
 								{option('model') ? (
@@ -728,22 +748,47 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 								</div>
 							</fieldset>
 						)}
-						<fieldset className={`${styles.group} ${styles.instructionsGroup}`} disabled={disabled}>
-							<div className={styles.row} data-size="m">
-								<span className={styles.label}>{t(locale, 'Instructions')}</span>
-								<small className={styles.cap}>
-									{t(locale, 'in English: who you are, not what to do')}
-								</small>
-							</div>
-							{/* A built-in's role reads in full (and copies): read-only, not a dimmed disabled field. */}
-							<TextArea
-								aria-label={t(locale, 'Instructions')}
-								className={styles.instructions}
-								readOnly={agent.builtin}
-								value={agent.instructions}
-								onChange={(event) => saveAgent({ ...agent, instructions: event.target.value })}
-							/>
-						</fieldset>
+						{/* spec/crew-templates-and-editor#template-library: the rules of the rights come first, read-only and collapsed; then the role's own
+						    instructions. A built-in with none of its own (Developer, Reviewer) shows the rules alone; a foreman's rules are its brief. */}
+						{(crewRightsInstructions[agent.role] ||
+							!agent.builtin ||
+							agent.instructions.trim()) && (
+							<fieldset
+								className={`${styles.group} ${styles.instructionsGroup}`}
+								disabled={disabled}>
+								<div className={styles.row} data-size="m">
+									<span className={styles.label}>{t(locale, 'Instructions')}</span>
+									<small className={styles.cap}>
+										{t(locale, 'in English: who you are, not what to do')}
+									</small>
+								</div>
+								{crewRightsInstructions[agent.role] && (
+									<ReadOnlyDetails
+										key={agent.role}
+										locale={locale}
+										className={styles.rules}
+										title={t(
+											locale,
+											agent.role === 'reviewer'
+												? 'Rules of every checker'
+												: 'Rules of every developer'
+										)}
+										text={crewRightsInstructions[agent.role]}
+									/>
+								)}
+								{(!agent.builtin || agent.instructions.trim()) && (
+									// A built-in's role reads in full (and copies): read-only, not a dimmed disabled field.
+									<TextArea
+										aria-label={t(locale, 'Instructions')}
+										className={styles.instructions}
+										readOnly={agent.builtin}
+										value={agent.instructions}
+										placeholder={t(locale, 'Optional')}
+										onChange={(event) => saveAgent({ ...agent, instructions: event.target.value })}
+									/>
+								)}
+							</fieldset>
+						)}
 					</>
 				)}
 				{crew && library && (

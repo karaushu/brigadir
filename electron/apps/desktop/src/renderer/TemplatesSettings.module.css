@@ -130,9 +130,15 @@
 	color: var(--fg);
 	font-weight: 600;
 }
-.warn {
+.warn,
+.off {
 	font-size: var(--text-11);
 	color: var(--amber-text);
+}
+/* spec/crew-templates-and-editor#provider-off: on a card it takes its own line under the models. */
+.picks > .off,
+[data-option-card] .off {
+	flex-basis: 100%;
 }
 .head {
 	display: flex;
@@ -212,6 +218,10 @@
 	min-width: 0;
 	max-width: 260px;
 }
+/* spec/crew-templates-and-editor#template-library: When to use is a line to read in full, so it takes the row's width. */
+.row input.whenToUse {
+	max-width: none;
+}
 .row > div[class*='popupRoot'] {
 	width: 190px;
 	min-width: 0;
@@ -253,6 +263,10 @@
 	min-height: 120px;
 	margin: 0 12px 12px 132px;
 	line-height: 1.5;
+}
+/* The rules of the rights sit under the caption, on the field's left edge. */
+.instructionsGroup .rules {
+	margin: 0 12px 8px 132px;
 }
 .instructionsGroup .instructions:read-only {
 	color: var(--fg2);

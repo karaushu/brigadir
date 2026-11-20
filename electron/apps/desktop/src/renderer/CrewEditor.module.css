@@ -313,36 +313,6 @@
 	border-top: 1px solid var(--sep);
 	margin: 0;
 }
-.instructions summary {
-	display: flex;
-	align-items: center;
-	gap: 5px;
-	min-height: var(--control-h-s);
-	font-size: var(--text-10-5);
-	color: var(--fg2);
-	cursor: default;
-	list-style: none;
-}
-.instructions summary::-webkit-details-marker {
-	display: none;
-}
-.instructions summary > svg {
-	transition: transform var(--motion-fast);
-}
-.instructions[open] summary > svg {
-	transform: rotate(90deg);
-}
-.instructions small {
-	font-size: inherit;
-	color: var(--fg3);
-}
-.instructions p {
-	margin: 0 0 0 14px;
-	font-size: var(--text-11);
-	line-height: 1.5;
-	color: var(--fg2);
-	white-space: pre-wrap;
-}
 .group {
 	font-size: var(--text-11);
 	font-weight: 600;

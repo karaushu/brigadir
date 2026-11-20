@@ -3,6 +3,7 @@ import {
 	findSpecAgent,
 	isComposing,
 	specParent,
+	specWhenToUse,
 	type CrewCompose,
 	type CrewSpec,
 	type CrewSpecAgent,
@@ -82,10 +83,18 @@ export function specModel(agent: CrewSpecAgent): string {
 		...(effort ? [effort] : []),
 	].join(' · ');
 }
+/** spec/crew-templates-and-editor#agent-template: the line by which a role is picked, as the palette and the roster give it. */
+function whenToUse(agent: CrewSpecAgent): string[] {
+	const line = specWhenToUse(agent).replace(/[.;]+$/, '');
+	return line ? [`when to use: ${line}`] : [];
+}
+/** spec/crew#auto-roles, spec/crew#compose: one role of a palette — its rights, its When to use and its model. */
+function paletteRole(role: CrewSpecAgent, model: string): string {
+	return `\`${role.name}\` (${[role.role === 'reviewer' ? 'checks, writes no code' : 'writes code', ...whenToUse(role), model].join('; ')})`;
+}
 function roster(agent: CrewSpecAgent): string {
 	const describe = (child: CrewSpecAgent): string => {
-		const parts: string[] = [];
-		if (child.summary?.trim()) parts.push(child.summary.trim().replace(/[.;]+$/, ''));
+		const parts: string[] = [...whenToUse(child)];
 		parts.push(specModel(child));
 		if (child.role === 'foreman')
 			parts.push(`leads ${child.agents.map((item) => `\`${item.name}\``).join(', ')}`);
@@ -103,7 +112,7 @@ function roster(agent: CrewSpecAgent): string {
 		}
 		return `\`${child.name}\`${parts.length ? ` (${parts.join('; ')})` : ''}`;
 	};
-	return `Your agents: ${agent.agents.map(describe).join(', ')}. Pass \`agent\` to create_worker_task and propose_plan. Give each part to the agent whose specialty and zone fit it. ${modelLadder} Reports come to you after their checks pass. Reviewers get no part of the code.`;
+	return `Your agents: ${agent.agents.map(describe).join(', ')}. Pass \`agent\` to create_worker_task and propose_plan. Give each part to the agent whose when-to-use line and zone fit it. ${modelLadder} Reports come to you after their checks pass. Reviewers get no part of the code.`;
 }
 /** spec/crew#compose: the roster of the approved crew, sent with the plan decision. */
 export function rosterBrief(spec: CrewSpec): string {
@@ -111,12 +120,9 @@ export function rosterBrief(spec: CrewSpec): string {
 }
 /** spec/crew#compose: instead of a roster, what the foreman composes its crew from. Catalog names, so the host maps them back to option ids. */
 export function composeBrief(palette: CrewCompose): string {
-	const templates = palette.templates.map((template) => {
-		const parts: string[] = [template.role];
-		if (template.summary?.trim()) parts.push(template.summary.trim().replace(/[.;]+$/, ''));
-		parts.push(`default ${specModel(template)}`);
-		return `\`${template.name}\` (${parts.join('; ')})`;
-	});
+	const templates = palette.templates.map((template) =>
+		paletteRole(template, `default ${specModel(template)}`)
+	);
 	const providers = palette.providers.map((entry) => {
 		const label = providerLabel[entry.provider];
 		if (!entry.model)
@@ -135,8 +141,8 @@ export function composeBrief(palette: CrewCompose): string {
 	});
 	return [
 		`You compose your crew yourself: the human chose this at launch. Read the task and the code first, then call propose_plan with crew and parts together; the human approves both before any worker starts, and may edit the crew.`,
-		`crew: the fewest agents the task's independent parts need, with zones that do not overlap. When the task is one chain of dependent steps, one developer and no reviewer is the whole crew: a split pays only when parts can run side by side. Each agent has name (short and unique, names its area, like \`API\` or \`UI\`), template (one of the templates below), summary (one line: what it is for), zone (the paths or globs it owns), and optionally provider, model and effort (names from the lists below; leave them out for the template's defaults) and checkedBy (names of reviewers in your crew who check it). ${modelLadder} Add a reviewer only where a part needs a second reader, and put it in checkedBy of the developers it checks; one reviewer can check several developers. Reviewers take no part of the code. Add a designer only when the task names a design source to match. At most one agent runs the smoke in the running app, and nobody checks it. Each part goes to an agent of this crew. You have no leads: the crew is one level under you.`,
-		`Templates: ${templates.join(', ') || 'none'}.`,
+		`crew: the fewest agents the task's independent parts need, with zones that do not overlap. When the task is one chain of dependent steps, one developer and no reviewer is the whole crew: a split pays only when parts can run side by side. Each agent has name (short and unique, names its area, like \`API\` or \`UI\`), template (one of the templates below), summary (one line: when to use this agent), zone (the paths or globs it owns), and optionally provider, model and effort (names from the lists below; leave them out for the template's defaults) and checkedBy (names of reviewers in your crew who check it). ${modelLadder} Add a reviewer only where a part needs a second reader, and put it in checkedBy of the developers it checks; one reviewer can check several developers. Reviewers take no part of the code. Add a designer only when the task names a design source to match. At most one agent runs the smoke in the running app, and nobody checks it. Each part goes to an agent of this crew. You have no leads: the crew is one level under you.`,
+		`Templates: ${templates.join(', ') || 'none'}. Pick a template by its when-to-use line, not by its name.`,
 		...(providers.length ? [`Models: ${providers.join('. ')}.`] : []),
 	].join('\n');
 }
@@ -179,13 +185,7 @@ export function workerContext(spec: CrewSpec, nodeId: string, tools?: WorkspaceT
  * parts large enough to pay for a session each. English by rule 12; no model is named in code (rule 7): the roles carry the catalog's names.
  */
 export function autoBrief(auto: AutoTask, options: { worktree: boolean }): string {
-	const roles = auto.roles.map((role) => {
-		const parts: string[] = [role.role === 'reviewer' ? 'checks, writes no code' : 'writes code'];
-		if (role.summary?.trim())
-			parts.push(`when to use: ${role.summary.trim().replace(/[.;]+$/, '')}`);
-		parts.push(specModel(role));
-		return `\`${role.name}\` (${parts.join('; ')})`;
-	});
+	const roles = auto.roles.map((role) => paletteRole(role, specModel(role)));
 	const budget = `${auto.budget.minutes} minutes of work and ${Math.round(auto.budget.tokens / 1000)}k tokens`;
 	const sections = [
 		`You do this task yourself: read the task and the code, then write the code. Do not plan aloud for a small task: a small task, or one chain of dependent steps, you do from start to end without a plan to approve and without questions.`,
@@ -199,7 +199,7 @@ export function autoBrief(auto: AutoTask, options: { worktree: boolean }): strin
 		`How to hire: call hire_workers once with the parts you hand out and wait for its result. Each part has a short title, a role (one of the roles below), its zone (the paths or globs it writes; zones never overlap), your estimate of the files and lines it changes, its budget when the default of ${budget} does not fit, and the full prompt for the worker. The worker sees nothing of this conversation, so the prompt stands on its own: the goal, the behaviour expected, what must stay untouched, and the command that proves the part is done (a test, a typecheck, a build). In summary, say what each part is and why the parts are independent: the person reads it on the card. The person approves, edits or declines the hire. Declined means you do those parts yourself. The host refuses a part whose zone overlaps another part or a running worker, or that is too small for a worker; a refused part stays with you, and the other parts are still hired.`,
 		`Before a hire and before you accept a part, the host commits your own edits to this task's branch, and workers start from that commit. After a hire you no longer write inside the zones you hired out; the host refuses those writes and tells you when you changed such a file another way.`,
 		`While workers run, keep working on what stays with you. A report arrives by itself when a worker ends a turn; do not poll task_status. Read the report, then read_diff where it raises a question. Return work with prompt_task or submit_review; answer a worker's question with prompt_task and its questionId. Accept a finished part with accept_task: it merges the part into this task as one commit and dismisses the worker. dismiss_worker dismisses a worker without its part; its task keeps its diff. A worker over its budget stops and waits for the person.`,
-		`Roles you hire from: ${roles.join(', ') || 'none'}. Pass the role's name. ${modelLadder} You cannot use a model or provider outside these roles. When no role fits a part, hire it with a base role (Developer, or Reviewer for a check) and write what the part needs into its prompt, or call request_model for another model: the person chooses it (or, when the settings allow, you do), and it becomes a role you can hire.`,
+		`Roles you hire from: ${roles.join(', ') || 'none'}. Pick the role whose when-to-use line fits the part, not the one whose name sounds right, and pass its name. ${modelLadder} You cannot use a model or provider outside these roles. When no role fits a part, hire it with a base role (Developer, or Reviewer for a check) and write what the part needs into its prompt, or call request_model for another model: the person chooses it (or, when the settings allow, you do), and it becomes a role you can hire.`,
 		`Permissions go to the person. Answer the person yourself: you are their agent for this task.`,
 	];
 	return sections.join('\n\n');

@@ -772,6 +772,33 @@ it('opens the session without the system prompt when the agent refuses it (spec/
 	expect(diagnostics.join('')).toContain('System prompt refused');
 	expect(events[0]?.kind).toBe('session.started');
 });
+it('counts a compaction from the per-model rows of the prompt result, not its zero usage (spec/agents-and-providers#turn-usage)', async () => {
+	const transport = await start('compaction');
+	await transport.send({ kind: 'prompt', text: '/compact' });
+	expect(events.filter((event) => event.kind === 'turn.usage')).toEqual([
+		{
+			kind: 'turn.usage',
+			input: 10800,
+			output: 3120,
+			cacheRead: 145000,
+			cacheWrite: 200,
+			main: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		},
+	]);
+	expect(events.filter((event) => event.kind === 'context.compacted')).toEqual([
+		{ kind: 'context.compacted', before: 153000, after: 14500 },
+	]);
+	// codex-acp's single row is its usage; its compaction reports no tokens.
+	await transport.send({ kind: 'prompt', text: '/compact codex' });
+	expect(events.filter((event) => event.kind === 'turn.usage').at(-1)).toEqual({
+		kind: 'turn.usage',
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+	});
+	expect(events.at(-1)).toEqual({ kind: 'turn.completed', reason: 'end_turn' });
+});
 it('declares compaction and reports each completed compaction once with its sizes (spec/agents-and-providers#compaction-signal)', async () => {
 	const transport = await start('compaction', { resumeSessionId: 'fixture-session' });
 	expect((await wire()).find((r) => r.event === 'initialize')?.params).toMatchObject({

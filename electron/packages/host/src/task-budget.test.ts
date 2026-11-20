@@ -149,6 +149,18 @@ it('a turn that passes the budget asks once, holds the queue, and a raise resume
 	expect((await records(client)).filter(kind('budget.reached'))).toHaveLength(1);
 });
 
+it('counts a compaction the prompt result reports per model, and asks when it passes the budget (spec/agents-and-providers#turn-usage)', async () => {
+	const { store, task } = await setup({ claude: 10_000 });
+	const { client } = await launch(store, task, 'compaction');
+	await client.command({ kind: 'prompt', text: '/compact' });
+	const reached = await find(client, kind('budget.reached'));
+	expect(reached.event).toMatchObject({ provider: 'claude', tokens: 14_120, estimated: false });
+	const stored = await until(async () => {
+		const value = await store.task(task);
+		return value.tokens?.input === 10_800 ? value : undefined;
+	});
+	expect(stored.tokens).toMatchObject({ output: 3_120, cacheWrite: 200, cacheRead: 145_000 });
+});
 it('asks in the middle of a turn from the estimate', async () => {
 	const { store, task } = await setup({ claude: 1000 });
 	const { client } = await launch(store, task);

@@ -257,18 +257,52 @@ export function compactionUpdate(
 export function contextSize(value: unknown): number | null {
 	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
-/** spec/agents-and-providers#turn-usage: the `usage` of a `session/prompt` result as one record; a missing counter is 0, no `usage` is no record. */
-export function turnUsage(usage: unknown): Extract<AgentEvent, { kind: 'turn.usage' }> | null {
-	if (!isRecord(usage)) return null;
+/** spec/agents-and-providers#turn-usage: the tokens of a `session/prompt` result as one record — the sum of its `_meta.quota.model_usage` rows when it has
+ *  any (claude-agent-acp: the turn's compactions, subagents and title too), with `usage` as `main` when it differs; else its `usage`. A missing counter is 0;
+ *  neither is no record. */
+export function turnUsage(
+	usage: unknown,
+	meta?: unknown
+): Extract<AgentEvent, { kind: 'turn.usage' }> | null {
 	const count = (value: unknown) =>
 		typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
-	return {
-		kind: 'turn.usage',
-		input: count(usage.inputTokens),
-		output: count(usage.outputTokens),
-		cacheRead: count(usage.cachedReadTokens),
-		cacheWrite: count(usage.cachedWriteTokens),
-	};
+	const quota = isRecord(meta) && isRecord(meta.quota) ? meta.quota : null;
+	const rows = (Array.isArray(quota?.model_usage) ? quota.model_usage : [])
+		.map((row) => (isRecord(row) && isRecord(row.token_count) ? row.token_count : null))
+		.filter((row) => row !== null);
+	const loop = isRecord(usage)
+		? {
+				input: count(usage.inputTokens),
+				output: count(usage.outputTokens),
+				cacheRead: count(usage.cachedReadTokens),
+				cacheWrite: count(usage.cachedWriteTokens),
+			}
+		: null;
+	if (rows.length) {
+		const total = rows.reduce<{
+			input: number;
+			output: number;
+			cacheRead: number;
+			cacheWrite: number;
+		}>(
+			(sum, row) => ({
+				input: sum.input + count(row.inputTokens),
+				output: sum.output + count(row.outputTokens),
+				cacheRead: sum.cacheRead + count(row.cachedInputTokens),
+				cacheWrite: sum.cacheWrite + count(row.cachedWriteTokens ?? row.cacheWriteInputTokens),
+			}),
+			{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+		);
+		const same =
+			loop !== null &&
+			loop.input === total.input &&
+			loop.output === total.output &&
+			loop.cacheRead === total.cacheRead &&
+			loop.cacheWrite === total.cacheWrite;
+		return { kind: 'turn.usage', ...total, ...(loop && !same ? { main: loop } : {}) };
+	}
+	if (!loop) return null;
+	return { kind: 'turn.usage', ...loop };
 }
 /** Claude ACP extension, observed by the v1 probe; never inferred from context usage. */
 export function mapRateLimit(

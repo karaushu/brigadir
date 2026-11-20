@@ -24,7 +24,14 @@ export type SlackSessionDeps = {
 		thread: string | null,
 		slack?: { projects?: SlackSessionProject[]; facts?: string }
 	): Promise<void>;
-	followUp(key: TaskKey, id: string, question: string, language: SlackLanguage): Promise<void>;
+	followUp(
+		key: TaskKey,
+		id: string,
+		question: string,
+		language: SlackLanguage,
+		/** What Brigadir said running the session's last actions. */
+		results?: string[]
+	): Promise<void>;
 	stop(id: string): Promise<void>;
 	close(id: string): void;
 	/** The events of one session id while a turn runs (`null` — no longer). */
@@ -61,6 +68,8 @@ type Live = {
 	at: number;
 	busy: boolean;
 	timer?: ReturnType<typeof setTimeout>;
+	/** spec/notifications-slack-notes-and-schedules#slack-agent: what the bot said running its last actions, told with the next message. */
+	results?: string[];
 };
 /** A follow-up the session no longer takes (closed by its own idle timer, or still answering): a new one asks instead. */
 const gone = Symbol('gone');
@@ -91,6 +100,11 @@ export class SlackSessions {
 	askTask(task: TaskKey, input: SlackSessionAsk): Promise<string | null> {
 		return this.ask(task, 'aboutTask', input);
 	}
+	/** spec/notifications-slack-notes-and-schedules#slack-agent: the outcome of the agent's actions, for its next message in the thread. */
+	actionResults(channel: string, ts: string, said: string[]) {
+		const live = this.live.get(`${channel}/${ts}`);
+		if (live) live.results = [...(live.results ?? []), ...said].slice(-20);
+	}
 	closeAll() {
 		for (const name of [...this.live.keys()]) this.drop(name);
 	}
@@ -111,11 +125,13 @@ export class SlackSessions {
 		}
 		if (live && !live.busy) {
 			const entry = live,
-				said = await this.turn(
-					entry,
-					() => this.deps.followUp(key, entry.id, input.question, input.language),
-					input.ack
-				);
+				results = entry.results;
+			delete entry.results;
+			const said = await this.turn(
+				entry,
+				() => this.deps.followUp(key, entry.id, input.question, input.language, results),
+				input.ack
+			);
 			if (said !== gone) {
 				if (said === null) this.drop(name);
 				return said;

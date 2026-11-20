@@ -247,6 +247,8 @@ describe('the Slack agent’s answer (spec/notifications-slack-notes-and-schedul
 				'Передаю агенту задачі «Кнопка».',
 				'ACTION send_to_task {"task": "t1", "text": "Make the button blue"}',
 				'`ACTION create_task {"project": "admin", "title": "Нова кнопка", "prompt": "Add a button"}`',
+				'ACTION create_task {"projects": ["b2c"], "title": "ATT", "base": "master"}',
+				'ACTION create_task {"projects": ["b2c"], "title": "Bad base", "base": "--upload-pack=x"}',
 				'ACTION watch {"kinds": ["ci", "merged"]}',
 				'ACTION note {"kind": "summary"}',
 				'ACTION note {"kind": "text", "text": "  купити  молоко ", "title": "Покупки", "append": "Списки", "project": "home"}',
@@ -258,7 +260,15 @@ describe('the Slack agent’s answer (spec/notifications-slack-notes-and-schedul
 		expect(text).toBe('Передаю агенту задачі «Кнопка».');
 		expect(actions).toEqual([
 			{ kind: 'send_to_task', task: 't1', text: 'Make the button blue' },
-			{ kind: 'create_task', projects: ['admin'], title: 'Нова кнопка', prompt: 'Add a button' },
+			{
+				kind: 'create_task',
+				projects: ['admin'],
+				title: 'Нова кнопка',
+				prompt: 'Add a button',
+				base: null,
+			},
+			{ kind: 'create_task', projects: ['b2c'], title: 'ATT', prompt: null, base: 'master' },
+			{ kind: 'create_task', projects: ['b2c'], title: 'Bad base', prompt: null, base: null },
 			{ kind: 'watch', kinds: ['ci', 'pr-merged'] },
 			{
 				kind: 'note',

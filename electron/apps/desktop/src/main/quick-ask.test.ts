@@ -25,16 +25,28 @@ it('a new message or text after a tool call starts its own paragraph', () => {
 		messageId,
 		content: { kind: 'text', text: value },
 	});
-	event(text('a', 'ACK: Creating '));
-	event(text('a', 'the task.'));
-	event(text('b', 'ACTION create_task {}'));
-	event({ kind: 'tool.changed', patch: { id: 't', title: 'Read', status: 'completed' } });
-	event(text(null, 'Done.'));
-	event(text(null, ' All of it.'));
-	expect(
+	const said = () =>
 		sent
 			.filter((item) => item.kind === 'text')
 			.map((item) => (item.kind === 'text' ? item.text : ''))
-			.join('')
-	).toBe('ACK: Creating the task.\n\nACTION create_task {}\n\nDone. All of it.');
+			.join('');
+	event(text('a', 'ACK: Looking '));
+	event(text('a', 'it up.'));
+	// The ACK line is complete the moment the agent turns to a tool, not when its answer starts.
+	event({ kind: 'tool.changed', patch: { id: 't', title: 'Read', status: 'pending' } });
+	expect(said()).toBe('ACK: Looking it up.\n\n');
+	event({ kind: 'tool.changed', patch: { id: 't', status: 'completed' } });
+	event(text('b', 'Found it.'));
+	event(text('c', 'ACTION create_task {}'));
+	event({
+		kind: 'message.delta',
+		role: 'thought',
+		messageId: null,
+		content: { kind: 'text', text: 'hm' },
+	});
+	event(text(null, 'Done.'));
+	event(text(null, ' All of it.'));
+	expect(said()).toBe(
+		'ACK: Looking it up.\n\nFound it.\n\nACTION create_task {}\n\nDone. All of it.'
+	);
 });

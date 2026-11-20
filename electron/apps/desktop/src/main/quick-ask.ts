@@ -68,8 +68,8 @@ type Thread = {
 	/** The session's own catalog, from `session.started` / `options.changed`. */
 	options: AgentOption[];
 	answering: boolean;
-	/** The turn's last answer text: its message, and whether a tool call came after it. */
-	said: { messageId: string | null; tool: boolean } | null;
+	/** The turn's last answer text: its message, and whether its paragraph has ended (a tool call, thinking or another message came). */
+	said: { messageId: string | null; ended: boolean } | null;
 	tools: Map<string, { write: boolean; paths: Set<string> }>;
 	quota: boolean;
 	/** spec/composer-steering-queue-and-ghost#quick-question: when the rejected limit resets, Unix seconds; the popover shows it on the limit chip. */
@@ -276,7 +276,9 @@ export class QuickAsks {
 		key: TaskKey,
 		id: string,
 		question: string,
-		language?: QuickAskRequest['language']
+		language?: QuickAskRequest['language'],
+		/** spec/notifications-slack-notes-and-schedules#slack-agent: what Brigadir said running the Slack agent's last actions. */
+		results?: string[]
 	) {
 		const thread = this.threads.get(id);
 		if (!thread || name(thread.key) !== name(key) || !thread.transport)
@@ -297,6 +299,7 @@ export class QuickAsks {
 						? quickSlackAgentFollowUpPrompt({
 								question,
 								language: language ?? thread.request.language,
+								...(results?.length ? { results } : {}),
 							})
 						: quickSlackFollowUpPrompt({ question, language: language ?? thread.request.language }),
 				question
@@ -426,24 +429,27 @@ export class QuickAsks {
 			thread.options = event.options;
 		// A forked Claude session may replay its history on load; only the answer to our prompt counts.
 		if (!thread.answering) return;
+		// The answer is one stream of paragraphs: a message ends as soon as the agent turns to a tool or to thinking, or starts another
+		// message, so a line such as Slack's `ACK: …` is complete — and posted — before the agent goes looking
+		// (spec/notifications-slack-notes-and-schedules#slack-agent).
+		const endParagraph = () => {
+			if (!thread.said || thread.said.ended) return;
+			thread.said.ended = true;
+			this.deps.send({ id: thread.id, kind: 'text', text: '\n\n' });
+		};
 		if (
 			event.kind === 'message.delta' &&
 			event.role === 'assistant' &&
 			event.content.kind === 'text' &&
 			!event.subagentId
 		) {
-			// The answer is one stream: a new message (or text after a tool call) starts its own paragraph, so a line
-			// such as Slack's `ACK: …` ends before the next message (spec/notifications-slack-notes-and-schedules#slack-agent).
-			const apart =
-				thread.said !== null && (thread.said.tool || event.messageId !== thread.said.messageId);
-			thread.said = { messageId: event.messageId, tool: false };
-			this.deps.send({
-				id: thread.id,
-				kind: 'text',
-				text: apart ? `\n\n${event.content.text}` : event.content.text,
-			});
-		} else if (event.kind === 'tool.changed') {
-			if (thread.said) thread.said.tool = true;
+			if (thread.said && event.messageId !== thread.said.messageId) endParagraph();
+			thread.said = { messageId: event.messageId, ended: false };
+			this.deps.send({ id: thread.id, kind: 'text', text: event.content.text });
+		} else if (event.kind === 'message.delta' && event.role === 'thought' && !event.subagentId)
+			endParagraph();
+		else if (event.kind === 'tool.changed') {
+			if (!event.subagentId) endParagraph();
 			// An update carries only what changed: the kind and the paths come with the first event of the call.
 			const known = thread.tools.get(event.patch.id) ?? { write: false, paths: new Set<string>() };
 			known.write ||= quickAskWrites(event.patch);

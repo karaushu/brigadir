@@ -655,7 +655,14 @@ export function slackAgentAnswer(text: string): string | null {
  * each; the bot only runs them.
  */
 export type SlackAgentStep =
-	| { kind: 'create_task'; projects: string[]; title: string; prompt: string | null }
+	| {
+			kind: 'create_task';
+			projects: string[];
+			title: string;
+			prompt: string | null;
+			/** The branch to start from, when the person named one; `null` — the project's base. */
+			base: string | null;
+	  }
 	| { kind: 'send_to_task'; task: string; text: string }
 	| { kind: 'ask_task'; task: string; question: string }
 	| {
@@ -673,6 +680,11 @@ export type SlackAgentStep =
 	| { kind: 'unwatch' };
 const text = (value: unknown, limit: number) =>
 	typeof value === 'string' && value.trim() ? value.trim().slice(0, limit) : null;
+/** A branch name the agent gave: plain ref characters only, so it never reads as a git option. */
+function slackBranch(value: unknown): string | null {
+	const name = text(value, 200);
+	return name && /^[\w][\w./-]*$/.test(name) && !name.includes('..') ? name : null;
+}
 function slackAgentStep(name: string, body: unknown): SlackAgentStep | null {
 	const value = isRecord(body) ? body : {};
 	if (name === 'create_task') {
@@ -682,7 +694,13 @@ function slackAgentStep(name: string, body: unknown): SlackAgentStep | null {
 				.slice(0, 10),
 			title = text(value.title, 200);
 		return projects.length && title
-			? { kind: name, projects, title, prompt: text(value.prompt, 20_000) }
+			? {
+					kind: name,
+					projects,
+					title,
+					prompt: text(value.prompt, 20_000),
+					base: slackBranch(value.base),
+				}
 			: null;
 	}
 	if (name === 'send_to_task') {

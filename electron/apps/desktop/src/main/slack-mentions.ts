@@ -66,6 +66,8 @@ export type SlackTaskInput = {
 	thread: SlackThreadRef;
 	/** spec/notifications-slack-notes-and-schedules#slack-agent: the other projects the agent named for the task; their folders join it. */
 	alsoProjects: string[];
+	/** The branch the agent named to start from (`master`, `origin/release`); `null` — the project's base. */
+	baseRef?: string | null;
 };
 /**
  * What Brigadir gives Slack: its projects and tasks, the helper model, task and note creation (the mentions), and the agent's
@@ -93,6 +95,8 @@ export type SlackBrigadir = SlackAnswering & {
 	): Promise<string | null>;
 	/** The thread's side session that still waits for a follow-up (ten minutes after its last answer). */
 	sideSession?(channel: string, ts: string): SlackSideSession | null;
+	/** spec/notifications-slack-notes-and-schedules#slack-agent: what the bot said running the agent's actions, for its next message in the thread. */
+	actionResults?(channel: string, ts: string, said: string[]): void;
 	createTask(input: SlackTaskInput): Promise<{ projectId: string; id: string; title: string }>;
 	tasks(projectId: string): Promise<SlackTaskInfo[]>;
 	/** The plan N of M and the CI state of a task, from its journal and the watched runs. */
@@ -172,6 +176,8 @@ type Mention = {
 	thread: SlackThreadMessage[];
 	/** The request's language; every answer to it is in it. */
 	language: SlackLanguage;
+	/** spec/notifications-slack-notes-and-schedules#slack-agent: while the agent's actions run, what the bot said about them — the agent's next message tells it. */
+	log?: string[];
 };
 type Pending = {
 	mention: Mention;
@@ -512,7 +518,8 @@ export class SlackMentions {
 		mention: Mention,
 		ids: string[],
 		title: string | null,
-		prompt?: string | null
+		prompt?: string | null,
+		baseRef?: string | null
 	) {
 		const start = this.deps.settings().mentions.start === 'start',
 			projects = await this.deps.projects().catch(() => []),
@@ -530,6 +537,7 @@ export class SlackMentions {
 				permalink: await this.permalink(mention.channel, mention.replyTs),
 			},
 			alsoProjects,
+			...(baseRef ? { baseRef } : {}),
 		});
 		// The task's later events (Needs you, Task done, CI) answer in this thread.
 		this.deps.threadStarted(
@@ -610,7 +618,15 @@ export class SlackMentions {
 		const { text, actions } = slackAgentSteps(reply),
 			said = text ? slackAgentAnswer(text) : null;
 		if (said) await this.reply(where, said);
-		for (const action of actions) await this.step(mention, action, tasks);
+		const acting = { ...mention, log: [] as string[] };
+		for (const action of actions) await this.step(acting, action, tasks);
+		// The agent learns what its actions did: it never claims a task that was not made.
+		if (actions.length)
+			this.deps.actionResults?.(
+				mention.channel,
+				mention.replyTs,
+				acting.log.length ? acting.log : ['(nothing was said)']
+			);
 	}
 	/** Brigadir's tasks for the agent: the thread's task first, then the newest of every project (≤ 40, plan and CI for 15). */
 	private async facts(own: TaskKey | null) {
@@ -655,7 +671,7 @@ export class SlackMentions {
 							projects.map((item) => item.name)
 						)
 					);
-				else await this.create(mention, ids, action.title, action.prompt);
+				else await this.create(mention, ids, action.title, action.prompt, action.base);
 			} else if (action.kind === 'send_to_task' || action.kind === 'ask_task') {
 				const task = taskOf(action.task);
 				if (!task) await this.reply(mention, slackReply.noTask);
@@ -854,6 +870,9 @@ export class SlackMentions {
 		notes?: NoteDraft[]
 	): Promise<string> {
 		this.prune();
+		mention.log?.push(
+			`${text} (asked them with buttons: ${buttons.map((item) => item.label).join(' · ')})`
+		);
 		const id = randomUUID().replace(/-/g, '').slice(0, 16);
 		const pending: Pending = {
 			mention,
@@ -885,9 +904,10 @@ export class SlackMentions {
 			if (now - pending.at > pendingMs) this.pending.delete(id);
 	}
 	private reply(
-		mention: Pick<Mention, 'channel' | 'replyTs'> & { language?: SlackLanguage },
+		mention: Pick<Mention, 'channel' | 'replyTs' | 'log'> & { language?: SlackLanguage },
 		text: string
 	) {
+		mention.log?.push(text);
 		return this.deps.api('chat.postMessage', {
 			channel: mention.channel,
 			thread_ts: mention.replyTs,
@@ -897,9 +917,10 @@ export class SlackMentions {
 		});
 	}
 	private ephemeral(
-		mention: Pick<Mention, 'channel' | 'replyTs' | 'user'> & { language?: SlackLanguage },
+		mention: Pick<Mention, 'channel' | 'replyTs' | 'user' | 'log'> & { language?: SlackLanguage },
 		text: string
 	) {
+		mention.log?.push(text);
 		return this.deps.api('chat.postEphemeral', {
 			channel: mention.channel,
 			user: mention.user,

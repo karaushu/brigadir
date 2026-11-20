@@ -189,7 +189,7 @@ Every agent session gets the app's MCP server `brigadir` in `session/new` (stdio
 | `hire_workers`, `dismiss_worker`, `request_model` | ✓ | | | | |
 | `propose_plan` | | ✓ | ✓ | | |
 | `create_worker_task` | | ✓ | ✓ | | |
-| `prompt_task` | ✓ | ✓ | ✓ | | |
+| `prompt_task` | ✓ | ✓ | ✓ | answers own reviewers | |
 | `task_status` | ✓ | ✓ | ✓ | | |
 | `read_report` | ✓ | ✓ | ✓ | | ✓ |
 | `read_transcript` | ✓ | ✓ | ✓ | | |
@@ -202,6 +202,7 @@ Every agent session gets the app's MCP server `brigadir` in `session/new` (stdio
 
 - The person's tools (`ask_user`, `create_task`, editor context, PR review drafting) exist only in the root's session, Auto or foreman (`humanToolsAllowed`). Workers ask up the tree instead. `set_task_class` is the Auto agent's only, not a foreman's ([Task classes](reviews.md#class-tool)).
 - **No separate task for the plan.** While a crew plan exists (it waits for the person or was approved; `crewPlanExists`), the root foreman's `tools/list` leaves out `create_task` and the server announces the change with `notifications/tools/list_changed`; a call from a stale list and the host itself answer `create_task is not available while your crew plan exists: run the plan in this task with create_worker_task.` A rejected plan brings the tool back. **Why:** the plan is executed by this task's crew; a separate task leaves the crew, its review loop and its integration branch behind.
+- A developer's `prompt_task` only answers a question from a reviewer of its own part's review ([A reviewer's question](reviews.md#reviewer-questions)); it prompts no task.
 - Workspace tools stay with every role: `browser_*`, `simulator_*`, `commands_*` (when their modules are on) and `console_*`. The simulator is one device per project: crew members queue for it, the foreman and solo agents go first.
 - **Two guards.** Structure: `tools/list` shows only the role's tools. Check: the host refuses a tool outside the role (`Tool X is not available to this agent`) and a reviewer call on a task outside its check edges. There is no `decide_permission` tool for any role.
 - One nesting rule: a worker gets no orchestration tools unless its node has subordinates (then it is a lead, see [Subordinates](#subordinates)).
@@ -442,7 +443,9 @@ Worker branches and worktrees are removed with the worker task. `+N −M` and th
 | `cancelled` | the task was cancelled; the tool returns a cancellation error, never a permission |
 
 - `prompt_task` without `questionId` is an ordinary queued prompt and does not close a question; a wrong addressee or closed question is an error.
-- A reviewer of the task's own review that asks while a plan holds the parent's turn — the plan for approval of a solo task's agent or the Auto agent, the root foreman's `propose_plan` call — answers that plan with the question ([plan chat](chat-turns-plans-and-questions.md#plan-chat)): it runs as the parent's next turn, and the parent presents the plan again after answering. A solo task's agent answers its own reviewers the same way ([A reviewer's question](reviews.md#reviewer-questions)), so the same holds for its plan for approval.
+- A reviewer's question arrives as ``Reviewer `<name> · <title>` asks (questionId …):`` (`The reviewer is blocked until you answer.`); any other worker's as ``Worker `<name> · <title>` asks …`` (`The worker is blocked until you answer.`).
+- A reviewer of a task's own review asks the author of the code it reviews: the task's agent, never the foreman above a crew developer's part ([A reviewer's question](reviews.md#reviewer-questions)). A solo task's agent and a crew developer answer their own reviewers with a `prompt_task` limited to that; a reviewer on a check edge asks its parent, as every worker does.
+- A reviewer of the task's own review that asks while a plan holds the author's turn — the plan for approval of a solo task's agent, a crew developer or the Auto agent, the root foreman's `propose_plan` call — answers that plan with the question ([plan chat](chat-turns-plans-and-questions.md#plan-chat)): it runs as the author's next turn, and the author presents the plan again after answering.
 - A question that ends while its prompt still waits in the parent's queue — cancelled with the caller's turn, or answered by the person — takes that prompt out (`prompt.removed`): the parent's agent may be held by a plan for approval or a hire card, and the prompt would otherwise run after the answer, for a question nobody waits on.
 - After a restart an overdue question escalates at once. If the ACP session resumes, the answer returns into its tool call; if the call is lost, the question stays visible and the stored answer goes with the next turn's context under the same id.
 - `ask_foreman` never carries permissions.

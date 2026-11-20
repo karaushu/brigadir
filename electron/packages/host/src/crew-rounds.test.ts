@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -550,4 +550,36 @@ it("builds the foreman's plan digest from its approved plan, the members, open c
 		{ kind: 'crew.plan.resolved', id: 'q', approved: true, parts: null }
 	);
 	expect((await host.planAssignment())!.text).toContain('1. Client notes — Developer: not started');
+});
+
+it("a check-edge reviewer's question goes to the foreman as a reviewer's and stays the foreman's: the developer's limited prompt_task cannot answer it and no plan is sent back (spec/crew#ask-foreman, spec/reviews#reviewer-questions)", async () => {
+	const { host, prompts, signal, report, reviewer, developer } = await crew();
+	await report();
+	const answerPlan = vi.fn(async () => true);
+	host['deps'].answerPlan = answerPlan;
+	const asked = (await host['registerQuestion'](reviewer(), 'c1', {
+		question: 'Is the phone optional?',
+	})) as { id: string };
+	expect(prompts.at(-1)?.text).toMatch(/^Reviewer `Reviewer · [^`]+` asks \(questionId /);
+	expect(prompts.at(-1)?.text).toContain('The reviewer is blocked until you answer.');
+	expect(answerPlan).not.toHaveBeenCalled();
+	// A developer's question keeps the worker's line.
+	await host['registerQuestion'](developer(), 'c2', { question: 'Which phone format?' });
+	expect(prompts.at(-1)?.text).toMatch(/^Worker `Developer · Client details` asks/);
+	// The answer limited to the task's own reviewers refuses a check-edge reviewer's question.
+	await expect(
+		host.answerSelfQuestion({ taskId: reviewer().taskId, text: 'yes', questionId: asked.id })
+	).rejects.toThrow('prompt_task answers only');
+	expect(host['questions'].find((item: { id: string }) => item.id === asked.id)?.state).toBe(
+		'pending'
+	);
+	// The foreman answers it with its own prompt_task.
+	await host.tool(
+		'prompt_task',
+		{ taskId: reviewer().taskId, text: 'Yes, optional.', questionId: asked.id },
+		signal
+	);
+	expect(host['questions'].find((item: { id: string }) => item.id === asked.id)?.state).toBe(
+		'answered'
+	);
 });

@@ -224,10 +224,11 @@ export function crewBrief(context: CrewContext, tools?: WorkspaceTools): string 
 /** spec/crew#ask-foreman: five minutes; host tests shorten it with `BRIGADIR_TEST_QUESTION_ESCALATION_MS`, nothing else sets it. */
 const questionEscalationMs =
 	Number(process.env.BRIGADIR_TEST_QUESTION_ESCALATION_MS) || crewQuestionEscalationMs;
-/** spec/reviews#reviewer-questions: what a solo agent's `prompt_task` answers when it is not an answer to its own reviewer (English, rule 12). */
-export const soloAnswerOnly =
+/** spec/reviews#reviewer-questions: what the `prompt_task` of a solo agent or a crew developer answers when it is not an answer to its own reviewer
+ *  (English, rule 12). */
+export const reviewerAnswerOnly =
 	"prompt_task answers only a question from a reviewer of this task's review.";
-/** spec/reviews#reviewer-questions: a solo task's agent answers its reviewers' questions. */
+/** spec/reviews#reviewer-questions: a solo task's agent and a crew developer answer their reviewers' questions. */
 export const reviewQuestionsBrief =
 	'When a reviewer of this task asks you a question, answer it with prompt_task and the questionId from the question message; the reviewer waits for your answer.';
 /** spec/chat-turns-plans-and-questions#checklist-tools: English by rule 12; the adapter turns the checklist into ACP `plan`, the chat shows it as the plan row. */
@@ -319,7 +320,7 @@ export function sessionBrief(
 		context?.role === 'auto' ? (options.role ?? '') : '',
 		context ? crewBrief(context, options.tools) : (options.role ?? ''),
 		checklistBrief,
-		context ? '' : reviewQuestionsBrief,
+		!context || context.role === 'developer' ? reviewQuestionsBrief : '',
 		worktreeBrief,
 		provider === 'claude' && (!context || context.role === 'auto') ? planApprovalBrief : '',
 		human ? contextBrief : '',
@@ -798,6 +799,10 @@ export class CrewHost {
 	}
 	private isSelf(worker: { taskId: string }) {
 		return worker.taskId === this.deps.key.id;
+	}
+	/** A node of this crew whose role is reviewer (spec/crew#reviewer). */
+	private isReviewerNode(nodeId: string) {
+		return this.node.agents.some((agent) => agent.id === nodeId && agent.role === 'reviewer');
 	}
 	/** A reviewer of the task itself rather than of a worker. */
 	private checksSelf(agentId: string) {
@@ -2931,7 +2936,12 @@ export class CrewHost {
 		await this.saveQuestions();
 		await this.deps.emit({ kind: 'crew.question.requested', question });
 		this.scheduleEscalation(question);
-		const prompt = `Worker \`${worker.name} · ${worker.title}\` asks (questionId ${question.id}):\n${text}${options.length ? `\nOptions: ${options.join(' | ')}` : ''}\nAnswer with prompt_task(taskId "${worker.taskId}", text, questionId "${question.id}"). The worker is blocked until you answer.`,
+		// spec/crew#ask-foreman: a reviewer — of the task's own review or on a check edge — is called a reviewer.
+		const who =
+				this.checksSelf(worker.nodeId) || this.isReviewerNode(worker.nodeId)
+					? 'Reviewer'
+					: 'Worker',
+			prompt = `${who} \`${worker.name} · ${worker.title}\` asks (questionId ${question.id}):\n${text}${options.length ? `\nOptions: ${options.join(' | ')}` : ''}\nAnswer with prompt_task(taskId "${worker.taskId}", text, questionId "${question.id}"). The ${who.toLowerCase()} is blocked until you answer.`,
 			marker = { kind: 'question' as const, questionId: question.id, agent: worker.name };
 		// spec/crew#ask-foreman: a reviewer of the task's own review asks while a waiting plan holds the author's turn — the question answers
 		// the plan as plan chat does, runs as the author's next turn, and the author presents the plan again.
@@ -2979,7 +2989,7 @@ export class CrewHost {
 		this.escalations.set(question.id, timer);
 	}
 	/**
-	 * spec/reviews#reviewer-questions: a solo task's agent answers a question of its own review's reviewer through `prompt_task`; nothing else
+	 * spec/reviews#reviewer-questions: a solo task's agent or a crew developer answers a question of its own review's reviewer through `prompt_task`; nothing else
 	 * goes through it, so it never prompts another task.
 	 */
 	async answerSelfQuestion(params: unknown) {
@@ -2995,7 +3005,8 @@ export class CrewHost {
 		const worker = question
 			? this.workers.find((item) => item.taskId === question.workerTaskId)
 			: undefined;
-		if (!question || !worker || !this.checksSelf(worker.nodeId)) throw new Error(soloAnswerOnly);
+		if (!question || !worker || !this.checksSelf(worker.nodeId))
+			throw new Error(reviewerAnswerOnly);
 		await this.answerQuestion(question.id, text, 'foreman');
 		return { answered: question.id };
 	}

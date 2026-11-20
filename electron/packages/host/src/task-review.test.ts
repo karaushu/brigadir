@@ -9,7 +9,10 @@ import {
 	builtinAgentTemplates,
 	crewPalette,
 	planFeedbackPrompt,
+	resolveCrew,
 	resolveCrewAgent,
+	specAgents,
+	starterCrewTemplate,
 	templateLookup,
 	type EventRecord,
 	type TaskKey,
@@ -761,6 +764,161 @@ it('a reviewer’s question the solo agent leaves unanswered goes to the person 
 	const question = asked.event as { question: { workerTaskId: string } };
 	await until(async () =>
 		(await store.task({ projectId: task.projectId, id: question.question.workerTaskId })).status ===
+		'needs-you'
+			? true
+			: undefined
+	);
+}, 240_000);
+
+/** A crew developer's task of a named crew (the foreman's host is not running): its own review runs in its own host. */
+async function developerTask(title: string) {
+	const { store, task: foreman } = await setup(title);
+	const spec = resolveCrew(starterCrewTemplate, {
+		lookup: templateLookup([...builtinAgentTemplates]),
+		defaultProvider: 'claude',
+		now: new Date().toISOString(),
+	});
+	await store.updateTask(foreman, { crew: spec });
+	const node = specAgents(spec.root).find((agent) => agent.role === 'developer')!;
+	const task = await store.createTask(foreman.projectId, title, 'claude', 'gui', title);
+	await store.updateTask(task, {
+		crewTaskId: foreman.id,
+		crewNodeId: node.id,
+		parentTaskId: foreman.id,
+	});
+	return { store, task };
+}
+
+it('a crew developer answers its own reviewer’s question with prompt_task, and only that; the question names a reviewer (spec/reviews#reviewer-questions)', async () => {
+	const { store, task } = await developerTask('Write the output, ask the author');
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['crew', log]);
+	// The developer has prompt_task from its first session; before any review it answers nothing.
+	await client.command({
+		kind: 'prompt',
+		text: '@call prompt_task {"taskId":"another-task","text":"Do this","questionId":"q1"}',
+	});
+	await find(client, (r) => r.event.kind === 'turn.completed');
+	const [refused] = await crewCalls(log, 'prompt_task');
+	expect(refused?.result?.isError).toBe(true);
+	expect(refused?.result?.content[0]?.text).toContain(
+		"prompt_task answers only a question from a reviewer of this task's review."
+	);
+	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await until(async () =>
+		(await client.snapshot()).records.filter((r) => r.event.kind === 'turn.completed').length >= 2
+			? true
+			: undefined
+	);
+	await client.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	// The reviewer asks the author of the code, not the developer's foreman.
+	const asked = await find(client, (r) => r.event.kind === 'crew.question.requested', 90_000);
+	const turn = await find(
+		client,
+		(r) => r.seq > asked.seq && r.event.kind === 'turn.started' && r.event.crew?.kind === 'question'
+	);
+	const text = turn.event.kind === 'turn.started' ? turn.event.text : '';
+	expect(text).toMatch(/^Reviewer `Reviewer · reviews the changes` asks \(questionId /);
+	expect(text).toContain('The reviewer is blocked until you answer.');
+	const answered = await find(client, (r) => r.event.kind === 'crew.question.resolved', 60_000);
+	expect(answered.event).toMatchObject({
+		answer: 'Yes, it stays: the person asked for it.',
+		answeredBy: 'foreman',
+	});
+	const [, wrongTask, own] = await crewCalls(log, 'prompt_task');
+	expect(wrongTask?.result?.isError).toBe(true);
+	expect(own?.result?.isError).toBeFalsy();
+	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(read.event).toMatchObject({ findings: 1 });
+}, 240_000);
+
+it('a reviewer’s question to a crew developer held by its plan answers the plan as plan chat does, and the developer presents it again (spec/reviews#reviewer-questions)', async () => {
+	const { store, task } = await developerTask('Keep the focus ring');
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['normal', log]);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await presented(client, 1);
+	await client.command({
+		kind: 'prompt',
+		text: planFeedbackPrompt('Safari only; ask the author first'),
+		answersPlan: true,
+	});
+	await presented(client, 2);
+	await client.command({ kind: 'prompt', text: 'Then update the changelog.' });
+	await client.command({
+		kind: 'startReview',
+		point: 'plan',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const asked = await find(client, (r) => r.event.kind === 'crew.question.requested', 90_000);
+	const plan = (await client.snapshot()).records
+		.filter((r) => r.event.kind === 'permission.requested')
+		.at(-1)!;
+	const rejected = await find(
+		client,
+		(r) =>
+			r.event.kind === 'permission.resolved' &&
+			r.event.id === (plan.event as { request: { id: string } }).request.id
+	);
+	expect(rejected.event).toMatchObject({ optionId: 'reject' });
+	const turn = await find(
+		client,
+		(r) => r.seq > asked.seq && r.event.kind === 'turn.started' && r.event.crew?.kind === 'question'
+	);
+	const text = turn.event.kind === 'turn.started' ? turn.event.text : '';
+	expect(text).toMatch(/^Reviewer `/);
+	expect(text).toContain('Your plan was sent back so that you can answer');
+	expect(
+		(await client.snapshot()).records.some(
+			(r) =>
+				r.seq > asked.seq &&
+				r.seq < turn.seq &&
+				r.event.kind === 'turn.started' &&
+				r.event.text.includes('Then update the changelog.')
+		)
+	).toBe(false);
+	const answered = await find(client, (r) => r.event.kind === 'crew.question.resolved', 60_000);
+	expect(answered.event).toMatchObject({ answeredBy: 'foreman' });
+	await presented(client, 3);
+}, 240_000);
+
+it('a reviewer’s question the crew developer leaves unanswered goes to the person after the wait (spec/crew#ask-foreman)', async () => {
+	const { store, task } = await developerTask('Write the output, ask the author, unanswered');
+	const previous = process.env.BRIGADIR_TEST_QUESTION_ESCALATION_MS;
+	process.env.BRIGADIR_TEST_QUESTION_ESCALATION_MS = '3000';
+	cleanup.push(async () => {
+		if (previous === undefined) delete process.env.BRIGADIR_TEST_QUESTION_ESCALATION_MS;
+		else process.env.BRIGADIR_TEST_QUESTION_ESCALATION_MS = previous;
+	});
+	const { client } = await launchHost(store, task);
+	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(client, (r) => r.event.kind === 'turn.completed');
+	await client.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const asked = await find(client, (r) => r.event.kind === 'crew.question.requested', 90_000);
+	const escalated = await find(client, (r) => r.event.kind === 'crew.question.escalated', 60_000);
+	expect(
+		(await client.snapshot()).records.some(
+			(r) => r.seq < escalated.seq && r.event.kind === 'crew.question.resolved'
+		)
+	).toBe(false);
+	const { question } = asked.event as { question: { workerTaskId: string } };
+	await until(async () =>
+		(await store.task({ projectId: task.projectId, id: question.workerTaskId })).status ===
 		'needs-you'
 			? true
 			: undefined

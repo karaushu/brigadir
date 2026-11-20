@@ -172,18 +172,22 @@ problem the fix brought in) is accepted.`), a `replyTo` that is not this reviewe
 - **Stop.** `Stop` (strip) cancels the open round and shuts the reviewers down; their tasks stay as the review's log until
   the task is archived or deleted, and their worktrees and branches go ([Reviewer sessions](#reviewer-sessions)). The
   review ends `stopped`.
-- <a id="reviewer-questions"></a>**A reviewer's question.** A reviewer asks the task's agent with
-  [`ask_foreman`](crew.md#ask-foreman); the question arrives as a prompt with its `questionId`, and the agent answers with
+- <a id="reviewer-questions"></a>**A reviewer's question.** A reviewer asks the author of the code it reviews — the
+  task's agent — with [`ask_foreman`](crew.md#ask-foreman), never that agent's foreman: the review is the author's own,
+  and so is the answer. The question arrives as a prompt with its `questionId`, headed ``Reviewer `<reviewer> · <its
+  task's title>` asks (questionId …):`` and ending `The reviewer is blocked until you answer.`; the agent answers with
   `prompt_task(taskId, text, questionId)`, which returns the text into the reviewer's call. A foreman and an Auto agent
-  have `prompt_task` among their crew tools. A solo task's agent has it from its first session too, in a form of its
-  own: `taskId` (the reviewer's task), `text` and `questionId`, all required; the host takes only an answer to an open
-  question from a reviewer of the task's own review and refuses anything else (`prompt_task answers only a question
-  from a reviewer of this task's review.`), so it never prompts another task. **Why from the first session:** a review
-  starts in the middle of the agent's session, and Codex does not read the tool list again. The solo agent's session
-  brief says it: `When a reviewer of this task asks you a question, answer it with prompt_task and the questionId from
-  the question message; the reviewer waits for your answer.` A question held by the agent's plan for approval answers
-  that plan ([plan chat](chat-turns-plans-and-questions.md#plan-chat)) and runs in front of the queue. A question the
-  agent leaves unanswered for five minutes goes to the person ([`ask_foreman`](crew.md#ask-foreman)).
+  have `prompt_task` among their crew tools. A solo task's agent and a crew developer (whose part has a review of its
+  own, [Points](#points)) have it from their first session too, in a form of its own: `taskId` (the reviewer's task),
+  `text` and `questionId`, all required; the host takes only an answer to an open question from a reviewer of the
+  task's own review and refuses anything else (`prompt_task answers only a question from a reviewer of this task's
+  review.`), so it never prompts another task, and a developer's work still goes up to its foreman only through its
+  reports. **Why from the first session:** a review starts in the middle of the agent's session, and Codex does not
+  read the tool list again. The session brief of both says it: `When a reviewer of this task asks you a question,
+  answer it with prompt_task and the questionId from the question message; the reviewer waits for your answer.` A
+  question held by the agent's plan for approval answers that plan ([plan chat](chat-turns-plans-and-questions.md#plan-chat))
+  and runs in front of the queue. A question the agent leaves unanswered for five minutes goes to the person
+  ([`ask_foreman`](crew.md#ask-foreman)).
 - **Restart.** The review's record and its runs are on disk; after a host restart the review continues from its state:
   a round being read is dispatched again, a review that waited for the agent's turn reads (no turn runs after a
   restart), a batch waiting for the agent's turn stays queued, a review waiting for the person keeps waiting.

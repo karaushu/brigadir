@@ -1439,6 +1439,8 @@ const noticeLog = new NoticeLog({
 /** spec/notifications-slack-notes-and-schedules#note-concurrent: one store for every writer of notes (windows, the note chat, Slack), so their writes queue. */
 let notesStoreOnce: Promise<NotesStore> | undefined;
 const sharedNotesStore = () => (notesStoreOnce ??= NotesStore.at(process.env.BRIGADIR_DATA_DIR));
+/** The note chats, once the app is ready: a Slack addition waits while a note's agent answers. */
+let noteChatsOnce: NoteChats | undefined;
 /** spec/notifications-slack-notes-and-schedules#slack: the person's CI bot in Slack; the token is read and kept here, in main. */
 const slack: Slack = new Slack({
 	dataRoot: () => resolveDataRoot(process.env.BRIGADIR_DATA_DIR),
@@ -1521,6 +1523,7 @@ const slack: Slack = new Slack({
 			})),
 		// spec/notifications-slack-notes-and-schedules#slack-note: the addition goes through the store's queue; an open note re-reads it.
 		appendNote: async (id, addition) => {
+			await noteChatsOnce?.idle(id);
 			const { text } = await (
 				await sharedNotesStore()
 			).edit(id, (note) => slackNoteAppended(note, addition));
@@ -3869,6 +3872,7 @@ void app.whenReady().then(async () => {
 				}
 			: undefined,
 	});
+	noteChatsOnce = noteChats;
 	app.on('will-quit', () => noteChats.closeAll());
 	handle('notes:chat-read', (id: string) => noteChats.read(id));
 	handle('notes:chat-send', (id: string, text: string, choice: NoteChatChoice) => {

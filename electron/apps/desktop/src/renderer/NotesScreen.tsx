@@ -69,59 +69,89 @@ const inScope = (note: NoteSummary, scope: NoteScope) =>
 			: note.project === scope.project;
 const SAVE_DELAY = 500;
 type SaveState = 'saved' | 'saving' | 'failed';
+/** An unsaved edit and the file text it was made from (`null` — not known: the save overwrites). */
+type NoteEdit = { text: string; base: string | null };
 /**
- * One note: its text as the editor holds it, saved 500 ms after the last edit (spec/notifications-slack-notes-and-schedules#notes). A save
- * carries `base`, the file's text the edits started from; main merges a file changed since (a Slack append, the note's agent,
- * another window) and the merged text comes back (spec/notifications-slack-notes-and-schedules#note-concurrent).
+ * One note: its text as the editor holds it, saved 500 ms after the last edit (spec/notifications-slack-notes-and-schedules#notes). Each save
+ * carries the file text its edit started from; main merges a file changed since (a Slack append, the note's agent, another
+ * window) and the merged text comes back (spec/notifications-slack-notes-and-schedules#note-concurrent). Saves run one at a time, per note;
+ * a re-read never replaces text that is waiting or being saved.
  */
 function useNoteText(id: string | null, locale: Locale) {
 	const [doc, setDoc] = useState<NoteDocument | null>(null),
 		[text, setText] = useState(''),
 		[save, setSave] = useState<SaveState>('saved');
-	const pending = useRef<{ id: string; text: string } | null>(null),
-		base = useRef<{ id: string; text: string } | null>(null),
+	const pending = useRef(new Map<string, NoteEdit>()),
+		/** Note → the text being written now. */
+		saving = useRef(new Map<string, string>()),
+		/** Note → the file text the editor last took. */
+		known = useRef(new Map<string, string>()),
+		/** Note → finished saves: a read begun before one is stale. */
+		saves = useRef(new Map<string, number>()),
+		open = useRef<string | null>(null),
+		chain = useRef<Promise<void>>(Promise.resolve()),
 		timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-	const flush = useCallback(async () => {
+	const flush = useCallback((): Promise<void> => {
 		clearTimeout(timer.current);
-		const next = pending.current;
-		if (!next) return;
-		pending.current = null;
-		try {
-			const from = base.current?.id === next.id ? base.current.text : null,
-				written = await window.brigadir.writeNote(next.id, next.text, from);
-			// Another note opened meanwhile keeps its own base.
-			if (base.current?.id === next.id) {
-				// `pending` was cleared above; a newer edit may have set it while the save ran.
-				const typed = pending.current as { id: string } | null;
-				if (typed?.id === next.id) {
-					// Typed on while it saved: the next save merges from what this one sent.
-					base.current = { id: next.id, text: next.text };
-				} else {
-					base.current = { id: next.id, text: written.text };
-					if (written.text !== next.text)
+		const saveOne = async (note: string) => {
+			const next = pending.current.get(note);
+			if (!next) return;
+			pending.current.delete(note);
+			saving.current.set(note, next.text);
+			try {
+				const written = await window.brigadir.writeNote(note, next.text, next.base);
+				saves.current.set(note, (saves.current.get(note) ?? 0) + 1);
+				saving.current.delete(note);
+				// An edit typed while it saved was made from `next.text` and merges from it.
+				if (!pending.current.has(note)) {
+					known.current.set(note, written.text);
+					if (open.current === note && written.text !== next.text)
 						setText((current) => (current === next.text ? written.text : current));
 				}
+			} catch (error) {
+				saving.current.delete(note);
+				// A newer edit holds this one's words too: it merges from where this one started.
+				const typed = pending.current.get(note);
+				pending.current.set(note, typed ? { text: typed.text, base: next.base } : next);
+				throw error;
 			}
-			if (!pending.current) setSave('saved');
-		} catch {
-			pending.current ??= next;
-			setSave('failed');
-			toastError(t(locale, 'Could not save the note. Changes are kept.'), {
-				key: `note-save-${next.id}`,
-				action: { label: t(locale, 'Retry'), run: () => void flush() },
-			});
-		}
+		};
+		const run = chain.current.then(async () => {
+			let failed = false;
+			for (const note of [...pending.current.keys()])
+				await saveOne(note).catch(() => (failed = true));
+			if (failed) {
+				setSave('failed');
+				toastError(t(locale, 'Could not save the note. Changes are kept.'), {
+					key: 'note-save',
+					action: { label: t(locale, 'Retry'), run: () => void flush() },
+				});
+			} else if (!pending.current.size) setSave('saved');
+		});
+		chain.current = run.catch(() => {});
+		return run;
 	}, [locale]);
 	useEffect(() => {
 		setDoc(null);
+		open.current = id;
 		if (!id) return;
 		let active = true;
-		const read = (initial: boolean) =>
-			window.brigadir
+		const read = (initial: boolean) => {
+			const begun = saves.current.get(id) ?? 0;
+			return window.brigadir
 				.readNote(id)
 				.then((note) => {
-					if (!active || pending.current?.id === id) return;
-					base.current = { id, text: note.text };
+					if (!active) return;
+					// Reopened while an edit of it waits or saves: the editor shows that edit; its save brings the file's text.
+					const own = pending.current.get(id)?.text ?? saving.current.get(id);
+					if (own !== undefined || begun !== (saves.current.get(id) ?? 0)) {
+						if (initial) {
+							setDoc(note);
+							setText(own ?? known.current.get(id) ?? note.text);
+						}
+						return;
+					}
+					known.current.set(id, note.text);
 					setDoc(note);
 					setText(note.text);
 					if (initial) setSave('saved');
@@ -129,6 +159,7 @@ function useNoteText(id: string | null, locale: Locale) {
 				.catch(() => {
 					if (active && initial) toastError(t(locale, 'Could not open the note.'));
 				});
+		};
 		void read(true);
 		const off = window.brigadir.onNotesChanged((change) => {
 			if (change.id === id && change.kind !== 'deleted') void read(false);
@@ -143,7 +174,9 @@ function useNoteText(id: string | null, locale: Locale) {
 		(next: string) => {
 			if (!id) return;
 			setText(next);
-			pending.current = { id, text: next };
+			const base =
+				pending.current.get(id)?.base ?? saving.current.get(id) ?? known.current.get(id) ?? null;
+			pending.current.set(id, { text: next, base });
 			setSave('saving');
 			clearTimeout(timer.current);
 			timer.current = setTimeout(() => void flush(), SAVE_DELAY);

@@ -8,6 +8,8 @@ import {
 	slackButtons,
 	slackFindTasks,
 	slackMentionText,
+	slackMentionWords,
+	slackLabelName,
 	slackFindNotes,
 	slackNoteAddition,
 	slackNoteText,
@@ -157,7 +159,11 @@ type Mention = {
 	replyTs: string;
 	inThread: boolean;
 	text: string;
+	/** The message as the person wrote it, spacing kept: a note's own words are taken from it. */
+	words: string;
 	projectId: string | null;
+	/** The project named by an `in <project>: …` prefix, found or not; a note resolves it itself (several of that name → asked). */
+	prefixName: string | null;
 	/** The project came from an `in <project>:` prefix: the person named it, the dispatch does not move it. */
 	prefixed: boolean;
 	/** The project whose `Where` channel this is. */
@@ -225,6 +231,11 @@ export class SlackMentions {
 			replyTs,
 			inThread: threadTs !== null,
 			text,
+			words: slackMentionWords(
+				typeof event.text === 'string' ? event.text : '',
+				this.deps.botUser()
+			),
+			prefixName: prefix ? ('project' in prefix ? prefix.name : prefix.unknown) : null,
 			projectId:
 				prefix && 'project' in prefix
 					? prefix.project
@@ -694,7 +705,7 @@ export class SlackMentions {
 		let text: string | null = null;
 		if (action.note === 'text') {
 			text = slackVerbatim(action.text ?? '', [
-				mention.text,
+				mention.words,
 				...mention.thread.map((message) => slackPlain(message.text)),
 			]);
 			if (!text) {
@@ -707,7 +718,7 @@ export class SlackMentions {
 			text,
 			title: action.title,
 			append: action.append,
-			project: action.project,
+			project: action.project ?? mention.prefixName,
 		});
 	}
 	/**
@@ -744,7 +755,7 @@ export class SlackMentions {
 							found.map((item) => (item.folder ? `${item.name} (${item.folder})` : item.name))
 						),
 						found.slice(0, 5).map((item) => ({
-							label: item.folder ? `${item.name} · ${item.folder}` : item.name,
+							label: slackLabelName(item.folder ? `${item.name} · ${item.folder}` : item.name),
 							draft: { ...draft, projectId: item.id },
 						}))
 					);
@@ -774,7 +785,7 @@ export class SlackMentions {
 						found.map((note) => ({ title: note.title, project: projectName(note.project) }))
 					),
 					found.slice(0, 5).map((note) => ({
-						label: `${note.title} · ${projectName(note.project) ?? 'No project'}`,
+						label: slackReply.noteChoice(note.title, projectName(note.project)),
 						draft: { ...draft, noteId: note.id },
 					}))
 				);

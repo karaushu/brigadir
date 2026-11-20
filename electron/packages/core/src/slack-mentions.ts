@@ -22,12 +22,16 @@ export function slackPlain(text: string): string {
 		.replace(/&amp;/g, '&');
 }
 
-/** The mention's own words: the bot's `<@U…>` goes, the rest is plain text. */
-export function slackMentionText(text: string, botUser: string | null): string {
+/** The mention's words as the person wrote them: the bot's `<@U…>` goes, the rest is plain text, spacing kept. */
+export function slackMentionWords(text: string, botUser: string | null): string {
 	const bot = botUser
 		? new RegExp(`<@${botUser}(?:\\|[^>]*)?>`, 'g')
 		: /^\s*<@[A-Z0-9]+(?:\|[^>]*)?>/;
-	return slackPlain(text.replace(bot, ' '))
+	return slackPlain(text.replace(bot, ' ')).replace(/^\s+|\s+$/g, '');
+}
+/** The mention's own words: the bot's `<@U…>` goes, the rest is plain text with spaces collapsed. */
+export function slackMentionText(text: string, botUser: string | null): string {
+	return slackMentionWords(text, botUser)
 		.replace(/[ \t]+/g, ' ')
 		.replace(/^\s+|\s+$/g, '');
 }
@@ -39,7 +43,7 @@ export function slackMentionText(text: string, botUser: string | null): string {
 export function slackProjectPrefix(
 	text: string,
 	projects: readonly { id: string; name: string }[]
-): { project: string; rest: string } | { unknown: string; rest: string } | null {
+): { project: string; name: string; rest: string } | { unknown: string; rest: string } | null {
 	const match = /^\s*(?:in|в|у)\s+([^:\n]{1,80}?)\s*:\s*/i.exec(text);
 	if (!match) return null;
 	const name = match[1]!.trim().replace(/^[`*_"'«]+|[`*_"'»]+$/g, ''),
@@ -48,7 +52,7 @@ export function slackProjectPrefix(
 		project =
 			projects.find((item) => item.name.toLowerCase() === key) ??
 			projects.find((item) => item.id.toLowerCase() === key);
-	return project ? { project: project.id, rest } : { unknown: name, rest };
+	return project ? { project: project.id, name, rest } : { unknown: name, rest };
 }
 
 /** A project named anywhere in the text as a whole word («що в роботі в business?»); only when exactly one is named. */
@@ -371,6 +375,19 @@ export type SlackStatusInput = {
 	ci: 'running' | 'pass' | 'fail' | 'cancelled' | null;
 	now: number;
 };
+/**
+ * A name inside a reply (a note's title, a project): escaped and fenced off, so the Ukrainian phrases never replace words
+ * in it; `slackLocalize` takes the fences out.
+ */
+const nameOpen = '\uE000',
+	nameClose = '\uE001';
+export function slackName(name: string): string {
+	return slackLabelName(slackEscape(name));
+}
+/** The same fence for a button label: plain text, so nothing is escaped. */
+export function slackLabelName(name: string): string {
+	return `${nameOpen}${name.replace(/[\uE000\uE001]/g, '')}${nameClose}`;
+}
 /** The bot's short answers in a thread (watch-ci shape: emoji, bold head, the subject after a dash). */
 export const slackReply = {
 	taskCreated: (project: string, title: string) =>
@@ -378,17 +395,23 @@ export const slackReply = {
 	taskWaiting: (project: string, title: string) =>
 		`⏳ *Waiting for approval in Brigadir* — ${slackEscape(project)}\n📋 Task: ${slackEscape(title)}`,
 	noteSaved: (project: string | null, title: string) =>
-		`📝 *Note saved* — ${project ? slackEscape(project) : 'No project'}\n🗒️ Note: ${slackEscape(title)}`,
+		`📝 *Note saved* — ${project ? slackName(project) : 'No project'}\n🗒️ Note: ${slackName(title)}`,
 	noteAdded: (project: string | null, title: string) =>
-		`📝 *Added to the note* — ${project ? slackEscape(project) : 'No project'}\n🗒️ Note: ${slackEscape(title)}`,
+		`📝 *Added to the note* — ${project ? slackName(project) : 'No project'}\n🗒️ Note: ${slackName(title)}`,
 	noteTextMissing: '🤔 *The note’s text is not in the message* — write it after the mention.',
-	noNote: (name: string) => `🔎 *No note «${slackEscape(name)}»* — create one?`,
+	noNote: (name: string) => `🔎 *No note «${slackName(name)}»* — create one?`,
+	/** A note as a button names it: the title, then its project. */
+	noteChoice: (title: string, project: string | null) =>
+		`${slackLabelName(title)} · ${project ? slackLabelName(project) : 'No project'}`,
 	severalNotes: (name: string, notes: readonly { title: string; project: string | null }[]) =>
-		`🤔 *Several notes match «${slackEscape(name)}»* — ${slackList(
-			notes.map((note) => `${note.title} (${note.project ?? 'No project'})`)
+		`🤔 *Several notes match «${slackName(name)}»* — ${slackList(
+			notes.map(
+				(note) =>
+					`${slackName(note.title)} (${note.project ? slackName(note.project) : 'No project'})`
+			)
 		)}. Which note?`,
 	severalProjects: (name: string, projects: readonly string[]) =>
-		`🤔 *Several projects match ${slackEscape(name)}* — ${slackList(projects)}. Which project?`,
+		`🤔 *Several projects match ${slackName(name)}* — ${slackList(projects.map(slackName))}. Which project?`,
 	createNote: 'Create note',
 	unknownProject: (name: string, projects: readonly string[]) =>
 		`🤔 *No project ${slackEscape(name)} in Brigadir*${projects.length ? `\nProjects: ${projects.slice(0, 20).map(slackEscape).join(', ')}` : ''}`,
@@ -404,9 +427,9 @@ export const slackReply = {
 	failed: (reason: string) => `⛔ *Could not do it* — ${slackEscape(reason)}`,
 } as const;
 
-/** One line of names: at most five, `… and N more` after them. */
+/** One line of names (already `slackName`d): at most five, `… and N more` after them. */
 function slackList(names: readonly string[]): string {
-	const shown = names.slice(0, 5).map(slackEscape).join(' · ');
+	const shown = names.slice(0, 5).join(' · ');
 	return names.length > 5 ? `${shown} … and ${names.length - 5} more` : shown;
 }
 
@@ -505,6 +528,7 @@ const ukPhrases: [string, string][] = [
 	['Create note', 'Створити нотатку'],
 	['(No project)', '(Без проєкту)'],
 	['— No project', '— Без проєкту'],
+	['· No project', '· Без проєкту'],
 	['🗒️ Note:', '🗒️ Нотатка:'],
 	['Which project?', 'Який проєкт?'],
 	['Which note?', 'Яку нотатку?'],
@@ -549,26 +573,36 @@ const ukStates: [string, string][] = [
 ];
 /** Puts a reply into the request's language; English passes through. */
 export function slackLocalize(text: string, language: SlackLanguage): string {
-	if (language === 'en') return text;
-	let out = text;
+	// Names stand fenced: the phrases go around them, never into them.
+	const names: string[] = [];
+	const fenced = text.replace(/\uE000([^\uE001]*)\uE001/g, (_, name: string) => {
+		names.push(name);
+		return `\uE000${names.length - 1}\uE001`;
+	});
+	const unfence = (value: string) =>
+		value.replace(/\uE000(\d+)\uE001/g, (_, index: string) => names[Number(index)] ?? '');
+	if (language === 'en') return unfence(fenced);
+	let out = fenced;
 	for (const [en, uk] of ukPhrases) out = out.split(en).join(uk);
 	for (const [en, uk] of ukStates)
 		out = out.split(`*${en}*`).join(`*${uk}*`).split(`— ${en}`).join(`— ${uk}`);
-	return out
-		.replace(/… and (\d+) more/g, '… і ще $1')
-		.replace(/(\d+) of (\d+)/g, '$1 з $2')
-		.replace(/(\d+)m ago/g, '$1 хв тому')
-		.replace(/(\d+)h ago/g, '$1 год тому')
-		.replace(/(\d+)d ago/g, '$1 дн тому')
-		.replace(
-			/(⏱️ Тривалість: )(.+)/,
-			(_, head: string, value: string) =>
-				head +
-				value
-					.replace(/(\d+)h\b/, '$1 год')
-					.replace(/(\d+)m\b/, '$1 хв')
-					.replace(/(\d+)s\b/, '$1 с')
-		);
+	return unfence(
+		out
+			.replace(/… and (\d+) more/g, '… і ще $1')
+			.replace(/(\d+) of (\d+)/g, '$1 з $2')
+			.replace(/(\d+)m ago/g, '$1 хв тому')
+			.replace(/(\d+)h ago/g, '$1 год тому')
+			.replace(/(\d+)d ago/g, '$1 дн тому')
+			.replace(
+				/(⏱️ Тривалість: )(.+)/,
+				(_, head: string, value: string) =>
+					head +
+					value
+						.replace(/(\d+)h\b/, '$1 год')
+						.replace(/(\d+)m\b/, '$1 хв')
+						.replace(/(\d+)s\b/, '$1 с')
+			)
+	);
 }
 
 /** One task as the helper model reads it for a free question. */

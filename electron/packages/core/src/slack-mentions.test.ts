@@ -74,10 +74,12 @@ it('reads the mention without the bot and Slack markup', () => {
 it('picks the project from `in <project>:` and says when it names none', () => {
 	expect(slackProjectPrefix('in business: fix the phone field', projects)).toEqual({
 		project: 'p1',
+		name: 'business',
 		rest: 'fix the phone field',
 	});
 	expect(slackProjectPrefix('In acme app: add a test', projects)).toEqual({
 		project: 'p2',
+		name: 'acme app',
 		rest: 'add a test',
 	});
 	expect(slackProjectPrefix('в business: що в роботі?', projects)).toMatchObject({ project: 'p1' });
@@ -140,7 +142,7 @@ it('writes replies, notes and buttons', () => {
 	expect(slackReply.taskWaiting('business', 'Fix')).toBe(
 		'⏳ *Waiting for approval in Brigadir* — business\n📋 Task: Fix'
 	);
-	expect(slackReply.noteSaved('admin', 'Release plan')).toBe(
+	expect(slackLocalize(slackReply.noteSaved('admin', 'Release plan'), 'en')).toBe(
 		'📝 *Note saved* — admin\n🗒️ Note: Release plan'
 	);
 	expect(slackLocalize(slackReply.noteAdded(null, 'Плани'), 'uk')).toBe(
@@ -157,9 +159,22 @@ it('writes replies, notes and buttons', () => {
 	).toBe(
 		'🤔 *Підходить кілька нотаток «план»* — План релізу (admin) · План (Без проєкту). Яку нотатку?'
 	);
-	expect(slackReply.severalProjects('admin', ['admin (admin-web)', 'admin (admin-api)'])).toBe(
+	expect(
+		slackLocalize(
+			slackReply.severalProjects('admin', ['admin (admin-web)', 'admin (admin-api)']),
+			'en'
+		)
+	).toBe(
 		'🤔 *Several projects match admin* — admin (admin-web) · admin (admin-api). Which project?'
 	);
+	// Names are never translated: a note titled like a fixed phrase stays as it is.
+	expect(slackLocalize(slackReply.noteChoice('Create note', null), 'uk')).toBe(
+		'Create note · Без проєкту'
+	);
+	expect(slackLocalize(slackReply.noteSaved('R&D <x>', 'Which note?'), 'uk')).toBe(
+		'📝 *Нотатку збережено* — R&amp;D &lt;x&gt;\n🗒️ Нотатка: Which note?'
+	);
+	expect(slackLocalize(slackReply.noteChoice('R&D', 'admin'), 'en')).toBe('R&D · admin');
 	expect(slackLocalize(slackReply.noNote('Ideas'), 'uk')).toBe(
 		'🔎 *Немає нотатки «Ideas»* — створити?'
 	);

@@ -19,3 +19,9 @@ it('takes either side whole when the other did not change', () => {
 	expect(mergeNoteText('a\n', 'a b\n', 'a\n')).toBe('a b\n');
 	expect(mergeNoteText('', 'typed', 'added\n')).toBe('typed\nadded');
 });
+
+it('keeps a line both sides added, each in its own place', () => {
+	expect(mergeNoteText('a\n', 'a\nsame\n', 'a\n\nFrom Slack: x\n\nsame\n')).toBe(
+		'a\nsame\n\nFrom Slack: x\n\nsame\n'
+	);
+});

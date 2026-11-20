@@ -1,4 +1,4 @@
-import { merge3, mergeLines, mergeText } from '@brigadir/diff';
+import { merge3, mergeLines, mergeText, myersWork, sequenceDiff } from '@brigadir/diff';
 
 /**
  * spec/notifications-slack-notes-and-schedules#note-concurrent: the editor's text (`ours`, edited from `base`) over the file as it is now
@@ -19,17 +19,15 @@ export function mergeNoteText(base: string, ours: string, disk: string): string 
 		if (chunk.kind === 'theirs') lines.push(...theirs);
 		else if (chunk.kind !== 'conflict') lines.push(...own);
 		else {
-			// The other side's lines that are neither the base's nor the person's are what it added.
-			const known = [...merge.base.slice(chunk.base.start, chunk.base.end), ...own];
-			lines.push(
-				...own,
-				...theirs.filter((line) => {
-					const index = known.indexOf(line);
-					if (index < 0) return true;
-					known.splice(index, 1);
-					return false;
-				})
-			);
+			// The other side's own additions within the chunk (against the base, not the person's text: a line both sides
+			// added stays twice, each in its own place).
+			const added = sequenceDiff(
+				merge.base.slice(chunk.base.start, chunk.base.end),
+				theirs,
+				250000,
+				myersWork
+			).flatMap((edit) => (edit.kind === 'added' ? [edit.value] : []));
+			lines.push(...own, ...added);
 		}
 		at = chunk.base.end;
 	}

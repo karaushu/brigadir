@@ -1026,6 +1026,24 @@ it('saves the person’s own words as a note, titled as asked, in the channel’
 			'🤔 *No project shop in Brigadir*\nProjects: business, admin'
 		);
 
+		// The words are kept as written, indentation included.
+		codeReply = () =>
+			'ACTION note {"kind": "text", "text": "- ship\\n - tell support", "title": "Release"}';
+		sockets[0]!.emit(mention('U1AB', 'save a note:\n- ship\n    - tell support'));
+		await settle();
+		expect(notes[2]!.text).toContain('\n\n- ship\n    - tell support\n');
+		notes.pop();
+
+		// An `in <project>:` prefix that names no project is asked back, never the channel's project.
+		codeReply = () => 'ACTION note {"kind": "text", "text": "x"}';
+		sockets[0]!.emit(mention('U1AB', 'in shop: save a note: x'));
+		await settle();
+		expect(notes).toHaveLength(2);
+		expect(posts().at(-1)?.body.text).toBe(
+			'🤔 *No project shop in Brigadir*\nProjects: business, admin'
+		);
+		codeReply = () => 'ACTION note {"kind": "text", "text": "Buy milk tomorrow", "title": "Milk"}';
+
 		// Words the person did not write are not saved.
 		sockets[0]!.emit(mention('U1AB', 'save something about groceries'));
 		await settle();
@@ -1047,6 +1065,13 @@ it('asks which project when a name means several, and saves where the person pre
 	codeReply = () => 'ACTION note {"kind": "text", "text": "rotate keys", "project": "admin"}';
 	try {
 		test.sockets[0]!.emit(mention('U1AB', 'note for admin: rotate keys'));
+		await test.settle();
+		expect(test.posts().at(-1)!.body.text).toBe(
+			'🤔 *Several projects match admin* — admin (admin-web) · Admin (admin-api). Which project?'
+		);
+		// The same name in an `in <project>:` prefix is asked too, not taken as the first project of that name.
+		codeReply = () => 'ACTION note {"kind": "text", "text": "rotate keys"}';
+		test.sockets[0]!.emit(mention('U1AB', 'in admin: note rotate keys'));
 		await test.settle();
 		expect(test.posts().at(-1)!.body.text).toBe(
 			'🤔 *Several projects match admin* — admin (admin-web) · Admin (admin-api). Which project?'

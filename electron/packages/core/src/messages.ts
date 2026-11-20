@@ -3096,6 +3096,14 @@ const uk = {
 	'The agent template could not be attached.': 'Не вдалося прикріпити шаблон агента.',
 	'Goes to the agent as a role for a subagent: the agent starts one when you ask.':
 		'Іде агенту як роль для сабагента: агент запускає його, коли ви попросите.',
+	'Goes to the agent as a task summary: state, branch, requests and changes.':
+		'Іде агенту як підсумок задачі: стан, гілка, запити й зміни.',
+	'Goes to the agent as the text of these lines.': 'Іде агенту як текст цих рядків.',
+	'Goes to the agent as a path: the agent reads the file itself.':
+		'Іде агенту як шлях: агент сам читає файл.',
+	'Goes to the agent as a path: the agent reads the folder itself.':
+		'Іде агенту як шлях: агент сам читає теку.',
+	'Goes to the agent as text.': 'Іде агенту як текст.',
 	// spec/notifications-slack-notes-and-schedules#message-classes: class T toasts — the region and texts that name the action and its object.
 	'Notifications (toasts)': 'Сповіщення',
 	'{repo} · changed': '{repo} · змінено',

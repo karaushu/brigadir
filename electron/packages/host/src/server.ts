@@ -1734,6 +1734,8 @@ export async function startHost(config: HostConfig) {
 						peer.close();
 					}
 				}
+			if (event.kind === 'turn.started' && event.review && !stopping)
+				void taskReview.batchTaken(event.review.id).catch(() => {});
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
 			if (event.kind === 'session.failed' && !stopping)
 				void taskReview.turnStopped().catch(() => {});

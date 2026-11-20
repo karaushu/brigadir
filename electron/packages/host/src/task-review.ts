@@ -646,7 +646,16 @@ export class TaskReviewLife {
 					findings: (review.findings ?? []).map((item) =>
 						open.includes(item) ? { ...item, accepted: true } : item
 					),
-					...(review.plan ? { plan: { ...review.plan, approved: true } } : {}),
+					// The batch was taken out of the queue above.
+					...(review.plan
+						? {
+								plan: {
+									...review.plan,
+									approved: true,
+									...(review.plan.queued ? { queued: false } : {}),
+								},
+							}
+						: {}),
 				});
 				await this.finished(state, { open: open.length });
 				return;
@@ -743,6 +752,14 @@ export class TaskReviewLife {
 		if (how === 'answered' && review.plan.queued)
 			await this.deps.dropBatch(batch.id).catch(() => {});
 		await this.update({ plan: { ...review.plan, queued: how === 'queued' } });
+	}
+	/** spec/reviews#data: a turn of the author took a review batch — a plan batch that was queued no longer waits in the queue. */
+	batchTaken(batch: string) {
+		return this.serial(async () => {
+			const review = this.doc.review;
+			if (review?.plan?.queued && review.batch === batch)
+				await this.update({ plan: { ...review.plan, queued: false } });
+		});
 	}
 	/** The batch the author may still get: the plan review is with the author and this is its last batch. */
 	planBatchLive(batch: string) {

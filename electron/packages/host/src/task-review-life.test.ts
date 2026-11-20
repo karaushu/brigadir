@@ -1153,6 +1153,24 @@ describe('fixes of an independent review of the plan review', () => {
 		expect(s.doc().review!.state).toBe('verifying');
 	});
 
+	// Seen in the walkthrough (N): `plan.queued` stayed true after the author took the batch.
+	it('a queued plan batch stops being queued when the author’s turn takes it, or when the approval takes it out (spec/reviews#data)', async () => {
+		const s = await setup();
+		s.state.planHow = 'queued';
+		await read(s);
+		expect(s.doc().review!.plan).toMatchObject({ queued: true });
+		await s.life.batchTaken('another batch');
+		expect(s.doc().review!.plan).toMatchObject({ queued: true });
+		await take(s);
+		await s.life.batchTaken(s.doc().review!.batch!);
+		expect(s.doc().review!.plan!.queued).toBe(false);
+
+		const approved = await setup();
+		approved.state.planHow = 'queued';
+		await read(approved);
+		await approved.life.planDecided(true);
+		expect(approved.doc().review!.plan).toMatchObject({ approved: true, queued: false });
+	});
 	it('a replaced source is written whole before the index names it', async () => {
 		const s = await setup();
 		await saveTaskSource(s.store, s.key, { title: 'Ticket', text: 'first' }, s.emit);

@@ -65,9 +65,9 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		await expect(
 			editor.locator('[data-crew-node][data-role="reviewer"]').filter({ hasText: 'Designer' })
 		).toHaveCount(1);
-		// spec/crew-templates-and-editor#roster: the specialty is one line the foreman reads; the root has none.
+		// spec/crew-templates-and-editor#roster: When to use is one line the foreman picks by; the root has none.
 		await inspector
-			.getByRole('textbox', { name: 'Specialty' })
+			.getByRole('textbox', { name: 'When to use' })
 			.fill('Checks screens against the design');
 		// A check edge from the inspector: Developer checked by Designer draws the amber dashed path.
 		await editor.locator('[data-crew-node]').nth(1).click();
@@ -150,10 +150,12 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 		const saved = JSON.parse(await readFile(crewFile, 'utf8'));
 		expect(
 			saved.template.root.agents.find((agent: { name: string }) => agent.name === 'Designer')
-				.summary
+				.whenToUse
 		).toBe('Checks screens against the design');
+		// spec/crew-templates-and-editor#schema: the fixture crew was a version 1 file; its save writes version 2.
+		expect(saved.schemaVersion).toBe(2);
 		await editor.locator('[data-crew-node][data-root="true"]').click();
-		await expect(inspector.getByRole('textbox', { name: 'Specialty' })).toHaveCount(0);
+		await expect(inspector.getByRole('textbox', { name: 'When to use' })).toHaveCount(0);
 		await editor.getByRole('button', { name: 'Done' }).click();
 		await expect(editor).toHaveCount(0);
 		await expect(sheet.locator('[data-crew-roster]')).toContainText('Designer');
@@ -170,8 +172,8 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 			'aria-selected',
 			'true'
 		);
-		// spec/crew-templates-and-editor#agent-cards: agents are cards of one radio group, crews are rows.
-		const agents = settings.getByRole('radiogroup', { name: 'Agents' }),
+		// spec/crew-templates-and-editor#agent-cards: roles are cards of one radio group, crews are rows.
+		const agents = settings.getByRole('radiogroup', { name: 'Roles' }),
 			crews = settings.getByRole('listbox', { name: 'Crews' });
 		await expect(agents.getByRole('radio')).toHaveCount(8);
 		// The built-in Review crew and the person's crew, saved in place as «Front + Design».
@@ -183,12 +185,17 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 			.click();
 		await expect(settings.getByText('built-in', { exact: true })).toBeVisible();
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toBeDisabled();
-		await expect(settings.getByRole('textbox', { name: 'Specialty' })).toHaveCount(0);
+		// A built-in's When to use is the app's line, locked like its name; Reviewer has no instructions beyond its rights.
+		await expect(settings.getByRole('textbox', { name: 'When to use' })).toBeDisabled();
+		await expect(settings.getByRole('textbox', { name: 'When to use' })).toHaveValue(
+			'Checks the work, writes no code'
+		);
+		await expect(settings.getByRole('textbox', { name: 'Instructions' })).toHaveCount(0);
 		await settings.getByRole('button', { name: 'Duplicate' }).click();
 		await expect(agents.getByRole('radio')).toHaveCount(9);
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toHaveValue('Reviewer 2');
 		await settings
-			.getByRole('textbox', { name: 'Specialty' })
+			.getByRole('textbox', { name: 'When to use' })
 			.fill('Reviews screens against the design');
 		await settings
 			.getByRole('textbox', { name: 'Instructions' })
@@ -201,7 +208,7 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 						await readFile(join(root, 'data', 'templates', 'agents', file), 'utf8')
 					);
 					if (doc.template.instructions === 'Check the screens against the design.')
-						return doc.template.summary;
+						return doc.schemaVersion === 2 ? doc.template.whenToUse : null;
 				}
 				return null;
 			})

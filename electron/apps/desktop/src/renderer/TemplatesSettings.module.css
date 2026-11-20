@@ -130,9 +130,15 @@
 	color: var(--fg);
 	font-weight: 600;
 }
-.warn {
+.warn,
+.off {
 	font-size: var(--text-11);
 	color: var(--amber-text);
+}
+/* spec/crew-templates-and-editor#provider-off: on a card it takes its own line under the models. */
+.picks > .off,
+[data-option-card] .off {
+	flex-basis: 100%;
 }
 .head {
 	display: flex;
@@ -211,6 +217,10 @@
 	flex: 1;
 	min-width: 0;
 	max-width: 260px;
+}
+/* spec/crew-templates-and-editor#template-library: When to use is a line to read in full, so it takes the row's width. */
+.row input.whenToUse {
+	max-width: none;
 }
 .row > div[class*='popupRoot'] {
 	width: 190px;

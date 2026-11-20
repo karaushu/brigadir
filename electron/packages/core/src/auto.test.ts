@@ -190,17 +190,19 @@ describe('spec/crew#auto-roles, spec/crew#auto-model', () => {
 			saveAs: 'Vision developer',
 		};
 		expect(isAutoModelAnswer(answer)).toBe(true);
-		const role = modelRole(developer, answer, 'role-1');
+		const role = modelRole(developer, answer, 'role-1', 'Parts that work\nfrom screenshots');
 		expect(role).toMatchObject({
 			id: 'role-1',
 			name: 'Vision developer',
+			// spec/crew#auto-model: the agent's reason, as one line, is the new role's When to use.
+			whenToUse: 'Parts that work from screenshots',
 			provider: 'codex',
 			instructions: developer.instructions,
 			requestedChoices: { configOptions: { model: 'gpt-6-astra', reasoning_effort: 'high' } },
 			choiceNames: { model: 'GPT-6 Astra', reasoning_effort: 'High' },
 		});
 		const { saveAs: _saveAs, ...unnamed } = answer;
-		expect(modelRole(developer, unnamed, 'r2').name).toBe('Developer · GPT-6 Astra · High');
+		expect(modelRole(developer, unnamed, 'r2', 'x').name).toBe('Developer · GPT-6 Astra · High');
 	});
 });
 

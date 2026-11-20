@@ -435,13 +435,14 @@ test("sheet picks the first catalog model, offers the model's effort levels and 
 		});
 		const settings = page.getByRole('dialog', { name: 'Settings' }),
 			reviewer = settings
-				.getByRole('radiogroup', { name: 'Agents' })
+				.getByRole('radiogroup', { name: 'Roles' })
 				.locator('[data-option-card]')
 				.filter({ has: page.getByRole('radio', { name: 'Reviewer', exact: true }) });
 		await reviewer.click();
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toBeDisabled();
-		// spec/settings-modules-and-onboarding#agents-tab: a built-in's role is read-only (readable and copyable), not a disabled field.
-		await expect(settings.getByRole('textbox', { name: 'Instructions' })).not.toBeEditable();
+		// spec/crew-templates-and-editor#template-library: a built-in's When to use is the app's; Reviewer is its rights alone, with no instructions block.
+		await expect(settings.getByRole('textbox', { name: 'When to use' })).toBeDisabled();
+		await expect(settings.getByRole('textbox', { name: 'Instructions' })).toHaveCount(0);
 		await expect(settings.getByRole('button', { name: 'Reset', exact: true })).toHaveCount(0);
 		const templateModel = settings.getByRole('button', { name: 'Model', exact: true });
 		await expect(templateModel).toBeEnabled();

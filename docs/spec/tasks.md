@@ -201,7 +201,7 @@ An `Auto` task without isolation that hires is moved into a worktree in the midd
 
 - Scope boundaries go structurally through `additionalDirectories` of the session.
 - An English repository-context block (type, branch, writable/read-only) is added to the first GUI prompt or the initial CLI prompt. User files such as `CLAUDE.md` are never edited.
-- A task with a role starts its session brief with the role: one sentence that the agent works alone and answers to the person, then the role text. For a built-in template the text is its solo variant (`soloInstructions` in `packages/core/src/solo-role.ts`): what the role does, without the crew tools. For an own template it is the template's Instructions as written, with a sentence to turn to the person wherever they name a foreman, a crew or crew tools. A checker is also told it changes no files.
+- A task with a role starts its session brief with the role: one sentence that the agent works alone and answers to the person, then the role text. For a built-in template the text is its solo variant (`soloInstructions` in `packages/core/src/solo-role.ts`): what the role does, without the crew tools. For an own role it is the solo text of its rights (Developer's or Reviewer's), then the role's Instructions as written, with a sentence to turn to the person wherever they name a foreman, a crew or crew tools. A checker is also told it changes no files.
 - Read-only repos: the policy layer rejects writes; writes that bypass it through shell commands are caught by snapshots and surface as the notice `The task only reads these repos, but files in them changed during the turn.`
 - Commit and push across submodules run in dependency order (submodule before parent): [Git](git.md).
 

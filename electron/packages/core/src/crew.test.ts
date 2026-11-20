@@ -31,7 +31,19 @@ import {
 	zoneOwns,
 	type AgentTemplate,
 	type CrewTemplate,
+	crewRightsInstructions,
+	isWhenToUse,
+	isAgentTemplateDocument,
+	isCrewTemplateDocument,
+	ownInstructions,
+	roleInstructions,
+	specWhenToUse,
+	upgradeAgentTemplateDocument,
+	upgradeCrewLaunch,
+	upgradeCrewTemplateDocument,
+	whenToUseLine,
 } from './crew';
+import { isMessageKey } from './messages';
 import {
 	addCrewAgent,
 	addCrewCheck,
@@ -253,7 +265,8 @@ it('resolves defaults, template and node overrides in order; a provider change d
 	});
 	expect(api.zone).toEqual(['services/api/**']);
 	expect(api.checkedBy).toEqual(['review']);
-	expect(api.instructions).toBe(builtinAgentTemplates[1]!.instructions);
+	// spec/crew-templates-and-editor#rights: Developer has no instructions of its own; its agent gets the rules of its rights.
+	expect(api.instructions).toBe(crewRightsInstructions.developer);
 	const lead = findSpecAgent(spec.root, 'ui-lead')!;
 	expect(lead.role).toBe('foreman');
 	expect(lead.zone).toEqual(['apps/admin/src/ui/**']);
@@ -389,12 +402,12 @@ it('edits the tree without breaking edges or ids', () => {
 	expect(() => removeCrewAgent(crew, 'root')).toThrow();
 	expect(() => branchAsCrewTemplate(crew, 'api', 'x', 'X')).toThrow();
 });
-it('resolves the specialty from the node, else the template, and validates it as one line (spec/crew-templates-and-editor#roster)', () => {
+it('resolves When to use from the node, else the template, and validates it as one line (spec/crew-templates-and-editor#roster)', () => {
 	const tester: AgentTemplate = {
 		id: 'tester',
 		name: 'Tester',
 		role: 'developer',
-		summary: 'Writes e2e tests.',
+		whenToUse: 'Writes e2e tests.',
 		instructions: '',
 		builtin: false,
 	};
@@ -409,8 +422,8 @@ it('resolves the specialty from the node, else the template, and validates it as
 			template: 'foreman-default',
 			agents: [
 				{ id: 'a', name: 'A', template: 'tester' },
-				{ id: 'b', name: 'B', template: 'tester', summary: '  Owns the fixtures.  ' },
-				{ id: 'c', name: 'C', template: 'tester', summary: '   ' },
+				{ id: 'b', name: 'B', template: 'tester', whenToUse: '  Owns the fixtures.  ' },
+				{ id: 'c', name: 'C', template: 'tester', whenToUse: '   ' },
 				{ id: 'd', name: 'D', template: null },
 			],
 		},
@@ -421,25 +434,33 @@ it('resolves the specialty from the node, else the template, and validates it as
 		defaultProvider: 'claude',
 		now: '2026-09-25T10:00:00.000Z',
 	});
-	expect(spec.root.agents.map((agent) => agent.summary)).toEqual([
+	expect(spec.root.agents.map((agent) => agent.whenToUse)).toEqual([
 		'Writes e2e tests.',
 		'Owns the fixtures.',
 		'Writes e2e tests.',
 		'',
 	]);
 	expect(isCrewSpec(spec)).toBe(true);
-	// Snapshots written before spec/crew-templates-and-editor#roster have no summary and stay readable.
-	const { summary: _, ...legacy } = spec.root.agents[0]!;
-	expect(
-		isCrewSpec({ ...spec, root: { ...spec.root, agents: [legacy, ...spec.root.agents.slice(1)] } })
-	).toBe(true);
-	expect(isCrewTemplate({ ...template, root: { ...template.root, summary: 'two\nlines' } })).toBe(
+	// Snapshots written before spec/crew-templates-and-editor#roster have no line and stay readable.
+	const { whenToUse: line, ...legacy } = spec.root.agents[0]!;
+	const withAgent = (agent: object) => ({
+		...spec,
+		root: { ...spec.root, agents: [agent, ...spec.root.agents.slice(1)] },
+	});
+	expect(isCrewSpec(withAgent(legacy))).toBe(true);
+	// spec/crew-templates-and-editor#schema: an older snapshot keeps the line as `summary`; both names at once are not a snapshot.
+	expect(isCrewSpec(withAgent({ ...legacy, summary: line }))).toBe(true);
+	expect(specWhenToUse({ ...legacy, summary: line! })).toBe('Writes e2e tests.');
+	expect(isCrewSpec(withAgent({ ...legacy, summary: line, whenToUse: line }))).toBe(false);
+	expect(isCrewTemplate({ ...template, root: { ...template.root, whenToUse: 'two\nlines' } })).toBe(
 		false
 	);
 	expect(
-		isCrewTemplate({ ...template, root: { ...template.root, summary: 'x'.repeat(241) } })
+		isCrewTemplate({ ...template, root: { ...template.root, whenToUse: 'x'.repeat(241) } })
 	).toBe(false);
-	expect(updateCrewAgent(template, 'b', { summary: undefined }).root.agents![1]).toEqual({
+	// The former name is not part of the current shape: it is upgraded on read.
+	expect(isCrewTemplate({ ...template, root: { ...template.root, summary: 'x' } })).toBe(false);
+	expect(updateCrewAgent(template, 'b', { whenToUse: undefined }).root.agents![1]).toEqual({
 		id: 'b',
 		name: 'B',
 		template: 'tester',
@@ -459,7 +480,7 @@ it('ships Senior developer with a model, and an overlay replaces its provider an
 	expect(onCodex.provider).toBe('codex');
 	expect(onCodex.choices).toBeUndefined();
 	expect(onCodex.choiceNames).toBeUndefined();
-	expect(onCodex.summary).toBe(senior.summary);
+	expect(onCodex.whenToUse).toBe(senior.whenToUse);
 	expect(builtinAgentCustomized(onCodex)).toBe(true);
 	// The same values in another key order are the app's own.
 	expect(
@@ -503,7 +524,7 @@ it("a built-in crew is customized when its tree differs from the app's (spec/cre
 	expect(builtinCrewCustomized({ ...edited, id: 'own', builtin: false })).toBe(false);
 	expect(withBuiltinCrew(base, undefined)).toBe(base);
 });
-it('ships the specialists as a Developer or a Reviewer with a specialty, and the review crew as the only built-in crew (spec/crew-templates-and-editor#builtin-templates)', () => {
+it('ships the profiles as a Developer or a Reviewer with When to use, and the review crew as the only built-in crew (spec/crew-templates-and-editor#builtin-templates)', () => {
 	const roles = Object.fromEntries(builtinAgentTemplates.map((item) => [item.id, item.role]));
 	expect(roles).toEqual({
 		'foreman-default': 'foreman',
@@ -519,9 +540,9 @@ it('ships the specialists as a Developer or a Reviewer with a specialty, and the
 		expect(isAgentTemplate(template)).toBe(true);
 		expect(isBuiltinCrewName(template.name)).toBe(true);
 		expect(builtinAgentCustomized(template)).toBe(false);
-		// Every role past the three base ones tells the foreman what it is for.
-		if (!['foreman-default', 'developer', 'reviewer'].includes(template.id))
-			expect(template.summary).toBeTruthy();
+		// spec/crew-templates-and-editor#builtin-templates: every built-in role says when to use it, in a line the library translates.
+		expect(isWhenToUse(template.whenToUse)).toBe(true);
+		expect(isMessageKey(template.whenToUse!)).toBe(true);
 	}
 	const lookup = templateLookup([]);
 	for (const crew of builtinCrewTemplates) expect(crewIssues(crew, lookup)).toEqual([]);
@@ -595,7 +616,11 @@ it('keeps an old task snapshot of a crew the app no longer ships valid, with the
 	);
 });
 it('makes the Designer check against the design source, node by node, and keeps the Tester off manual app checks (spec/crew-templates-and-editor#builtin-templates)', () => {
-	const text = (id: string) => builtinAgentTemplates.find((item) => item.id === id)!.instructions;
+	// What the agent of a built-in role reads: the rules of its rights, then the role's own instructions.
+	const text = (id: string) => {
+		const role = builtinAgentTemplates.find((item) => item.id === id)!;
+		return roleInstructions(role.role, role.instructions);
+	};
 	const designer = text('designer');
 	for (const phrase of [
 		'a Figma node or frame, a mock-up file, or a reference screen',
@@ -618,10 +643,78 @@ it('makes the Designer check against the design source, node by node, and keeps 
 	);
 	const tester = text('tester');
 	expect(tester).toContain('automated tests');
-	expect(tester).toContain('Checking the running app by hand is a different job');
+	expect(tester).toContain('Checking the running app by hand is not your job');
 	expect(tester).toContain('10 minutes when it states none');
 	for (const id of ['tester', 'designer'])
 		expect(
-			builtinAgentTemplates.find((item) => item.id === id)!.summary!.length
+			builtinAgentTemplates.find((item) => item.id === id)!.whenToUse!.length
 		).toBeLessThanOrEqual(240);
+});
+// spec/crew-templates-and-editor#schema
+it('reads version 1 roles and crews in the current shape, without a second copy of the rights', () => {
+	const rules = crewRightsInstructions.developer;
+	const doc = upgradeAgentTemplateDocument({
+		schemaVersion: 1,
+		template: {
+			id: 'front',
+			name: 'Front',
+			role: 'developer',
+			summary: 'React screens',
+			instructions: `${rules}\n\nUse the tokens.`,
+			builtin: false,
+		},
+	});
+	expect(isAgentTemplateDocument(doc)).toBe(true);
+	expect(doc).toEqual({
+		schemaVersion: 2,
+		template: {
+			id: 'front',
+			name: 'Front',
+			role: 'developer',
+			whenToUse: 'React screens',
+			instructions: 'Use the tokens.',
+			builtin: false,
+		},
+	});
+	// A duplicate of Developer is the rules alone; any other text stays as written; a version 2 document is left alone.
+	expect(ownInstructions('developer', rules)).toBe('');
+	expect(ownInstructions('developer', 'Read the spec first.')).toBe('Read the spec first.');
+	expect(ownInstructions('foreman', 'Lead.')).toBe('Lead.');
+	const current = { schemaVersion: 2, template: { ...builtinAgentTemplates[1]!, builtin: false } };
+	expect(upgradeAgentTemplateDocument(current)).toBe(current);
+	expect(isAgentTemplateDocument({ schemaVersion: 1, template: builtinAgentTemplates[1] })).toBe(
+		false
+	);
+	const crew = upgradeCrewTemplateDocument({
+		schemaVersion: 1,
+		template: {
+			...starterCrewTemplate,
+			root: {
+				...starterCrewTemplate.root,
+				agents: [{ id: 'a', name: 'A', template: 'developer', summary: 'API routes' }],
+			},
+		},
+	});
+	expect(isCrewTemplateDocument(crew)).toBe(true);
+	expect((crew as { template: CrewTemplate }).template.root.agents![0]).toEqual({
+		id: 'a',
+		name: 'A',
+		template: 'developer',
+		whenToUse: 'API routes',
+	});
+	// A schedule's one-off crew.
+	const launch = upgradeCrewLaunch({
+		template: { ...starterCrewTemplate, root: { ...starterCrewTemplate.root, summary: 'x' } },
+	});
+	expect(isCrewLaunch(launch)).toBe(true);
+	expect(upgradeCrewLaunch({ templateId: 'review' })).toEqual({ templateId: 'review' });
+});
+// spec/crew#auto-model
+it('makes one When to use line of free text', () => {
+	expect(whenToUseLine('  Parts that\nwork from   screenshots ')).toBe(
+		'Parts that work from screenshots'
+	);
+	const long = whenToUseLine(`${'word '.repeat(80)}end`);
+	expect(isWhenToUse(long)).toBe(true);
+	expect(long.endsWith('word…')).toBe(true);
 });

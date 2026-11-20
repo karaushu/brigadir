@@ -3,8 +3,10 @@ import {
 	agentProviders,
 	autoRootName,
 	crewLabel,
+	ownInstructions,
 	selectOption,
 	t,
+	whenToUseLine,
 	type AgentTask,
 	type AutoModelRequest,
 	type Locale,
@@ -95,8 +97,9 @@ export function ModelCard({
 					choiceNames: Object.fromEntries(
 						[answer.model, answer.effort].flatMap((item) => (item ? [[item.id, item.name]] : []))
 					),
-					...(base.summary ? { summary: base.summary } : {}),
-					instructions: base.instructions,
+					// spec/crew#auto-model: the line is the agent's reason; the rules of the rights come with the role, so no instructions of its own.
+					...(whenToUseLine(request.reason) ? { whenToUse: whenToUseLine(request.reason) } : {}),
+					instructions: ownInstructions(base.role, base.instructions),
 					builtin: false,
 				})
 				.catch(() => toastError(t(locale, 'The role could not be saved to the library.')));

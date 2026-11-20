@@ -6,7 +6,9 @@ import {
 	foremanTemplateId,
 	isCrewName,
 	isCrewSpec,
-	isCrewSummary,
+	isWhenToUse,
+	ownInstructions,
+	specWhenToUse,
 	normalizeZonePath,
 	resolveCrewAgent,
 	zoneCovers,
@@ -211,12 +213,13 @@ export function composeCrew(spec: CrewSpec, input: unknown, newId: () => string)
 			configOptions[efforts.id] = choice.value;
 			choiceNames[efforts.id] = choice.name;
 		}
-		if (item.summary !== undefined && !isCrewSummary(item.summary))
-			throw new Error(`The specialty of ${name} must be one line of at most 240 characters.`);
-		const summary =
+		// spec/crew#compose: the tool's `summary` is the agent's When to use line.
+		if (item.summary !== undefined && !isWhenToUse(item.summary))
+			throw new Error(`The summary of ${name} must be one line of at most 240 characters.`);
+		const whenToUse =
 			typeof item.summary === 'string' && item.summary.trim()
 				? item.summary.trim()
-				: template.summary;
+				: specWhenToUse(template);
 		const zoneInput = item.zone ?? [];
 		if (!Array.isArray(zoneInput) || zoneInput.length > 256)
 			throw new Error(`The zone of ${name} must be a list of paths.`);
@@ -239,7 +242,7 @@ export function composeCrew(spec: CrewSpec, input: unknown, newId: () => string)
 				...(Object.keys(configOptions).length ? { configOptions } : {}),
 			},
 			choiceNames,
-			summary: summary ?? '',
+			whenToUse,
 			instructions: template.instructions,
 			extraInstructions: '',
 			zone: [...new Set(zone as string[])],
@@ -283,9 +286,11 @@ export function specAsTemplate(spec: CrewSpec, known: (id: string) => boolean): 
 			: agent.template && known(agent.template)
 				? agent.template
 				: null;
+		// The rules of its rights come back with the node's role at the next resolve; only the role's own text is kept.
+		const own = ownInstructions(agent.role, agent.instructions).trim();
 		const extra =
-			template === null && agent.instructions.trim()
-				? [agent.instructions.trim(), agent.extraInstructions.trim()].filter(Boolean).join('\n\n')
+			template === null && own
+				? [own, agent.extraInstructions.trim()].filter(Boolean).join('\n\n')
 				: agent.extraInstructions;
 		const choices = agent.requestedChoices,
 			names = agent.choiceNames;
@@ -296,7 +301,7 @@ export function specAsTemplate(spec: CrewSpec, known: (id: string) => boolean): 
 			provider: agent.provider,
 			...(choices.modeId || Object.keys(choices.configOptions ?? {}).length ? { choices } : {}),
 			...(Object.keys(names).length ? { choiceNames: names } : {}),
-			...(agent.summary ? { summary: agent.summary } : {}),
+			...(specWhenToUse(agent) ? { whenToUse: specWhenToUse(agent) } : {}),
 			...(agent.zone.length && !isRoot ? { zone: agent.zone } : {}),
 			...(extra ? { extraInstructions: extra } : {}),
 			...(agent.checkedBy.length ? { checkedBy: agent.checkedBy } : {}),

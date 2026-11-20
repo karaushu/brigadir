@@ -129,7 +129,7 @@ export function updateCrewAgent(
 				| 'provider'
 				| 'choices'
 				| 'choiceNames'
-				| 'summary'
+				| 'whenToUse'
 				| 'zone'
 				| 'extraInstructions'
 		]?: CrewAgent[K] | undefined;

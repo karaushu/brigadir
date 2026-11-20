@@ -6,6 +6,7 @@ import {
 	isCrewName,
 	isCrewSpecAgent,
 	normalizeZonePath,
+	whenToUseLine,
 	zonePrefix,
 	crewAgentsPerNodeLimit,
 	type CrewSpec,
@@ -108,7 +109,7 @@ export function autoSpec(task: {
 			provider,
 			requestedChoices: Object.keys(configOptions).length ? { configOptions } : {},
 			choiceNames: {},
-			summary: '',
+			whenToUse: '',
 			instructions: '',
 			extraInstructions: '',
 			zone: [],
@@ -399,15 +400,22 @@ export function isAutoModelAnswer(value: unknown): value is AutoModelAnswer {
 		(value.saveAs === undefined || (isCrewName(value.saveAs) && value.saveAs.trim().length > 0))
 	);
 }
-/** The role a model answer adds to the task: the base role's instructions on the chosen provider and options. */
-export function modelRole(base: CrewSpecAgent, answer: AutoModelAnswer, id: string): CrewSpecAgent {
+/** The role a model answer adds to the task: the base role's rights and instructions on the chosen provider and options; its When to use is the agent's reason. */
+export function modelRole(
+	base: CrewSpecAgent,
+	answer: AutoModelAnswer,
+	id: string,
+	reason: string
+): CrewSpecAgent {
 	const chosen = [answer.model, answer.effort].filter((item): item is AutoModelChoice => !!item);
 	const named = chosen.map((item) => item.name).join(' · ');
 	const configOptions = Object.fromEntries(chosen.map((item) => [item.id, item.value]));
 	const choiceNames = Object.fromEntries(chosen.map((item) => [item.id, item.name]));
+	const { summary: _summary, ...rest } = base;
 	return {
-		...base,
+		...rest,
 		id,
+		whenToUse: whenToUseLine(reason),
 		name: crewName(
 			answer.saveAs?.trim() || `${base.name} · ${named || autoRootName(answer.provider)}`
 		).slice(0, crewNameLimit),

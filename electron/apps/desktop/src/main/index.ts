@@ -203,6 +203,8 @@ import {
 	isAutoModelRequest,
 	isAgentTemplateDocument,
 	isCrewTemplateDocument,
+	upgradeAgentTemplateDocument,
+	upgradeCrewTemplateDocument,
 	type CrewLaunch,
 	type AutoTask,
 	type ProviderCatalog,
@@ -4874,7 +4876,7 @@ void app.whenReady().then(async () => {
 			name: `${template.name.replace(/[\/:\\]/g, '-').slice(0, 200)}.json`,
 			extensions: ['json'],
 			filterName: 'JSON',
-			text: `${JSON.stringify({ schemaVersion: 1, template }, null, 2)}\n`,
+			text: `${JSON.stringify({ schemaVersion: 2, template }, null, 2)}\n`,
 		});
 	});
 	handleClient('templates:import', async (client) => {
@@ -4887,10 +4889,17 @@ void app.whenReady().then(async () => {
 		if (!path) return null;
 		const text = await readFileNode(path, 'utf8');
 		if (text.length > 2_000_000) throw new Error('The file is too large');
-		const doc: unknown = JSON.parse(text);
+		const raw: unknown = JSON.parse(text);
+		// spec/crew-templates-and-editor#schema: an import is an own template, of either document version.
+		const own =
+			isRecord(raw) && isRecord(raw.template)
+				? { ...raw, template: { ...raw.template, builtin: false } }
+				: raw;
 		const store = await TemplateStore.at(process.env.BRIGADIR_DATA_DIR);
-		if (isAgentTemplateDocument(doc)) await store.saveAgent({ ...doc.template, builtin: false });
-		else if (isCrewTemplateDocument(doc)) await store.saveCrew({ ...doc.template, builtin: false });
+		const role = upgradeAgentTemplateDocument(own),
+			crew = upgradeCrewTemplateDocument(own);
+		if (isAgentTemplateDocument(role)) await store.saveAgent(role.template);
+		else if (isCrewTemplateDocument(crew)) await store.saveCrew(crew.template);
 		else throw new Error('The file is not a Brigadir template');
 		return store.read();
 	});

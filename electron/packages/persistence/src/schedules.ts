@@ -5,6 +5,7 @@ import {
 	isSchedule,
 	isScheduleId,
 	isScheduleRun,
+	upgradeCrewLaunch,
 	type Schedule,
 	type ScheduleRun,
 } from '@brigadir/core';
@@ -39,6 +40,12 @@ export class SchedulesStore {
 	}
 	async read(projectId: string, id: string): Promise<Schedule> {
 		const doc = await readDocument(await safePath(await this.dir(projectId, id), 'schedule.json'));
+		// spec/crew-templates-and-editor#schema: a one-off crew saved before the line was `whenToUse` reads in the current shape.
+		if (isRecord(doc.schedule) && isRecord(doc.schedule.task) && doc.schedule.task.crew)
+			doc.schedule = {
+				...doc.schedule,
+				task: { ...doc.schedule.task, crew: upgradeCrewLaunch(doc.schedule.task.crew) },
+			};
 		if (!isSchedule(doc.schedule) || doc.schedule.id !== id || doc.schedule.projectId !== projectId)
 			throw new ReadFailure('invalid_document');
 		return doc.schedule;

@@ -11,8 +11,8 @@ import {
 	crewName,
 	crewParent,
 	crewRecommendedDepth,
-	crewSummary,
-	crewSummaryLimit,
+	crewWhenToUse,
+	crewWhenToUseLimit,
 	findCrewAgent,
 	foremanTemplateId,
 	removeCrewAgent,
@@ -402,7 +402,7 @@ export function CrewEditor({
 				name: crewName(agent.name),
 				role: crewAgentRole(agent, lookup),
 				builtin: false,
-				...(crewSummary(agent, lookup) ? { summary: crewSummary(agent, lookup) } : {}),
+				...(crewWhenToUse(agent, lookup) ? { whenToUse: crewWhenToUse(agent, lookup) } : {}),
 				instructions: [source?.instructions ?? '', agent.extraInstructions ?? '']
 					.filter(Boolean)
 					.join('\n\n'),
@@ -432,7 +432,7 @@ export function CrewEditor({
 				updateCrewAgent(template, agent.id, {
 					template: item.id,
 					extraInstructions: undefined,
-					summary: undefined,
+					whenToUse: undefined,
 					provider: undefined,
 					choices: undefined,
 					choiceNames: undefined,
@@ -1056,24 +1056,24 @@ export function CrewEditor({
 										/>
 									</div>
 								)}
-								{/* spec/crew-templates-and-editor#roster: one line the parent reads in the crew roster; the template's line shows as the placeholder. */}
+								{/* spec/crew-templates-and-editor#roster: the line the parent picks this agent by; the role's line shows as the placeholder. */}
 								{!isRoot && (
 									<div className={styles.row}>
-										<span className={styles.label}>{t(locale, 'Specialty')}</span>
+										<span className={styles.label}>{t(locale, 'When to use')}</span>
 										<TextInput
-											aria-label={t(locale, 'Specialty')}
+											aria-label={t(locale, 'When to use')}
 											className={styles.summary}
 											placeholder={
-												(agent.template ? lookup(agent.template)?.summary : undefined) ||
-												t(locale, 'What the foreman reads about this agent. In English.')
+												(agent.template ? lookup(agent.template)?.whenToUse : undefined) ||
+												t(locale, 'One line, in English.')
 											}
-											maxLength={crewSummaryLimit}
-											value={agent.summary ?? ''}
+											maxLength={crewWhenToUseLimit}
+											value={agent.whenToUse ?? ''}
 											disabled={busy}
 											onChange={(event) =>
 												change(
 													updateCrewAgent(template, agent.id, {
-														summary: event.target.value.replace(/[\r\n]+/g, ' ') || undefined,
+														whenToUse: event.target.value.replace(/[\r\n]+/g, ' ') || undefined,
 													})
 												)
 											}
@@ -1162,7 +1162,7 @@ export function CrewEditor({
 									</p>
 								)}
 								<hr className={styles.sep} />
-								{(resolvedTemplate || isRoot || isLead) && (
+								{(resolvedTemplate?.instructions.trim() || isRoot || isLead) && (
 									<details
 										className={styles.instructions}
 										open={instructionsOpen}

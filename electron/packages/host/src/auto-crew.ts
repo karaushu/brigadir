@@ -1009,7 +1009,7 @@ export class AutoCrewHost extends CrewHost {
 			const answer = await chosen;
 			if (isRecord(answer) && answer.ask !== true) {
 				if (!isAutoModelAnswer(answer)) throw new Error('The model could not be resolved.');
-				const role = await this.addModelRole(base, answer);
+				const role = await this.addModelRole(base, answer, request.reason);
 				await this.deps.emit({
 					kind: 'crew.model.resolved',
 					id: request.id,
@@ -1056,7 +1056,7 @@ export class AutoCrewHost extends CrewHost {
 		if (!waiter) throw new Error('The question is no longer open');
 		if (answer !== null && !isAutoModelAnswer(answer)) throw new Error('Invalid answer');
 		const base = autoRole(this.auto, waiter.request.role) ?? this.auto.roles[0]!;
-		const role = answer ? await this.addModelRole(base, answer) : null;
+		const role = answer ? await this.addModelRole(base, answer, waiter.request.reason) : null;
 		this.modelWaiters.delete(id);
 		await this.deps.emit({
 			kind: 'crew.model.resolved',
@@ -1068,8 +1068,12 @@ export class AutoCrewHost extends CrewHost {
 		});
 		waiter.resolve(role);
 	}
-	private async addModelRole(base: CrewSpecAgent, answer: AutoModelAnswer): Promise<CrewSpecAgent> {
-		const made = modelRole(base, answer, `role-${randomUUID().slice(0, 12)}`),
+	private async addModelRole(
+		base: CrewSpecAgent,
+		answer: AutoModelAnswer,
+		reason: string
+	): Promise<CrewSpecAgent> {
+		const made = modelRole(base, answer, `role-${randomUUID().slice(0, 12)}`, reason),
 			role = {
 				...made,
 				name: uniqueName(made.name, new Set(this.auto.roles.map((item) => item.name))),

@@ -660,9 +660,16 @@ export class CrewHost {
 	protected async parked(_worker: CrewWorkerRecord): Promise<boolean> {
 		return false;
 	}
-	/** A worker that waited for a decision starts now, as a new one would. */
-	protected launchLater(worker: CrewWorkerRecord) {
+	/** A worker that waited for a decision starts now, as a new one would; a launch a stopped host left half-way goes on from there. */
+	protected async launchLater(worker: CrewWorkerRecord) {
 		if (this.waiting.includes(worker.taskId) || this.launching.has(worker.taskId)) return;
+		const key = this.workerKey(worker),
+			task = await this.deps.store.task(key).catch(() => null);
+		if (!task || task.hasStarted) return;
+		// The worktree's preparation resumes from its manifest.
+		if (task.status === 'preparing' || task.status === 'interrupted')
+			await this.deps.store.setStatus(key, 'queued');
+		else if (task.status !== 'queued') return;
 		this.waiting.push(worker.taskId);
 		this.watchSlots();
 	}

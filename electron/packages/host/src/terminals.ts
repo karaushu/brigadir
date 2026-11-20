@@ -621,8 +621,18 @@ export class Terminals {
 	reopen() {
 		this.closed = false;
 	}
-	closeAll() {
+	/** Closes every session; the promise settles once their processes exited, or after `waitMs` (a process that ignores SIGHUP). */
+	closeAll(waitMs = 5000): Promise<void> {
 		this.closed = true;
+		const exited = Promise.all(
+			[...this.entries.values()]
+				.filter((entry) => !entry.info.exited)
+				.map((entry) => new Promise<void>((resolve) => entry.exits.push(resolve)))
+		);
 		for (const entry of [...this.entries.values()]) this.close(entry);
+		return Promise.race([
+			exited.then(() => {}),
+			new Promise<void>((resolve) => setTimeout(resolve, waitMs).unref?.()),
+		]);
 	}
 }

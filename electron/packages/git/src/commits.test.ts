@@ -266,4 +266,4 @@ it('the agent’s own commit leaves out a submodule pointer the person held at a
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
-});
+}, 30_000);

@@ -575,6 +575,11 @@ export async function startHost(config: HostConfig) {
 	let steerPending = false;
 	/** spec/crew#auto-budget: this worker was stopped at its part budget; nothing starts by itself until the person's message continues it. */
 	let overBudget = task.overBudget === true;
+	/** true — the person continues the part (the stop is lifted on disk too, so a restart keeps a continuation that waits); false — stopped. */
+	async function continuePart(go: boolean) {
+		overBudget = !go;
+		await store.updateTask(config.key, { overBudget: !go });
+	}
 	/** spec/composer-steering-queue-and-ghost#steering-hold: when each held message was sent, the window timer of Claude, and the tools of subagents (no step boundary). */
 	const heldAt = new Map<string, number>();
 	let heldTimer: ReturnType<typeof setTimeout> | undefined;
@@ -651,8 +656,9 @@ export async function startHost(config: HostConfig) {
 			stopScopeWatch = () => {};
 			// spec/crew#auto-move: what stops with the session and the consoles, read while it still runs; the row names it.
 			const stopped = stoppedByMove();
-			// Consoles of the task stop with the session: nothing writes into the folder while it is captured and restored.
-			terminals.closeAll();
+			// Consoles of the task stop with the session: nothing writes into the folder while it is captured and restored. A saved
+			// command started again later must not meet its old process on its port.
+			await terminals.closeAll();
 			await scopeRefresh.catch(() => {});
 			await saveFinished.catch(() => {});
 			await agentFileTail.catch(() => {});
@@ -781,7 +787,8 @@ export async function startHost(config: HostConfig) {
 				quotaBlocked() ||
 				overBudget ||
 				!queue.prompts.length ||
-				(await budgetBlocks())
+				(await budgetBlocks()) ||
+				overBudget
 			)
 				return;
 			const next = queue.prompts[0]!;
@@ -914,6 +921,8 @@ export async function startHost(config: HostConfig) {
 			let queued = queue.prompts.some((item) => turnHeld.has(item.id));
 			for (const item of due) {
 				if (!queue.held?.some((entry) => entry.id === item.id)) continue;
+				// A hire's call that began meanwhile (a parallel tool) holds this one and every later one.
+				if (busy && hireCallWaits()) break;
 				// spec/crew#auto-move: a hire that moves the task ends the turn; what was held waits for the host in the new folder.
 				const inputs =
 					!queued &&
@@ -930,6 +939,7 @@ export async function startHost(config: HostConfig) {
 								)
 							).map((value) => ({ ...value.input, id: value.attachment.id }))
 						: null;
+				if (inputs && busy && hireCallWaits()) break;
 				if (!inputs || !(await steerPrompt(item, inputs))) {
 					await queueHeld(item);
 					queued = true;
@@ -2417,9 +2427,9 @@ export async function startHost(config: HostConfig) {
 		}
 		// spec/crew#auto-budget: the part went over its budget; the turn stops and the worker waits for the person.
 		if (c.kind === 'overBudget') {
-			// The flag goes first: the end of the stopped turn must not start what is queued.
-			overBudget = true;
-			await store.updateTask(config.key, { overBudget: true });
+			// The flag goes first, in the prompt order: a dispatch already under way ends as a turn this stop cancels, and the end of the
+			// stopped turn starts nothing queued.
+			await serialPrompt(() => continuePart(false));
 			if (busy) {
 				await command({ kind: 'cancel' });
 				for (let waited = 0; busy && waited < 30_000; waited += 200)
@@ -2702,12 +2712,12 @@ export async function startHost(config: HostConfig) {
 						: c;
 				// spec/reviews#plan-loop: the findings of a plan review answered the waiting plan, so they run before what is queued.
 				const front = c.kind === 'submitReview' && planAnswered.delete(c.review.id);
-				// spec/crew#auto-budget: the person's message continues a worker stopped at its part budget, before what waited meanwhile.
+				// spec/crew#auto-budget: the person's message continues a worker stopped at its part budget, before what waited meanwhile; the
+				// stop is lifted once the message is taken.
 				const resumes = overBudget && c.kind === 'prompt' && !c.crew;
-				if (resumes) overBudget = false;
 				if (
 					!busy &&
-					!overBudget &&
+					(!overBudget || resumes) &&
 					(!queue.prompts.length || resumes) &&
 					!queue.paused &&
 					!quotaBlocked() &&
@@ -2716,7 +2726,13 @@ export async function startHost(config: HostConfig) {
 					!workspaceGate &&
 					!(await budgetBlocks())
 				) {
-					await beginPrompt(own);
+					if (resumes) await continuePart(true);
+					try {
+						await beginPrompt(own);
+					} catch (error) {
+						if (resumes) await continuePart(false);
+						throw error;
+					}
 					return;
 				}
 				if (
@@ -2740,6 +2756,7 @@ export async function startHost(config: HostConfig) {
 				if (
 					c.kind === 'prompt' &&
 					c.steer === true &&
+					!resumes &&
 					busy &&
 					transport!.steering &&
 					!queue.prompts.length &&
@@ -2755,6 +2772,7 @@ export async function startHost(config: HostConfig) {
 				}
 				const before = front || resumes ? queue.prompts[0]?.id : undefined;
 				await emit({ kind: 'prompt.queued', prompt, ...(before ? { before } : {}) });
+				if (resumes) await continuePart(true);
 				kickPrompts();
 			});
 		if (busy) throw new Error('Wait for the active turn before changing options');
@@ -3428,7 +3446,7 @@ export async function startHost(config: HostConfig) {
 			crewWorker?.stop();
 			budget?.stop();
 			await crewHost?.stop().catch(() => {});
-			terminals.closeAll();
+			void terminals.closeAll();
 			transport?.close();
 			if (transport) await transport.closed;
 			// spec/chat-turns-plans-and-questions#background-commands: nothing is stopped on purpose; what ran in the background is journaled as stopped with the host.

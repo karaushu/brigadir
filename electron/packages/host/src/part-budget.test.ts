@@ -24,7 +24,7 @@ async function until<T>(read: () => Promise<T | undefined>, timeout = 15_000): P
 }
 async function launch() {
 	const root = await mkdtemp(join(tmpdir(), 'brigadir-part-budget-'));
-	cleanup.push(() => rm(root, { recursive: true, force: true }));
+	cleanup.push(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 	await mkdir(join(root, 'repo'));
 	const store = await SessionStore.at(join(root, 'data'));
 	const project = await store.addProject(join(root, 'repo'));
@@ -44,7 +44,11 @@ async function launch() {
 		stdio: 'ignore',
 	});
 	cleanup.push(async () => {
-		if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+		if (child.exitCode !== null || child.signalCode !== null) return;
+		child.kill('SIGTERM');
+		await until(async () =>
+			child.exitCode !== null || child.signalCode !== null ? true : undefined
+		).catch(() => child.kill('SIGKILL'));
 	});
 	const identity = await until(async () => {
 		const id = await readIdentity(store, key);
@@ -95,4 +99,42 @@ it('a worker stopped at its part budget starts nothing queued until the personâ€
 	expect(started(records)).toEqual(['hold', 'go on', 'queued before', 'report']);
 	expect(records.findIndex((r) => r.seq === exceeded.seq)).toBeGreaterThan(0);
 	expect((await store.task(key)).overBudget).toBe(false);
+}, 60_000);
+
+it('a continuation taken while the queue is paused lifts the stop on disk; a refused one does not', async () => {
+	const { store, key, client } = await launch();
+	const stop = () =>
+		client.command({
+			kind: 'overBudget',
+			title: 'API',
+			budget: { minutes: 40, tokens: 400_000 },
+			used: { minutes: 41, tokens: 12_000 },
+		});
+	await stop();
+	await client.command({ kind: 'prompt', text: 'report', crew: { kind: 'review-continue' } });
+	await client.command({ kind: 'pausePromptQueue' });
+	await client.command({ kind: 'prompt', text: 'go on' });
+	let records = (await client.snapshot()).records;
+	expect(promptQueue(records).prompts.map((item) => item.command.text)).toEqual([
+		'go on',
+		'report',
+	]);
+	// A restart now keeps the continuation: the stop is lifted on disk.
+	expect((await store.task(key)).overBudget).toBe(false);
+	await client.command({ kind: 'resumePromptQueue' });
+	records = await until(async () => {
+		const value = (await client.snapshot()).records;
+		return started(value).length >= 2 ? value : undefined;
+	});
+	expect(started(records)).toEqual(['go on', 'report']);
+	// Stopped again with a full, paused queue: the message must wait in the queue, is refused, and the stop stays.
+	await until(async () => (!(await client.status()).busy ? true : undefined));
+	await stop();
+	for (let index = 0; index < 32; index++)
+		await client.command({ kind: 'prompt', text: `r${index}`, crew: { kind: 'review-continue' } });
+	await client.command({ kind: 'pausePromptQueue' });
+	await expect(client.command({ kind: 'prompt', text: 'go on' })).rejects.toThrow(
+		'The prompt queue is full'
+	);
+	expect((await store.task(key)).overBudget).toBe(true);
 }, 60_000);

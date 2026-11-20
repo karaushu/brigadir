@@ -602,9 +602,11 @@ export class AutoCrewHost extends CrewHost {
 				({ event }) =>
 					event.kind === 'workspace.move' && event.id === current.id && event.state === 'moved'
 			);
+		// spec/crew#auto-move: the saved commands the agent had started run again in the worktree, in every host that finishes the move (an
+		// earlier one that stopped took its commands with it); the row, written once, names what the restart stopped.
+		const restarted = await this.restartCommands(current);
 		if (!announced) {
-			// spec/crew#auto-move: what the restart stopped; the saved commands the agent had started run again in the worktree.
-			const stopped = stoppedRow(current, await this.restartCommands(current));
+			const stopped = stoppedRow(current, restarted);
 			await this.deps.emit({
 				kind: 'workspace.move',
 				id: current.id,
@@ -708,10 +710,33 @@ export class AutoCrewHost extends CrewHost {
 				)
 				.map((worker) => [worker.planPartId!, worker])
 		);
-		// The workers this hire created before the host stopped waited for the decision; they start now.
-		for (const worker of started.values()) {
-			const task = await this.deps.store.task(this.workerKey(worker)).catch(() => null);
-			if (task?.status === 'queued' && !task.hasStarted) this.launchLater(worker);
+		// The workers this hire created before the host stopped waited for the decision. One whose role the person changed now is
+		// discarded and hired again; the others take the part as decided now (title, prompt, acceptance, budget) and start.
+		const saved = started.size
+			? ((await this.deps.store.task(this.deps.key)).crew ?? this.deps.context.spec)
+			: this.deps.context.spec;
+		for (const [partId, worker] of [...started]) {
+			const part = hireable.find((item) => item.id === partId),
+				task = await this.deps.store.task(this.workerKey(worker)).catch(() => null);
+			if (!part || !task || task.hasStarted) continue;
+			const node = saved.root.agents.find((agent) => agent.id === worker.nodeId);
+			if (node && node.template !== part.role) {
+				await this.dismiss(worker, 'discarded');
+				started.delete(partId);
+				continue;
+			}
+			if (task.title !== part.title || task.prompt !== part.prompt)
+				await this.deps.store.updateTask(task, { title: part.title, prompt: part.prompt });
+			if (
+				worker.title !== part.title ||
+				JSON.stringify(worker.budget) !== JSON.stringify(part.budget)
+			) {
+				worker.title = part.title;
+				worker.budget = part.budget;
+				await this.saveWorkers();
+			}
+			await this.savePartBrief(worker, part.prompt, part.acceptance ?? '');
+			await this.launchLater(worker);
 		}
 		const pending = hireable.filter((part) => !started.has(part.id));
 		if (pending.length) {
@@ -720,9 +745,17 @@ export class AutoCrewHost extends CrewHost {
 			const from = await this.leadHeads();
 			const spec = this.deps.context.spec,
 				taken = new Set(this.specNames(spec.root));
-			// A part's node id comes from its hire and part, so a decision made again after a crash finds the node it already added.
-			const nodeId = (part: AutoHirePart) =>
-				`w-${createHash('sha256').update(`${hireId}\0${part.id}`).digest('hex').slice(0, 16)}`;
+			// A part's node id comes from its hire and part, so a decision made again after a crash finds the node it already added; a part
+			// whose role changed in between gets a node of that role.
+			const hash = (text: string) =>
+				`w-${createHash('sha256').update(text).digest('hex').slice(0, 16)}`;
+			const nodeId = (part: AutoHirePart) => {
+				const first = hash(`${hireId}\0${part.id}`),
+					node = spec.root.agents.find((agent) => agent.id === first);
+				return !node || node.template === part.role
+					? first
+					: hash(`${hireId}\0${part.id}\0${part.role}`);
+			};
 			const nodes = pending.map((part) => {
 				const existing = spec.root.agents.find((agent) => agent.id === nodeId(part));
 				if (existing) return { part, node: existing, added: false };

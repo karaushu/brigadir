@@ -852,6 +852,86 @@ describe('review fixes', () => {
 		await until(() => (launched.includes(created!) ? true : undefined));
 		expect(restarted.spawned).toHaveLength(1);
 	});
+	it('3d: a worker whose launch stopped half-way, and the person’s new edits, are taken by the next approval', async () => {
+		const { host, make, events, store, task } = await setup();
+		void host.tool('hire_workers', hireInput, signal()).catch(() => {});
+		const hire = await until(() => pendingHire(events));
+		host.failAfter = 1;
+		await expect(host.decideHire({ id: hire.id, approved: true, parts: null })).rejects.toThrow(
+			'crashed'
+		);
+		const [created] = host.spawned,
+			key = { projectId: task.projectId, id: created! };
+		await host.stop();
+		// The host died while the worker prepared its worktree.
+		await store.setStatus(key, 'preparing');
+		const restarted = make(),
+			launched: string[] = [];
+		cleanup.push(() => restarted.stop());
+		restarted['launchWorker'] = async (worker: CrewWorkerRecord) => {
+			launched.push(worker.taskId);
+		};
+		restarted['hasSlot'] = async () => true;
+		await restarted.start();
+		const edited = hire.parts.map((part) =>
+			part.title === 'API endpoints'
+				? {
+						...part,
+						title: 'API endpoints v2',
+						prompt: 'Add the endpoints, paged.',
+						budget: { minutes: 20, tokens: 200_000 },
+					}
+				: part
+		);
+		await restarted.decideHire({ id: hire.id, approved: true, parts: edited });
+		await until(() => (launched.includes(created!) ? true : undefined));
+		expect((await store.task(key)).status).toBe('queued');
+		expect(await store.task(key)).toMatchObject({
+			title: 'API endpoints v2',
+			prompt: 'Add the endpoints, paged.',
+		});
+		expect(restarted['workers'].find((item) => item.taskId === created)).toMatchObject({
+			title: 'API endpoints v2',
+			budget: { minutes: 20, tokens: 200_000 },
+		});
+	});
+	it('3e: a parked worker whose role the person changed is discarded and hired again with that role', async () => {
+		const { host, make, events, store, task } = await setup();
+		void host.tool('hire_workers', hireInput, signal()).catch(() => {});
+		const hire = await until(() => pendingHire(events));
+		host.failAfter = 1;
+		await expect(host.decideHire({ id: hire.id, approved: true, parts: null })).rejects.toThrow(
+			'crashed'
+		);
+		const [created] = host.spawned;
+		await host.stop();
+		await store.setStatus({ projectId: task.projectId, id: created! }, 'queued');
+		const restarted = make();
+		cleanup.push(() => restarted.stop());
+		restarted['launchWorker'] = async () => {};
+		await restarted.start();
+		const other = roles().find((role) => role.name !== 'Developer' && role.role !== 'reviewer')!;
+		const edited = hire.parts.map((part) =>
+			part.title === 'API endpoints' ? { ...part, role: other.id, roleName: other.name } : part
+		);
+		await restarted.decideHire({ id: hire.id, approved: true, parts: edited });
+		expect(events.findLast((event) => event.kind === 'crew.worker.dismissed')).toMatchObject({
+			taskId: created,
+			reason: 'discarded',
+		});
+		const resolved = events.findLast((event) => event.kind === 'crew.hire.resolved');
+		expect(resolved?.kind === 'crew.hire.resolved' && resolved.hired).toHaveLength(2);
+		expect(
+			resolved?.kind === 'crew.hire.resolved' && resolved.hired.map((item) => item.taskId)
+		).not.toContain(created);
+		const api = restarted['workers'].find(
+			(item) => item.title === 'API endpoints' && item.taskId !== created
+		)!;
+		const node = (await store.task(task)).crew!.root.agents.find(
+			(agent) => agent.id === api.nodeId
+		);
+		expect(node?.template).toBe(other.id);
+	});
 	it('4: a dismissed worker does not start from its slot', async () => {
 		const { host, store, task } = await hiredFixture();
 		const worker = host['workers'][0]!,

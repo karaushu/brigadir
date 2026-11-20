@@ -12,6 +12,7 @@ import {
 	samePullRequest,
 	waitsForPerson,
 	statusAfterTurn,
+	lastTurnPlanReturned,
 	queuedCrewQuestion,
 	type TaskProposal,
 	type TaskProposalResult,
@@ -1546,7 +1547,8 @@ export async function startHost(config: HostConfig) {
 				status = statusAfterTurn(
 					event.reason,
 					pendingInputs([...records, record]),
-					taskReview.document().review?.state === 'yours'
+					taskReview.document().review?.state === 'yours',
+					lastTurnPlanReturned([...records, record])
 				);
 			if (event.kind === 'crew.question.escalated' && !busy) status = 'needs-you';
 			if (

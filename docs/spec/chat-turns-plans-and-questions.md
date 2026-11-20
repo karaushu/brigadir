@@ -68,8 +68,9 @@ While a turn runs, the last row of the log is a status line, for example `⟳ Wo
 <a id="turn-footer"></a>
 ### Turn footer
 
-Each completed turn ends with a footer: `Done · 1 min 4 s` (or `Interrupted` / `Error`), then `Copy response`, `Turn actions` (`…`), an optional background chip, and **changed-file chips** with `+N −M`.
+Each completed turn ends with a footer: `Done · 1 min 4 s` (or `Plan sent back` / `Interrupted` / `Error`), then `Copy response`, `Turn actions` (`…`), an optional background chip, and **changed-file chips** with `+N −M`.
 
+- **`Plan sent back`** ends a turn whose plan for approval went back for revision — plan chat, `Plan further…`, `Send edits`, a plan review's findings or `Fix N` reject the request with its reject option and the agent ends the turn (`turn.completed` `cancelled`). It is the normal end of a planning turn: the `Turns` panel shows it with the done glyph, and the task's status after it is not `interrupted`. `Interrupted` stays for a turn the person stopped or that a host restart cut off.
 - Chips come from the turn's **snapshot checkpoints**, not from parsing tool calls (see [Diff and review](diff-and-review.md)). They are the real delta of the turn, including changes made through the terminal (`sed`, code generators). `activity:turn-changes` (`readTurnChanges`) returns at most 200 files plus `total`.
 - Clicking a chip opens the Changes panel and the diff on that file, limited to the turn's range.
 - The chip path is truncated **from the left**, with the file name in bold (`FilePath`), the same pattern as the diff file header and the sidebar repo section.

@@ -2325,6 +2325,7 @@ const uk = {
 	'What should change in the plan?': 'Що змінити в плані?',
 	'⌘↩ send · Esc cancel': '{shortcut} надіслати · Esc скасувати',
 	'Plan in revision': 'План на доопрацюванні',
+	'Plan sent back': 'План повернуто',
 	'The plan copy could not be opened.': 'Копію плану не вдалося відкрити.',
 	'Reject the plan and tell the agent what to change':
 		'Відхилити план і сказати агенту, що змінити',

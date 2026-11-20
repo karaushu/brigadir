@@ -347,6 +347,11 @@ workers`) stays available all the time.
 A reviewer on any provider reads everything through host tools; it needs no connector of its own.
 
 - **The task's prompt** (and, for a crew, nothing of the workers: they have not started).
+- **The person's answers to the plan** after that prompt, oldest first, in every round: each `Plan further…` text, each
+  `Send edits` version and each message in [chat while the plan waits](chat-turns-plans-and-questions.md#plan-chat),
+  since the last approved plan, read back from the prompts that carried them. They are marked as the person's own words and as part of
+  what was asked: where they differ from the task's prompt the later message decides, and a plan that follows them is
+  not `contradicts` or `out-of-scope`. Past 20 000 characters the newest stay and the prompt says how many were left out.
 - **The plan**: `read_plan(taskId, reviewId)` → `{revision, text}`: the plan's Markdown as presented (a split is
   rendered as Markdown: the summary, then per part its number, title, executor with its role, provider and model, files,
   scopes and prompt, then the crew's roster). In a closure check it adds `read` (the revision the first read had), `previous` (the

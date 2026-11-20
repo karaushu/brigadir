@@ -185,9 +185,57 @@ export function planChatPrompt(text: string): string {
 export function planChatWords(prompt: string): string | null {
 	return prompt.startsWith(chatLead) ? prompt.slice(chatLead.length) : null;
 }
+const editsLead =
+	'I edited your plan. Treat this version as the plan, adjust it only where something is wrong, and present it for approval again:\n\n';
 /** English by rule 12: the person edited the plan copy; the agent sees that version before anything is approved. */
 export function planEditsPrompt(text: string): string {
-	return `I edited your plan. Treat this version as the plan, adjust it only where something is wrong, and present it for approval again:\n\n${text.trim()}`;
+	return `${editsLead}${text.trim()}`;
+}
+
+/** spec/reviews#plan-inputs: one of the person's answers to a waiting plan — `Plan further…`, `Send edits` or a chat message. */
+export type PlanAsk = { kind: 'plan further' | 'edits' | 'chat'; text: string };
+/**
+ * spec/reviews#plan-inputs: what the person said about the plan after the task's prompt, in order — the answers to every plan presented since
+ * the last approved one (a plan for approval or the foreman's split), read back from the prompts that carried them.
+ */
+export function planAsks(records: readonly EventRecord[]): PlanAsk[] {
+	const plans = new Map<string, PermissionRequest>();
+	let asks: PlanAsk[] = [];
+	for (const { event } of records) {
+		if (event.kind === 'permission.requested' && isPlanApproval(event.request))
+			plans.set(event.request.id, event.request);
+		const approved =
+			(event.kind === 'permission.resolved' &&
+				event.optionId !== null &&
+				plans
+					.get(event.id)
+					?.options.find((option) => option.id === event.optionId)
+					?.kind.startsWith('allow') === true) ||
+			(event.kind === 'crew.plan.resolved' && event.approved);
+		if (approved) asks = [];
+		if (event.kind !== 'turn.started' || event.crew || event.review) continue;
+		const further = planPromptFeedback(event.text),
+			chat = planChatWords(event.text);
+		if (further !== null) asks.push({ kind: 'plan further', text: further });
+		else if (chat !== null) asks.push({ kind: 'chat', text: chat });
+		else if (event.text.startsWith(editsLead))
+			asks.push({ kind: 'edits', text: event.text.slice(editsLead.length) });
+	}
+	return asks;
+}
+/** spec/reviews#plan-inputs: the person's answers for a plan reviewer's prompt (English, rule 12), the newest kept when they pass `limit`. */
+export function planAsksBrief(asks: readonly PlanAsk[], limit = 20_000): string {
+	const blocks: string[] = [];
+	let size = 0;
+	for (const ask of [...asks].reverse()) {
+		const block = `<person_message kind="${ask.kind}">\n${ask.text.trim()}\n</person_message>`;
+		if (size + block.length > limit) break;
+		blocks.unshift(block);
+		size += block.length;
+	}
+	if (!blocks.length) return '';
+	const left = asks.length - blocks.length;
+	return `\nAfter that prompt the person answered the plan, oldest first. These are the person's own words and part of what was asked: where they differ from the task's prompt, the later message decides, and a plan that follows them neither contradicts the task nor goes out of its scope.${left ? ` (${left} earlier ${left === 1 ? 'message is' : 'messages are'} left out for length.)` : ''}\n${blocks.join('\n')}`;
 }
 
 /** The first markdown heading, else the first non-empty line, for the collapsed row and the file name. */

@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { SessionStore, atomicJson } from '@brigadir/persistence';
 import {
 	builtinAgentTemplates,
+	planFeedbackPrompt,
 	resolveCrewAgent,
 	templateLookup,
 	type EventRecord,
@@ -467,4 +468,64 @@ it('a plan review reads the waiting plan; its reviewer’s task says it reviews 
 	expect(created.event).toMatchObject({ name: 'Reviewer', title: 'reviews the plan' });
 	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
 	expect(read.event).toMatchObject({ point: 'plan', findings: 1, gaps: 1 });
+}, 180_000);
+
+/** The prompts the fixture agents got, from the log they share. */
+const agentPrompts = async (log: string) =>
+	(await readFile(log, 'utf8').catch(() => ''))
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line) as { event: string; params: unknown })
+		.filter((entry) => entry.event === 'prompt')
+		.map((entry) => String(entry.params));
+const presented = (client: HostClient, n: number) =>
+	until(async () =>
+		(await client.snapshot()).records.filter((r) => r.event.kind === 'permission.requested')
+			.length >= n
+			? true
+			: undefined
+	);
+
+// Seen in the walkthrough (A): the plan reviewer read only the task's first prompt and filed findings for doing what the person asked later.
+it('a plan reviewer reads the person’s answers to the plan after the task’s prompt (spec/reviews#plan-inputs)', async () => {
+	const { store, task } = await setup('Keep the focus ring');
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['normal', log]);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await presented(client, 1);
+	// Chat while the plan waits, then `Plan further…` on the next plan.
+	await client.command({ kind: 'prompt', text: 'Is Safari 16 in scope?', steer: true });
+	await find(
+		client,
+		(r) => r.event.kind === 'turn.started' && r.event.text.endsWith('Is Safari 16 in scope?')
+	);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await presented(client, 2);
+	await client.command({
+		kind: 'prompt',
+		text: planFeedbackPrompt('Cover Edge too'),
+		answersPlan: true,
+	});
+	await presented(client, 3);
+	await client.command({
+		kind: 'startReview',
+		point: 'plan',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	const check = (await agentPrompts(log)).find((text) =>
+		text.startsWith('Check the plan of task')
+	)!;
+	expect(check).toContain('<task_prompt>\nplan\n</task_prompt>');
+	expect(check).toContain("These are the person's own words");
+	expect(check).toContain(
+		'<person_message kind="chat">\nIs Safari 16 in scope?\n</person_message>'
+	);
+	expect(check.indexOf('Is Safari 16 in scope?')).toBeLessThan(check.indexOf('Cover Edge too'));
+	expect(check).toContain(
+		'<person_message kind="plan further">\nCover Edge too\n</person_message>'
+	);
 }, 180_000);

@@ -131,6 +131,8 @@ export type TaskReviewDeps = {
 	foreman: boolean;
 	/** spec/design-review#design-source: the Figma links of the task's prompt, saved sources and plans. */
 	designLinks?(): Promise<string[]>;
+	/** spec/reviews#plan-inputs: the person's answers to the plans since the last approved one, for the plan reviewer's prompt. */
+	planAsks?(): string;
 };
 /**
  * spec/reviews#loop: the task side of its reviews — the agent's proposal, the review the person, the agent or the host started, and where it is
@@ -806,7 +808,7 @@ export class TaskReviewLife {
 	private async planPrompt(taskId: string, reviewId: string, round: number, reviewer: string) {
 		const review = this.doc.review,
 			plan = review?.plan,
-			brief = await this.deps.brief().catch(() => ''),
+			brief = `${await this.deps.brief().catch(() => '')}${this.deps.planAsks?.() ?? ''}`,
 			guidance = review?.guidance ?? '',
 			what = plan?.kind === 'split' ? "the foreman's split of task" : 'the plan of task';
 		if (round <= 1)

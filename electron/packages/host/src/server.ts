@@ -64,6 +64,8 @@ import {
 	outputTail,
 	isPlanApproval,
 	planApprovalText,
+	planAsks,
+	planAsksBrief,
 	planChatPrompt,
 	planRejectOption,
 	splitPlanMarkdown,
@@ -380,6 +382,7 @@ export async function startHost(config: HostConfig) {
 			].join('');
 		},
 		part: async () => (crewWorker ? ((await readPartBrief())?.part ?? null) : null),
+		planAsks: () => planAsksBrief(planAsks(records)),
 		// spec/design-review#design-source: Figma links of the task's prompt (a worker's part), its saved sources and the plans it presented.
 		designLinks: async () => {
 			const texts = records.flatMap((record) => {

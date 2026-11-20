@@ -62,7 +62,10 @@ const dayMs = 86_400_000,
 export class SlackWatches {
 	private watches: SlackWatch[] = [];
 	private timer: ReturnType<typeof setInterval> | null = null;
-	private passing = false;
+	/** The pass in flight; a call during it waits for it. */
+	private flight: Promise<void> | null = null;
+	/** Writes of the file, one after another: an older list never lands over a newer one. */
+	private saving: Promise<void> = Promise.resolve();
 	readonly loaded: Promise<void>;
 	constructor(private readonly deps: SlackWatchesDeps) {
 		this.loaded = this.load();
@@ -81,10 +84,14 @@ export class SlackWatches {
 		this.schedule();
 	}
 	private async save() {
-		await atomicJson(await this.deps.file(true), {
-			schemaVersion: 1,
-			watches: this.watches,
-		}).catch(() => {});
+		const write = this.saving.then(async () => {
+			await atomicJson(await this.deps.file(true), {
+				schemaVersion: 1,
+				watches: this.watches,
+			}).catch(() => {});
+		});
+		this.saving = write;
+		await write;
 		this.schedule();
 	}
 	private schedule() {
@@ -190,8 +197,12 @@ export class SlackWatches {
 	/** One pass over every watch; the timer calls it each minute, tests call it directly. */
 	async poll(): Promise<void> {
 		await this.loaded;
-		if (this.passing) return;
-		this.passing = true;
+		this.flight ??= this.pass().finally(() => {
+			this.flight = null;
+		});
+		await this.flight;
+	}
+	private async pass(): Promise<void> {
 		const prs = new Map<string, ReturnType<SlackWatching['pr']>>();
 		const readPR = (pr: SlackWatchPR) => {
 			const key = `${pr.projectId}\0${pr.scopeId}\0${pr.number}`;
@@ -220,7 +231,6 @@ export class SlackWatches {
 				}
 			}
 		} finally {
-			this.passing = false;
 			await this.save();
 		}
 	}
@@ -337,9 +347,12 @@ export class SlackWatches {
 			watch.outbox = message;
 		}
 	}
-	dispose() {
+	/** Stops the timer; resolves when the pass in flight and its write have ended. */
+	async dispose(): Promise<void> {
 		if (this.timer) clearInterval(this.timer);
 		this.timer = null;
+		await this.flight?.catch(() => {});
+		await this.saving;
 	}
 }
 function running(detail: CIRunDetail) {

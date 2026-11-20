@@ -9,7 +9,7 @@ const roots: string[] = [];
 const all: SlackWatches[] = [];
 afterEach(async () => {
 	vi.useRealTimers();
-	for (const item of all.splice(0)) item.dispose();
+	await Promise.all(all.splice(0).map((item) => item.dispose()));
 	await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -111,7 +111,8 @@ it('tells the thread when the PR is merged, reading GitHub once a minute per PR,
 	expect(state.prReads).toBe(1);
 	expect(posts).toEqual([]);
 
-	watches.dispose();
+	// The timer's pass may still be writing the file: the next store opens it only after that.
+	await watches.dispose();
 	const again = await setup(dir);
 	again.state.pr = 'MERGED';
 	await again.watches.poll();

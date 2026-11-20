@@ -741,7 +741,7 @@ export class Slack {
 		return this.watches?.taskEnded(task) ?? Promise.resolve();
 	}
 	dispose() {
-		this.watches?.dispose();
+		void this.watches?.dispose();
 		if (this.timer) clearTimeout(this.timer);
 		this.timer = null;
 		this.socket.stop();

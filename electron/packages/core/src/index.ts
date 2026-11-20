@@ -133,6 +133,8 @@ export * from './blame';
 export * from './renderer-error';
 export * from './mcp-tools';
 export * from './search';
+export * from './settings-registry';
+export * from './brigadir-chat';
 export * from './quick-ask';
 export * from './slash-menu';
 export * from './archive';

@@ -20,6 +20,7 @@ import {
 import { Button, Choice, Popup, Segments, Switch } from './ui/Controls';
 import { Glyph } from './ui/Glyph';
 import { optionChoices } from './ui/OptionIcon';
+import { useWorkspace } from './store';
 import { Spinner } from './ui/Loading';
 import { readCatalog, useProviderCatalogs } from './HelperAgent';
 import { TextInput } from './ui/Input';
@@ -158,6 +159,21 @@ export function SlackSettings({
 					!replacing &&
 					t(locale, 'No token in Keychain, in SLACK_CI_BOT_TOKEN or in a project’s .env.local.')
 				}>
+				{/* spec/settings-modules-and-onboarding#slack-setup: Brigadir walks through the setup in its chat; Settings closes. */}
+				{!replacing && (
+					<SettingsRow label={t(locale, 'Set up with Brigadir')}>
+						<Button
+							size="m"
+							appearance="primary"
+							onClick={() =>
+								useWorkspace.getState().openBrigadir(null, t(locale, 'Set up a Slack bot for me'))
+							}
+							data-slack-brigadir>
+							<Glyph name="helmet-chat" size={13} />
+							{t(locale, 'Set up with Brigadir')}
+						</Button>
+					</SettingsRow>
+				)}
 				{tokenField}
 				{memberRow}
 			</SettingsSection>

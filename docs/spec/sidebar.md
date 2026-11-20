@@ -109,9 +109,10 @@ pointer travels along the rail. No stripes or borders.
 | `Pull requests` | `pr-branch` | PR list, see [Pull requests](pull-requests-and-ci.md) | accent pill: PRs waiting for your review | `⌃⌘2` · `Alt+2` |
 | `Notes` | `note` | Notes screen and the notes list, see [Notes](notifications-slack-notes-and-schedules.md) | none | `⌃⌘3` · `Alt+3` |
 | `Schedules` | `schedule` | Schedules screen and list, see [Schedules](notifications-slack-notes-and-schedules.md) | dot: red — last run failed, amber — missed run waits, accent — a run is working | `⌃⌘4` · `Alt+4` |
+| `Brigadir` | `helmet-chat` | the Brigadir chat and its list of setups and recent changes, see [Brigadir chat](settings-modules-and-onboarding.md#brigadir-chat-entry) | accent dot: a setup is left unfinished | `⌃⌘5` · `Alt+5` |
 
 - Count pill: 14 px, on the glyph's top-right corner, ringed in the rail colour; above 9 it reads `9+`.
-- Shortcuts are `View` menu items (commands `section-tasks`, `section-prs`, `notes`, `schedules`); ☰ on Windows/Linux has
+- Shortcuts are `View` menu items (commands `section-tasks`, `section-prs`, `notes`, `schedules`, `section-brigadir`); ☰ on Windows/Linux has
   the same items.
 - A module that is off (Pull requests, Notes, Schedules) removes its tile; the other shortcuts do not shift.
 - Clicking the open section's tile, or pressing its shortcut again, hides/shows the sidebar. Another section's tile shows
@@ -119,8 +120,8 @@ pointer travels along the rail. No stripes or borders.
 - `Pull requests` opens on all projects; a project group in the PR list narrows the board. What Tasks showed (a task or a
   project board) is remembered and restored on return to Tasks. Opening a task from anywhere (⌘J, a notification) while
   in Pull requests switches back to Tasks.
-- Persisted: `sidebarSection` in `surface-layout.json` (`tasks` | `prs`); a missing or unknown value opens Tasks. Notes and
-  Schedules are screens of their own and are not stored there.
+- Persisted: `sidebarSection` in `surface-layout.json` (`tasks` | `prs`); a missing or unknown value opens Tasks. Notes,
+  Schedules and Brigadir are screens of their own and are not stored there.
 - Every section's list uses the same look as tasks (one look, one component): a filter row, a 36 px «All …» row where it
   makes sense, project groups under a header, rows with a 14 px glyph and a second line, hover and selection on the whole row.
   Empty sections show one sentence and one action (`No notes yet` · `New note`, `No schedules` · `New schedule`,

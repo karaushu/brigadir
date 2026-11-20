@@ -94,6 +94,7 @@ const steps = [
 	'notify',
 	'keys',
 	'remote',
+	'brigadir',
 	'project',
 	'done',
 ] as const;
@@ -332,6 +333,8 @@ export function Intro({
 		railPRs: useRef<HTMLButtonElement>(null),
 		railNotes: useRef<HTMLButtonElement>(null),
 		railSchedules: useRef<HTMLButtonElement>(null),
+		// spec/settings-modules-and-onboarding#intro-steps: the Brigadir step lights its tile.
+		railBrigadir: useRef<HTMLButtonElement>(null),
 	};
 	const remoteOn = Boolean(remote?.enabled) && draft?.modules.remoteAccess !== false;
 	// spec/settings-modules-and-onboarding#intro-remote: a hovered module row lights its part of the window; access turned on lights the Remote tile.
@@ -356,23 +359,25 @@ export function Intro({
 				? remoteOn
 					? refs.chip
 					: null
-				: step === 'agents'
-					? refs.chat
-					: step === 'crew'
-						? crewFocus === 'chat'
-							? refs.chat
-							: refs.crew
-						: step === 'git'
-							? refs.changes
-							: step === 'editor'
-								? refs.editor
-								: step === 'tasks'
-									? refs.allProjects
-									: step === 'notify'
-										? refs.banner
-										: step === 'project'
-											? refs.projects
-											: null;
+				: step === 'brigadir'
+					? refs.railBrigadir
+					: step === 'agents'
+						? refs.chat
+						: step === 'crew'
+							? crewFocus === 'chat'
+								? refs.chat
+								: refs.crew
+							: step === 'git'
+								? refs.changes
+								: step === 'editor'
+									? refs.editor
+									: step === 'tasks'
+										? refs.allProjects
+										: step === 'notify'
+											? refs.banner
+											: step === 'project'
+												? refs.projects
+												: null;
 	const [spot, setSpot] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 	useLayoutEffect(() => {
 		const measure = () => {
@@ -503,7 +508,12 @@ export function Intro({
 						schedules: draft.modules.schedules,
 					}}
 					selected="tasks"
-					tileRefs={{ prs: refs.railPRs, notes: refs.railNotes, schedules: refs.railSchedules }}
+					tileRefs={{
+						prs: refs.railPRs,
+						notes: refs.railNotes,
+						schedules: refs.railSchedules,
+						brigadir: refs.railBrigadir,
+					}}
 					tools={
 						<>
 							<IconButton label={tr('Notifications')}>
@@ -1459,6 +1469,48 @@ export function Intro({
 								'Control this machine from Brigadir on another computer: tasks, terminal, browser and simulator run here.'
 							)}>
 							<RemoteStep status={remote} locale={lang} onStatus={remoteChanged} />
+						</Section>
+					)}
+					{/* spec/settings-modules-and-onboarding#intro-steps: Brigadir — what to ask it, with examples; Next turns nothing on. */}
+					{step === 'brigadir' && (
+						<Section
+							title={tr('Brigadir (section)')}
+							sub={tr('Ask about tasks and code, change settings or set things up — in a chat.')}>
+							<ListCard>
+								{(
+									[
+										[
+											'agents',
+											'Tasks and code',
+											'What is up with my tasks? How is the main flow built?',
+										],
+										[
+											'settings',
+											'Settings',
+											'Make the code font one size bigger. Three columns instead of two.',
+										],
+										[
+											'slack',
+											'Setups',
+											'Set up a Slack bot for me. Turn on access from my laptop.',
+										],
+									] as const
+								).map(([glyph, title, detail]) => (
+									<ListRow
+										key={title}
+										tall
+										wrap
+										lead={<Glyph name={glyph} size={16} />}
+										title={tr(title)}
+										detail={tr(detail)}
+									/>
+								))}
+							</ListCard>
+							<p className={s.note}>
+								{tr(
+									'The helmet in the rail opens it. In Search Everywhere, the last row asks Brigadir.'
+								)}
+							</p>
 						</Section>
 					)}
 					{step === 'project' && (

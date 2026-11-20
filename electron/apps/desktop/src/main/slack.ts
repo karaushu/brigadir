@@ -441,6 +441,59 @@ export class Slack {
 		await this.seal(token);
 		return this.refresh();
 	}
+	/**
+	 * spec/settings-modules-and-onboarding#slack-setup: a bot token from the Brigadir chat's secret card — sealed as `Connect` seals it, with the
+	 * scopes Slack granted (`x-oauth-scopes`) and the app's id (`bots.info`, needs `users:read`) for the links to the app's pages.
+	 */
+	async connectBot(
+		value: string
+	): Promise<{ bot: string; team: string; scopes: string | null; appId: string | null }> {
+		const token = value.trim();
+		if (!isBotToken(token)) throw new Error('This is not a bot token (xoxb-…).');
+		let response: Response;
+		try {
+			response = await (this.deps.fetch ?? fetch)('https://slack.com/api/auth.test', {
+				method: 'POST',
+				headers: {
+					authorization: `Bearer ${token}`,
+					'content-type': 'application/json; charset=utf-8',
+				},
+				body: '{}',
+				signal: AbortSignal.timeout(15_000),
+			});
+		} catch {
+			throw new SlackError('unreachable', true);
+		}
+		const auth: unknown = await response.json().catch(() => null);
+		if (!isRecord(auth)) throw new SlackError('bad_response', true);
+		if (auth.ok !== true)
+			throw new SlackError(typeof auth.error === 'string' ? auth.error : 'error');
+		const scopes = response.headers.get('x-oauth-scopes');
+		await this.setToken(token);
+		let appId: string | null = null;
+		if (typeof auth.bot_id === 'string')
+			try {
+				const info = await this.call('bots.info', { bot: auth.bot_id }, { form: true, token });
+				appId = isRecord(info.bot) && typeof info.bot.app_id === 'string' ? info.bot.app_id : null;
+			} catch {
+				/* Without users:read Slack refuses; the links go to the apps list. */
+			}
+		return {
+			bot: await this.shownName().catch(() => (typeof auth.user === 'string' ? auth.user : 'bot')),
+			team: typeof auth.team === 'string' ? auth.team : '',
+			scopes,
+			appId,
+		};
+	}
+	/** What the Brigadir chat's Slack setup has done: the tokens, the member ID and whether mentions are heard. */
+	setupState() {
+		return {
+			bot: this.current.state === 'on',
+			app: Boolean(this.appToken),
+			memberId: Boolean(this.deps.settings().memberId),
+			listening: this.listening.state === 'on',
+		};
+	}
 	/** `Move to Keychain`: the token found in the environment or a file is sealed; the file is not changed. */
 	async moveToKeychain(): Promise<SlackState> {
 		if (this.token && this.token.source !== 'keychain') await this.seal(this.token.value);

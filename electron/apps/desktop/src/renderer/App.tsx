@@ -49,6 +49,9 @@ import { QuotaButton } from './Quota';
 import { SectionsRail, SettingsTile } from './SectionsRail';
 import { SidebarPRs } from './SidebarPRs';
 import { SidebarNotes } from './SidebarNotes';
+import { SidebarBrigadir } from './SidebarBrigadir';
+import { BrigadirChat } from './BrigadirChat';
+import { useBrigadirList } from './brigadir-data';
 import { SidebarSchedules } from './SidebarSchedules';
 import { SchedulesScreen, useSchedules } from './SchedulesScreen';
 import { requestPRReview } from './pr-section';
@@ -351,7 +354,23 @@ export function App() {
 		schedules: schedulesRoute,
 		openSchedules,
 		openScheduleTask,
+		brigadir: brigadirRoute,
+		openBrigadir,
+		closeBrigadir,
 	} = useWorkspace();
+	// spec/settings-modules-and-onboarding#brigadir-chat-entry: the Brigadir section — its chat in the main area, its list in the sidebar.
+	const brigadirOpen = !!brigadirRoute;
+	const brigadirList = useBrigadirList();
+	// spec/settings-modules-and-onboarding#brigadir-chat-entry: `Ask Brigadir` and `Set up with Brigadir` in Settings open the section; Settings closes.
+	const brigadirOpened = useRef(brigadirRoute);
+	useEffect(() => {
+		if (brigadirRoute && brigadirRoute !== brigadirOpened.current) setSettings(false);
+		brigadirOpened.current = brigadirRoute;
+	}, [brigadirRoute]);
+	/** spec/sidebar#rail-sections: the tile's dot — a setup the person began and left unfinished. */
+	const brigadirDot = !!brigadirList?.setups.some(
+		(setup) => !setup.done && setup.status !== 'Not set up'
+	);
 	// spec/notifications-slack-notes-and-schedules#notes: the Notes screen, while its module is on.
 	const notesOpen = !!notesRoute && appearance.modules.notes;
 	// spec/notifications-slack-notes-and-schedules#schedules: the Schedules section, while its module is on; a run's task opened from it keeps the section's sidebar.
@@ -826,9 +845,10 @@ export function App() {
 	/** spec/sidebar#section-rail: a section's tile or key opens it with the sidebar; the open section's own hides and shows the sidebar. */
 	const openSection = (next: typeof section) => {
 		// spec/notifications-slack-notes-and-schedules#notes + spec/sidebar#section-rail: from the Notes screen a section's tile goes back to that section's board, the sidebar shown.
-		if (notesOpen || schedulesOpen) {
+		if (notesOpen || schedulesOpen || brigadirOpen) {
 			useWorkspace.getState().closeNotes();
 			useWorkspace.getState().closeSchedules();
+			closeBrigadir();
 			setSidebarHidden(false);
 			if (next === section) return;
 		}
@@ -1037,6 +1057,15 @@ export function App() {
 			moveRefusal(task, { moving: false, git: !!task.taskTree }) === null &&
 			route !== '#kit'
 	);
+	// spec/settings-modules-and-onboarding#brigadir-chat-tools: the chat's `settings_open` — Settings at the row, lit as from Search Everywhere.
+	useEffect(
+		() =>
+			window.brigadir.onBrigadirOpenSettings((target) => {
+				setSettingsTarget(target.setting ? { setting: target.setting } : {});
+				setSettings(target.tab);
+			}),
+		[]
+	);
 	useEffect(
 		() =>
 			window.brigadir.onWorkspaceAction((action) => {
@@ -1078,6 +1107,14 @@ export function App() {
 					newSchedule();
 				if (action === 'section-tasks') openSection('tasks');
 				if (action === 'section-prs' && prsModule) openSection('prs');
+				// spec/settings-modules-and-onboarding#brigadir-chat-entry: ⌃⌘5 opens Brigadir; there it hides and shows the sidebar.
+				if (action === 'section-brigadir') {
+					if (useWorkspace.getState().brigadir) setSidebarHidden((value) => !value);
+					else {
+						setSidebarHidden(false);
+						useWorkspace.getState().openBrigadir();
+					}
+				}
 				if (action === 'sidebar-toggle') {
 					setSidebarHidden((value) => !value);
 					if (document.activeElement?.closest('aside'))
@@ -1241,12 +1278,21 @@ export function App() {
 										notes: appearance.modules.notes,
 										schedules: appearance.modules.schedules,
 									}}
-									selected={notesOpen ? 'notes' : schedulesOpen ? 'schedules' : section}
+									selected={
+										brigadirOpen
+											? 'brigadir'
+											: notesOpen
+												? 'notes'
+												: schedulesOpen
+													? 'schedules'
+													: section
+									}
 									counts={{
 										tasks: needsYou.length,
 										prs: railPRs.loaded ? waitingCount(railPRs.items.map((item) => item.pr)) : 0,
 									}}
 									scheduleDot={scheduleDot}
+									brigadirDot={brigadirDot}
 									onOpen={(id) => {
 										if (id === 'notes') {
 											if (notesOpen) setSidebarHidden((value) => !value);
@@ -1256,6 +1302,12 @@ export function App() {
 											else {
 												setSidebarHidden(false);
 												openSchedules();
+											}
+										} else if (id === 'brigadir') {
+											if (brigadirOpen) setSidebarHidden((value) => !value);
+											else {
+												setSidebarHidden(false);
+												openBrigadir();
 											}
 										} else openSection(id);
 									}}
@@ -1284,7 +1336,13 @@ export function App() {
 									aria-label={t(locale, 'Projects')}>
 									<div className={styles.sidebarChrome} data-sidebar-strip />
 									{/* spec/sidebar#section-rail: the section the rail picked — Tasks, or Pull requests in the same look. */}
-									{schedulesOpen && workspace ? (
+									{brigadirOpen ? (
+										<SidebarBrigadir
+											locale={locale}
+											selected={brigadirRoute.chat}
+											onOpen={(chat, ask) => openBrigadir(chat, ask)}
+										/>
+									) : schedulesOpen && workspace ? (
 										<SidebarSchedules
 											locale={locale}
 											projects={workspace.projects}
@@ -1628,7 +1686,7 @@ export function App() {
 									)}
 								</aside>
 								<main className={styles.content} tabIndex={-1}>
-									{!task && !boardProject && !notesOpen && !schedulesOpen && (
+									{!task && !boardProject && !notesOpen && !schedulesOpen && !brigadirOpen && (
 										<header className={styles.titlebar}>
 											<span>{activeProject?.name ?? t(locale, 'Brigadir')}</span>
 											<AgentsButton />
@@ -1644,6 +1702,23 @@ export function App() {
 											<h1>{t(locale, 'Some data could not be read.')}</h1>
 											<Button onClick={handleRetry}>{t(locale, 'Retry')}</Button>
 										</div>
+									) : brigadirOpen ? (
+										<SurfaceBoundary surface="project" locale={locale} resetKey="brigadir">
+											<BrigadirChat
+												locale={locale}
+												chat={brigadirRoute.chat}
+												ask={brigadirRoute.ask ?? null}
+												project={activeProject?.name ?? workspace?.projects[0]?.name ?? null}
+												onOpenChat={(chat, ask) => openBrigadir(chat, ask)}
+												onOpenSettings={(target) => {
+													setSettingsTarget(target.setting ? { setting: target.setting } : {});
+													setSettings(target.tab);
+												}}
+												onOpenTask={(key) =>
+													useWorkspace.getState().selectTask(key.projectId, key.id)
+												}
+											/>
+										</SurfaceBoundary>
 									) : schedulesOpen && !task && workspace ? (
 										<SurfaceBoundary surface="project" locale={locale} resetKey="schedules">
 											<SchedulesScreen

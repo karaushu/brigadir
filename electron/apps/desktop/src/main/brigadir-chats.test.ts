@@ -1,0 +1,212 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, expect, it } from 'vitest';
+import {
+	brigadirCards,
+	defaultAppSettings,
+	type AppSettings,
+	type BrigadirChatEvent,
+} from '@brigadir/core';
+import { BrigadirChats, type BrigadirChatDeps } from './brigadir-chats';
+
+const roots: string[] = [];
+afterEach(async () => {
+	for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+});
+async function setup(over: Partial<BrigadirChatDeps> = {}) {
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-chat-'));
+	roots.push(root);
+	let settings: AppSettings = structuredClone(defaultAppSettings);
+	const events: BrigadirChatEvent[] = [],
+		created: unknown[] = [],
+		opened: string[] = [];
+	const slackState = { bot: false, app: false, memberId: false, listening: false };
+	const deps: BrigadirChatDeps = {
+		root,
+		mcp: {
+			register: async () => ({ name: 'brigadir', command: 'x', args: [], env: [] }),
+			unregister: () => {},
+		},
+		send: (event) => events.push(event),
+		locale: () => 'en',
+		settings: () => settings,
+		saveSettings: async (next) => {
+			settings = next;
+		},
+		openSettings: (key) => key === 'taskColumns',
+		openRemoteSettings: () => {},
+		projects: async () => [{ id: 'p1', name: 'b2c', path: '/tmp/b2c' }],
+		openProject: () => 'p1',
+		facts: async () => ({
+			text: '- t1 «ATT»',
+			tasks: [{ projectId: 'p1', id: 't1', title: 'ATT' }],
+		}),
+		choice: () => ({ provider: 'claude', model: null }),
+		today: () => '2026-11-20',
+		createTask: async (input) => {
+			created.push(input);
+			return { projectId: input.projectId, id: 'new' };
+		},
+		sendToTask: async () => 'sent',
+		askTask: async () => 'because',
+		openTask: () => {},
+		openExternal: (url) => opened.push(url),
+		slack: {
+			connectBot: async (token) => {
+				if (token === 'bad') throw new Error('invalid_auth');
+				slackState.bot = true;
+				return {
+					bot: 'Jarvis',
+					team: 'acme',
+					scopes: token === 'few' ? 'chat:write' : null,
+					appId: 'A1',
+				};
+			},
+			connectApp: async () => {
+				slackState.app = true;
+			},
+			state: () => slackState,
+		},
+		...over,
+	};
+	const chats = new BrigadirChats(deps);
+	const chat = await chats.create();
+	const tool = (name: string, args: Record<string, unknown>) =>
+		(
+			chats as unknown as {
+				tool(chat: string, method: string, params: unknown, signal: AbortSignal): Promise<unknown>;
+			}
+		).tool(chat.id, name, args, new AbortController().signal);
+	const cards = async () => brigadirCards((await chats.read(chat.id)).rows);
+	const until = async (check: () => Promise<boolean>) => {
+		for (let i = 0; i < 100 && !(await check()); i++)
+			await new Promise((resolve) => setTimeout(resolve, 10));
+	};
+	return {
+		chats,
+		chat,
+		tool,
+		cards,
+		until,
+		events,
+		created,
+		opened,
+		get settings() {
+			return settings;
+		},
+	};
+}
+
+it('changes a setting with a card the person can undo (spec/settings-modules-and-onboarding#brigadir-chat-cards)', async () => {
+	const test = await setup();
+	expect(await test.tool('settings_set', { key: 'typography.editor.size', value: 13 })).toEqual({
+		key: 'typography.editor.size',
+		before: 12,
+		after: 13,
+	});
+	expect(test.settings.typography.editor.size).toBe(13);
+	const [card] = await test.cards();
+	expect(card).toMatchObject({
+		type: 'setting',
+		state: 'done',
+		before: 12,
+		after: 13,
+		place: 'Settings ▸ Appearance ▸ Editor ▸ Size',
+	});
+	await test.chats.undo(test.chat.id, card!.id);
+	expect(test.settings.typography.editor.size).toBe(12);
+	expect((await test.cards())[0]).toMatchObject({ state: 'undone' });
+	await expect(test.chats.undo(test.chat.id, card!.id)).rejects.toThrow('Nothing to undo');
+	await expect(
+		test.tool('settings_set', { key: 'typography.editor.size', value: 99 })
+	).rejects.toThrow('takes 8–24');
+});
+
+it('holds a change behind Apply until the person answers', async () => {
+	const test = await setup();
+	const call = test.tool('settings_set', { key: 'modules.browser', value: false });
+	await test.until(async () => (await test.cards()).length > 0);
+	const [card] = await test.cards();
+	expect(card).toMatchObject({ state: 'pending' });
+	expect(test.settings.modules.browser).toBe(true);
+	expect(test.chats.answer(test.chat.id, card!.id, 'apply')).toBe(true);
+	await call;
+	expect(test.settings.modules.browser).toBe(false);
+	const cancelled = test.tool('settings_set', { key: 'modules.notes', value: false });
+	await test.until(async () => (await test.cards()).length > 1);
+	test.chats.answer(test.chat.id, (await test.cards())[1]!.id, 'cancel');
+	expect(await cancelled).toBe('The person cancelled the change.');
+	expect(test.settings.modules.notes).toBe(true);
+});
+
+it('takes a secret from its card, never through the agent, and tells the agent only the check', async () => {
+	const test = await setup();
+	const call = test.tool('secret_request', { kind: 'slackBotToken' });
+	await test.until(async () => (await test.cards()).some((card) => card.type === 'secret'));
+	const secret = () => test.cards().then((cards) => cards.find((card) => card.type === 'secret')!);
+	test.chats.answer(test.chat.id, (await secret()).id, 'secret', 'bad');
+	await test.until(
+		async () =>
+			(await secret()).type === 'secret' &&
+			((await secret()) as { state: string }).state === 'error'
+	);
+	expect(await secret()).toMatchObject({ state: 'error', result: 'invalid_auth' });
+	test.chats.answer(test.chat.id, (await secret()).id, 'secret', 'few');
+	const answer = String(await call);
+	expect(answer).toContain('lacks scopes');
+	expect(answer).not.toContain('few');
+	expect(await secret()).toMatchObject({
+		state: 'scopes',
+		link: 'https://api.slack.com/apps/A1/oauth',
+	});
+	const rows = JSON.stringify((await test.chats.read(test.chat.id)).rows);
+	expect(rows).not.toContain('"few"');
+});
+
+it('walks the Slack setup and proposes tasks the person starts or declines', async () => {
+	const test = await setup();
+	const steps = String(await test.tool('setup_start', { kind: 'slack', name: 'Jarvis' }));
+	expect(steps).toContain('Create in Slack');
+	const link = (await test.cards()).find((card) => card.type === 'link')!;
+	expect(link).toMatchObject({ label: 'Create in Slack', title: 'Create the Jarvis app' });
+	await test.chats.openLink(test.chat.id, link.id);
+	expect(test.opened[0]).toContain('manifest_json=');
+	expect((await test.chats.list()).setups[0]).toMatchObject({
+		kind: 'slack',
+		status: '1 of 5 · Create in Slack',
+		chat: test.chat.id,
+	});
+	await expect(test.tool('open_link', { url: 'https://evil.example', label: 'x' })).rejects.toThrow(
+		'Only links'
+	);
+	const task = test.tool('create_task', {
+		projects: ['b2c'],
+		title: 'Test',
+		prompt: 'Do it',
+		base: 'master',
+	});
+	await test.until(async () => (await test.cards()).some((card) => card.type === 'task'));
+	test.chats.answer(
+		test.chat.id,
+		(await test.cards()).find((card) => card.type === 'task')!.id,
+		'start'
+	);
+	expect(await task).toMatchObject({ task: 'new', started: true });
+	expect(test.created[0]).toMatchObject({ projectId: 'p1', baseRef: 'master', title: 'Test' });
+	await expect(test.tool('send_to_task', { task: 'nope', text: 'x' })).rejects.toThrow(
+		'No task nope'
+	);
+	expect(await test.tool('ask_task', { task: 'ATT', question: 'why?' })).toBe('because');
+});
+
+it('lists chats newest first and drops archived ones', async () => {
+	const test = await setup();
+	const second = await test.chats.create();
+	await test.chats.rename(second.id, 'Slack-бот Jarvis');
+	expect((await test.chats.list()).chats.map((chat) => chat.title)).toContain('Slack-бот Jarvis');
+	await test.chats.archive(second.id);
+	expect((await test.chats.list()).chats.map((chat) => chat.id)).toEqual([test.chat.id]);
+	await test.chats.remove(test.chat.id);
+	expect((await test.chats.list()).chats).toEqual([]);
+});

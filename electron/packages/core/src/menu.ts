@@ -231,6 +231,8 @@ export const menuCommands: readonly Command[] = [
 	workspace('View', 'Notes', 'notes', 'Ctrl+Command+3', 'always'),
 	// spec/notifications-slack-notes-and-schedules#schedules: Schedules is the fourth section; File ▸ New schedule… opens the sheet with When = Repeat.
 	workspace('View', 'Schedules', 'schedules', 'Ctrl+Command+4', 'always'),
+	// spec/settings-modules-and-onboarding#brigadir-chat-entry: Brigadir is the fifth section; not a module, so always there.
+	workspace('View', 'Brigadir (section)', 'section-brigadir', 'Ctrl+Command+5', 'always'),
 	// spec/task-window-workspace#layout-switch: View ▸ Layout — the three switches of the task toolbar's Layout, ⌘1–⌘3 (the routes are ⇧⌘1 / ⇧⌘2),
 	// then Show all and Reset column widths.
 	workspace('Layout', 'Chat', 'layout-chat', 'CmdOrCtrl+1', 'task'),
@@ -414,6 +416,7 @@ export const menuCommandIcons: Readonly<Record<string, MenuIcon>> = {
 	'sidebar-toggle': 'sidebar-toggle',
 	'section-tasks': 'board',
 	'section-prs': 'pr-branch',
+	'section-brigadir': 'helmet-chat',
 	notes: 'note',
 	'note-new': 'note',
 	schedules: 'schedule',

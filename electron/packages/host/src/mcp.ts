@@ -29,7 +29,7 @@ type Content = {
 	content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[];
 	isError?: true;
 };
-type Tool = {
+export type Tool = {
 	name: string;
 	description: string;
 	shape: z.ZodRawShape;
@@ -42,7 +42,8 @@ type Tool = {
 		id: string | number
 	): Promise<Content>;
 };
-const text = (value: unknown): Content => ({
+export type ToolContent = Content;
+export const text = (value: unknown): Content => ({
 	content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
 });
 const toolError = (message: string): Content => ({
@@ -1043,7 +1044,7 @@ const reviewerAnswerTool: Tool = {
 			)
 		),
 };
-type Served = {
+export type Served = {
 	tools: Map<string, Tool & { schema: z.ZodObject }>;
 	list: { tools: unknown[] };
 	modules: AppModules;
@@ -1130,6 +1131,23 @@ export function mcpTools(
 	served.set(key, value);
 	return value;
 }
+/** spec/settings-modules-and-onboarding#brigadir-chat-tools: a fixed set of tools served the same way (main's Brigadir chat). */
+export function servedTools(list: readonly Tool[]): Served {
+	const tools = list.map((tool) => ({ ...tool, schema: z.object(tool.shape) }));
+	return {
+		modules: { ...defaultModules },
+		hidden: noHidden,
+		tools: new Map(tools.map((tool) => [tool.name, tool])),
+		list: {
+			tools: tools.map((tool) => ({
+				name: tool.name,
+				description: tool.when ? `${tool.description} ${tool.when}` : tool.description,
+				inputSchema: z.toJSONSchema(tool.schema, { target: 'draft-7', io: 'input' }),
+				execution: { taskSupport: 'forbidden' },
+			})),
+		},
+	};
+}
 /** Where a session reads the modules that are on and learns about a switch (`ModuleSettings` in the host). */
 export type ModuleSource = {
 	current(): AppModules;
@@ -1215,8 +1233,34 @@ export function serveMcp(
 	review = false,
 	hidden: HiddenToolSource = nothingHidden
 ): (chunk: string) => void {
-	const tools = () =>
-			mcpTools(role, modules.current(), review, hidden.current(), modules.slackBot?.() ?? null),
+	return serveToolSet(
+		socket,
+		{
+			tools: () =>
+				mcpTools(role, modules.current(), review, hidden.current(), modules.slackBot?.() ?? null),
+			// spec/agents-and-providers#tools-awareness: what the agent has besides its own tools, from the modules on now and the role of the session.
+			instructions: () =>
+				toolsInstructions(role, { ...modules.current(), slackBot: modules.slackBot?.() ?? null }),
+			subscribe: (listener) => {
+				const off = modules.subscribe(listener),
+					offHidden = hidden.subscribe(listener);
+				return () => {
+					off();
+					offHidden();
+				};
+			},
+		},
+		call
+	);
+}
+/** A set of tools served over MCP JSON-RPC: what it lists now, the `instructions` of `initialize`, and when the list changes. */
+export type ToolSet = {
+	tools(): Served;
+	instructions(): string | null;
+	subscribe(listener: () => void): () => void;
+};
+export function serveToolSet(socket: Socket, set: ToolSet, call: McpCall): (chunk: string) => void {
+	const tools = () => set.tools(),
 		running = new Map<string | number, AbortController>();
 	const send = (value: unknown) => {
 		if (socket.destroyed) return;
@@ -1228,15 +1272,11 @@ export function serveMcp(
 	};
 	// spec/settings-modules-and-onboarding#modules: a switch in Settings changes the list; agents that follow the notification re-read it (Claude does, Codex does not).
 	let initialized = false;
-	const unsubscribe = modules.subscribe(() => {
-		if (initialized) send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
-	});
-	const unsubscribeHidden = hidden.subscribe(() => {
+	const unsubscribe = set.subscribe(() => {
 		if (initialized) send({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
 	});
 	socket.once('close', () => {
 		unsubscribe();
-		unsubscribeHidden();
 		for (const controller of running.values()) controller.abort();
 		running.clear();
 	});
@@ -1248,11 +1288,7 @@ export function serveMcp(
 	): Promise<unknown> {
 		if (method === 'initialize') {
 			const requested = isRecord(params) ? params.protocolVersion : undefined;
-			// spec/agents-and-providers#tools-awareness: what the agent has besides its own tools, from the modules on now and the role of the session.
-			const instructions = toolsInstructions(role, {
-				...modules.current(),
-				slackBot: modules.slackBot?.() ?? null,
-			});
+			const instructions = set.instructions();
 			return {
 				protocolVersion:
 					typeof requested === 'string' && versions.includes(requested) ? requested : versions[0],

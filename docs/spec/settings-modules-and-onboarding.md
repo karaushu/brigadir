@@ -206,7 +206,7 @@ Why one switch per module: every MCP tool goes into the context of every session
 <a id="intro-steps"></a>
 ### Steps
 
-The order is Welcome, Appearance, Agents, Crew, Git and GitHub, Editor, Tasks, Modules, Notifications, Keyboard shortcuts, Remote access, First project, All set.
+The order is Welcome, Appearance, Agents, Crew, Git and GitHub, Editor, Tasks, Modules, Notifications, Keyboard shortcuts, Remote access, Brigadir, First project, All set.
 
 | Step | Card contents | Spotlight / window |
 | --- | --- | --- |
@@ -221,6 +221,7 @@ The order is Welcome, Appearance, Agents, Crew, Git and GitHub, Editor, Tasks, M
 | `Notifications` | `When` options with descriptions; when not `Never`: `Sound` row and `macOS permission` row (macOS only) with `Allow` | demo banner |
 | `Keyboard shortcuts` | `KeymapEditor`: preset `Brigadir` / `VS Code` / `IntelliJ`, every menu shortcut in sections (General, Chat, Editor, Changes, Console, Browser, View …), search by action or keys; click a shortcut to record, Esc cancels; conflicts show in the row, with `Replace` for a command conflict and only `Cancel` for a reserved key | card centred |
 | `Remote access` | see [Remote access step](#intro-remote) | `Remote` tile while access is on |
+| `Brigadir` | title `Brigadir`, `Ask about tasks and code, change settings or set things up — in a chat.`; three rows with a glyph: `Tasks and code` (`What is up with my tasks? How is the main flow built?`), `Settings` (`Make the code font one size bigger. Three columns instead of two.`), `Setups` (`Set up a Slack bot for me. Turn on access from my laptop.`); the note `The helmet in the rail opens it. In Search Everywhere, the last row asks Brigadir.` Next turns nothing on | the `Brigadir` rail tile ([Brigadir chat](#brigadir-chat-entry)) |
 | `First project` | "Drag a folder here, or" `Choose a folder…`; then the folder name and path, `Another folder…`, found repos appearing one by one (260 ms apart) with their kind (`Root`, `Submodule`, `Separate repo`, `Worktree`, `Folder`) | project list |
 | `All set` | "Settings are always in ⌘,", `Go through again`, `Restart` (if needed), `New task ⌘N` (closes the intro and opens New task for the added project) | — |
 
@@ -256,8 +257,82 @@ This step exists only while the `remoteAccess` module is on and the window is no
 - While access is on, a status line shows "Listening · LAN … · Tailscale …" and `Port {port}. No port forwarding on the router.`, followed by `Add devices in Settings ▸ Modules ▸ Remote access.` The window shows the `Remote` tile, and the spotlight is on it. Pairing is not part of the intro. `Next` turns nothing on.
 - The intro saves the whole settings object, so it copies the live `remoteAccess.enabled` into its draft. Otherwise the next save would turn access off.
 
+<a id="brigadir-chat"></a>
+## Brigadir chat
+
+A chat with Brigadir itself — the same agent that answers in Slack ([Slack agent](notifications-slack-notes-and-schedules.md#slack-agent)), here in the app and with the app's settings in its hands. The person asks in their own words: about tasks («what's with the ATT task in b2c?»), about code in any project («how does b2c decide when to show consent mode?»), for work («make a task from master in b2c…»), or of the app itself («set up Slack», «three columns instead of two», «code font one size bigger»). It answers, looks things up read-only, makes and hands over tasks, changes settings and walks through setups; it never edits files and never sees a secret.
+
+<a id="brigadir-chat-entry"></a>
+### Where it is
+
+- **Rail section**: `Brigadir` is a section of the sections rail like Pull requests, Notes and Schedules ([sidebar](sidebar.md#rail-sections)): a tile under `Schedules` with the glyph `helmet-chat` (the helmet with a chat bubble), `⌃⌘5` · `Alt+5`, `View ▸ Brigadir` (`section-brigadir`). It is not a module and has no off switch.
+- **Its list** (the sidebar, in the shared list look): group `Setups` — one row per guided setup with its state as the second line (`1 of 5 · Create in Slack`, `Not set up`, `Connected`); a click opens the chat that runs it, or starts one. Group `Chats` — the chats, newest first: the title is the first line of the first message (`Rename…` changes it), the time of the last message is the second line. The filter row is `Filter chats` with `New chat` (`+`). A chat's context menu has `Rename…`, `Archive` (the chat leaves the list; its files stay) and `Delete…` (`Delete the chat?`, «The chat and its history are deleted. Settings it changed stay.»). The rail tile has an accent dot while a setup the person began is left unfinished.
+- **Its screen** (the main area): the open chat, with the header — the helmet, the chat's title, the second line `Brigadir` — `Open Settings` and `New chat`. The log is the [note chat](notifications-slack-notes-and-schedules.md#note-chat)'s (the person's bubble, the answer in Markdown, a row per tool call, `Done · 8s`), 680 px wide in the middle, and the cards are `ui/ChatCard`; the composer is `ComposerIsland` without the capsule. A tool row of Brigadir's own tools says what it did (`Changed a setting`, `Asking for a token`); Claude's loader of deferred tools has no row. Leaving for Tasks brings back the task that was open, as Pull requests does.
+- **No chat open** (a new chat, or the section's first opening): the helmet-chat glyph, the title `Brigadir` and six example tiles in a 3 × 2 grid over the composer; a click sends the tile's text as the first message. The examples cover the three kinds of work, with the person's own project names: `Set up a Slack bot for me`, `Make the code font one size bigger`, `Three columns instead of two`, `What is up with my tasks in {project}?`, `How is the main flow built in {project}?` (the open project, else the first; without projects these two are left out), `Turn on access from my laptop`.
+- **Search Everywhere**: the `Brigadir` group, last in `All` and `Actions`, holds one row `Ask Brigadir: «<query>»` for any query that is not empty; `↩` on it closes the search, opens the section in a new chat and sends the query as its first message.
+- **Elsewhere**: the Settings window's header has `Ask Brigadir` beside `Esc` (Settings closes, the section opens); the Slack popup's `Bot` section, while there is no bot, has `Set up with Brigadir` (Settings closes, a new chat starts with `Set up a Slack bot for me`).
+- Not persisted in `sidebarSection`: like Notes and Schedules it is a screen of its own.
+
+<a id="brigadir-chat-session"></a>
+### The agent
+
+- The agent of `Slack: code questions` in Customize per action, else the Default agent — the same agent as in Slack. It is a `QuickAsks` session of mode `aboutCode`, as the Slack agent's is: it starts in the open project's main tree (else the first project's) with every project's folder added, reads files and runs only [commands that read](notifications-slack-notes-and-schedules.md#slack-side-commands); every edit and every other command is declined.
+- Its prompt (English, [rule 12](../../AGENTS.md)) is the Slack agent's ([what the agent gets](notifications-slack-notes-and-schedules.md#slack-agent)): every project, today's date, Brigadir's tasks (the open task first, then the newest of every project) — plus the [settings registry](#settings-registry) as a list (key, label, tab, type, allowed values, current value) and the setup guides. The task list is refreshed with each message. It answers in the language the person writes in, in the app's Markdown, with code where it helps (unlike Slack).
+- **Chats.** Each chat is its own agent session, kept as normalized events in `~/.brigadir/assistant/chats/<id>/events.jsonl` ([rule 2](../../AGENTS.md)) with `chat.json` (title, times, archived); it survives a restart and its session resumes on the next message. The session closes after 10 idle minutes. `New chat` starts an empty one; settings already changed and secrets already sealed live in Brigadir, not in a chat. A chat is not a task: no board column, branch or PR.
+- **A setup outlives its chat.** Each setup's progress (which steps are done, the Slack app id, the chat that runs it) is kept in `~/.brigadir/assistant/setups.json`. A new chat's prompt lists the setups left unfinished, and the agent offers to go on: `Continue the Slack setup (3 of 5)?`.
+
+<a id="settings-registry"></a>
+### Settings registry
+
+One typed list in `core/settings-registry.ts` describes every setting a person can change: key path, label (catalog key), tab and row (`data-settings-row`), type and allowed values, default, spec anchor, and how the chat may touch it — `set`, `confirm` (a change that opens the machine to the network, removes a module's UI or lets agents act without asking: `remoteAccess.enabled`, `modules.*` to off, `agents.slackPostWithoutAsking`) or `read`. Secrets are not in it. The Settings window and the chat validate through the same entry, so the chat can never write a value the window would refuse.
+
+<a id="brigadir-chat-tools"></a>
+### Tools
+
+| Tool | What it does | What the agent gets back |
+| --- | --- | --- |
+| `settings_find {query}` | registry entries matching words in any language | key, label, tab, type, values, current value |
+| `settings_set {key, value}` | validates and saves; `confirm` entries first show a card with `Apply` · `Cancel` | the new value, or the refusal and its reason |
+| `settings_open {key}` | opens Settings at the row, lit as from Search Everywhere | `opened` |
+| `setup_start {kind}` | starts a guided setup (`slack`, `remoteAccess`) and shows its steps card | the steps and which are done |
+| `secret_request {kind}` | shows a secret card (`slackBotToken`, `slackAppToken`); the value goes from the field to main and the key store | the check's result: `connected as @<bot>`, missing scopes, or Slack's error — never the value |
+| `open_link {url}` | opens a link the setup built (Slack's app pages) in the browser, after the person clicks it | `opened` |
+| `create_task {projects, title, prompt, base}` | the [agent-created task](tasks.md#agent-created-tasks) card in the chat, `Start` · `Decline`; `base` as in [Slack](notifications-slack-notes-and-schedules.md#slack-agent) | the task's id, or `declined` |
+| `send_to_task {task, text}` | the message goes to that task's agent, as a steer from the person | `sent` or the refusal (gone, archived, busy) |
+| `ask_task {task, question}` | a [quick question](composer-steering-queue-and-ghost.md#quick-question) to that task's agent in its own side session | its answer |
+| `open_task {task}` | opens the task in Tasks | `opened` |
+
+- The tools are served by main (`main/brigadir-chat-mcp.ts`): the agent spawns the same `mcp-relay` a task's agent does, with a token of its chat, on `~/.brigadir/run/brigadir-chat.sock` (`/tmp/brigadir.<uid>/` when that path is too long for a socket). The tool list and JSON-RPC are the host's (`serveToolSet`), so the schemas and errors read as a task's do. Brigadir's tools never show the agent's own permission card. A task is found by its id or exact title from the task list.
+
+- A pasted secret never enters the conversation, the journal, a log or the agent's context; the card shows `Token in Keychain` once it is sealed.
+- `open_link` opens only links Brigadir built for a setup (the Slack manifest link, `https://api.slack.com/apps/<app id>/…`); any other URL is refused.
+
+<a id="brigadir-chat-cards"></a>
+### Cards in the chat
+
+- **Setting changed**: one row — a green tick, the setting's place (`Editor ▸ Size`), `<old> → <new>`, `Undo` and `Open in Settings` (the row, lit). `Undo` puts the old value back while the setting still has the new one; after another change it fails with `The setting changed since. Undo is off.` Undone, the row shows the old value and `Undone`.
+- **Confirm**: `<label> · <old> → <new>`, the [module consequence](#module-off) or the network fact as one line, `Apply` · `Cancel`. Nothing changes until `Apply`.
+- **Setup steps**: the steps top to bottom, joined by a line — done green with a tick, the current one ringed in the accent, the rest numbered; the header says `1 of 5` or `Done`. It updates as steps finish and stays in the chat as the record.
+- **Secret**: the field (`type=password`), `Connect`, and the result line of the check; `Replace…` once connected. It goes to the key store, never to the agent.
+- **Link**: the button the setup built (`Create in Slack`, `Open App-Level Tokens`), opened only on a click.
+
+<a id="slack-setup"></a>
+### Slack setup
+
+`setup_start {kind: "slack"}`, from `Set up with Brigadir` or the person's words. Steps:
+
+1. **Name** — the agent asks what the bot is called (default `Brigadir`). The bot's name is set in Slack, and agents know the bot by it ([bot name](notifications-slack-notes-and-schedules.md#slack-bot-name)).
+2. **Create in Slack** — a link to `https://api.slack.com/apps?new_app=1&manifest_json=<manifest>` with that name, every bot scope Brigadir uses (`chat:write`, `users:read`, `channels:read`, `groups:read`, `app_mentions:read`, `channels:history`, `groups:history`, `im:history`), the bot events `app_mention`, `message.channels`, `message.groups`, `message.im`, Socket Mode, Interactivity and the app's Messages tab. The person picks the workspace and presses `Create`.
+3. **Bot token** — `Install to Workspace`, then the secret card for `xoxb-…`. The check is `auth.test`; scopes missing from its `x-oauth-scopes` are named with a link to the app's `OAuth & Permissions` page and `Reinstall to Workspace`.
+4. **App-level token** — a link to the app's `Basic Information ▸ App-Level Tokens` (`connections:write`), then the secret card for `xapp-…`, checked with `apps.connections.open`. `Create tasks from Slack` turns on.
+5. **You** — the person's member ID (`Profile ▸ ⋯ ▸ Copy member ID`), saved as `slack.memberId`; the agent ends with a mention test: «Write @<bot> hi in any channel».
+
+Every developer needs their own Slack app: Slack spreads one app's Socket Mode events across all its open connections, so with a shared app a mention would reach a random person's Brigadir. The agent says so when the person mentions a team.
+
 <a id="later"></a>
 ## Later
+- More Brigadir chat setups: notifications and sounds, a project's Slack channel, an agent provider's sign-in; `Set up with Brigadir` in the Remote access popup.
+- The Brigadir chat: an action of its own in Customize per action; chat titles from the Helper agent; archived chats and their restore; `note` and `watch` as tools, as the Slack agent's actions; the intro step's window showing the section.
 
 - A per-project override of a module's global switch in `project.json`.
 - Agent templates that hide disabled providers.

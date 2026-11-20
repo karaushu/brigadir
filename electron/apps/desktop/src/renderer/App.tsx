@@ -949,7 +949,18 @@ export function App() {
 			window.brigadir.onNotificationOpen((key) => {
 				if (location.hash === '#kit') location.hash = 'workspace';
 				useWorkspace.getState().selectTask(key.projectId, key.id);
-				void load();
+				void load().then(() => {
+					// spec/smoke-run#ready-surfaces: Ready to look opens the screen as the chat row's `Show` does.
+					const show = key.show,
+						task = useWorkspace
+							.getState()
+							.workspace?.tasks.find(
+								(item) => item.projectId === key.projectId && item.id === key.id
+							);
+					if (!show || !task) return;
+					if (show.where === 'simulator') setTaskSimulator(task);
+					else if (show.tab) setTaskBrowser(task, show.tab, '', 'front');
+				});
 			}),
 		[load]
 	);

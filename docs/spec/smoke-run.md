@@ -31,7 +31,8 @@ it exists.
 ## `smoke_start`
 
 MCP `smoke_start(steps)` — a tool of a solo task's agent, an Auto agent and a crew developer, listed while the
-browser or the simulator module is on. Not of a foreman, a lead or a reviewer.
+browser or the simulator module is on. Not of a foreman, a lead or a reviewer, and not of a terminal (CLI) session:
+the host cannot ask it for the report, so it lists neither smoke tool (`ready_to_look` stays).
 
 - `steps`: 1–12 lines of 1–120 characters, the flows the run goes through in the order it runs them (`Clients list`,
   `Client card · tabs`, `Add a note`). A flow, not a matrix: no repeat per device or theme unless the task is about it.
@@ -60,15 +61,19 @@ start, across turns and restarts.
 - **The host asks for the report** at once: into the running turn through steering when the adapter steers
   ([Steering](composer-steering-queue-and-ghost.md#steering)), else as a prompt when the agent is idle. A turn that ends
   with the run still open is answered once by the prompt (marker `smoke-report`): `Your smoke run is still open. File
-  its report now with smoke_report: …`. A turn after that one which ends without the report drops the run
-  (`smoke.dropped`, `reason: no-report`).
+  its report now with smoke_report: …`. The ask's own turn (begun with that marker, by the prompt or adopted from
+  steering) ending without the report drops the run (`smoke.dropped`, `reason: no-report`). An ask that waits in the
+  queue is not sent twice; one the person removed from the queue is sent again at the next turn end. When the run
+  is reported or dropped, its asks still in the queue are taken out.
 - **The person** acts on the [deck row](#deck) while the run is running: `+5 min` journals `smoke.extended` (the
   run's limit grows by five minutes, up to 60 in all); `Stop` journals
   `smoke.stopped` (`cause: person`), with the same refusal and the same ask for the report.
 - **The person stops the turn** while a run is open: the run is dropped (`smoke.dropped`, `reason: cancelled`); the
   host asks for nothing.
 - **Restart.** The run lives in the journal. A host that starts with a run open arms the limit for the time left; a
-  limit that passed while it was down journals `smoke.stopped` then, and asks for the report as above.
+  limit that passed while it was down journals `smoke.stopped` then, and asks for the report as above. A run that
+  was already stopped is asked again unless an ask waits in the queue: the old host may have stopped before it asked
+  or during the ask's turn.
 
 <a id="report"></a>
 

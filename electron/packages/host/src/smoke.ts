@@ -34,6 +34,43 @@ export function smokeReportDue(run: SmokeRun): string {
 			: `The smoke run reached its limit of ${minutes(run.limitMs)}.`;
 	return `${head} Stop checking and file the report now with smoke_report: what you checked, what failed, and what you could not check and why.`;
 }
+/** spec/smoke-run#start: a terminal task's agent cannot be asked for the report, so it runs none. */
+export const terminalSmoke =
+	'A terminal session runs no smoke run: check the app with the browser or simulator tools and say what you found.';
+/** The turns from the run's start up to `seq`: was one of them an ask for the report that ended (its `turn.completed` is in the range)? */
+export function askEnded(records: readonly EventRecord[], id: string, seq: number): boolean {
+	let started = false,
+		inAsk = false;
+	for (const record of records) {
+		if (record.seq > seq) break;
+		const event = record.event;
+		if (event.kind === 'smoke.started' && event.id === id) started = true;
+		if (!started) continue;
+		if (event.kind === 'turn.started') inAsk = event.crew?.kind === 'smoke-report';
+		else if (event.kind === 'host.stopped') inAsk = false;
+		else if (event.kind === 'turn.completed') {
+			if (inAsk) return true;
+			inAsk = false;
+		}
+	}
+	return false;
+}
+/** Asks for the report of the run that wait in the queue: queued, not removed, and not yet begun as a turn. */
+export function asksWaiting(records: readonly EventRecord[], id: string): boolean {
+	let started = false;
+	const queued = new Set<string>();
+	let begun = 0;
+	for (const record of records) {
+		const event = record.event;
+		if (event.kind === 'smoke.started' && event.id === id) started = true;
+		if (!started) continue;
+		if (event.kind === 'prompt.queued' && event.prompt.command.crew?.kind === 'smoke-report')
+			queued.add(event.prompt.id);
+		else if (event.kind === 'prompt.removed') queued.delete(event.id);
+		else if (event.kind === 'turn.started' && event.crew?.kind === 'smoke-report') begun++;
+	}
+	return queued.size > begun;
+}
 const stillOpen =
 	'Your smoke run is still open. File its report now with smoke_report: what you checked, what failed, and what you could not check and why.';
 /** spec/smoke-run#limit: the limit a task's host reads from `settings.json` at `smoke_start`. */
@@ -62,6 +99,10 @@ export type SmokeDeps = {
 	steer(text: string): Promise<boolean>;
 	/** A new turn with the text, marker `smoke-report`. */
 	prompt(text: string): Promise<void>;
+	/** Take the asks for the report that still wait in the queue out of it (the run they ask about is closed). */
+	dropAsks(): Promise<void>;
+	/** spec/smoke-run#start: a GUI session — the host can ask it for the report; a terminal one has no smoke run. */
+	asks: boolean;
 	/** spec/smoke-run#ready: the page of a browser tab of this task; null with no page open. */
 	page(tab: string | undefined): Promise<{ tab: string; url: string } | null>;
 	stopping(): boolean;
@@ -107,6 +148,7 @@ export class SmokeLife {
 	start(params: unknown) {
 		return this.serial(async () => {
 			if (!this.deps.eligible) throw new Error('Method is not available to this role');
+			if (!this.deps.asks) throw new Error(terminalSmoke);
 			if (!this.on()) throw new Error('The simulator and the browser are off in Settings.');
 			const input = isRecord(params) ? params : {};
 			const steps = Array.isArray(input.steps)
@@ -184,6 +226,8 @@ export class SmokeLife {
 				elapsedMs: Math.max(0, (run.stoppedAt ?? this.now()) - run.startedAt),
 				...(run.cause ? { stopped: run.cause } : {}),
 			});
+			// An ask still in the queue belongs to this run: it must not reach the next one.
+			await this.deps.dropAsks().catch(() => {});
 			return {
 				reported: true,
 				failed: counts.failed,
@@ -216,48 +260,49 @@ export class SmokeLife {
 			await this.halt('person');
 		});
 	}
-	/** After the host loaded its journal: arm the limit for the time left, or stop a run whose limit passed while the host was down. */
+	/**
+	 * After the host loaded its journal: arm the limit for the time left, or stop a run whose limit passed while the host was down; a run that
+	 * waits for its report and has no ask on its way is asked again (the host may have stopped before it asked, or during the ask's turn).
+	 */
 	load() {
 		return this.serial(async () => {
 			const run = this.run();
-			if (run?.state !== 'running') return;
-			if (run.startedAt + run.limitMs <= this.now()) await this.halt('limit');
-			else this.arm();
+			if (run?.state === 'running') {
+				if (run.startedAt + run.limitMs <= this.now()) await this.halt('limit');
+				else this.arm();
+			} else if (run?.state === 'stopped' && !this.deps.busy()) await this.ask(run);
 		});
 	}
-	/** spec/smoke-run#limit: a turn ended with the run still open — ask once for the report; a turn after that drops it; a stopped turn drops it. */
-	turnEnded(cancelled: boolean) {
+	/**
+	 * spec/smoke-run#limit: a turn ended (`seq` — its `turn.completed`) with the run still open. A stopped turn drops the run; a turn that was
+	 * the ask and ended without the report drops it; otherwise the host asks once, unless an ask waits in the queue.
+	 */
+	turnEnded(cancelled: boolean, seq: number) {
 		return this.serial(async () => {
 			const run = this.run();
 			if (!smokeOpen(run) || this.deps.stopping()) return;
-			const records = this.deps.records(),
-				since = this.startSeq(records, run.id);
-			const later = records.filter((record) => record.seq > since);
-			// The ask ran as a turn of its own: that turn (or a later one) ended without the report.
-			const answered = later.some(
-				(record) =>
-					record.event.kind === 'turn.started' && record.event.crew?.kind === 'smoke-report'
-			);
-			// The ask waits in the queue: its turn comes.
-			const queued = later.some(
-				(record) =>
-					record.event.kind === 'prompt.queued' &&
-					record.event.prompt.command.crew?.kind === 'smoke-report'
-			);
-			if (!cancelled && !answered && (queued || this.asked === run.id)) return;
-			if (cancelled || answered) {
-				this.disarm();
-				await this.deps.emit({
-					kind: 'smoke.dropped',
-					id: run.id,
-					reason: cancelled ? 'cancelled' : 'no-report',
-					elapsedMs: Math.max(0, this.now() - run.startedAt),
-				});
+			if (cancelled || askEnded(this.deps.records(), run.id, seq)) {
+				await this.drop(run, cancelled ? 'cancelled' : 'no-report');
 				return;
 			}
-			this.asked = run.id;
-			await this.deps.prompt(run.state === 'stopped' ? smokeReportDue(run) : stillOpen);
+			await this.ask(run);
 		});
+	}
+	/** One ask for the report as a prompt (marker `smoke-report`), unless one waits in the queue or this host already sent one. */
+	private async ask(run: SmokeRun) {
+		if (this.asked === run.id || asksWaiting(this.deps.records(), run.id)) return;
+		await this.deps.prompt(run.state === 'stopped' ? smokeReportDue(run) : stillOpen);
+		this.asked = run.id;
+	}
+	private async drop(run: SmokeRun, reason: 'cancelled' | 'no-report') {
+		this.disarm();
+		await this.deps.emit({
+			kind: 'smoke.dropped',
+			id: run.id,
+			reason,
+			elapsedMs: Math.max(0, this.now() - run.startedAt),
+		});
+		await this.deps.dropAsks().catch(() => {});
 	}
 	private startSeq(records: readonly EventRecord[], id: string) {
 		return (
@@ -323,19 +368,25 @@ export class SmokeLife {
 			await this.deps.steer(text).catch(() => false);
 			return;
 		}
-		this.asked = stopped.id;
-		await this.deps.prompt(text);
+		await this.ask(stopped);
 	}
 	private arm() {
 		this.disarm();
 		const run = this.run();
 		if (run?.state !== 'running') return;
-		const left = run.startedAt + run.limitMs - this.now();
+		const left = run.startedAt + run.limitMs - this.now(),
+			id = run.id;
 		// setTimeout holds at most ~24.8 days; a limit is at most an hour.
 		this.timer = setTimeout(
 			() => {
 				this.timer = null;
-				void this.serial(() => this.halt('limit')).catch(() => {});
+				// The callback may wait behind a `+5 min` or a new run: it stops only the same run past its own limit.
+				void this.serial(async () => {
+					const now = this.run();
+					if (now?.id !== id || now.state !== 'running') return;
+					if (now.startedAt + now.limitMs <= this.now()) await this.halt('limit');
+					else this.arm();
+				}).catch(() => {});
 			},
 			Math.max(0, left)
 		);

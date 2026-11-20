@@ -134,7 +134,7 @@ describe('spec/smoke-run#data', () => {
 		);
 	});
 	it('tells the reviewer the newest report, or that none ran (spec/reviews#smoke)', () => {
-		expect(smokeReviewParagraph(null)).toContain('No smoke run checked this change');
+		expect(smokeReviewParagraph([])).toContain('No smoke run checked this change');
 		const reported = journal(
 			[0, started],
 			[
@@ -152,8 +152,20 @@ describe('spec/smoke-run#data', () => {
 				},
 			]
 		);
-		const text = smokeReviewParagraph(smokeRunOf(reported));
-		expect(text).toContain('ended in time');
+		const text = smokeReviewParagraph(reported);
+		// A later run that is open or dropped does not hide the newest report.
+		expect(
+			smokeReviewParagraph([
+				...reported,
+				{
+					schemaVersion: 1,
+					seq: 9,
+					at: at(20),
+					event: { kind: 'smoke.started', id: 's2', steps: ['x'], limitMs: 60_000 },
+				},
+			])
+		).toContain('- [failed] Client card — no avatar');
+		expect(text).toContain('the run ended in time');
 		expect(text).toContain('- [failed] Client card — no avatar');
 		expect(text).toContain('- [unchecked] Notes — not in the report');
 		expect(text).toContain(

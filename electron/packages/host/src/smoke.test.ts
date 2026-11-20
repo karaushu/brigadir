@@ -31,11 +31,18 @@ const ofKind = <K extends SessionEvent['kind']>(list: readonly EventRecord[], ki
 
 describe('SmokeLife (spec/smoke-run)', () => {
 	function life(
-		options: { busy?: boolean; steer?: boolean; hired?: boolean; workers?: boolean } = {}
+		options: {
+			busy?: boolean;
+			steer?: boolean;
+			hired?: boolean;
+			workers?: boolean;
+			asks?: boolean;
+		} = {}
 	) {
 		const records: EventRecord[] = [],
 			prompts: string[] = [],
 			steers: string[] = [];
+		let dropped = 0;
 		let now = Date.parse('2026-11-20T10:00:00Z');
 		const emit = async (event: SessionEvent) => {
 			records.push({
@@ -61,6 +68,10 @@ describe('SmokeLife (spec/smoke-run)', () => {
 			prompt: async (text) => {
 				prompts.push(text);
 			},
+			dropAsks: async () => {
+				dropped++;
+			},
+			asks: options.asks ?? true,
 			page: async () => ({ tab: 'b1', url: 'http://localhost:3000/details' }),
 			stopping: () => false,
 			now: () => now,
@@ -72,6 +83,8 @@ describe('SmokeLife (spec/smoke-run)', () => {
 			prompts,
 			steers,
 			emit,
+			dropped: () => dropped,
+			last: () => records.at(-1)?.seq ?? 0,
 			tick: (ms: number) => {
 				now += ms;
 			},
@@ -140,20 +153,86 @@ describe('SmokeLife (spec/smoke-run)', () => {
 		expect(busy.prompts).toEqual([]);
 	});
 	it('a turn that ends with the run open is asked once; the ask turn ending without a report drops it; a stopped turn drops it', async () => {
-		const { value, records, prompts, emit } = life();
+		const { value, records, prompts, emit, last, dropped } = life();
 		await value.start(start);
-		await value.turnEnded(false);
-		await value.turnEnded(false);
+		await emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await value.turnEnded(false, last());
+		await value.turnEnded(false, last());
 		expect(prompts).toHaveLength(1);
 		expect(prompts[0]).toContain('Your smoke run is still open');
 		await emit({ kind: 'turn.started', text: prompts[0]!, crew: { kind: 'smoke-report' } });
-		await value.turnEnded(false);
+		await emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await value.turnEnded(false, last());
 		expect(ofKind(records, 'smoke.dropped')[0]).toMatchObject({ reason: 'no-report' });
+		expect(dropped()).toBe(1);
 		const cancelled = life();
 		await cancelled.value.start(start);
-		await cancelled.value.turnEnded(true);
+		await cancelled.value.turnEnded(true, cancelled.last());
 		expect(ofKind(cancelled.records, 'smoke.dropped')[0]).toMatchObject({ reason: 'cancelled' });
 		expect(cancelled.prompts).toEqual([]);
+	});
+	it('an ask the agent adopts as a new turn is not taken for an ended ask by the old turn ending after it (codex steering)', async () => {
+		const { value, records, emit, last } = life({ busy: true, steer: true });
+		await value.start(start);
+		await emit({ kind: 'turn.completed', reason: 'end_turn' });
+		const old = last();
+		// The adopted turn began after the old one's end was journaled; that end reaches the host later.
+		await emit({
+			kind: 'turn.started',
+			text: '',
+			origin: 'agent',
+			crew: { kind: 'smoke-report' },
+		} as SessionEvent);
+		await value.turnEnded(false, old);
+		expect(ofKind(records, 'smoke.dropped')).toEqual([]);
+		await value.report({ steps: [{ step: 'Clients list', result: 'passed' }], summary: 'ok' });
+		expect(ofKind(records, 'smoke.reported')).toHaveLength(1);
+	});
+	it('a restarted host asks again for a stopped run; a removed ask is asked again; an ask in the queue is not doubled', async () => {
+		const first = life();
+		await first.value.start(start);
+		const id = ofKind(first.records, 'smoke.started')[0]!.id;
+		await first.emit({ kind: 'smoke.stopped', id, cause: 'limit' });
+		await first.value.load();
+		expect(first.prompts).toHaveLength(1);
+		expect(first.prompts[0]).toContain('reached its limit of 10 minutes');
+		// The ask waits in the queue: a turn that ends meanwhile asks nothing more.
+		const second = life();
+		await second.value.start(start);
+		const run = ofKind(second.records, 'smoke.started')[0]!.id;
+		await second.emit({ kind: 'smoke.stopped', id: run, cause: 'person' });
+		await second.emit({
+			kind: 'prompt.queued',
+			prompt: {
+				id: 'q1',
+				command: { kind: 'prompt', text: 'x', crew: { kind: 'smoke-report' } },
+				attachments: [],
+			},
+		} as SessionEvent);
+		await second.emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await second.value.turnEnded(false, second.last());
+		expect(second.prompts).toEqual([]);
+		// The person removed it: the next turn end asks again.
+		await second.emit({ kind: 'prompt.removed', id: 'q1' });
+		await second.emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await second.value.turnEnded(false, second.last());
+		expect(second.prompts).toHaveLength(1);
+	});
+	it('an old timer does not stop a run the person extended', async () => {
+		const { value, records, tick } = life();
+		await value.start(start);
+		const id = ofKind(records, 'smoke.started')[0]!.id;
+		tick(9 * 60_000);
+		await value.extend(id);
+		tick(60_000);
+		await value.load();
+		expect(ofKind(records, 'smoke.stopped')).toEqual([]);
+		tick(5 * 60_000);
+		await value.load();
+		expect(ofKind(records, 'smoke.stopped')).toHaveLength(1);
+	});
+	it('a terminal session runs no smoke', async () => {
+		await expect(life({ asks: false }).value.start(start)).rejects.toThrow('A terminal session');
 	});
 	it('Ready to look journals a screen once and needs the device or the page', async () => {
 		const { value, records, emit } = life();

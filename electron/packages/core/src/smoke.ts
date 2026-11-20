@@ -164,23 +164,28 @@ export function readyScreens(records: readonly EventRecord[]): Set<string> {
 		if (record.event.kind === 'task.ready') seen.add(readyScreenKey(record.event.screen));
 	return seen;
 }
-/** spec/smoke-run#review: the newest smoke run for a reviewer's prompt (English, rule 12); null with no run and no rule to state. */
-export function smokeReviewParagraph(run: SmokeRun | null): string {
-	if (!run || run.state === 'running' || run.state === 'stopped')
+/** spec/smoke-run#review: the newest report of the task, whatever runs started after it. */
+export function newestSmokeReport(
+	records: readonly EventRecord[]
+): Extract<SessionEvent, { kind: 'smoke.reported' }> | null {
+	const found = records.findLast((record) => record.event.kind === 'smoke.reported')?.event;
+	return found?.kind === 'smoke.reported' ? found : null;
+}
+/** spec/smoke-run#review: the newest smoke report for a reviewer's prompt (English, rule 12), or the rule for a task with none. */
+export function smokeReviewParagraph(records: readonly EventRecord[]): string {
+	const report = newestSmokeReport(records);
+	if (!report)
 		return '\nSmoke run: this task has no smoke report. When this change shows in the running app (a screen, a page, a flow a person goes through), leave one finding at the screen\'s file: "No smoke run checked this change in the running app." Do not raise it for a change that does not show in the app.';
-	if (run.state === 'dropped')
-		return `\nSmoke run: the task's last smoke run ended without a report (${run.dropped === 'cancelled' ? 'the person stopped the turn' : 'the agent did not report'}). When this change shows in the running app, leave one finding at the screen's file: "No smoke run checked this change in the running app."`;
-	const report = run.report!,
-		ended = report.stopped
-			? report.stopped === 'limit'
-				? 'stopped at its time limit'
-				: 'stopped by the person'
-			: 'ended in time';
+	const ended = report.stopped
+		? report.stopped === 'limit'
+			? 'stopped at its time limit'
+			: 'stopped by the person'
+		: 'ended in time';
 	const steps = report.steps
 		.map(
 			(item) =>
 				`- [${item.result}] ${item.step}${item.missing ? ' — not in the report' : item.note ? ` — ${item.note}` : ''}`
 		)
 		.join('\n');
-	return `\nSmoke run: the task's newest smoke run (${ended}) reported:\n${steps}\nSummary: ${report.summary}\nA failed step that the change since this report does not fix is a finding, at the line that causes it or at the screen's file. An unchecked step is not a finding by itself.`;
+	return `\nSmoke run: the task's newest smoke report (the run ${ended}):\n${steps}\nSummary: ${report.summary}\nA failed step that the change since this report does not fix is a finding, at the line that causes it or at the screen's file. An unchecked step is not a finding by itself.`;
 }

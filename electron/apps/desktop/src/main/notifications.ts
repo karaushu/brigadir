@@ -530,10 +530,10 @@ export class Notifications {
 				open: () => {
 					this.deps.gateway.removeGroup(name(key));
 					for (const handleId of [...state.handles.keys()]) this.close(state, handleId);
-					this.deps.openTask(key);
-					// spec/smoke-run#ready-surfaces: a click on `Ready to look` shows the screen as the row's `Show` does.
+					// spec/smoke-run#ready-surfaces: a click on `Ready to look` opens the task on the screen, as the row's `Show` does.
 					const ready = kind === 'ready' && requestId ? state.ready.get(requestId) : undefined;
-					if (ready) this.deps.showScreen?.(key, ready);
+					if (ready && this.deps.showScreen) this.deps.showScreen(key, ready);
+					else this.deps.openTask(key);
 				},
 				allow: () => answer(choices.allow),
 				deny: () => answer(choices.deny),

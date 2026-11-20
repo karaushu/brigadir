@@ -381,9 +381,10 @@ export async function startHost(config: HostConfig) {
 		part: async () => (crewWorker ? ((await readPartBrief())?.part ?? null) : null),
 		// spec/design-review#design-source: Figma links of the task's prompt (a worker's part), its saved sources and the plans it presented.
 		// spec/reviews#smoke: with the browser or the simulator on, the reviewer reads the newest smoke report.
+		// A crew worker's part is not the integrated work: its reviewer gets no smoke paragraph (spec/reviews#smoke).
 		smoke: () =>
-			modules.current().browser || modules.current().simulator
-				? smokeReviewParagraph(smoke.run())
+			!crew?.parentKey && (modules.current().browser || modules.current().simulator)
+				? smokeReviewParagraph(records)
 				: '',
 		designLinks: async () => {
 			const texts = records.flatMap((record) => {
@@ -545,6 +546,14 @@ export async function startHost(config: HostConfig) {
 				});
 			}),
 		prompt: (text) => command({ kind: 'prompt', text, crew: { kind: 'smoke-report' } }),
+		dropAsks: () =>
+			serialPrompt(async () => {
+				for (const item of [...queue.prompts, ...(queue.held ?? [])])
+					if (item.command.kind === 'prompt' && item.command.crew?.kind === 'smoke-report')
+						await emit({ kind: 'prompt.removed', id: item.id });
+			}),
+		// spec/smoke-run#start: the host asks a GUI session for the report; a terminal session has no smoke run.
+		asks: task.transport !== 'terminal',
 		page: async (tab) => {
 			if (!ui) return null;
 			const state = await ui.request('browser', { kind: 'state', ...(tab ? { tab } : {}) });
@@ -561,7 +570,11 @@ export async function startHost(config: HostConfig) {
 	// spec/crew#roles: the root foreman's `create_task` is hidden while its crew plan exists; open MCP sessions hear the change.
 	const hiddenListeners = new Set<() => void>();
 	const hiddenTools: HiddenToolSource = {
-		current: () => crewHiddenTools(crew, records),
+		// spec/smoke-run#start: a terminal session lists no smoke run tools (the host cannot ask it for the report).
+		current: () =>
+			task.transport === 'terminal'
+				? new Set([...crewHiddenTools(crew, records), 'smoke_start', 'smoke_report'])
+				: crewHiddenTools(crew, records),
 		subscribe(listener) {
 			hiddenListeners.add(listener);
 			return () => hiddenListeners.delete(listener);
@@ -1753,7 +1766,7 @@ export async function startHost(config: HostConfig) {
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
 			// spec/smoke-run#limit: a turn that ends with the smoke run open asks for the report once; a stopped turn drops the run.
 			if (event.kind === 'turn.completed' && !stopping)
-				void smoke.turnEnded(event.reason === 'cancelled').catch(() => {});
+				void smoke.turnEnded(event.reason === 'cancelled', record.seq).catch(() => {});
 			// spec/reviews#tripwire, spec/reviews#class-raise, spec/reviews#large-review
 			if (!stopping) classEvent(event);
 			// spec/reviews#plan-start: a presented plan starts its review or answers one; an approval ends it.

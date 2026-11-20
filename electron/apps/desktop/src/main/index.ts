@@ -1399,10 +1399,12 @@ const notifications = new Notifications({
 		sessions.command(key, { kind: 'answerPermission', id, optionId }),
 	openTask,
 	// spec/smoke-run#ready-surfaces: a click on `Ready to look` opens the screen as the chat row's `Show` does.
+	// The same deferred window action as openTask, so a closed window opens on the screen too.
 	showScreen: (key, ready) =>
-		ready.where === 'browser' && ready.tab
-			? clients.broadcast('browser:show', { key, tab: ready.tab, front: true })
-			: clients.broadcast('simulator:event', { show: key }),
+		dispatchWindowAction('notification:open', {
+			...key,
+			show: { where: ready.where, ...(ready.tab ? { tab: ready.tab } : {}) },
+		}),
 	push: (type, task, key) => remoteAccess.pushPhones(type, task, key),
 	badge: (count) => {
 		routedNotices.badge(count);

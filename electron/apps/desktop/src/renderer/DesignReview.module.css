@@ -122,6 +122,14 @@ button.tile:focus-visible > .image {
 	width: 100%;
 	height: 100%;
 }
+/* spec/design-review#card: both images of a pair at one scale — the node's width, bounded by the narrower aspect ratio and the tile's height. */
+.pair[data-same-scale] .picture {
+	width: min(100%, calc(var(--pair-aspect) * 86px));
+	height: auto;
+}
+.pair[data-large][data-same-scale] .picture {
+	width: min(100%, calc(var(--pair-aspect) * 170px));
+}
 .mark {
 	fill: none;
 	stroke: var(--amber);

@@ -33,6 +33,8 @@ type Tool = {
 	name: string;
 	description: string;
 	shape: z.ZodRawShape;
+	/** Its own when-to-use line instead of `whenToUse[name]` (a solo agent's `prompt_task`). */
+	when?: string;
 	run(
 		args: Record<string, unknown>,
 		call: McpCall,
@@ -1014,6 +1016,29 @@ const crewTool = (name: CrewToolName): Tool => ({
 	run: async (args, call, signal, id) =>
 		text(await call('crew_tool', { tool: name, params: { ...args, callId: String(id) } }, signal)),
 });
+/**
+ * spec/reviews#reviewer-questions: a solo task's agent answers its own reviewers' `ask_foreman` questions. Listed from the first session (a review
+ * starts mid-session and Codex does not read the list again); the host takes only an answer to an open question of the task's own reviewer.
+ */
+const soloAnswerTool: Tool = {
+	name: 'prompt_task',
+	description:
+		"Answer a question that a reviewer of this task's review asked you: taskId is the reviewer's task and questionId comes from the question message. The answer returns into the reviewer's waiting call. It answers nothing else and prompts no other task.",
+	when: 'Use it only when a reviewer of this task asked you a question.',
+	shape: {
+		taskId,
+		text: z.string().min(1).max(200_000),
+		questionId: z.string().min(1).max(128),
+	},
+	run: async (args, call, signal, id) =>
+		text(
+			await call(
+				'crew_tool',
+				{ tool: 'prompt_task', params: { ...args, callId: String(id) } },
+				signal
+			)
+		),
+};
 type Served = {
 	tools: Map<string, Tool & { schema: z.ZodObject }>;
 	list: { tools: unknown[] };
@@ -1071,7 +1096,7 @@ export function mcpTools(
 		...human,
 		// spec/pull-requests-and-ci#review-crew: a crew worker of a PR review never drafts comments — the foreman leaves the merged findings.
 		...(review && modules.pullRequests && humanToolsAllowed(role) ? reviewTools : []),
-		...(role ? crewTools(role).map(crewTool) : []),
+		...(role ? crewTools(role).map(crewTool) : [soloAnswerTool]),
 	]
 		.filter((tool) => !hidden.has(tool.name))
 		.map((tool) => ({ ...tool, schema: z.object(tool.shape) }));
@@ -1082,9 +1107,10 @@ export function mcpTools(
 		list: {
 			tools: tools.map((tool) => ({
 				name: tool.name,
-				description: whenToUse[tool.name]
-					? `${tool.description} ${whenToUse[tool.name]}`
-					: tool.description,
+				description:
+					(tool.when ?? whenToUse[tool.name])
+						? `${tool.description} ${tool.when ?? whenToUse[tool.name]}`
+						: tool.description,
 				inputSchema: z.toJSONSchema(tool.schema, { target: 'draft-7', io: 'input' }),
 				...(readOnlyTools.has(tool.name) ? { annotations: { readOnlyHint: true } } : {}),
 				execution: { taskSupport: 'forbidden' },

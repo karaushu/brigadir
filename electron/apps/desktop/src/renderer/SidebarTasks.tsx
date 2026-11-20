@@ -28,7 +28,7 @@ import { Popover, useHoverPopover } from './ui/Popover';
 import { TaskPreviewContent } from './ui/TaskPreviewContent';
 import { collapseCrew, loadCollapsedCrews, useCrewCollapse } from './crew-collapse';
 import { useWaitsForSimulator } from './simulator-waiting';
-import { currentReviewerRows, reviewerState, workerRowState } from './worker-row';
+import { currentReviewerRows, reviewCardShown, reviewerState, workerRowState } from './worker-row';
 import styles from './App.module.css';
 /* The sidebar's task row and crew card (spec/sidebar#layout, spec/crew#task-type, spec/appearance#evolution-redesign). The intro's sample window shows the same card at rest
    (`preview`, spec/settings-modules-and-onboarding#intro-steps, rule 17): nothing read through main, the crew expanded. */
@@ -74,6 +74,9 @@ export function CrewCard({
 		: '';
 	// spec/crew#attention: a worker waiting for the person lifts needs-you onto the header, expanded or collapsed.
 	const waiting = crewNeedsYou(task, tasks);
+	// spec/reviews#surfaces: a solo task with no reviewer counted now (none yet, or the last review did not start) is a plain row.
+	if (!reviewCardShown(task, rows))
+		return <TaskRow task={task} preview={preview} onMenu={onMenu} onOpen={onOpen} />;
 	return (
 		<div
 			className={styles.crewCard}

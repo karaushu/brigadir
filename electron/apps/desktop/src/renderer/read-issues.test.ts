@@ -30,6 +30,20 @@ it('names the project, the task and what could not be read; the path stays for a
 		reason: 'Git could not read the repository.',
 		path: 'projects/p1/tasks/t1/git',
 	});
+	// spec/architecture-and-platform#read-issues: a worktree task whose worktree is not ready — the workspace, not git.
+	expect(
+		readIssueLine(
+			{ path: 'projects/p1/tasks/t1/worktree', code: 'worktree_not_ready' },
+			projects,
+			tasks
+		)
+	).toEqual({
+		project: 'business',
+		task: 'Client details',
+		what: 'Worktree',
+		reason: 'The worktree is not ready.',
+		path: 'projects/p1/tasks/t1/worktree',
+	});
 	// A task.json that does not read has no title: the project names it.
 	expect(line('projects/p1/tasks/t9/task.json')).toMatchObject({
 		project: 'business',

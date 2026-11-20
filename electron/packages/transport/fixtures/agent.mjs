@@ -195,8 +195,14 @@ connection = agent({name:'fixture'})
    if(own){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const title=script.split('\n')[1]??'';const finding=/^- id (\S+) \(/m.exec(script)?.[1];
     // spec/crew#reviewer: a task titled «hold the verdict» — the first reviewer to read a check holds it until its turn is cancelled; the check sent again is answered.
     if(/hold the verdict/i.test(title)){let first=true;try{mkdirSync(join(tmpdir(),`brigadir-fixture-hold-${own[2]}`));}catch{first=false;}if(first){record('held',{reviewId:own[2]});await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}}
-    script=own[3]==='first read'?(file&&!/clean/i.test(title)?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round 1: say hello instead"}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"${/remark/i.test(title)?',"note":"Ran the output check: it prints done."':''}}`)
-     :/dispute/i.test(title)&&finding?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"replyTo":"${finding}","text":"Still says done."}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"}`;}
+    // spec/reviews#reviewer-questions: a task titled «ask the author» — the first read asks the task's agent first (`unanswered`: a question nobody answers).
+    const ask=own[3]==='first read'&&/ask the author/i.test(title)?`@call ask_foreman {"question":"${/unanswered/i.test(title)?'Nobody answers this: ':''}Is out/result.txt meant to stay?"}\n`:'';
+    script=ask+(own[3]==='first read'?(file&&!/clean/i.test(title)?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round 1: say hello instead"}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"${/remark/i.test(title)?',"note":"Ran the output check: it prints done."':''}}`)
+     :/dispute/i.test(title)&&finding?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"replyTo":"${finding}","text":"Still says done."}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"}`);}
+   // spec/reviews#reviewer-questions: the task's agent answers its reviewer's question with prompt_task, unless the question says nobody answers.
+   const asked=/^Worker `[^`]*` asks \(questionId (\S+)\):\n(?!Nobody answers this)Is out\/result\.txt meant to stay\?[\s\S]*?prompt_task\(taskId "([^"]+)"/.exec(script);
+   // The first call names another task with the real questionId: the host refuses it, and the answer goes to the reviewer.
+   if(asked)script=`@call prompt_task {"taskId":"another-task","text":"Not for you.","questionId":"${asked[1]}"}\n@call prompt_task {"taskId":"${asked[2]}","text":"Yes, it stays: the person asked for it.","questionId":"${asked[1]}"}`;
    const check=/^Check task (\S+) of `[^`]*` \(reviewId (\S+), round (\d) of \d\)/.exec(script);
    if(check&&/hold the verdict/.test(script.split('\n')[1]??'')){await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}
    if(check){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const dispute=/dispute/i.test(script.split('\n')[1]??'');const comment=file&&(check[3]==='1'||dispute);

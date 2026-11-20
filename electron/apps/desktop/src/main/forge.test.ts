@@ -709,3 +709,34 @@ it('spec/architecture-and-platform#read-issues: a read that fails locally is a r
 		await rm(dir, { recursive: true, force: true });
 	}
 });
+it('spec/architecture-and-platform#read-issues: a worktree task whose worktree is not ready after its preparation is a Worktree issue, not Git', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'brigadir-pr-worktree-')),
+		repo = join(dir, 'repo');
+	try {
+		await mkdir(repo);
+		await gitText(repo, ['init', '-b', 'main']);
+		const store = await SessionStore.at(join(dir, 'data')),
+			project = await store.addProject(repo),
+			task = await store.createTask(project.id, 'Worktree gone', 'claude');
+		await store.updateTask(task, {
+			launch: { isolation: 'worktree', branch: 'b', baseRef: 'HEAD', setupCommand: '', scopes: [] },
+			preparation: { state: 'ready', step: 'worktree' },
+		} as never);
+		const runner = vi.fn<GhRunner>(async () => ({ code: 0, stdout: '', stderr: '' })),
+			actions = new ForgeActions(store.root, {} as Sessions, new Forge(runner));
+		await expect(actions.read(task, false)).rejects.toThrow('The isolated workspace is not ready');
+		await vi.waitFor(() =>
+			expect(
+				actions.decorate({
+					projects: [],
+					tasks: [{ ...task, title: 'x', status: 'done' }],
+					issues: [],
+				}).issues
+			).toEqual([
+				{ path: `projects/${project.id}/tasks/${task.id}/worktree`, code: 'worktree_not_ready' },
+			])
+		);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});

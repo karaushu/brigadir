@@ -195,7 +195,9 @@ export type ReadIssueCode =
 	| 'unreadable'
 	| 'unsafe_path'
 	/** spec/architecture-and-platform#read-issues: a task's repository state (branch, base, remote) could not be read with git. */
-	| 'git_failed';
+	| 'git_failed'
+	/** spec/architecture-and-platform#read-issues: the same read of a worktree task whose worktree is not ready after its preparation. */
+	| 'worktree_not_ready';
 export type ReadIssue = { path: string; code: ReadIssueCode };
 /** Desktop may include its home directory for display-only path abbreviation. */
 export type WorkspaceSnapshot = {

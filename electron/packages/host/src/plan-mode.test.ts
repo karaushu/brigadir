@@ -149,13 +149,16 @@ it('Medium on a Codex-shaped session: switched into plan mode between turns, ask
 	const { repo, store, task } = await setup('Plan mode');
 	let { client, child } = await launch(store, task, 'crew-codex-plan');
 	const start = await last(client);
-	await turn(client, '@call set_task_class {"class":"medium","reason":"touches the API"}');
+	const ended = await turn(
+		client,
+		'@call set_task_class {"class":"medium","reason":"touches the API"}'
+	);
 	// The class's answer tells the agent to end its turn; the session is not switched during it.
 	const answered = await records(client);
 	expect(said(answered, start)).toContain('Brigadir switches the session into plan mode');
 	expect(
 		ofKind(
-			answered.filter((r) => r.seq > start),
+			answered.filter((r) => r.seq > start && r.seq < ended.seq),
 			'plan.mode'
 		)
 	).toEqual([]);

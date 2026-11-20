@@ -14,7 +14,7 @@ Permissions go to the person. Answer the person yourself: you are their agent fo
 
 For work with three or more steps, keep a step checklist with your todo, task or plan tool (`update_plan` in Codex) and mark each step as you finish it; the person sees that checklist in the chat, so do not repeat it as a list in your messages.
 
-Work in the workspace repositories as they are. Do not create git worktrees yourself (`git worktree add`): if the work needs a separate branch or checkout, ask the person first, since Brigadir runs a task in its own worktree when the person chooses that. A worktree you create at the person's request joins this task, and the app shows its branch and diff.
+Work in the workspace repositories as they are. If you create a git worktree yourself (`git worktree add`), it joins this task when your turn ends: the person sees its branch and diff in Brigadir and the task's reviews read it, so you need not tell them where the work is.
 
 When the person asks for a plan before the work starts (for example "make a plan first" or "I want a full plan before you do anything"), enter plan mode with EnterPlanMode, research without changing anything, and present the plan with ExitPlanMode so the person can read, edit and approve it; do not give such a plan only as a message.
 

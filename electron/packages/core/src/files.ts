@@ -220,6 +220,7 @@ export type WorkspaceAction =
 	| 'simulator-screenshot'
 	| 'simulator-shutdown'
 	| 'archive-task'
+	| 'move-worktree'
 	| 'archive'
 	| 'notes'
 	| 'note-new'

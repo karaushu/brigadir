@@ -17,6 +17,8 @@ import { ProjectScreen } from './ProjectScreen';
 import { NotesScreen } from './NotesScreen';
 import type { NoteSelection } from './NoteEditor';
 import {
+	isMessageKey,
+	moveRefusal,
 	relativeAge,
 	projectColors,
 	sidebarTasks,
@@ -875,6 +877,17 @@ export function App() {
 		if (task.status === 'backlog' && !task.hasStarted) editTask(task);
 		else useWorkspace.getState().selectTask(task.projectId, task.id);
 	};
+	/** spec/tasks#move-to-worktree: the host starts the move (or says why not); the chat row follows it. */
+	const moveToWorktree = (target: AgentTask) =>
+		window.brigadir.sendCommand(target, { kind: 'moveToWorktree' }).catch((error: unknown) => {
+			const message =
+				error instanceof Error
+					? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+					: '';
+			toastError(
+				isMessageKey(message) ? t(locale, message) : t(locale, 'Could not move to a worktree')
+			);
+		});
 	const taskMenu = (task: AgentTask): Promise<string | null> => {
 		const focused = document.activeElement,
 			fromBoard = !!focused?.closest('[data-board-task]');
@@ -900,6 +913,7 @@ export function App() {
 				if (action === 'edit') editTask(task);
 				if (action === 'open') openTask(task);
 				if (action === 'archived') showArchiveToast(task);
+				if (action === 'move') void moveToWorktree(task);
 				await load();
 				if (fromBoard) followBoardFocus(focused, task.id, '[data-project-screen] button');
 				return action;
@@ -1017,7 +1031,11 @@ export function App() {
 		!!(task || mainTree) && route !== '#kit',
 		needsYou.length > 0 && route !== '#kit',
 		!!task && !task.archived && !['backlog', 'preparing'].includes(task.status) && route !== '#kit',
-		!!task && !!workspace && canArchive(task, workspace.tasks) && route !== '#kit'
+		!!task && !!workspace && canArchive(task, workspace.tasks) && route !== '#kit',
+		// spec/tasks#move-to-worktree: the same rule as the menus; the host repeats it with what only it knows.
+		!!task &&
+			moveRefusal(task, { moving: false, git: !!task.taskTree }) === null &&
+			route !== '#kit'
 	);
 	useEffect(
 		() =>
@@ -1037,6 +1055,7 @@ export function App() {
 						.createNote(null, '')
 						.then((id) => openNotes(id))
 						.catch(() => toastError(t(locale, 'Could not create the note.')));
+				if (action === 'move-worktree' && task) void moveToWorktree(task);
 				if (action === 'archive-task' && task && workspace && canArchive(task, workspace.tasks))
 					void archiveTask(task).catch(() => toastError(t(locale, 'Could not archive the task.')));
 				if (action === 'new-task' && activeProject) {

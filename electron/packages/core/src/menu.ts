@@ -52,6 +52,8 @@ export const menuContextKeys = [
 	'prSection',
 	'noteChat',
 	'fileTree',
+	/** spec/tasks#move-to-worktree: the open task can move into a worktree now. */
+	'movable',
 ] as const;
 export type MenuContext = Record<(typeof menuContextKeys)[number], boolean>;
 export const emptyMenuContext = Object.fromEntries(
@@ -114,6 +116,8 @@ export const menuCommands: readonly Command[] = [
 	workspace('File', 'Find Action…', 'find-action', 'CmdOrCtrl+Shift+A', 'always'),
 	// spec/tasks#archive: ⌃⌘A archives the open task, like Mail; inactive while its agent works. The Archive window is ⌥⌘A (⇧⌘A is Find Action, spec/search-menus-and-commands#search-tabs).
 	workspace('File', 'Archive task', 'archive-task', 'Ctrl+CmdOrCtrl+A', 'archivable'),
+	// spec/tasks#move-to-worktree: the open task leaves the project folder for a worktree of its own; no default shortcut.
+	workspace('File', 'Move to a worktree', 'move-worktree', undefined, 'movable'),
 	// spec/search-menus-and-commands#project-commands: project commands, right under Search Everywhere; ⌘. stays the turn's Stop.
 	workspace('File', 'Project commands…', 'commands', 'CmdOrCtrl+Alt+R', 'always'),
 	workspace('File', 'Run current command', 'command-run', 'Ctrl+Command+R', 'task'),
@@ -341,6 +345,7 @@ export const menuCommandIcons: Readonly<Record<string, MenuIcon>> = {
 	'find-in-files': 'find-in-files',
 	'find-action': 'search-action',
 	'archive-task': 'archive-box',
+	'move-worktree': 'sidebar-worktree',
 	commands: 'command-idle',
 	'command-run': 'command-play',
 	'command-stop': 'command-stop',

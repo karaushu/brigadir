@@ -1790,7 +1790,13 @@ export function TaskView({
 		{ ...review, comments: review.comments.filter((comment) => !comment.review) },
 		changes
 	);
-	const unavailable = (changes?.scopes ?? []).filter((scope) => scope.available === false);
+	// spec/projects-and-board#external-folders: a folder from outside that left the task (unchosen, or a joined worktree that went away,
+	// spec/tasks#agent-worktrees) is no repo of the task any more.
+	const unavailable = (changes?.scopes ?? []).filter(
+		(scope) =>
+			scope.available === false &&
+			(scope.selected || (scope.kind !== 'external' && scope.kind !== 'folder'))
+	);
 	const notices = (placement: 'composer' | 'shelf') => (
 		<>
 			<ReadOnlyChip

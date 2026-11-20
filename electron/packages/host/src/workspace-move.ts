@@ -49,7 +49,15 @@ import {
  * across the host's restart: `pending` (the decision waits for the turn) → `moving` → `switching` (the task's documents are rewritten) →
  * `switched` (the task is a worktree task; the project folder is restored) → `moved`; or `failed`.
  */
-export type MoveState = 'pending' | 'moving' | 'switching' | 'switched' | 'moved' | 'failed';
+export type MoveState =
+	| 'pending'
+	| 'moving'
+	| 'switching'
+	| 'switched'
+	| 'moved'
+	| 'failed'
+	/** spec/tasks#move-to-worktree: the person cancelled a move that waited for the turn. */
+	| 'cancelled';
 export type RepoMove = {
 	scopeId: string;
 	/** The repo's path relative to the project folder ('' for the root). */
@@ -60,9 +68,15 @@ export type RepoMove = {
 export type MoveDocument = {
 	schemaVersion: 1;
 	id: string;
-	hireId: string;
-	decision: AutoHireDecision;
+	/** spec/crew#auto-move: the hire that started the move; absent for the person's move (spec/tasks#move-to-worktree). */
+	hireId?: string;
+	decision?: AutoHireDecision;
+	by?: 'person';
 	state: MoveState;
+	/** The row said `waiting` (the person's move waited for the turn). */
+	waited?: boolean;
+	/** spec/tasks#move-to-worktree: the agent's next prompt told it where the task moved. */
+	told?: boolean;
 	repos: string[];
 	branch?: string;
 	base?: string;
@@ -119,9 +133,10 @@ export async function readMove(store: SessionStore, key: TaskKey): Promise<MoveD
 	}
 	if (
 		typeof doc.id !== 'string' ||
-		typeof doc.hireId !== 'string' ||
-		!isAutoHireDecision(doc.decision) ||
-		!['pending', 'moving', 'switching', 'switched', 'moved', 'failed'].includes(
+		(doc.by === 'person'
+			? doc.hireId !== undefined
+			: typeof doc.hireId !== 'string' || !isAutoHireDecision(doc.decision)) ||
+		!['pending', 'moving', 'switching', 'switched', 'moved', 'failed', 'cancelled'].includes(
 			String(doc.state)
 		) ||
 		!Array.isArray(doc.repos) ||
@@ -404,8 +419,12 @@ export async function prepareMove(deps: MoveDeps, doc: MoveDocument): Promise<Mo
 		if (!prior) continue;
 		const planned = plans.get(scope.id);
 		if (!planned) {
+			// spec/tasks#agent-worktrees: a repo that joined after the task's start (a worktree the agent made) keeps its own first tree.
 			const start =
-				snapshots.checkpoints[from]?.trees.find((item) => item.scopeId === scope.id) ?? prior;
+				snapshots.checkpoints
+					.slice(from)
+					.find((point) => point.trees.some((item) => item.scopeId === scope.id))
+					?.trees.find((item) => item.scopeId === scope.id) ?? prior;
 			trees.push(start);
 			continue;
 		}

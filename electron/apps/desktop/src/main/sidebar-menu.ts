@@ -30,6 +30,7 @@ import type { Files } from './files';
 import type { Browsers } from './browser';
 import type { LaunchQueue } from './launch-queue';
 import type { TaskArchives } from './task-archive';
+import { personMoveRefusal } from './move-worktree';
 const name = (key: TaskKey) => `${key.projectId}/${key.id}`;
 export class SidebarMenus {
 	labels?: TaskLabels;
@@ -76,6 +77,7 @@ export class SidebarMenus {
 			label: MessageKey;
 			enabled?: boolean;
 			accelerator?: string;
+			sublabel?: MessageKey;
 			copy?: string;
 			reveal?: string;
 		} | null)[],
@@ -92,6 +94,7 @@ export class SidebarMenus {
 							...(icons[item.id] ? { icon: icons[item.id] } : {}),
 							enabled: item.enabled ?? true,
 							...(item.accelerator ? { accelerator: item.accelerator } : {}),
+							...(item.sublabel ? { sublabel: t(locale, item.sublabel) } : {}),
 							...(item.copy !== undefined ? { copy: item.copy } : {}),
 							...(item.reveal !== undefined ? { reveal: item.reveal } : {}),
 						}
@@ -113,6 +116,7 @@ export class SidebarMenus {
 		| 'deleted'
 		| 'archived'
 		| 'restored'
+		| 'move'
 		| null
 	> {
 		const store = await SessionStore.at(this.dataDir),
@@ -146,6 +150,8 @@ export class SidebarMenus {
 						.then((owner) => (owner.auto ? owner : null))
 						.catch(() => null)
 				: null;
+		// spec/tasks#move-to-worktree: one rule with the host; a refusal stays visible as the item's second line.
+		const moveRefused = await personMoveRefusal(store, key, stored, this.launches.isQueued(key));
 		const canContinue =
 			Boolean(task.provider) &&
 			!connected &&
@@ -185,6 +191,16 @@ export class SidebarMenus {
 						]
 					: []),
 				{ id: 'copy', label: 'Copy task title', copy: task.title },
+				...(moveRefused === 'worktree'
+					? []
+					: [
+							{
+								id: 'move-worktree',
+								label: 'Move to a worktree' as const,
+								enabled: moveRefused === null,
+								...(moveRefused ? { sublabel: moveRefused } : {}),
+							},
+						]),
 				...(connected ||
 				['working', 'needs-you', 'preparing'].includes(task.status) ||
 				this.launches.isQueued(key)
@@ -220,6 +236,7 @@ export class SidebarMenus {
 			return null;
 		}
 		if (action === 'open') return 'open';
+		if (action === 'move-worktree') return 'move';
 		if (action === 'dismiss' && autoCrew) {
 			await this.sessions.command(autoCrew, { kind: 'dismissWorker', taskId: key.id });
 			return null;

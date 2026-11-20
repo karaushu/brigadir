@@ -682,3 +682,12 @@
 	font-family: var(--ui-family);
 	color: var(--fg3);
 }
+/* spec/tasks#move-to-worktree: a waiting move holds its `Cancel` (S, rule 16); the row keeps its tint, the button sets its height. */
+.service[data-size] {
+	padding-block: 2px;
+}
+/* The sheet's `[data-crew-row] > button` rule (NewTask) spans its rail; a chat row's button keeps its own width. */
+.service > .rowButton {
+	width: auto;
+	margin-top: 0;
+}

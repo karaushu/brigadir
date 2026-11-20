@@ -449,7 +449,7 @@ Native menu with glyphs; right click, the context-menu key or Shift+F10; it acts
 | Open | `Open task` |
 | Continue | `Continue with a new agent` (stopped task whose session started; `Start task` if it never started), `Continue in a new task` (not backlog/preparing) |
 | Copy | `Duplicate task…`, `Repeat…` (Schedules module), `Show task diff` |
-| Board | `Edit task…` (unstarted backlog), `Add to backlog` / `Start task` / `Move to in progress` / `Mark completed` (allowed board moves), `Rename task…`, `Pin task` / `Unpin task`, `Copy task title`, `Stop` (connected, running or queued) |
+| Board | `Edit task…` (unstarted backlog), `Add to backlog` / `Start task` / `Move to in progress` / `Mark completed` (allowed board moves), `Rename task…`, `Pin task` / `Unpin task`, `Copy task title`, `Move to a worktree` (a solo or Auto task without a worktree; disabled with the reason where it cannot move, [Tasks](tasks.md#move-to-worktree)), `Stop` (connected, running or queued) |
 | End | `Archive` (`⌃⌘A`, disabled while an agent works in it or its crew), `Delete task…` |
 
 - `Duplicate task…` opens an editable launch draft with the same initial prompt, provider/transport and repo/isolation

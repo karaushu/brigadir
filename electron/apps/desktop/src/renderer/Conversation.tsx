@@ -82,6 +82,9 @@ import {
 	type Locale,
 	type QuestionAnswer,
 	type SessionCommand,
+	type SessionEvent,
+	worktreeCard,
+	worktreeCardName,
 	type SessionSnapshot,
 	type UserQuestion,
 	changeCountsLabel,
@@ -121,7 +124,14 @@ import {
 	planPromptFeedback,
 	sessionModeName,
 } from '@brigadir/core';
-import { CrewAnswerRow, CrewEventRow, PlanCard, PlanSummary, WorkspaceMoveRow } from './Crew';
+import {
+	CrewAnswerRow,
+	CrewEventRow,
+	PlanCard,
+	PlanSummary,
+	WorkspaceMoveRow,
+	WorktreeRow,
+} from './Crew';
 import { HireCard, HireSummary } from './HireCard';
 import { ModelCard } from './ModelCard';
 import { QuickAskLogRow } from './QuickAsk';
@@ -173,7 +183,13 @@ const chatNavigation = [
 	'activity-collapse',
 ] as const;
 /** spec/notifications-slack-notes-and-schedules#message-classes: what a failed session command was, for its own toast. */
+/** spec/tasks#move-to-worktree: the newest move of the task waits for the turn or runs. */
+function moveUnderWay(records: readonly { event: SessionEvent }[]) {
+	const last = records.findLast((record) => record.event.kind === 'workspace.move')?.event;
+	return last?.kind === 'workspace.move' && (last.state === 'waiting' || last.state === 'moving');
+}
 const sendFailures: Partial<Record<SessionCommand['kind'], MessageKey>> = {
+	cancelMove: 'Could not cancel the move.',
 	prompt: 'Could not send the message.',
 	steerQueuedPrompt: 'Could not send the message.',
 	cancel: 'Could not stop the turn.',
@@ -1519,9 +1535,19 @@ export function Conversation({
 				if (same[0]?.seq !== row.record.seq) return null;
 				const newest = same.at(-1)!.event;
 				return newest.kind === 'workspace.move' ? (
-					<WorkspaceMoveRow event={newest} owner={task} locale={locale} />
+					<WorkspaceMoveRow
+						event={newest}
+						owner={task}
+						locale={locale}
+						{...(newest.state === 'waiting' && newest.by === 'person'
+							? { onCancel: () => void send({ kind: 'cancelMove' }) }
+							: {})}
+					/>
 				) : null;
 			}
+			// spec/tasks#agent-worktrees: a worktree the agent made joined the task, or went away.
+			if (e.kind === 'worktree.joined' || e.kind === 'worktree.removed')
+				return <WorktreeRow event={e} locale={locale} />;
 			if (e.kind === 'crew.report' && e.report.taskId === task.id) return null;
 			if (e.kind === 'crew.worker.created' && e.nodeId.startsWith('review-')) return null;
 			if (e.kind === 'turn.started' || e.kind.startsWith('crew.'))
@@ -1710,7 +1736,10 @@ export function Conversation({
 					/>
 				) : (
 					<div className={styles.resolved}>
-						{e.request.tool.title} · {t(locale, 'Resolved')}
+						{worktreeCardName(e.request.tool) !== null
+							? t(locale, worktreeCard.title).replace('{name}', worktreeCardName(e.request.tool)!)
+							: e.request.tool.title}{' '}
+						· {t(locale, 'Resolved')}
 					</div>
 				);
 			// spec/chat-turns-plans-and-questions#plan-row: the checklist opens the plan it follows, in place.
@@ -2305,6 +2334,8 @@ export function Conversation({
 						task={task}
 						locale={locale}
 						contended={contended}
+						moving={moveUnderWay(records)}
+						onMove={() => window.brigadir.dispatchWorkspaceAction('move-worktree')}
 						usage={
 							<TaskUsageCounterView
 								view={tokens}

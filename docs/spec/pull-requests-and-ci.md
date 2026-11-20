@@ -54,6 +54,8 @@ A task spans several git roots, so **one task → up to N PRs**, one per GitHub 
 | Ready card above the PR groups | See [Ready card](#ready-card) |
 | Project screen `New pull request` | See [Project PR section](#project-pr-section) |
 
+A task whose work sits in a [worktree the agent made](tasks.md#agent-worktrees) (a checkout of the root's repo that joined the task) offers that worktree's branch: it is the task's branch. The root's own entry is left out while the root has no changes of its own in the task, so a PR never goes out from the empty root branch while the work sits in the joined one; with changes of its own the root keeps its entry next to the joined one.
+
 Disabled-state reasons (all shown at once, never only the first): `No origin remote`, `GitHub is unavailable`, `GitHub status could not be read.` keep the dialog shut. Branch reasons (`Detached HEAD`, `Base branch is unavailable`, `No commits ahead of base`, `A pull request is already open`) do not disable entries: the dialog opens and shows the reason in its status line so another pair can be picked; tooltips and menu rows still name them.
 
 <a id="new-pr-dialog"></a>

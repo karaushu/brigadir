@@ -270,6 +270,8 @@ export function activityRows(records: EventRecord[]): ActivityRow[] {
 				'crew.budget.exceeded',
 				'crew.lead.committed',
 				'workspace.move',
+				'worktree.joined',
+				'worktree.removed',
 				'crew.zone.touched',
 				'crew.worker.created',
 				'crew.part.started',

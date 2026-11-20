@@ -2,8 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+	baseTree,
+	changeBaseOf,
 	isGitScope,
 	isMainTree,
+	type AgentTask,
+	type SnapshotDocument,
 	isRecord,
 	repoBlockers,
 	suggestedBranch,
@@ -95,6 +99,25 @@ function safeRemote(value: string | null) {
 	} catch {
 		return value;
 	}
+}
+/** spec/tasks#agent-worktrees: the newest selected, available checkout of the root's repo that joined the task, and whether the root's own tree
+ *  changed since the task's change base. */
+export function joinedStandIn(
+	task: Pick<AgentTask, 'launch' | 'changeBase'>,
+	doc: SnapshotDocument
+): { id: string; rootId: string; rootChanged: boolean } | null {
+	const root = doc.scopes.find((scope) => scope.kind === 'root');
+	if (!root) return null;
+	const id = task.launch?.scopes
+		.filter((choice) => choice.selected && choice.worktreeOf === root.id)
+		.map((choice) =>
+			doc.scopes.find((scope) => scope.id === choice.id && scope.available !== false)
+		)
+		.findLast(Boolean)?.id;
+	if (!id) return null;
+	const latest = doc.checkpoints.at(-1)?.trees.find((tree) => tree.scopeId === root.id)?.tree;
+	const base = baseTree(doc, root.id, changeBaseOf(doc, task.changeBase))?.tree;
+	return { id, rootId: root.id, rootChanged: !!latest && !!base && latest !== base };
 }
 const folderGone = async (path: string) => {
 	try {
@@ -220,9 +243,21 @@ export class ForgeActions {
 		// spec/pull-requests-and-ci#github-status: a local read keeps GitHub's last answer; with none yet (the first reads came during
 		// preparation) it reads GitHub once instead of reporting an unknown state as a failure.
 		if (!previous) remote = true;
+		const opened = await Snapshots.open(store, key);
 		// A folder outside git has no branch or remote to read: it has no part in a pull request (spec/projects-and-board#external-folders).
-		const scopes = (await Snapshots.open(store, key)).current.scopes.filter(
-			(scope) => scope.available !== false && isGitScope(scope)
+		// spec/pull-requests-and-ci#create-pr-entries: a joined checkout of the root's repo holds the task's work; the root's own entry stays only
+		// while the root changed in the task, so no PR goes out from the empty root branch.
+		const standIn = joinedStandIn(task, opened.current);
+		const scopes = opened.current.scopes.filter(
+			(scope) =>
+				scope.available !== false &&
+				isGitScope(scope) &&
+				!(
+					standIn &&
+					scope.id === standIn.rootId &&
+					!standIn.rootChanged &&
+					!task.pullRequests?.[scope.id]
+				)
 		);
 		let auth = previous?.auth ?? 'error',
 			error: string | null = null;

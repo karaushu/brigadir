@@ -29,7 +29,11 @@ import {
 	isAutoModelRequest,
 } from './auto';
 import { isTaskProposal, isTaskProposalResult } from './task-proposal';
-import { isWorkspaceMoveFields } from './workspace-move';
+import {
+	isWorkspaceMoveFields,
+	isWorktreeJoinedFields,
+	isWorktreeRemovedFields,
+} from './workspace-move';
 import { isReviewPoint, isTaskReviewWho } from './task-review';
 import { isDesignNode, isDesignReviewState, isDesignVerdict } from './design-review';
 import { isTaskClass } from './task-class';
@@ -400,6 +404,8 @@ const checks: Record<string, Check> = {
 		{ reason: (v) => v === 'no-worktree' }
 	),
 	'workspace.move': isWorkspaceMoveFields,
+	'worktree.joined': isWorktreeJoinedFields,
+	'worktree.removed': isWorktreeRemovedFields,
 	'crew.worker.dismissed': object({
 		taskId: isId,
 		nodeId: isId,

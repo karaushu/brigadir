@@ -33,6 +33,8 @@ import {
 	type CrewTemplate,
 	type EventRecord,
 	type WorkspaceMoveEvent,
+	type WorktreeJoinedEvent,
+	type WorktreeRemovedEvent,
 	type WorkspaceStayed,
 	type WorkspaceStopped,
 	type Locale,
@@ -938,17 +940,52 @@ export function CrewEventRow({
 	if (e.kind === 'crew.hire.requested' || e.kind === 'crew.hire.resolved') return null;
 	return null;
 }
-/** spec/crew#activity: the move into a worktree — moving, moved, some paths stayed, failed — shown for the newest event of its id. */
+/** spec/crew#activity, spec/tasks#move-to-worktree: the move into a worktree — waiting (the person's, with `Cancel`), moving, moved, some paths
+ *  stayed, failed, cancelled — shown for the newest event of its id. */
 export function WorkspaceMoveRow({
 	event,
 	owner,
 	locale,
+	onCancel,
 }: {
 	event: WorkspaceMoveEvent;
 	owner: AgentTask | undefined;
 	locale: Locale;
+	onCancel?: () => void;
 }) {
 	const agent = autoRootName(owner?.provider ?? 'claude');
+	if (event.state === 'waiting')
+		return (
+			<div
+				className={styles.service}
+				data-crew-row="workspace-move"
+				data-state="waiting"
+				data-size={onCancel ? 's' : undefined}>
+				<Glyph name="clock" size={12} />
+				<small>{t(locale, 'workspace')}</small>
+				<span className={styles.label}>
+					{t(locale, 'Move to a worktree')}{' '}
+					<span>· {t(locale, 'Waiting for the turn to end')}</span>
+				</span>
+				{onCancel && (
+					<Button className={styles.rowButton} onClick={onCancel}>
+						{t(locale, 'Cancel')}
+					</Button>
+				)}
+			</div>
+		);
+	if (event.state === 'cancelled')
+		return (
+			<div
+				className={styles.service}
+				data-crew-row="workspace-move"
+				data-state="cancelled"
+				data-quiet>
+				<Glyph name="sidebar-worktree" size={12} />
+				<small>{t(locale, 'workspace')}</small>
+				<span className={styles.label}>{t(locale, 'Move to a worktree cancelled')}</span>
+			</div>
+		);
 	if (event.state === 'moving')
 		return (
 			<div className={styles.service} data-crew-row="workspace-move" data-state="moving">
@@ -1025,6 +1062,46 @@ export function WorkspaceMoveRow({
 			)}
 			<MoveStopped items={event.stopped ?? []} locale={locale} />
 		</>
+	);
+}
+/** spec/tasks#agent-worktrees: a worktree the agent made joined the task, or its folder went away. */
+export function WorktreeRow({
+	event,
+	locale,
+}: {
+	event: WorktreeJoinedEvent | WorktreeRemovedEvent;
+	locale: Locale;
+}) {
+	if (event.kind === 'worktree.removed')
+		return (
+			<div className={styles.service} data-crew-row="worktree" data-state="removed" data-quiet>
+				<Glyph name="sidebar-worktree" size={12} />
+				<small>{t(locale, 'worktree')}</small>
+				<span className={styles.label} title={event.path}>
+					{event.name}
+				</span>
+				<small>{t(locale, 'removed')}</small>
+				{event.branch && (
+					<small>
+						{event.branchKept
+							? t(locale, 'branch {branch} kept').replace('{branch}', event.branch)
+							: t(locale, 'branch deleted')}
+					</small>
+				)}
+			</div>
+		);
+	return (
+		<div className={styles.service} data-crew-row="worktree" data-state="joined">
+			<Glyph name="sidebar-worktree" size={12} />
+			<small>{t(locale, 'worktree')}</small>
+			<span className={styles.label} title={event.path}>
+				{event.name}
+				{event.branch && <span> · {event.branch}</span>}
+			</span>
+			<small className={styles.ok}>{t(locale, 'joined the task')}</small>
+			{event.by === 'person' && <small>{t(locale, 'you allowed it')}</small>}
+			{event.standsForRoot && <small>{t(locale, 'holds the task’s work')}</small>}
+		</div>
 	);
 }
 /** spec/crew#auto-move: what the move's restart stopped, one line each; a saved command the agent had started reads `started again`. */

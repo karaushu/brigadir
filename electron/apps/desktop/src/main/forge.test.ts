@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { Forge, type GhRunner } from '@brigadir/forge';
 import { atomicJson, SessionStore } from '@brigadir/persistence';
 import { gitText, Snapshots } from '@brigadir/git';
-import { ForgeActions } from './forge';
+import { ForgeActions, joinedStandIn } from './forge';
 import type { Sessions } from './sessions';
 import type { PRRef, SessionCommand, TaskKey } from '@brigadir/core';
 // Each test drives real git: fixture repos, a bare remote and ForgeActions, ~170 git processes (2–2.5 s alone). Nothing in
@@ -608,6 +608,67 @@ it('spec/pull-requests-and-ci#github-status: the first local read after preparat
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
+});
+// spec/pull-requests-and-ci#create-pr-entries, spec/tasks#agent-worktrees: the joined checkout of the root's repo holds the work; the root's own
+// entry stays only while the root changed in the task.
+it('names the joined stand-in of the root and whether the root changed itself', () => {
+	const tree = (scopeId: string, value: string) => ({
+		scopeId,
+		tree: value.repeat(40),
+		commit: value.repeat(40),
+		ref: `refs/x/${scopeId}`,
+	});
+	const scope = (id: string, kind: 'root' | 'external', path: string) =>
+		({ id, name: id, kind, path, branch: 'main', selected: true, available: true }) as never;
+	const doc = {
+		schemaVersion: 1 as const,
+		scopes: [scope('aaaaaaaaaaaaaaaa', 'root', '/p'), scope('bbbbbbbbbbbbbbbb', 'external', '/w')],
+		checkpoints: [
+			{ id: 0, at: '', reason: 'baseline' as const, trees: [tree('aaaaaaaaaaaaaaaa', 'a')] },
+			{
+				id: 1,
+				at: '',
+				reason: 'join' as const,
+				trees: [tree('aaaaaaaaaaaaaaaa', 'a'), tree('bbbbbbbbbbbbbbbb', 'b')],
+			},
+		],
+	};
+	const launch = (worktreeOf?: string) => ({
+		isolation: 'in-place' as const,
+		branch: '',
+		baseRef: '',
+		setupCommand: '',
+		scopes: [
+			{ id: 'aaaaaaaaaaaaaaaa', name: '.', kind: 'root' as const, selected: true },
+			{
+				id: 'bbbbbbbbbbbbbbbb',
+				name: 'w',
+				kind: 'external' as const,
+				path: '/w',
+				selected: true,
+				...(worktreeOf ? { worktreeOf } : {}),
+			},
+		],
+	});
+	expect(joinedStandIn({ launch: launch() }, doc)).toBeNull();
+	expect(joinedStandIn({ launch: launch('aaaaaaaaaaaaaaaa') }, doc)).toEqual({
+		id: 'bbbbbbbbbbbbbbbb',
+		rootId: 'aaaaaaaaaaaaaaaa',
+		rootChanged: false,
+	});
+	const changed = {
+		...doc,
+		checkpoints: [
+			...doc.checkpoints,
+			{
+				id: 2,
+				at: '',
+				reason: 'turn' as const,
+				trees: [tree('aaaaaaaaaaaaaaaa', 'c'), tree('bbbbbbbbbbbbbbbb', 'b')],
+			},
+		],
+	};
+	expect(joinedStandIn({ launch: launch('aaaaaaaaaaaaaaaa') }, changed)?.rootChanged).toBe(true);
 });
 it('spec/architecture-and-platform#read-issues: a read that fails locally is a read issue of the task, not GitHub state, until a read succeeds', async () => {
 	const dir = await mkdtemp(join(tmpdir(), 'brigadir-pr-local-')),

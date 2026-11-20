@@ -1,4 +1,4 @@
-import { isId, isRecord } from './workspace';
+import { isId, isMainTree, isRecord, type AgentTask } from './workspace';
 /**
  * spec/crew#auto-move: why a path of the task stayed in the project folder when the task moved into a worktree.
  * `person` — changed outside the agent's turns or by the person's Save; `moving` — the person changed it while the move ran;
@@ -37,13 +37,25 @@ export function isWorkspaceStopped(value: unknown): value is WorkspaceStopped {
 		(value.restarted === undefined || value.restarted === true)
 	);
 }
-export type WorkspaceMoveState = 'moving' | 'moved' | 'failed';
-/** spec/crew#auto-move: the move of a task into a worktree; the newest event of an `id` is its chat row (rule 2: a normalized event). */
+/**
+ * spec/tasks#worktree-move: `waiting` — the person's move waits for the agent's turn to end; `cancelled` — the person cancelled it while it
+ * waited. A hire's move starts at `moving`.
+ */
+export type WorkspaceMoveState = 'waiting' | 'moving' | 'moved' | 'failed' | 'cancelled';
+export const workspaceMoveStates: readonly WorkspaceMoveState[] = [
+	'waiting',
+	'moving',
+	'moved',
+	'failed',
+	'cancelled',
+];
+/** spec/crew#auto-move, spec/tasks#worktree-move: the move of a task into a worktree; the newest event of an `id` is its chat row (rule 2: a normalized event). */
 export type WorkspaceMoveEvent = {
 	kind: 'workspace.move';
 	id: string;
-	/** The hire that asked for the move. */
-	hireId: string;
+	/** The hire that asked for the move; absent when the person started it (`by: 'person'`). */
+	hireId?: string;
+	by?: 'person';
 	state: WorkspaceMoveState;
 	/** The repos that move, by name: the project's name for the root, the relative path for the others. */
 	repos: string[];
@@ -70,8 +82,10 @@ export function isWorkspaceMoveFields(value: unknown): boolean {
 	return (
 		isRecord(value) &&
 		isId(value.id) &&
-		isId(value.hireId) &&
-		['moving', 'moved', 'failed'].includes(String(value.state)) &&
+		(isId(value.hireId)
+			? value.by === undefined
+			: value.hireId === undefined && value.by === 'person') &&
+		workspaceMoveStates.includes(value.state as WorkspaceMoveState) &&
 		Array.isArray(value.repos) &&
 		value.repos.length <= 512 &&
 		value.repos.every(text) &&
@@ -117,4 +131,102 @@ export function moveFate(
 	// Changed before the task too: only a text file on all three sides merges.
 	if (regular(base) && regular(head) && regular(current)) return { kind: 'merge' };
 	return { kind: 'stay', reason: 'conflict' };
+}
+
+/**
+ * spec/tasks#agent-worktrees: a git worktree made in the task's turns joined the task as a folder. `by: 'agent'` — the host saw the agent make
+ * it; `by: 'person'` — the host could not tell and the person allowed it on a card. The chat row says which branch now holds the work.
+ */
+export type WorktreeJoinedEvent = {
+	kind: 'worktree.joined';
+	scopeId: string;
+	name: string;
+	path: string;
+	/** The task's repo it is a checkout of, by name (the project's name for the root). */
+	repo: string;
+	/** Its branch; absent on a detached `HEAD`. */
+	branch?: string;
+	/** True when it is a checkout of the task root's repo: its branch is the task's branch from now on. */
+	standsForRoot: boolean;
+	by: 'agent' | 'person';
+};
+/** spec/tasks#agent-worktrees: a joined worktree's folder is gone (removed by the agent, or missing after a restart). */
+export type WorktreeRemovedEvent = {
+	kind: 'worktree.removed';
+	scopeId: string;
+	name: string;
+	path: string;
+	branch?: string;
+	/** The branch still exists in the repo, with its commits. */
+	branchKept: boolean;
+};
+export function isWorktreeJoinedFields(value: unknown): boolean {
+	return (
+		isRecord(value) &&
+		isId(value.scopeId) &&
+		text(value.name) &&
+		text(value.path) &&
+		text(value.repo) &&
+		(value.branch === undefined || text(value.branch)) &&
+		typeof value.standsForRoot === 'boolean' &&
+		(value.by === 'agent' || value.by === 'person')
+	);
+}
+export function isWorktreeRemovedFields(value: unknown): boolean {
+	return (
+		isRecord(value) &&
+		isId(value.scopeId) &&
+		text(value.name) &&
+		text(value.path) &&
+		(value.branch === undefined || text(value.branch)) &&
+		typeof value.branchKept === 'boolean'
+	);
+}
+/** spec/tasks#move-to-worktree: why the person's `Move to a worktree` cannot run (message keys, English is the key). */
+export const moveRefusals = {
+	role: 'Only a solo or Auto task moves into a worktree.',
+	terminal: 'A task in the terminal cannot move: its agent would stop.',
+	busy: 'The task cannot restart now.',
+	git: 'The project has no Git repository.',
+} as const;
+export type MoveRefusal = (typeof moveRefusals)[keyof typeof moveRefusals];
+/**
+ * spec/tasks#move-to-worktree: whether the person's move applies. `worktree` — the task already has one (the item is not shown); a refusal —
+ * shown disabled with that reason; null — it can move. One rule for the menus and the host.
+ */
+export function moveRefusal(
+	task: Pick<
+		AgentTask,
+		| 'id'
+		| 'launch'
+		| 'transport'
+		| 'crew'
+		| 'auto'
+		| 'crewTaskId'
+		| 'readOnlyAgent'
+		| 'provider'
+		| 'status'
+		| 'preparation'
+	>,
+	state: { moving: boolean; git: boolean }
+): MoveRefusal | 'worktree' | null {
+	if (task.launch?.isolation === 'worktree') return 'worktree';
+	if (
+		isMainTree(task) ||
+		!task.provider ||
+		task.crewTaskId !== undefined ||
+		task.readOnlyAgent === true ||
+		(task.crew !== undefined && task.auto === undefined)
+	)
+		return moveRefusals.role;
+	if (task.transport === 'terminal') return moveRefusals.terminal;
+	if (
+		state.moving ||
+		task.status === 'backlog' ||
+		task.status === 'queued' ||
+		task.preparation?.state === 'preparing'
+	)
+		return moveRefusals.busy;
+	if (!state.git) return moveRefusals.git;
+	return null;
 }

@@ -47,6 +47,7 @@ A checkpoint is `{id, at, reason, trees[]}`; `reason` is one of:
 | `user-before` / `user-after` | Around an explicit Save in the built-in editor and around a file revert. |
 | `quick-before` / `quick-after` | Around a quick question's edit. |
 | `move` | When a running task moves into a worktree: each repo's `HEAD` tree in the new working copy, the task's change base from then on ([Tasks](tasks.md#worktree-move)). |
+| `join` | When a worktree the agent made joins the task: first its tree at the commit it was made at, then the folder as it is. Its diff counts from that commit, so the agent's commits there are the task's. After a `worktree.joined` by the agent the second capture is attributed to the agent's last turn ([Tasks](tasks.md#agent-worktrees)). |
 
 Saving is explicit (no autosave), so the user's own edit is a clean delta between `user-before` and `user-after`.
 
@@ -483,7 +484,7 @@ the whole file in the file header. It opens a popover with snapshot-history entr
   entries fall back to file precision.
 - **Entry:** `{checkpoint, at, author: 'user' | 'agent' | 'unknown', turn, turnNumber, prompt, excerpt, quick?, precision:
   'lines' | 'file'}`. `user` = the change came with a `file.saved` event (explicit Save); `agent` = a `tools`/`turn`/
-  `refresh` checkpoint inside an agent turn; quick-question edits are attributed to the question; anything else is
+  `refresh` checkpoint inside an agent turn, or a `join` capture after the agent's worktree joined; quick-question edits are attributed to the question; anything else is
   `unknown`. Binary or oversized patches fall back to file precision.
 - **Popover:** newest entry expanded (`Turn N` / `During agent turn` / `Quick question` / `Your edit` /
   `Unattributed change`, `These lines` or `This file`, the agent's message excerpt and the tool that touched the file),

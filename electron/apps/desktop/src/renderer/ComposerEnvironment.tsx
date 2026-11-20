@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
+	moveRefusal,
 	t,
 	type AgentTask,
 	type Locale,
@@ -10,7 +11,7 @@ import { ContentionChip } from './ContentionChip';
 import { Glyph } from './ui/Glyph';
 import { BranchName } from './ui/BranchName';
 import { ChangeCounts } from './ui/ChangeCounts';
-import { Popover } from './ui/Popover';
+import { MenuItem, MenuList, MenuSeparator, Popover } from './ui/Popover';
 import { useWorkspace } from './store';
 import styles from './ComposerEnvironment.module.css';
 import { SkeletonRows } from './ui/Loading';
@@ -23,9 +24,13 @@ export function ComposerEnvironment({
 	contended = [],
 	notices,
 	usage,
+	moving = false,
+	onMove,
 }: {
 	task: AgentTask;
 	locale: Locale;
+	/** spec/tasks#move-to-worktree: a move of this task waits or runs; the popover then offers none. */ moving?: boolean;
+	/** spec/tasks#move-to-worktree: the popover's last row, for a task without a worktree. */ onMove?: () => void;
 	/** spec/notifications-slack-notes-and-schedules#repo-contention: the chip stands right of the footer button, its own target. */ contended?: readonly ScopeLockView[];
 	/** spec/notifications-slack-notes-and-schedules#notice-chips: the other class S chips, after it. */ notices?: ReactNode;
 	/** spec/composer#task-usage: the token counter, at the footer's right end. */ usage?: ReactNode;
@@ -58,6 +63,8 @@ export function ComposerEnvironment({
 	}, [open, task.projectId, task.id]);
 	// A task without a tree yet still shows its ongoing states (spec/notifications-slack-notes-and-schedules#notice-chips): the footer holds the chips alone.
 	const tree = task.taskTree;
+	// spec/tasks#move-to-worktree: the menus' rule; the footer stands only for a task with a git tree.
+	const moveRefused = moveRefusal(task, { moving, git: !!tree });
 	if (!tree)
 		return notices || usage ? (
 			<div className={styles.root} data-composer-environment data-notices-only>
@@ -82,6 +89,7 @@ export function ComposerEnvironment({
 			data-isolation={tree.worktree ? 'worktree' : 'in-place'}
 			data-detached={tree.branch === null || undefined}
 			data-open={open}
+			data-move-under-way={moving || undefined}
 			data-composer-environment>
 			<button
 				ref={button}
@@ -139,7 +147,10 @@ export function ComposerEnvironment({
 				label={t(locale, 'Task repos')}
 				locale={locale}
 				className={styles.popover}
-				note={base ? `${t(locale, 'Worktree')} · ${t(locale, 'from')} ${base}` : undefined}>
+				note={base ? `${t(locale, 'Worktree')} · ${t(locale, 'from')} ${base}` : undefined}
+				initialFocus={(node) =>
+					node.querySelector<HTMLElement>('[role^=menuitem]:not(:disabled)') ?? node
+				}>
 				{failed ? (
 					<p role="alert">{t(locale, 'Some data could not be read.')}</p>
 				) : repos === null ? (
@@ -175,6 +186,19 @@ export function ComposerEnvironment({
 							);
 						})}
 					</ul>
+				)}
+				{onMove && !moving && moveRefused !== 'worktree' && (
+					<MenuList label={t(locale, 'Task repos')}>
+						<MenuSeparator />
+						<MenuItem
+							icon={<Glyph name="sidebar-worktree" size={12} />}
+							disabled={moveRefused !== null}
+							reason={moveRefused ? t(locale, moveRefused) : undefined}
+							data-move-worktree
+							onSelect={onMove}>
+							{t(locale, 'Move to a worktree')}
+						</MenuItem>
+					</MenuList>
 				)}
 			</Popover>
 		</div>

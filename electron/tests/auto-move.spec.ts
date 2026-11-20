@@ -150,3 +150,105 @@ test('an Auto task without isolation moves into a worktree when it hires @area:c
 		await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 	}
 });
+
+// spec/tasks#move-to-worktree: the person's move — from the environment line under the composer, with the File menu item enabled for it. The
+// host restarts in the worktree (a real process) and the window follows it.
+test('the person moves a task without isolation into a worktree from the environment line @area:crew', async () => {
+	test.setTimeout(240_000);
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-person-move-')),
+		repo = join(root, 'repo'),
+		data = join(root, 'data');
+	await mkdir(repo);
+	const git = (...args: string[]) =>
+		run('git', args, {
+			cwd: repo,
+			env: {
+				...process.env,
+				GIT_AUTHOR_NAME: 'T',
+				GIT_AUTHOR_EMAIL: 't@x',
+				GIT_COMMITTER_NAME: 'T',
+				GIT_COMMITTER_EMAIL: 't@x',
+			},
+		});
+	await git('init', '-q', '-b', 'main');
+	await writeFile(join(repo, 'README.md'), 'hello\n');
+	await git('add', '-A');
+	await git('commit', '-q', '-m', 'init');
+	await writeFile(join(repo, 'notes.txt'), 'mine\n');
+	const dir = join(data, 'projects/project');
+	await mkdir(join(dir, 'tasks/task'), { recursive: true });
+	await writeFile(
+		join(dir, 'project.json'),
+		JSON.stringify({ schemaVersion: 1, project: { id: 'project', name: 'repo', path: repo } })
+	);
+	await writeFile(
+		join(dir, 'tasks/task/task.json'),
+		JSON.stringify({
+			schemaVersion: 1,
+			task: {
+				id: 'task',
+				projectId: 'project',
+				title: 'Client details',
+				status: 'done',
+				provider: 'claude',
+				prompt: 'Client details',
+			},
+		})
+	);
+	await writeFile(
+		join(data, 'settings.json'),
+		JSON.stringify({
+			schemaVersion: 1,
+			settings: {
+				appearance: 'light',
+				language: 'en',
+				agents: { ...defaultAppSettings.agents, enabled: { claude: true, codex: false } },
+			},
+		})
+	);
+	const app = await electron.launch({
+		executablePath,
+		args: [desktop, `--user-data-dir=${join(root, 'profile')}`],
+		env: {
+			...env,
+			BRIGADIR_DATA_DIR: data,
+			BRIGADIR_TEST_AGENT: fixtureAgent,
+			BRIGADIR_FIXTURE_SCENARIO: 'normal',
+		},
+	});
+	const enabled = () =>
+		app.evaluate(
+			({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('move-worktree')?.enabled
+		);
+	try {
+		const page = await app.firstWindow();
+		await page.getByText('Client details', { exact: true }).first().click();
+		await page.getByRole('main').getByRole('button', { name: 'Start', exact: true }).click();
+		await expect(page.getByText('The host is disconnected.')).toBeHidden({ timeout: 30_000 });
+		await send(page, "sh echo 'export const api = 1;' > api.ts");
+		await expect
+			.poll(async () => (await git('status', '--porcelain')).stdout.includes('api.ts'), {
+				timeout: 60_000,
+			})
+			.toBe(true);
+		await expect.poll(enabled).toBe(true);
+		await page.locator('[data-composer-environment] > button').first().click();
+		await page.getByRole('menuitem', { name: 'Move to a worktree' }).click();
+		const row = page.locator('[data-crew-row="workspace-move"]');
+		await expect(row).toHaveAttribute('data-state', 'moved', { timeout: 120_000 });
+		await expect(page.locator('[data-composer-environment]')).toHaveAttribute(
+			'data-isolation',
+			'worktree',
+			{ timeout: 30_000 }
+		);
+		expect((await git('status', '--porcelain', '--untracked-files=all')).stdout.trim()).toBe(
+			'?? notes.txt'
+		);
+		// A task in a worktree has nothing to move.
+		await expect.poll(enabled).toBe(false);
+	} finally {
+		await app.close();
+		await run('pkill', ['-f', root]).catch(() => {});
+		await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+	}
+});

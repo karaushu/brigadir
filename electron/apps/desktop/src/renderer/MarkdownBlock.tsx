@@ -42,11 +42,20 @@ function diffSides(diff: FenceDiff) {
 }
 /** The chat's markdown look at rest, for a text without code blocks: no file links, no syntax requests through main (the intro's
  *  sample plan, spec/settings-modules-and-onboarding#intro-steps). The same two boxes as `MarkdownBlock`, so the look is the same. */
-export function MarkdownStill({ html }: { html: string }) {
+export function MarkdownStill({
+	html,
+	className,
+}: {
+	html: string;
+	className?: string | undefined;
+}) {
 	const markup = useMemo(() => ({ __html: html }), [html]);
 	return (
 		<div>
-			<div className={styles.markdown} dangerouslySetInnerHTML={markup} />
+			<div
+				className={className ? `${styles.markdown} ${className}` : styles.markdown}
+				dangerouslySetInnerHTML={markup}
+			/>
 		</div>
 	);
 }

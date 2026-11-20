@@ -16,7 +16,8 @@ import { settingLocation } from '@brigadir/core';
 import { Button, IconButton } from './ui/Controls';
 import { Glyph, type GlyphName } from './ui/Glyph';
 import { TextArea, TextInput } from './ui/Input';
-import { ChatComposer } from './ChatComposer';
+import { ChatComposer, useChatSlash, type ChatMentions } from './ChatComposer';
+import { PromptText } from './ui/PromptText';
 import { ChatCard } from './ui/ChatCard';
 import { MarkdownStill, markdown } from './MarkdownBlock';
 import { toastError } from './ui/Toast';
@@ -121,6 +122,13 @@ export const brigadirExamples = (
 		: []),
 	{ glyph: 'remote', text: 'Turn on access from my laptop' },
 ];
+/** spec/composer#chat-composer: the Brigadir chat's `@` — every project's tasks and the projects; no files. */
+const brigadirMentions: ChatMentions = {
+	tasksOf: null,
+	projects: true,
+	filesOf: null,
+	taskWay: 'Goes to Brigadir as the task: its title, id and project.',
+};
 /**
  * spec/settings-modules-and-onboarding#brigadir-chat-entry: the Brigadir section's screen — the open chat with its cards, or the example tiles when
  * none is open; the composer under either. The log is the note chat's look (rule 17); the cards are `ui/ChatCard`.
@@ -166,16 +174,37 @@ export function BrigadirChat({
 	useEffect(() => {
 		log.current?.scrollTo({ top: log.current.scrollHeight });
 	}, [rows?.length]);
-	const start = async (text: string) => {
+	// spec/composer#chat-composer: `/` lists the agent's commands (from disk until it announces them) and the chat's own tools; `@` every
+	// project's tasks and the projects.
+	const events = useMemo(
+		() => (rows ?? []).flatMap((row) => (row.kind === 'event' ? [row] : [])),
+		[rows]
+	);
+	const slash = useChatSlash(
+		'brigadir',
+		() => window.brigadir.readBrigadirSlashCatalog(),
+		events,
+		locale
+	);
+	// A new chat is made for its first attachment, so the file has a folder to live in.
+	const made = useRef<string | null>(null);
+	const ensureChat = async () => {
+		if (chat) return chat;
+		if (made.current) return made.current;
+		const id = (await window.brigadir.createBrigadirChat()).id;
+		made.current = id;
+		onOpenChat(id);
+		return id;
+	};
+	useEffect(() => {
+		if (chat !== made.current) made.current = null;
+	}, [chat]);
+	const start = async (text: string, attachments: string[] = []) => {
 		const message = text.trim();
 		if (!message) return;
 		try {
-			let id = chat;
-			if (!id) {
-				id = (await window.brigadir.createBrigadirChat()).id;
-				onOpenChat(id);
-			}
-			await window.brigadir.sendBrigadirChat(id, message);
+			const id = await ensureChat();
+			await window.brigadir.sendBrigadirChat(id, message, attachments);
 		} catch {
 			setDraft(message);
 			toastError(t(locale, 'Could not send the message.'));
@@ -188,11 +217,11 @@ export function BrigadirChat({
 		asked.current = ask;
 		void start(ask);
 	}, [ask]);
-	const send = () => {
+	const send = (attachments: string[]) => {
 		if (busy) return;
 		const message = draft;
 		setDraft('');
-		void start(message);
+		void start(message, attachments);
 	};
 	const answer = (
 		card: string,
@@ -270,7 +299,18 @@ export function BrigadirChat({
 					<div className={s.column}>
 						{all.map((turn, index) => (
 							<div key={turn.prompt?.seq ?? `p${index}`} className={n.turn}>
-								{turn.prompt && <div className={n.user}>{turn.prompt.text}</div>}
+								{turn.prompt && (
+									<div className={n.user}>
+										<PromptText
+											owner={{ chat: 'brigadir', id: chat }}
+											locale={locale}
+											text={turn.prompt.text}
+											rowId={`brigadir/${chat}/${turn.prompt.seq}`}
+											attachments={turn.prompt.attachments ?? []}
+											commands={slash.commands}
+										/>
+									</div>
+								)}
 								{turn.parts.map((part) =>
 									part.kind === 'text' ? (
 										<div key={part.key} className={n.text}>
@@ -324,6 +364,10 @@ export function BrigadirChat({
 					busy={busy && !!chat}
 					onSend={send}
 					onStop={() => chat && void window.brigadir.stopBrigadirChat(chat)}
+					holder={chat ? { chat: 'brigadir', id: chat } : undefined}
+					onNeedHolder={async () => ({ chat: 'brigadir' as const, id: await ensureChat() })}
+					mentions={brigadirMentions}
+					slash={slash}
 				/>
 			</div>
 		</section>

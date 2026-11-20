@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentProvider } from './agent';
 import type { Locale } from './messages';
+import { isAttachmentList, type PromptAttachment } from './attachments';
 
 /**
  * spec/settings-modules-and-onboarding#brigadir-chat: the Brigadir chat — the rail section's chats with Brigadir's own agent. Each chat is
@@ -66,7 +67,13 @@ export type BrigadirSetupKind = 'slack' | 'remoteAccess';
 export type BrigadirSecretKind = 'slackBotToken' | 'slackAppToken';
 export type BrigadirStep = { name: string; detail: string; done: boolean };
 export type BrigadirChatEntry =
-	| { kind: 'prompt'; text: string; choice?: BrigadirChatChoice }
+	/** `attachments`: the files and images the message carries; their tokens stand in `text` (spec/composer#chat-composer). */
+	| {
+			kind: 'prompt';
+			text: string;
+			choice?: BrigadirChatChoice;
+			attachments?: PromptAttachment[];
+	  }
 	| { kind: 'event'; event: AgentEvent }
 	| { kind: 'card'; card: BrigadirCard }
 	| { kind: 'done'; milliseconds: number; stopped: boolean }
@@ -115,7 +122,10 @@ export function isBrigadirChatRow(value: unknown): value is BrigadirChatRow {
 		return false;
 	switch (value.kind) {
 		case 'prompt':
-			return typeof value.text === 'string';
+			return (
+				typeof value.text === 'string' &&
+				(value.attachments === undefined || isAttachmentList(value.attachments))
+			);
 		case 'event':
 			return record(value.event) && typeof value.event.kind === 'string';
 		case 'card':

@@ -76,3 +76,18 @@ describe('Brigadir chat (spec/settings-modules-and-onboarding#brigadir-chat)', (
 		expect(missingSlackScopes(null)).toHaveLength(8);
 	});
 });
+
+describe('Brigadir chat attachments (spec/composer#chat-composer)', () => {
+	it("keeps the message's attachments in its row, within the prompt's limits", () => {
+		const item = {
+			id: '0b1c2d3e-0000-4000-8000-000000000001',
+			name: 'shot.png',
+			kind: 'image' as const,
+			bytes: 10,
+		};
+		const row = { seq: 1, at: '2026-11-21T10:00:00Z', kind: 'prompt', text: 'see' };
+		expect(isBrigadirChatRow({ ...row, attachments: [item] })).toBe(true);
+		expect(isBrigadirChatRow({ ...row, attachments: Array(11).fill(item) })).toBe(false);
+		expect(isBrigadirChatRow({ ...row, attachments: 'x' })).toBe(false);
+	});
+});

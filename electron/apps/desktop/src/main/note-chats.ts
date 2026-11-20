@@ -1,8 +1,12 @@
-import { appendFile, readFile, realpath } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { appendFile, readFile, realpath, stat } from 'node:fs/promises';
+import { basename, isAbsolute, join, normalize, relative, sep } from 'node:path';
 import { AgentTransport, type AdapterCommand } from '@brigadir/transport';
 import type { NotesStore } from '@brigadir/persistence';
 import {
+	attachmentToken,
 	isNoteChatRow,
+	promptParts,
 	lastSeenNote,
 	noteChatPrompt,
 	noteLineDelta,
@@ -12,6 +16,8 @@ import {
 	undoableEdit,
 	type AgentEvent,
 	type AgentOption,
+	type AttachmentInput,
+	type PromptAttachment,
 	type NoteChatChoice,
 	type NoteChatEvent,
 	type NoteChatEntry,
@@ -27,9 +33,50 @@ export type NoteChatDeps = {
 	send(event: NoteChatEvent): void;
 	/** The note's text changed under the editor: the agent's edit or an Undo. */
 	changed(id: string): void;
+	/**
+	 * spec/composer#chat-composer: the note chat's own attachments by id, in that order, each read and checked (`Attachments` of
+	 * `notes/<id>/`); the limits of a prompt hold. Without it a message carries no attachments.
+	 */
+	attachments?(
+		note: string,
+		ids: string[]
+	): Promise<{ attachment: PromptAttachment; input: AttachmentInput }[]>;
+	/** Makes an attachment of the note chat (a file reference picked in `@`). */
+	attach?(note: string, input: AttachmentInput): Promise<PromptAttachment>;
+	/** spec/composer#chat-composer: the summary a task pill becomes when the message goes, as the task composer's `@task`; null — the task is gone. */
+	taskSummary?(task: string): Promise<{ name: string; text: string } | null>;
 	adapter?: AdapterCommand | undefined;
 	idleMs?: number;
 };
+/**
+ * spec/composer#chat-composer: a file or folder of the note's project picked in the `@` menu — a reference the agent reads itself, as the
+ * task composer's (spec/composer#agent-blocks). `path` is relative to the project's main tree and stays inside it.
+ */
+export async function projectReference(
+	root: string,
+	path: string
+): Promise<{ name: string; text: string }> {
+	const clean = normalize(path).replace(/[\\/]+$/, '');
+	if (
+		!clean ||
+		clean === '.' ||
+		isAbsolute(clean) ||
+		clean === '..' ||
+		clean.startsWith(`..${sep}`)
+	)
+		throw new Error('The path is outside the project');
+	const absolute = join(root, clean),
+		[real, base] = await Promise.all([realpath(absolute), realpath(root)]);
+	const inside = relative(base, real);
+	if (!inside || inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside))
+		throw new Error('The path is outside the project');
+	const directory = (await stat(real)).isDirectory(),
+		name = basename(clean);
+	return {
+		name: directory ? `${name.slice(0, 199)}/` : name.slice(0, 200),
+		text: `${directory ? 'Directory' : 'File'} reference:\nProject-relative path: ${JSON.stringify(clean.split(sep).join('/'))}\nAbsolute path: ${JSON.stringify(absolute)}\nRead the current contents from disk when needed.`,
+	};
+}
 type Chat = {
 	id: string;
 	transport: AgentTransport | null;
@@ -106,19 +153,70 @@ export class NoteChats {
 	idle(id: string): Promise<void> {
 		return this.turns.get(id) ?? Promise.resolve();
 	}
-	async send(id: string, text: string, choice: NoteChatChoice) {
+	private async readAttachments(id: string, ids: string[]) {
+		if (!ids.length) return [];
+		if (!this.deps.attachments) throw new Error('This chat takes no attachments.');
+		return this.deps.attachments(id, ids);
+	}
+	/** Throws when a message's attachments are gone, changed or over the limits: the window keeps its draft. */
+	async checkAttachments(id: string, ids: string[]) {
+		await this.readAttachments(id, ids);
+	}
+	/** spec/composer#chat-composer: where the `/` list is read before the agent starts — the note's project, else the notes folder. */
+	async slashFolder(id: string): Promise<string> {
+		const store = await this.deps.store;
+		const note = await store.read(id);
+		return (await this.deps.projectPath(note.project)) ?? (await store.dir());
+	}
+	/** spec/composer#chat-composer: a file or folder of the note's project, picked in `@`, as an attachment of the chat. */
+	async attachFile(id: string, path: string): Promise<PromptAttachment> {
+		const note = await (await this.deps.store).read(id);
+		const root = await this.deps.projectPath(note.project);
+		if (!root || !this.deps.attach) throw new Error('The note has no project');
+		return this.deps.attach(id, { kind: 'text', ...(await projectReference(root, path)) });
+	}
+	async send(id: string, text: string, choice: NoteChatChoice, attachmentIds: string[] = []) {
 		if (this.chats.get(id)?.busy || this.turns.has(id))
 			throw new Error('The agent is still answering');
 		let end = () => {};
 		this.turns.set(id, new Promise<void>((resolve) => (end = resolve)));
 		try {
-			await this.turn(id, text, choice, await this.deps.store);
+			const attached = await this.readAttachments(id, attachmentIds);
+			await this.turn(id, text, choice, await this.deps.store, attached);
 		} finally {
 			this.turns.delete(id);
 			end();
 		}
 	}
-	private async turn(id: string, text: string, choice: NoteChatChoice, store: NotesStore) {
+	/**
+	 * spec/composer#chat-composer: what the agent reads of the person's text — a task pill becomes the task's summary in its place, as in the
+	 * task composer; a task that is gone stays its id.
+	 */
+	private async agentText(text: string) {
+		const summaries: (AttachmentInput & { id: string })[] = [];
+		let out = '';
+		for (const part of promptParts(text)) {
+			if (part.kind === 'text') out += part.text;
+			else if (part.token.kind === 'task') {
+				const summary = await this.deps.taskSummary?.(part.token.id).catch(() => null);
+				if (!summary) {
+					out += `the task with id ${part.token.id}`;
+					continue;
+				}
+				const id = randomUUID();
+				summaries.push({ id, kind: 'text', ...summary });
+				out += attachmentToken(id);
+			} else out += part.raw;
+		}
+		return { text: out, summaries };
+	}
+	private async turn(
+		id: string,
+		text: string,
+		choice: NoteChatChoice,
+		store: NotesStore,
+		attached: { attachment: PromptAttachment; input: AttachmentInput }[] = []
+	) {
 		let chat = this.chats.get(id);
 		const note = await store.read(id);
 		const file = await store.textPath(id);
@@ -145,23 +243,36 @@ export class NoteChats {
 			const seen = lastSeenNote(rows);
 			if (seen !== undefined && seen !== note.text)
 				await this.append(id, { kind: 'person-edit', ...noteLineDelta(seen, note.text) });
-			await this.append(id, { kind: 'prompt', text, note: note.text, choice });
+			await this.append(id, {
+				kind: 'prompt',
+				text,
+				note: note.text,
+				choice,
+				...(attached.length ? { attachments: attached.map((item) => item.attachment) } : {}),
+			});
 			const project = await this.deps.projectPath(note.project);
 			const fresh = !chat.transport || !sameChoice(chat.choice, choice);
 			if (fresh) await this.start(chat, choice, project, rows, store);
 			chat.stopped = false;
 			chat.answering = true;
+			const said = await this.agentText(text);
 			try {
-				await chat.transport!.send({
-					kind: 'prompt',
-					text: noteChatPrompt({
-						text,
-						note: note.text,
-						file,
-						project: note.project && project ? note.project : null,
-						first: fresh,
-					}),
-				});
+				await chat.transport!.send(
+					{
+						kind: 'prompt',
+						text: noteChatPrompt({
+							text: said.text,
+							note: note.text,
+							file,
+							project: note.project && project ? note.project : null,
+							first: fresh,
+						}),
+					},
+					[
+						...attached.map((item) => ({ ...item.input, id: item.attachment.id })),
+						...said.summaries,
+					]
+				);
 			} finally {
 				chat.answering = false;
 			}
@@ -237,7 +348,8 @@ export class NoteChats {
 		if (event.kind === 'session.started' || event.kind === 'options.changed')
 			chat.options = event.options;
 		// A resumed session may replay its history on load; only the answer to our message is the chat's.
-		if (event.kind === 'session.started' || chat.answering)
+		// The agent's commands may come before the first answer; the `/` menu reads them (spec/composer#chat-composer).
+		if (event.kind === 'session.started' || event.kind === 'commands.changed' || chat.answering)
 			void this.append(chat.id, { kind: 'event', event });
 	}
 	/** Edits of the note's own file go through; any other write is declined; the rest needs no write and is allowed. */

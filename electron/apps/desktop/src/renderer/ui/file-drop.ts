@@ -4,12 +4,13 @@ import { attachTaskFile } from '../task-state';
 export const fileDragType = 'application/x-brigadir-file';
 /** spec/composer#paste: the composer also takes files from Finder (`files`) and shows its drop zone while one is over it (`over`). */
 export function fileDropHandlers(
-	task: AgentTask,
+	/** null — a surface without a task (spec/composer#chat-composer): Finder files only, no drags from a Files tree. */
+	task: AgentTask | null,
 	onError: () => void,
 	options: { files?: (files: File[]) => void; over?: (value: boolean) => void } = {}
 ) {
 	const accepts = (event: DragEvent) =>
-		event.dataTransfer.types.includes(fileDragType) ||
+		(task !== null && event.dataTransfer.types.includes(fileDragType)) ||
 		(Boolean(options.files) && event.dataTransfer.types.includes('Files'));
 	return {
 		onDragOver(event: DragEvent) {
@@ -32,6 +33,7 @@ export function fileDropHandlers(
 				options.files?.(Array.from(event.dataTransfer.files));
 				return;
 			}
+			if (!task) return;
 			try {
 				const payload = JSON.parse(event.dataTransfer.getData(fileDragType));
 				if (

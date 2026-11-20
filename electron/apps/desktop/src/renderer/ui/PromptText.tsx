@@ -5,12 +5,13 @@ import {
 	attachmentMention,
 	promptParts,
 	type AgentTask,
+	type AttachmentHolder,
 	type Locale,
 	type PromptAttachment,
 	type PromptToken,
 } from '@brigadir/core';
 import { useWorkspace } from '../store';
-import { MarkdownBlock } from '../MarkdownBlock';
+import { MarkdownBlock, MarkdownStill } from '../MarkdownBlock';
 import { userMarkdown, type UserMarkdownEnv } from '../markdown';
 import type { FindCommands } from '../mention-editor';
 import { AttachmentChips, useAttachmentPreview } from './AttachmentChips';
@@ -23,9 +24,11 @@ import styles from './PromptText.module.css';
  * the document, a thumbnail the viewer; attachments the text does not place stay tiles under it (spec/chat#images).
  * spec/composer#formatting: the text is Markdown, rendered as an answer is (lists, code, bold, links); a pill or a thumbnail stands where its token was
  * typed, in the paragraph or the list item, as a portal into the slot the renderer left there.
+ * spec/composer#chat-composer: a chat that is not a task (`owner` without `task`) shows the same pills; its Markdown has no task's code links.
  */
 export function PromptText({
 	task,
+	owner = task,
 	locale,
 	text,
 	rowId,
@@ -33,7 +36,8 @@ export function PromptText({
 	attachments = [],
 	commands,
 }: {
-	task: AgentTask;
+	task?: AgentTask | undefined;
+	/** Whose attachments these are; the task by default. */ owner?: AttachmentHolder | undefined;
 	locale: Locale;
 	text: string;
 	rowId: string;
@@ -48,8 +52,11 @@ export function PromptText({
 			part.kind === 'token' && part.token.kind === 'attachment' ? [part.token.id] : []
 		)
 	);
-	const tasks = useWorkspace((state) => state.workspace?.tasks);
-	const { open, dialogs } = useAttachmentPreview(task, locale, attachments);
+	const tasks = useWorkspace((state) => state.workspace?.tasks),
+		projects = useWorkspace((state) => state.workspace?.projects);
+	// A message of a task or of a chat: one of the two is always given.
+	const holder: AttachmentHolder = owner ?? task!;
+	const { open, dialogs } = useAttachmentPreview(holder, locale, attachments);
 	const rest = attachments.filter((item) => !placed.has(item.id));
 	const parsed = useMemo(() => {
 		const tokens = userMarkdown.parse(text, {}),
@@ -96,6 +103,15 @@ export function PromptText({
 				</span>
 			);
 		}
+		if (token.kind === 'project') {
+			const item = (projects ?? []).find((entry) => entry.id === token.id);
+			return (
+				<span key={key} className={styles.pill} data-kind="project" title={item?.path}>
+					<Glyph name="folder" size={10} />
+					<span>{item?.name ?? token.id}</span>
+				</span>
+			);
+		}
 		const item = attachments.find((entry) => entry.id === token.id);
 		if (!item) return null;
 		const label = attachmentLabel(locale, item);
@@ -103,7 +119,7 @@ export function PromptText({
 			return (
 				<InlineImage
 					key={key}
-					task={task}
+					task={holder}
 					item={item}
 					label={label}
 					open={() => {
@@ -116,7 +132,7 @@ export function PromptText({
 				mention.kind === 'task'
 					? (tasks ?? []).find(
 							(entry: AgentTask) =>
-								entry.projectId === task.projectId && entry.title === mention.label
+								(!task || entry.projectId === task.projectId) && entry.title === mention.label
 						)
 					: null;
 		return (
@@ -152,15 +168,19 @@ export function PromptText({
 	return (
 		<>
 			<div ref={box} className={styles.text} data-prompt-text>
-				<MarkdownBlock
-					rowId={rowId}
-					html={parsed.html}
-					tokens={parsed.tokens}
-					locale={locale}
-					task={task}
-					revision={revision}
-					className={styles.markdown}
-				/>
+				{task ? (
+					<MarkdownBlock
+						rowId={rowId}
+						html={parsed.html}
+						tokens={parsed.tokens}
+						locale={locale}
+						task={task}
+						revision={revision}
+						className={styles.markdown}
+					/>
+				) : (
+					<MarkdownStill html={parsed.html} className={styles.markdown} />
+				)}
 			</div>
 			{slots.map((node, index) => {
 				const token = promptParts(node.dataset.promptToken ?? '').find(
@@ -178,7 +198,7 @@ export function PromptText({
 				<AttachmentChips
 					log
 					spaced={Boolean(text.trim())}
-					task={task}
+					task={holder}
 					locale={locale}
 					attachments={rest}
 				/>
@@ -193,7 +213,7 @@ function InlineImage({
 	label,
 	open,
 }: {
-	task: AgentTask;
+	task: AttachmentHolder;
 	item: PromptAttachment;
 	label: string;
 	open(): void;

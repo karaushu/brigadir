@@ -67,6 +67,28 @@ export function isAttachmentOwner(v: unknown): v is AttachmentOwner {
 		isRecord(v) && isId(v.projectId) && isId(v.id) && (v.draft === undefined || v.draft === true)
 	);
 }
+/** spec/composer#chat-composer: a chat that is not a task keeps its own attachments — a Brigadir chat in `assistant/chats/<id>/`, a note's chat in `notes/<id>/`. */
+export type ChatOwner = { chat: 'brigadir' | 'note'; id: string };
+/** Who keeps an attachment: a task, a sheet's draft or a chat. */
+export type AttachmentHolder = AttachmentOwner | ChatOwner;
+export function isChatOwner(v: unknown): v is ChatOwner {
+	return (
+		isRecord(v) &&
+		(v.chat === 'brigadir' || v.chat === 'note') &&
+		isId(v.id) &&
+		(v.chat === 'brigadir' || v.id.startsWith('note-')) &&
+		Object.keys(v).every((key) => key === 'chat' || key === 'id')
+	);
+}
+export function isAttachmentHolder(v: unknown): v is AttachmentHolder {
+	return isChatOwner(v) || isAttachmentOwner(v);
+}
+/** A holder as one string: a cache key and an effect dependency. A task's key has a `/`, a chat's none (ids have neither `/` nor `:`). */
+export function holderKey(holder: AttachmentHolder): string {
+	return 'chat' in holder
+		? `chat:${holder.chat}:${holder.id}`
+		: `${holder.projectId}/${holder.id}${holder.draft ? '/draft' : ''}`;
+}
 /** spec/tasks#backlog-edit: a task's own list keeps the composer's limits — 10 attachments, 8 MB together, no repeats. */
 export function isAttachmentList(v: unknown): v is PromptAttachment[] {
 	return (

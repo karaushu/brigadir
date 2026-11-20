@@ -43,9 +43,9 @@ import { useWorkspace } from './store';
 import { Glyph } from './ui/Glyph';
 import { glyphMarkup } from './ui/glyph-markup';
 import { StatusIcon } from './ui/Controls';
+import { composerMenuClass, composerMenuTaskIcon } from './ui/ComposerIsland';
 import { useAttachmentPreview } from './ui/AttachmentChips';
 import type { MentionGroup, MentionGroupItem } from './ui/mention-tabs';
-import styles from './ComposerMentions.module.css';
 
 const glyphs = {
 	file: glyphMarkup(<Glyph name="file" size={10} />),
@@ -304,7 +304,7 @@ export function useComposerEditor({
 						: t(locale, statusLabels[entry.task.status]),
 				...(parent ? { depth: 1 } : {}),
 				icon: (
-					<span className={styles.taskIcon}>
+					<span className={composerMenuTaskIcon}>
 						<StatusIcon
 							size={12}
 							status={entry.task.status}
@@ -551,7 +551,7 @@ export function useComposerEditor({
 			hint: t(locale, 'next tab'),
 			emptyTab: t(locale, 'No matches'),
 			placement: 'top',
-			className: `${styles.menu ?? ''}${trigger?.kind === '/' ? ` ${styles.slash ?? ''}` : ''}`,
+			className: composerMenuClass(trigger?.kind === '/'),
 		},
 	});
 

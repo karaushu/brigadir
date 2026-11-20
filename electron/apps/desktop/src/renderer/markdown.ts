@@ -38,7 +38,7 @@ export const userMarkdown = createMarkdown(true);
 userMarkdown.inline.ruler.before('text', 'prompt_token', (state, silent) => {
 	if (state.src.charCodeAt(state.pos) !== 0x40 || state.src.charCodeAt(state.pos + 1) !== 0x5b)
 		return false;
-	const match = /^@\[(?:att|task|model):[^\]\s]{1,300}\]/.exec(
+	const match = /^@\[(?:att|task|project|model):[^\]\s]{1,300}\]/.exec(
 		state.src.slice(state.pos, state.pos + 340)
 	);
 	if (!match || promptParts(match[0]).every((part) => part.kind !== 'token')) return false;

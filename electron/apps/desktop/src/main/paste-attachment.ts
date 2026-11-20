@@ -1,6 +1,6 @@
 import { clipboard, nativeImage, type NativeImage } from 'electron';
 import { Attachments, SessionStore } from '@brigadir/persistence';
-import { imageSizeRefusal, type AttachmentOwner, type PromptAttachment } from '@brigadir/core';
+import { imageSizeRefusal, type AttachmentHolder, type PromptAttachment } from '@brigadir/core';
 
 const imageLimit = 4 * 1024 * 1024,
 	pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -8,7 +8,7 @@ const imageLimit = 4 * 1024 * 1024,
 // spec/composer#paste: ⌘V in the composer. Main reads the image from the system clipboard itself; the renderer only says a paste
 // happened, so no image bytes cross the bridge. The platform offers a screenshot's TIFF as `image/png` too.
 export async function pasteAttachment(
-	key: AttachmentOwner,
+	key: AttachmentHolder,
 	name: string,
 	dataDir?: string
 ): Promise<PromptAttachment | null> {

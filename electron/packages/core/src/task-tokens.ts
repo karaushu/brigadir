@@ -114,9 +114,10 @@ export function reduceTokenTally(tally: TokenTally, event: SessionEvent, at = ''
 		case 'turn.usage': {
 			let { openingShare, learnedShare } = tally;
 			if (tally.opening > 0) {
-				// What the turn paid past its growth after the opening is what the opening cost.
-				const growth = tally.estimate - Math.round(tally.opening * tally.openingShare),
-					paid = event.input + event.cacheWrite + event.output - growth;
+				// What the turn's own loop paid past its growth after the opening is what the opening cost; its other calls (compactions, subagents) are not.
+				const own = event.main ?? event,
+					growth = tally.estimate - Math.round(tally.opening * tally.openingShare),
+					paid = own.input + own.cacheWrite + own.output - growth;
 				learnedShare = Math.round(Math.min(1, Math.max(0, paid / tally.opening)) * 1000) / 1000;
 				openingShare = learnedShare;
 			}

@@ -1011,7 +1011,7 @@ export class AgentTransport {
 					this.wireAnswers = Math.max(this.wireAnswers, this.promptsSent);
 				})
 				.then((result) => {
-					const usage = turnUsage(result.usage);
+					const usage = turnUsage(result.usage, result._meta);
 					if (usage) void this.emit(usage);
 					const ended = this.emit({ kind: 'turn.completed', reason: result.stopReason });
 					if (this.turn === mine) this.ended = mine;

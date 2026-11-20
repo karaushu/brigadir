@@ -145,6 +145,13 @@ export async function readDocument(
 		await file.close();
 	}
 }
+/** spec/architecture-and-platform#read-issues: a worktree task whose worktree is missing or not ready on its branch — the workspace, not git. */
+export class WorkspaceNotReady extends Error {
+	constructor() {
+		super('The isolated workspace is not ready');
+	}
+}
+const missing = (error: unknown) => isRecord(error) && error.code === 'ENOENT';
 /** One read-modify-write of a task.json at a time in this process: a status write that read the file before a launch
  *  write must not put the old launch back (spec/tasks#agent-worktrees: the host adopts a folder while the turn ends). */
 const taskWrites = new Map<string, Promise<unknown>>();
@@ -281,14 +288,20 @@ export class SessionStore {
 			task = await this.task(key);
 		if (task.launch?.isolation !== 'worktree') return project;
 		const path = await safePath(this.root, 'worktrees', key.projectId, key.id),
-			doc = await readDocument(await safePath(await this.taskDir(key), 'worktree.json'));
+			doc = await readDocument(await safePath(await this.taskDir(key), 'worktree.json')).catch(
+				(error: unknown) => {
+					throw missing(error) ? new WorkspaceNotReady() : error;
+				}
+			);
 		if (
 			doc.root !== path ||
 			doc.state !== 'ready' ||
 			doc.branch !== task.launch.branch ||
-			(await realpath(path)) !== path
+			(await realpath(path).catch((error: unknown) => {
+				throw missing(error) ? new WorkspaceNotReady() : error;
+			})) !== path
 		)
-			throw new Error('The isolated workspace is not ready');
+			throw new WorkspaceNotReady();
 		return { ...project, path };
 	}
 	async task(key: TaskKey): Promise<AgentTask> {

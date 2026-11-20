@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { TaskReviewMember } from '@brigadir/core';
-import { currentReviewerRows, reviewerState } from './worker-row';
+import { currentReviewerRows, reviewCardShown, reviewerState } from './worker-row';
 
 const member = (state: TaskReviewMember['state'], findings = 2): TaskReviewMember => ({
 	name: 'Codex 2',
@@ -39,4 +39,13 @@ it("only the current review's reviewers keep rows; workers stay (spec/reviews#su
 	]);
 	// A review that did not start counts no reviewer: an earlier one's rows go.
 	expect(currentReviewerRows(rows, []).map((item) => item.task.id)).toEqual(['w']);
+});
+
+it('a solo task keeps its reviewer card only while the current review counts reviewers (spec/reviews#surfaces)', () => {
+	const reviewerRow = { task: { id: 'r1' }, reviewer: true };
+	// The last review did not start: no reviewer counted, no card with `0`.
+	expect(reviewCardShown({}, currentReviewerRows([], []))).toBe(false);
+	expect(reviewCardShown({}, [reviewerRow])).toBe(true);
+	// A crew's card stays without rows.
+	expect(reviewCardShown({ crew: {} }, [])).toBe(true);
 });

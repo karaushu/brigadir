@@ -160,6 +160,7 @@ describe('spec/composer#slash-menu: список `/` з диска', () => {
 			'editor_state',
 			'editor_restart_language_servers',
 			'pr_state',
+			'prompt_task',
 		]);
 		expect(catalog.tools[0]).toMatchObject({
 			server: 'brigadir',
@@ -205,6 +206,7 @@ describe('spec/composer#slash-menu: список `/` з диска', () => {
 			'editor_state',
 			'editor_restart_language_servers',
 			'pr_state',
+			'prompt_task',
 		]);
 		const noPr = await readSlashCatalog(
 			store,
@@ -227,6 +229,7 @@ describe('spec/composer#slash-menu: список `/` з диска', () => {
 			'console_read',
 			'editor_state',
 			'editor_restart_language_servers',
+			'prompt_task',
 		]);
 		const foreman = await readSlashCatalog(
 			store,

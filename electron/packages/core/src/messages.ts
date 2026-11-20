@@ -1597,6 +1597,7 @@ const uk = {
 	'The folder could not be read.': 'Не вдалося прочитати теку.',
 	'The data location is not allowed.': 'Це розташування даних недоступне.',
 	'Git could not read the repository.': 'Git не зміг прочитати репозиторій.',
+	'The worktree is not ready.': 'Worktree не готовий.',
 	// spec/architecture-and-platform#read-issues: what could not be read, beside the project and task.
 	'Task names': 'Назви задач',
 	'App data': 'Дані застосунку',

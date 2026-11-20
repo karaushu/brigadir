@@ -59,16 +59,18 @@ export function requestForgeAction(
 ) {
 	pendingAction = { projectId: task.projectId, id: task.id, action, scopeId };
 }
-/** spec/architecture-and-platform#read-issues: the workspace shows a `Git` read issue of this task. */
+/** spec/architecture-and-platform#read-issues: the workspace shows a `Git` or `Worktree` read issue of this task. */
 const hasGitIssue = (task: AgentTask) =>
 	Boolean(
-		useWorkspace
-			.getState()
-			.workspace?.issues.some(
-				(issue) =>
-					issue.code === 'git_failed' &&
-					issue.path.split(/[\\/]/).join('/') === `projects/${task.projectId}/tasks/${task.id}/git`
-			)
+		useWorkspace.getState().workspace?.issues.some((issue) => {
+			const path = issue.path.split(/[\\/]/).join('/');
+			return (
+				(issue.code === 'git_failed' &&
+					path === `projects/${task.projectId}/tasks/${task.id}/git`) ||
+				(issue.code === 'worktree_not_ready' &&
+					path === `projects/${task.projectId}/tasks/${task.id}/worktree`)
+			);
+		})
 	);
 export function ForgeProvider({
 	task,

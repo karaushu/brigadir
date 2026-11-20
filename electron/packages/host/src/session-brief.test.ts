@@ -12,6 +12,7 @@ import {
 } from '@brigadir/core';
 import {
 	checklistBrief,
+	reviewQuestionsBrief,
 	commandsBrief,
 	contextBrief,
 	sourcesBrief,
@@ -64,10 +65,10 @@ const worker: CrewContext = {
 
 it('gives a session without a crew the checklist sentence, Claude the plan sentence, and both the context sentence (spec/chat-turns-plans-and-questions#checklist-tools, spec/chat-turns-plans-and-questions#plan-approval, spec/agents-and-providers#context-tools)', () => {
 	expect(sessionBrief(null, 'codex')).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}`
+		`${checklistBrief}\n\n${reviewQuestionsBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}`
 	);
 	expect(sessionBrief(null, 'claude')).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${planApprovalBrief}\n\n${contextBrief}\n\n${sourcesBrief}`
+		`${checklistBrief}\n\n${reviewQuestionsBrief}\n\n${worktreeBrief}\n\n${planApprovalBrief}\n\n${contextBrief}\n\n${sourcesBrief}`
 	);
 });
 
@@ -97,7 +98,7 @@ it('gives a crew worker neither the plan nor the context sentence (spec/chat-tur
 
 it('points every session at the saved project commands, a crew worker too (spec/search-menus-and-commands#agent-command-tools, spec/agents-and-providers#tools-awareness)', () => {
 	expect(sessionBrief(null, 'claude', { commands: true })).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${planApprovalBrief}\n\n${contextBrief}\n\n${sourcesBrief}\n\n${commandsBrief}`
+		`${checklistBrief}\n\n${reviewQuestionsBrief}\n\n${worktreeBrief}\n\n${planApprovalBrief}\n\n${contextBrief}\n\n${sourcesBrief}\n\n${commandsBrief}`
 	);
 	expect(
 		sessionBrief(foreman, 'claude', { commands: true }).endsWith(
@@ -108,6 +109,13 @@ it('points every session at the saved project commands, a crew worker too (spec/
 		`${crewBrief(worker)}\n\n${checklistBrief}\n\n${worktreeBrief}\n\n${commandsBrief}`
 	);
 	expect(commandsBrief).toContain('Start a dev server as a project command');
+});
+
+it('tells a solo agent, and no crew member, that it answers its reviewers with prompt_task (spec/reviews#reviewer-questions)', () => {
+	expect(sessionBrief(null, 'codex')).toContain(reviewQuestionsBrief);
+	expect(sessionBrief(foreman, 'claude')).not.toContain(reviewQuestionsBrief);
+	expect(sessionBrief(worker, 'codex')).not.toContain(reviewQuestionsBrief);
+	expect(reviewQuestionsBrief).toContain('prompt_task');
 });
 
 it('tells every session, a crew worker too, not to create worktrees of its own (spec/tasks#agent-worktrees)', () => {
@@ -121,7 +129,7 @@ const allOn = { browser: true, simulator: true, commands: true };
 it('names the tools in the brief of Codex and the CLI only, built from the modules that are on (spec/agents-and-providers#tools-awareness)', () => {
 	expect(sessionBrief(null, 'claude', { tools: allOn })).not.toContain('browser_open');
 	expect(sessionBrief(null, 'codex', { tools: allOn })).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}\n\n${toolsBrief(null, allOn)}`
+		`${checklistBrief}\n\n${reviewQuestionsBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}\n\n${toolsBrief(null, allOn)}`
 	);
 	expect(sessionBrief(null, 'claude', { tools: allOn, cli: true })).toContain(
 		toolsBrief(null, allOn)
@@ -134,7 +142,7 @@ it('names the tools in the brief of Codex and the CLI only, built from the modul
 	// spec/terminal-and-cli-agents#agent-console-tools: with every module off the brief still names the console.
 	const none = { browser: false, simulator: false, commands: false };
 	expect(sessionBrief(null, 'codex', { tools: none })).toBe(
-		`${checklistBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}\n\n${toolsBrief(null, none)}`
+		`${checklistBrief}\n\n${reviewQuestionsBrief}\n\n${worktreeBrief}\n\n${contextBrief}\n\n${sourcesBrief}\n\n${toolsBrief(null, none)}`
 	);
 	expect(toolsBrief(null, none)).toBe(
 		'This app gives you the console of this task (console_list, console_read).'

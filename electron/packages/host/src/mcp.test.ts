@@ -464,6 +464,8 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'editor_state',
 			'editor_restart_language_servers',
 			'pr_state',
+			// spec/reviews#reviewer-questions: a solo agent answers its own reviewers.
+			'prompt_task',
 		]);
 		expect(mcp.seen.has(undefined)).toBe(false);
 		mcp.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
@@ -509,6 +511,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'simulator_screenshot',
 			'simulator_logs',
 			'simulator_network',
+			'prompt_task',
 		]);
 		mcp.send(
 			request(7, 'tools/call', {
@@ -548,6 +551,7 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'editor_state',
 			'editor_restart_language_servers',
 			'pr_state',
+			'prompt_task',
 		]);
 		mcp.send(request(11, 'tools/call', { name: 'commands_run', arguments: { id: 'dev' } }));
 		expect(JSON.parse(await mcp.reply(11)).result).toEqual({

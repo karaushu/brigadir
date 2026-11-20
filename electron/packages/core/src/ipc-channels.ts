@@ -415,8 +415,12 @@ export const ipcTable = {
 		kind: 'invoke',
 		channel: 'notes:write',
 		class: 'remote',
-		arity: 2,
-		validate: (a) => a.length === 2 && isNoteId(a[0]) && isNoteText(a[1]),
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isNoteId(a[0]) &&
+			isNoteText(a[1]) &&
+			(a[2] === undefined || a[2] === null || isNoteText(a[2])),
 	},
 	setNoteProject: {
 		kind: 'invoke',

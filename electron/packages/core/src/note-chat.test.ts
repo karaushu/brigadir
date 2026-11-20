@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	isNoteChatRow,
 	lastSeenNote,
 	noteChatPrompt,
 	noteLineDelta,
@@ -38,5 +39,27 @@ describe('note chat (spec/notifications-slack-notes-and-schedules#notes)', () =>
 		expect(
 			noteChatPrompt({ text: 'x', note: '', file: '/n/a.md', project: 'p', first: false })
 		).toMatch(/^The same note/);
+	});
+});
+
+describe('note chat attachments (spec/composer#chat-composer)', () => {
+	it("keeps the message's attachments in its row, within the prompt's limits", () => {
+		const item = {
+			id: '0b1c2d3e-0000-4000-8000-000000000001',
+			name: 'shot.png',
+			kind: 'image' as const,
+			bytes: 10,
+		};
+		const row = {
+			seq: 1,
+			at,
+			kind: 'prompt',
+			text: '@[att:0b1c2d3e-0000-4000-8000-000000000001]',
+			note: '',
+		};
+		expect(isNoteChatRow({ ...row, attachments: [item] })).toBe(true);
+		expect(isNoteChatRow(row)).toBe(true);
+		expect(isNoteChatRow({ ...row, attachments: [item, item] })).toBe(false);
+		expect(isNoteChatRow({ ...row, attachments: [{ ...item, id: 'x' }] })).toBe(false);
 	});
 });

@@ -80,7 +80,8 @@ import { defaultDataDir, readRelayHandoff } from '@brigadir/persistence';
 import { ScopeControls } from './scope-controls';
 import { LaunchLocks } from './launch-locks';
 import { searchProjectFiles } from './project-files';
-import { readSlashCatalog } from './slash-catalog';
+import { readChatSlashCatalog, readSlashCatalog } from './slash-catalog';
+import { brigadirChatTools } from '@brigadir/host/brigadir-tools';
 import { LaunchSettingsStore, unattendedBaseRef } from './launch-settings';
 import { Preparations } from './preparations';
 import { withAutoBranch, branchNamePrompt } from '@brigadir/core';
@@ -247,6 +248,7 @@ import {
 	fitWindowBounds,
 	type WindowBounds,
 	type AttachmentOwner,
+	type AttachmentHolder,
 	type TaskSheet,
 	soloRole,
 	soloRoleChecks,
@@ -2095,6 +2097,17 @@ function postNotice(notice: SlackNotice, projectId: string | null) {
 	brigadirNotice?.(notice);
 }
 /** spec/settings-modules-and-onboarding#brigadir-chat-session: Brigadir's tasks as the Slack agent gets them — the newest of every project (≤ 40), plan and CI for 15. */
+/** spec/composer#agent-blocks: a task's summary as a `@task` pill sends it — built now, without a model. */
+async function taskSummaryOf(source: TaskKey): Promise<{ name: string; text: string }> {
+	const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
+		task = await store.task(source),
+		journal = await store.journal(source),
+		diff = await readRelayDiff(store, source, changes.range(source));
+	return {
+		name: `${taskSummaryPrefix}${task.title}`.slice(0, 200),
+		text: taskSummaryText(task, journal.records, diff.stat).slice(0, 256 * 1024),
+	};
+}
 async function brigadirFacts() {
 	const projects = (
 		await readWorkspace(
@@ -3626,17 +3639,21 @@ void app.whenReady().then(async () => {
 	});
 	handle('layout:save', (value) => layout.save(value));
 	// spec/tasks#backlog-edit: an owner is a task or a launch sheet's draft; only the fields that name it go on.
-	const owner = (value: AttachmentOwner): AttachmentOwner => ({
-		projectId: value.projectId,
-		id: value.id,
-		...(value.draft ? { draft: true as const } : {}),
-	});
+	// spec/composer#chat-composer: a chat that is not a task (the Brigadir chat, a note's chat) is named by its kind and id.
+	const owner = (value: AttachmentHolder): AttachmentHolder =>
+		'chat' in value
+			? { chat: value.chat, id: value.id }
+			: {
+					projectId: value.projectId,
+					id: value.id,
+					...(value.draft ? { draft: true as const } : {}),
+				};
 	/**
 	 * spec/remote-access-and-mobile#client-ui-seam: files of this machine for a window of another machine go there as bytes: the picker opens over that
 	 * window, dropped and pasted files are read here, and the machine makes the attachments.
 	 */
 	const upload =
-		(client: Client, key: AttachmentOwner) => (name: string, bytes: Uint8Array, image: boolean) =>
+		(client: Client, key: AttachmentHolder) => (name: string, bytes: Uint8Array, image: boolean) =>
 			client.forward!('attachment:upload', [
 				owner(key),
 				name,
@@ -3697,7 +3714,9 @@ void app.whenReady().then(async () => {
 	// spec/design-review#data: only a kept screenshot or a copied design image of the task (the channel checks the name).
 	handle('design:image', async (key, file: string) => {
 		const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR);
-		const bytes = await readFileNode(await safePath(await store.taskDir(owner(key)), file));
+		const bytes = await readFileNode(
+			await safePath(await store.taskDir({ projectId: key.projectId, id: key.id }), file)
+		);
 		const type = file.endsWith('.jpg') ? 'jpeg' : file.endsWith('.webp') ? 'webp' : 'png';
 		return `data:image/${type};base64,${bytes.toString('base64')}`;
 	});
@@ -3746,17 +3765,12 @@ void app.whenReady().then(async () => {
 				)
 			).attachment
 	);
-	handle('attachment:task-summary', async (key, source) => {
-		const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
-			task = await store.task(source),
-			journal = await store.journal(source),
-			diff = await readRelayDiff(store, source, changes.range(source));
-		return new Attachments(store).create(key, {
+	handle('attachment:task-summary', async (key, source) =>
+		new Attachments(await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).create(key, {
 			kind: 'text',
-			name: `${taskSummaryPrefix}${task.title}`.slice(0, 200),
-			text: taskSummaryText(task, journal.records, diff.stat).slice(0, 256 * 1024),
-		});
-	});
+			...(await taskSummaryOf(source)),
+		})
+	);
 	// spec/composer#agent-blocks: the template as the library has it now; the attachment keeps what the agent read.
 	handle('attachment:agent-template', async (key, templateId) => {
 		const template = soloRoleTemplates(
@@ -3919,6 +3933,25 @@ void app.whenReady().then(async () => {
 				: null,
 		send: (event) => clients.broadcast('notes:chat-event', event),
 		changed: (id) => notesChanged({ id, kind: 'written' }),
+		// spec/composer#chat-composer: the chat's files and images live in `notes/<id>/`; a task pill goes as the task's summary.
+		attachments: async (id, ids) =>
+			new Attachments(await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).resolve(
+				{ chat: 'note', id },
+				ids
+			),
+		attach: async (id, input) =>
+			new Attachments(await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).create(
+				{ chat: 'note', id },
+				input
+			),
+		taskSummary: async (id) => {
+			const task = (
+				await readWorkspace(
+					process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+				)
+			).tasks.find((item) => item.id === id);
+			return task ? taskSummaryOf({ projectId: task.projectId, id: task.id }) : null;
+		},
 		adapter: process.env.BRIGADIR_TEST_AGENT
 			? {
 					command: '/usr/bin/env',
@@ -3962,6 +3995,12 @@ void app.whenReady().then(async () => {
 			).projects.map(({ id, name, path }) => ({ id, name, path })),
 		openProject: () => null,
 		facts: () => brigadirFacts(),
+		// spec/composer#chat-composer: the chat's files and images live in `assistant/chats/<id>/`.
+		attachments: async (chat, ids) =>
+			new Attachments(await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).resolve(
+				{ chat: 'brigadir', id: chat },
+				ids
+			),
 		choice: () => {
 			const run = actionChoice(
 				'brigadirChat',
@@ -4082,9 +4121,16 @@ void app.whenReady().then(async () => {
 	handle('brigadir:list', () => brigadirChats.list());
 	handle('brigadir:read', (id: string) => brigadirChats.read(id));
 	handle('brigadir:create', () => brigadirChats.create());
-	handle('brigadir:send', (id: string, text: string) => {
-		// The answer streams by `brigadir:event`; the call returns once the message is on its way.
-		void brigadirChats.send(id, text).catch(() => {});
+	handle('brigadir:send', async (id: string, text: string, attachments: string[]) => {
+		// The answer streams by `brigadir:event`; the call returns once the message is on its way. Attachments that are gone or over
+		// the limits refuse the message, so the window keeps its draft.
+		await brigadirChats.checkAttachments(id, attachments);
+		void brigadirChats.send(id, text, attachments).catch(() => {});
+	});
+	// spec/composer#chat-composer: the chat's `/` list before its agent announces its own; its own tools are Brigadir's chat tools.
+	handle('brigadir:slash', async () => {
+		const place = await brigadirChats.slashPlace();
+		return readChatSlashCatalog(place.provider, place.folder, brigadirChatTools);
 	});
 	handle('brigadir:stop', (id: string) => brigadirChats.stop(id));
 	handle('brigadir:rename', (id: string, title: string) => brigadirChats.rename(id, title));
@@ -4109,10 +4155,20 @@ void app.whenReady().then(async () => {
 		])) as 'rename' | 'archive' | 'restore' | 'delete' | null;
 	});
 	handle('notes:chat-read', (id: string) => noteChats.read(id));
-	handle('notes:chat-send', (id: string, text: string, choice: NoteChatChoice) => {
-		// The answer streams by `notes:chat-event`; the call returns once the message is on its way.
-		void noteChats.send(id, text, choice);
-	});
+	handle(
+		'notes:chat-send',
+		async (id: string, text: string, choice: NoteChatChoice, attachments: string[]) => {
+			// The answer streams by `notes:chat-event`; the call returns once the message is on its way. Attachments that are gone or
+			// over the limits refuse the message, so the window keeps its draft.
+			await noteChats.checkAttachments(id, attachments);
+			void noteChats.send(id, text, choice, attachments).catch(() => {});
+		}
+	);
+	// spec/composer#chat-composer: the note chat's `/` list from disk (no tools of ours), and a file of its project picked in `@`.
+	handle('notes:chat-slash', async (id: string, provider: 'claude' | 'codex') =>
+		readChatSlashCatalog(provider, await noteChats.slashFolder(id), [])
+	);
+	handle('notes:chat-attach-file', (id: string, path: string) => noteChats.attachFile(id, path));
 	handle('notes:chat-stop', (id: string) => noteChats.stop(id));
 	handle('notes:chat-undo', (id: string, seq: number) => noteChats.undo(id, seq));
 	handle('notes:list', async () => (await notesStore).list());

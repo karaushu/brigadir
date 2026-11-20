@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import { thumbnailCrop, type PromptAttachment, type TaskKey } from '@brigadir/core';
+import {
+	holderKey,
+	thumbnailCrop,
+	type AttachmentHolder,
+	type PromptAttachment,
+} from '@brigadir/core';
 /** spec/chat#images: a tile's picture — the cached thumbnail, a placeholder of the same size while it loads, «unavailable» when the image is gone or changed. */
-export function useThumbnail(task: TaskKey, item: PromptAttachment) {
+export function useThumbnail(task: AttachmentHolder, item: PromptAttachment) {
 	const [state, setState] = useState<{ src: string | null; failed: boolean }>({
 		src: null,
 		failed: false,
@@ -21,7 +26,7 @@ export function useThumbnail(task: TaskKey, item: PromptAttachment) {
 		return () => {
 			active = false;
 		};
-	}, [task.id, task.projectId, item.id, item.kind]);
+	}, [holderKey(task), item.id, item.kind]);
 	return state;
 }
 export function Thumbnail({ src }: { src: string }) {

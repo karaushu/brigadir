@@ -82,3 +82,40 @@ it('caches a thumbnail beside a verified image and refuses it once the image is 
 		await rm(root, { recursive: true, force: true });
 	}
 });
+it('keeps a chat’s attachments in its own folder, only while the chat exists (spec/composer#chat-composer)', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-chat-attachments-'));
+	try {
+		const store = await SessionStore.at(join(root, 'data'));
+		const assets = new Attachments(store);
+		const chat = { chat: 'brigadir' as const, id: '0b1c2d3e-0000-4000-8000-000000000001' },
+			note = { chat: 'note' as const, id: 'note-abc' };
+		await expect(assets.create(chat, { kind: 'text', name: 'a', text: 'b' })).rejects.toThrow(
+			'gone'
+		);
+		await expect(assets.create(note, { kind: 'text', name: 'a', text: 'b' })).rejects.toThrow(
+			'gone'
+		);
+		await mkdir(join(store.root, 'assistant', 'chats', chat.id), { recursive: true });
+		await writeFile(join(store.root, 'assistant', 'chats', chat.id, 'chat.json'), '{}');
+		await mkdir(join(store.root, 'notes'), { recursive: true });
+		await writeFile(join(store.root, 'notes', 'note-abc.md'), '# A');
+		const one = await assets.create(chat, { kind: 'text', name: 'a.ts', text: 'ref' }),
+			two = await assets.create(note, { kind: 'text', name: 'b.ts', text: 'ref' });
+		expect((await assets.read(chat, one.id)).path).toContain(
+			join('assistant', 'chats', chat.id, 'attachments', one.id)
+		);
+		expect((await assets.read(note, two.id)).path).toContain(
+			join('notes', 'note-abc', 'attachments', two.id)
+		);
+		await expect(assets.read(note, one.id)).rejects.toThrow();
+		await expect(
+			assets.create({ chat: 'brigadir', id: '../x' } as never, {
+				kind: 'text',
+				name: 'a',
+				text: 'b',
+			})
+		).rejects.toThrow();
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

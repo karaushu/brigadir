@@ -180,3 +180,25 @@
 .island[data-archived='true'] {
 	opacity: 0.5;
 }
+/* spec/composer#mention-menu: the `@` and `/` menus open above the island's text, from its left edge; the island stays where it is.
+   spec/composer#mentions: with the tabs it is 400 wide (at most the island less 20); the `/` menu's tabs are its groups: 480. Used by the
+   task composer and the chat composer (spec/composer#chat-composer). */
+.menu.menu.menu {
+	left: 10px;
+	width: min(360px, calc(100% - 20px));
+}
+.menu.menu.menu[data-mention-tabs] {
+	width: min(400px, calc(100% - 20px));
+}
+.menu.menu.menu.slashMenu[data-mention-tabs] {
+	width: min(480px, calc(100% - 20px));
+}
+/* A task's state glyph at the menu row's 12 px. */
+.menuTaskIcon {
+	display: flex;
+	flex: none;
+}
+.menuTaskIcon > span {
+	width: 12px;
+	height: 12px;
+}

@@ -16,6 +16,8 @@ import {
 	isBrigadirSetupLink,
 	isRecord,
 	mcpCall,
+	mentionNamesText,
+	promptDisplayText,
 	missingSlackScopes,
 	quickSlackAllows,
 	selectOption,
@@ -24,6 +26,8 @@ import {
 	type AgentEvent,
 	type AgentOption,
 	type AppSettings,
+	type AttachmentInput,
+	type PromptAttachment,
 	type BrigadirCard,
 	type BrigadirChatChoice,
 	type BrigadirChatEntry,
@@ -87,6 +91,14 @@ export type BrigadirChatDeps = {
 		connectApp(token: string): Promise<void>;
 		state(): { bot: boolean; app: boolean; memberId: boolean; listening: boolean };
 	};
+	/**
+	 * spec/composer#chat-composer: the chat's own attachments by id, in that order, each read and checked (`Attachments` of the chat's folder);
+	 * the limits of a prompt hold. Without it a message carries no attachments.
+	 */
+	attachments?(
+		chat: string,
+		ids: string[]
+	): Promise<{ attachment: PromptAttachment; input: AttachmentInput }[]>;
 	/** A short title for a chat from its first message; null — keep the first line. */
 	title?(text: string): Promise<string | null>;
 	adapter?: AdapterCommand | undefined;
@@ -118,6 +130,13 @@ type Setups = Partial<
 	Record<BrigadirSetupKind, { chat: string | null; name?: string; appId?: string | null }>
 >;
 const writeKinds = new Set(['allow_once', 'allow_always']);
+/** spec/settings-modules-and-onboarding#brigadir-chat-session: the chat works in the open project's main tree, else the first project's. */
+export function chatFolder(
+	projects: readonly { id: string; path: string }[],
+	open: string | null
+): string | null {
+	return (projects.find((item) => item.id === open) ?? projects[0])?.path ?? null;
+}
 const sameChoice = (a: BrigadirChatChoice | null, b: BrigadirChatChoice) =>
 	!!a && a.provider === b.provider && a.model === b.model;
 
@@ -263,17 +282,24 @@ export class BrigadirChats {
 		return this.append(chat, { kind: 'card', card });
 	}
 	// ---------- a turn ----------
-	async send(id: string, text: string) {
+	async send(id: string, text: string, attachmentIds: string[] = []) {
 		const live = this.live.get(id);
 		if (live?.busy) throw new Error('Brigadir is still answering');
 		let meta = await this.meta(id);
 		if (!meta) throw new Error('This chat is gone.');
 		const message = text.trim();
 		if (!message) return;
+		const attachments = attachmentIds.length
+			? (await this.readAttachments(id, attachmentIds)).map((item) => item.attachment)
+			: [];
 		if (!meta.title) {
-			meta = { ...meta, title: brigadirChatTitle(message) };
+			// spec/composer#chat-composer: the title reads names, not tokens.
+			const projects = await this.deps.projects().catch(() => []),
+				{ tasks } = await this.deps.facts().catch(() => ({ tasks: [] })),
+				shown = promptDisplayText(message, attachments, tasks, [], projects);
+			meta = { ...meta, title: brigadirChatTitle(shown) };
 			void this.deps
-				.title?.(message)
+				.title?.(shown)
 				.then(async (title) => {
 					if (title) await this.rename(id, title);
 				})
@@ -281,9 +307,25 @@ export class BrigadirChats {
 		}
 		await this.writeMeta({ ...meta, updatedAt: new Date().toISOString() });
 		void this.broadcastList();
-		await this.turn(id, message);
+		await this.turn(id, message, attachments);
 	}
-	private async turn(id: string, text: string) {
+	private async readAttachments(chat: string, ids: string[]) {
+		if (!this.deps.attachments) throw new Error('This chat takes no attachments.');
+		return this.deps.attachments(chat, ids);
+	}
+	/** Throws when a message's attachments are gone, changed or over the limits: the window keeps its draft. */
+	async checkAttachments(chat: string, ids: string[]) {
+		if (ids.length) await this.readAttachments(chat, ids);
+	}
+	/** spec/composer#chat-composer: where the `/` list is read before the agent starts — the agent the next message runs and its working folder. */
+	async slashPlace(): Promise<{ provider: 'claude' | 'codex'; folder: string }> {
+		const projects = await this.deps.projects().catch(() => []);
+		return {
+			provider: this.deps.choice().provider,
+			folder: chatFolder(projects, this.deps.openProject()) ?? this.deps.root,
+		};
+	}
+	private async turn(id: string, text: string, attachments: PromptAttachment[] = []) {
 		let chat = this.live.get(id);
 		if (!chat) {
 			chat = {
@@ -305,29 +347,55 @@ export class BrigadirChats {
 		const choice = this.deps.choice();
 		try {
 			const rows = await this.rows(id);
-			await this.append(id, { kind: 'prompt', text, choice });
+			await this.append(id, {
+				kind: 'prompt',
+				text,
+				choice,
+				...(attachments.length ? { attachments } : {}),
+			});
 			const fresh = !chat.transport || !sameChoice(chat.choice, choice);
 			const projects = await this.deps.projects();
 			if (fresh) await this.start(chat, choice, rows, projects);
 			const facts = await this.deps.facts().catch(() => ({ text: '', tasks: [] }));
+			// spec/composer#chat-composer: task and project pills become their names and ids; attachments go as blocks where their pills stand.
+			const said = mentionNamesText(
+				text,
+				facts.tasks.map((task) => ({
+					...task,
+					project: projects.find((item) => item.id === task.projectId)?.name ?? task.projectId,
+				})),
+				projects
+			);
+			const inputs = attachments.length
+				? (
+						await this.readAttachments(
+							id,
+							attachments.map((item) => item.id)
+						)
+					).map((item) => ({ ...item.input, id: item.attachment.id }))
+				: [];
 			chat.stopped = false;
 			chat.answering = true;
 			try {
-				await chat.transport!.send({
-					kind: 'prompt',
-					text: fresh
-						? brigadirChatPrompt({
-								text,
-								language: /[а-яіїєґ]/i.test(text) ? 'uk' : this.deps.locale(),
-								today: this.deps.today(),
-								project: projects.find((item) => item.id === this.deps.openProject())?.name ?? null,
-								projects: projects.map(({ name, path }) => ({ name, path })),
-								facts: facts.text,
-								settings: settingsRegistryText(this.deps.settings()),
-								setups: await this.unfinishedSetups(),
-							})
-						: brigadirChatFollowUp({ text, facts: facts.text }),
-				});
+				await chat.transport!.send(
+					{
+						kind: 'prompt',
+						text: fresh
+							? brigadirChatPrompt({
+									text: said,
+									language: /[а-яіїєґ]/i.test(text) ? 'uk' : this.deps.locale(),
+									today: this.deps.today(),
+									project:
+										projects.find((item) => item.id === this.deps.openProject())?.name ?? null,
+									projects: projects.map(({ name, path }) => ({ name, path })),
+									facts: facts.text,
+									settings: settingsRegistryText(this.deps.settings()),
+									setups: await this.unfinishedSetups(),
+								})
+							: brigadirChatFollowUp({ text: said, facts: facts.text }),
+					},
+					inputs
+				);
 			} finally {
 				chat.answering = false;
 			}
@@ -356,8 +424,7 @@ export class BrigadirChats {
 		chat.transport?.close();
 		chat.transport = null;
 		chat.controller = new AbortController();
-		const open = projects.find((item) => item.id === this.deps.openProject()) ?? projects[0];
-		const cwd = open?.path ?? this.deps.root;
+		const cwd = chatFolder(projects, this.deps.openProject()) ?? this.deps.root;
 		await mkdir(this.deps.root, { recursive: true, mode: 0o700 });
 		// After a restart the same provider and model go on with the journal's session.
 		const last = rows.findLast((row) => row.kind === 'prompt'),
@@ -408,8 +475,9 @@ export class BrigadirChats {
 	private event(chat: Live, event: AgentEvent) {
 		if (event.kind === 'session.started' || event.kind === 'options.changed')
 			chat.options = event.options;
-		// A resumed session may replay its history on load; only the answer to our message is the chat's.
-		if (event.kind === 'session.started' || chat.answering)
+		// A resumed session may replay its history on load; only the answer to our message is the chat's. The agent's commands
+		// may come before the first answer; the `/` menu reads them (spec/composer#chat-composer).
+		if (event.kind === 'session.started' || event.kind === 'commands.changed' || chat.answering)
 			void this.append(chat.id, { kind: 'event', event });
 	}
 	/** spec/settings-modules-and-onboarding#brigadir-chat-session: reads and commands that read; every edit and every other command is declined. */

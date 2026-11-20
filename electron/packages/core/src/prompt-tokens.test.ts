@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	agentToken,
+	mentionNamesText,
+	projectToken,
 	attachmentLines,
 	attachmentMention,
 	attachmentToken,
@@ -162,4 +164,32 @@ it('spec/composer#prompt-tokens: an agent template is a token until the message 
 		'run @Tester on it'
 	);
 	expect(promptDisplayText(text)).toBe('run @tester on it');
+});
+
+describe('chat mentions (spec/composer#chat-composer)', () => {
+	const image = '0b1c2d3e-0000-4000-8000-000000000001';
+	it('reads a project token, keeps it raw for the agent and shows its name', () => {
+		const text = `look at ${projectToken('p1')} and ${taskToken('t1')} ${attachmentToken(image)}`;
+		expect(promptParts(text).filter((part) => part.kind === 'token')).toHaveLength(3);
+		expect(promptSequence(text, [image])).toEqual([
+			{ kind: 'text', text: `look at ${projectToken('p1')} and ${taskToken('t1')} ` },
+			{ kind: 'attachment', id: image },
+		]);
+		expect(
+			promptDisplayText(text, [], [{ id: 't1', title: 'ATT' }], [], [{ id: 'p1', name: 'b2c' }])
+		).toBe('look at @b2c and @ATT ');
+	});
+	it('names tasks and projects for the Brigadir chat, unambiguously, and leaves attachments in place', () => {
+		const text = `why is ${taskToken('t1')} slow in ${projectToken('p1')}? ${attachmentToken(image)} ${taskToken('gone')}`;
+		expect(
+			mentionNamesText(
+				text,
+				[{ id: 't1', title: 'Fix "login"', project: 'b2c' }],
+				[{ id: 'p1', name: 'b2c', path: '/src/b2c' }]
+			)
+		).toBe(
+			`why is the task "Fix \\"login\\"" (id t1, project "b2c") slow in the project "b2c" (folder "/src/b2c")? ${attachmentToken(image)} the task with id gone`
+		);
+		expect(mentionNamesText('plain text', [], [])).toBe('plain text');
+	});
 });

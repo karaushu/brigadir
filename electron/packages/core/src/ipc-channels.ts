@@ -46,6 +46,7 @@ import { isTaskSurface, isSurfaceDraft } from './surface';
 import { isSurfaceLayout } from './layout';
 import {
 	isAttachmentOwner,
+	isAttachmentHolder,
 	isAttachmentInput,
 	isAttachmentId,
 	isAttachmentIds,
@@ -449,9 +450,10 @@ export const ipcTable = {
 		kind: 'invoke',
 		channel: 'notes:chat-send',
 		class: 'remote',
-		arity: 3,
+		arity: 4,
 		validate: (a) =>
-			a.length === 3 &&
+			a.length === 4 &&
+			isAttachmentIds(a[3]) &&
 			isNoteId(a[0]) &&
 			typeof a[1] === 'string' &&
 			a[1].trim().length > 0 &&
@@ -475,6 +477,27 @@ export const ipcTable = {
 		validate: (a) => a.length === 2 && isNoteId(a[0]) && Number.isSafeInteger(a[1]),
 	},
 	onNoteChatEvent: { kind: 'subscribe', channel: 'notes:chat-event', class: 'remote' },
+	// spec/composer#chat-composer: the note chat's `/` list from disk and a file of the note's project picked in its `@` menu.
+	readNoteChatSlashCatalog: {
+		kind: 'invoke',
+		channel: 'notes:chat-slash',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isNoteId(a[0]) && (a[1] === 'claude' || a[1] === 'codex'),
+	},
+	attachNoteChatFile: {
+		kind: 'invoke',
+		channel: 'notes:chat-attach-file',
+		class: 'remote',
+		arity: 2,
+		validate: (a) =>
+			a.length === 2 &&
+			isNoteId(a[0]) &&
+			typeof a[1] === 'string' &&
+			a[1].length > 0 &&
+			a[1].length <= 4096 &&
+			!a[1].includes('\0'),
+	},
 	// spec/settings-modules-and-onboarding#brigadir-chat: the Brigadir chats of the rail section, their cards and setups.
 	readBrigadirChats: {
 		kind: 'invoke',
@@ -501,13 +524,22 @@ export const ipcTable = {
 		kind: 'invoke',
 		channel: 'brigadir:send',
 		class: 'client',
-		arity: 2,
+		arity: 3,
 		validate: (a) =>
-			a.length === 2 &&
+			a.length === 3 &&
+			isAttachmentIds(a[2]) &&
 			isId(a[0]) &&
 			typeof a[1] === 'string' &&
 			a[1].trim().length > 0 &&
 			a[1].length <= brigadirChatLimits.message,
+	},
+	// spec/composer#chat-composer: the Brigadir chat's `/` list from disk, before its agent announces its own.
+	readBrigadirSlashCatalog: {
+		kind: 'invoke',
+		channel: 'brigadir:slash',
+		class: 'client',
+		arity: 0,
+		validate: noArgs,
 	},
 	stopBrigadirChat: {
 		kind: 'invoke',
@@ -2508,7 +2540,7 @@ export const ipcTable = {
 		channel: 'attachment:pick',
 		class: 'client',
 		arity: 1,
-		validate: (a) => a.length === 1 && isAttachmentOwner(a[0]),
+		validate: (a) => a.length === 1 && isAttachmentHolder(a[0]),
 	},
 	createAttachment: {
 		kind: 'invoke',
@@ -2524,7 +2556,7 @@ export const ipcTable = {
 		arity: 2,
 		validate: (a) =>
 			a.length === 2 &&
-			isAttachmentOwner(a[0]) &&
+			isAttachmentHolder(a[0]) &&
 			typeof a[1] === 'string' &&
 			a[1].trim().length > 0 &&
 			a[1].length <= 200,
@@ -2548,7 +2580,7 @@ export const ipcTable = {
 		},
 		validate: (a) =>
 			a.length === 2 &&
-			isAttachmentOwner(a[0]) &&
+			isAttachmentHolder(a[0]) &&
 			Array.isArray(a[1]) &&
 			a[1].length > 0 &&
 			a[1].length <= 10 &&
@@ -2566,7 +2598,7 @@ export const ipcTable = {
 		channel: 'attachment:read',
 		class: 'remote',
 		arity: 2,
-		validate: (a) => a.length === 2 && isAttachmentOwner(a[0]) && isAttachmentId(a[1]),
+		validate: (a) => a.length === 2 && isAttachmentHolder(a[0]) && isAttachmentId(a[1]),
 	},
 	// spec/design-review#data: a kept screenshot or a copied design image of a task, for the design review card.
 	readDesignImage: {
@@ -2582,7 +2614,7 @@ export const ipcTable = {
 		channel: 'attachment:info',
 		class: 'remote',
 		arity: 2,
-		validate: (a) => a.length === 2 && isAttachmentOwner(a[0]) && isAttachmentId(a[1]),
+		validate: (a) => a.length === 2 && isAttachmentHolder(a[0]) && isAttachmentId(a[1]),
 	},
 	attachTaskSummary: {
 		kind: 'invoke',
@@ -2608,14 +2640,14 @@ export const ipcTable = {
 		channel: 'attachment:thumbnail',
 		class: 'remote',
 		arity: 2,
-		validate: (a) => a.length === 2 && isAttachmentOwner(a[0]) && isAttachmentId(a[1]),
+		validate: (a) => a.length === 2 && isAttachmentHolder(a[0]) && isAttachmentId(a[1]),
 	},
 	copyAttachmentImage: {
 		kind: 'invoke',
 		channel: 'attachment:copy-image',
 		class: 'client',
 		arity: 2,
-		validate: (a) => a.length === 2 && isAttachmentOwner(a[0]) && isAttachmentId(a[1]),
+		validate: (a) => a.length === 2 && isAttachmentHolder(a[0]) && isAttachmentId(a[1]),
 	},
 	browserCommand: {
 		kind: 'invoke',
@@ -3967,7 +3999,7 @@ export const ipcTable = {
 		arity: 4,
 		validate: (a) =>
 			a.length === 4 &&
-			isAttachmentOwner(a[0]) &&
+			isAttachmentHolder(a[0]) &&
 			typeof a[1] === 'string' &&
 			a[1].trim().length > 0 &&
 			a[1].length <= 200 &&

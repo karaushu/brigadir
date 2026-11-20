@@ -3098,6 +3098,10 @@ const uk = {
 		'Іде агенту як роль для сабагента: агент запускає його, коли ви попросите.',
 	'Goes to the agent as a task summary: state, branch, requests and changes.':
 		'Іде агенту як підсумок задачі: стан, гілка, запити й зміни.',
+	// spec/composer#chat-composer: the Brigadir chat's task and project pills.
+	'Goes to Brigadir as the task: its title, id and project.':
+		'Іде Бригадиру як задача: назва, id і проєкт.',
+	'Goes to Brigadir as the project: its name and folder.': 'Іде Бригадиру як проєкт: назва й тека.',
 	'Goes to the agent as the text of these lines.': 'Іде агенту як текст цих рядків.',
 	'Goes to the agent as a path: the agent reads the file itself.':
 		'Іде агенту як шлях: агент сам читає файл.',

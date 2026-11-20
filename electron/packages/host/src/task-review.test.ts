@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { SessionStore, atomicJson } from '@brigadir/persistence';
 import {
 	builtinAgentTemplates,
+	crewPalette,
 	planFeedbackPrompt,
 	resolveCrewAgent,
 	templateLookup,
@@ -529,3 +530,61 @@ it('a plan reviewer reads the person’s answers to the plan after the task’s 
 		'<person_message kind="plan further">\nCover Edge too\n</person_message>'
 	);
 }, 180_000);
+
+// Seen in the walkthrough (A, question 2): a plan reviewer asked the author while the plan approval held its turn; nobody could answer.
+it('a reviewer’s question to an Auto agent held by its plan answers the plan as plan chat does, and the agent presents it again (spec/crew#ask-foreman)', async () => {
+	const { store, task } = await setup('Keep the focus ring');
+	const lookup = {
+		lookup: templateLookup([...builtinAgentTemplates]),
+		defaultProvider: 'claude' as const,
+	};
+	await store.updateTask(task, {
+		auto: {
+			roles: crewPalette(builtinAgentTemplates, lookup, []).templates,
+			budget: { minutes: 40, tokens: 400_000 },
+		},
+	});
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['normal', log]);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await presented(client, 1);
+	await client.command({
+		kind: 'prompt',
+		text: planFeedbackPrompt('Safari only; ask the author first'),
+		answersPlan: true,
+	});
+	await presented(client, 2);
+	await client.command({
+		kind: 'startReview',
+		point: 'plan',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const asked = await find(client, (r) => r.event.kind === 'crew.question.requested', 90_000);
+	// The waiting plan is answered with its reject option, and the question is the agent's next turn.
+	const plan = (await client.snapshot()).records
+		.filter((r) => r.event.kind === 'permission.requested')
+		.at(-1)!;
+	const rejected = await find(
+		client,
+		(r) =>
+			r.event.kind === 'permission.resolved' &&
+			r.event.id === (plan.event as { request: { id: string } }).request.id
+	);
+	expect(rejected.event).toMatchObject({ optionId: 'reject' });
+	const turn = await find(
+		client,
+		(r) => r.seq > asked.seq && r.event.kind === 'turn.started' && r.event.crew?.kind === 'question'
+	);
+	expect(turn.event.kind === 'turn.started' && turn.event.text).toContain(
+		'Your plan was sent back so that you can answer'
+	);
+	const answered = await find(client, (r) => r.event.kind === 'crew.question.resolved', 60_000);
+	expect(answered.event).toMatchObject({ answeredBy: 'foreman' });
+	// The agent presents the plan again, and the reviewer, answered, gives its verdict.
+	await presented(client, 3);
+	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(read.event).toMatchObject({ point: 'plan', findings: 1 });
+}, 240_000);

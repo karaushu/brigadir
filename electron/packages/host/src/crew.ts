@@ -338,6 +338,12 @@ export type CrewHostDeps = {
 	held?(): Promise<boolean>;
 	/** spec/crew#ask-foreman: the question is over; its prompt, if it still waits in this host's queue, is taken out. */
 	dropQuestion?(questionId: string): Promise<void>;
+	/** spec/crew#ask-foreman: a reviewer's question answers a waiting plan for approval — rejected, the question in front of the queue; false
+	 *  when no plan waits or this agent cannot answer questions. */
+	answerPlan?(
+		text: string,
+		marker: Extract<SessionEvent, { kind: 'turn.started' }>['crew']
+	): Promise<boolean>;
 };
 export type SelfReviewHooks = {
 	/** The task review the round belongs to (`task-review.json`). */
@@ -2739,10 +2745,27 @@ export class CrewHost {
 		await this.saveQuestions();
 		await this.deps.emit({ kind: 'crew.question.requested', question });
 		this.scheduleEscalation(question);
-		await this.deps.prompt(
-			`Worker \`${worker.name} · ${worker.title}\` asks (questionId ${question.id}):\n${text}${options.length ? `\nOptions: ${options.join(' | ')}` : ''}\nAnswer with prompt_task(taskId "${worker.taskId}", text, questionId "${question.id}"). The worker is blocked until you answer.`,
-			{ kind: 'question', questionId: question.id, agent: worker.name }
-		);
+		const prompt = `Worker \`${worker.name} · ${worker.title}\` asks (questionId ${question.id}):\n${text}${options.length ? `\nOptions: ${options.join(' | ')}` : ''}\nAnswer with prompt_task(taskId "${worker.taskId}", text, questionId "${question.id}"). The worker is blocked until you answer.`,
+			marker = { kind: 'question' as const, questionId: question.id, agent: worker.name };
+		// spec/crew#ask-foreman: a reviewer of the task's own review asks while a waiting plan holds the author's turn — the question answers
+		// the plan as plan chat does, runs as the author's next turn, and the author presents the plan again.
+		if (this.checksSelf(worker.nodeId)) {
+			if (this.planWaiter || (await this.pendingPlan()))
+				if (
+					await this.rejectPlanForReview(
+						`${prompt}\nYour split was sent back so that you can answer. After you answer, call propose_plan again with the split, unchanged unless the answer changes it.`
+					)
+				)
+					return question;
+			if (
+				await this.deps.answerPlan?.(
+					`${prompt}\nYour plan was sent back so that you can answer. After you answer, present the plan for approval again, unchanged unless the answer changes it.`,
+					marker
+				)
+			)
+				return question;
+		}
+		await this.deps.prompt(prompt, marker);
 		return question;
 	}
 	private scheduleEscalation(question: CrewQuestion) {

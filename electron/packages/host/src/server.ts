@@ -502,6 +502,29 @@ export async function startHost(config: HostConfig) {
 					for (const item of queuedCrewQuestion(queue, questionId))
 						await emit({ kind: 'prompt.removed', id: item.id });
 				}),
+			// spec/crew#ask-foreman, spec/chat-turns-plans-and-questions#plan-chat: a reviewer's question to an agent held by its plan for
+			// approval answers that plan with its reject option and runs before what is queued. Only an agent that answers questions
+			// (`prompt_task`) gets it: the Auto agent; a split waits in the crew host.
+			answerPlan: (text: string, marker: Extract<SessionEvent, { kind: 'turn.started' }>['crew']) =>
+				serialPrompt(async () => {
+					if (!autoTask) return false;
+					const plan = [...permissions.values()].find((item) => isPlanApproval(item.request)),
+						reject = plan ? planRejectOption(plan.request) : null;
+					if (!plan || !reject) return false;
+					await plan.finish(reject.id);
+					const before = queue.prompts[0]?.id;
+					await emit({
+						kind: 'prompt.queued',
+						prompt: {
+							id: randomUUID(),
+							command: { kind: 'prompt', text, ...(marker ? { crew: marker } : {}) },
+							attachments: [],
+						},
+						...(before ? { before } : {}),
+					});
+					kickPrompts();
+					return true;
+				}),
 		};
 		// spec/crew#auto: the Auto agent's host hires through cards and asks the app about models.
 		const host: CrewHost =

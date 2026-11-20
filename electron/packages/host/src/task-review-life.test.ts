@@ -967,6 +967,51 @@ describe('the plan review (spec/reviews#plan-review)', () => {
 		expect(s.doc().review!.state).toBe('verifying');
 	});
 
+	// From the walkthrough's code audit: any turn end after the batch counted as the foreman's answer to its split.
+	it("the foreman's answer is the turn that read the split's rejection, not another turn that ends meanwhile", async () => {
+		const s = await setup({ foreman: true });
+		const split = plan(1, '# Split proposed by the foreman\n\n## Part 1: Notes', 'split');
+		await present(s, split);
+		await s.life.hooks().planVerdict('Codex', 1, {
+			findings: [{ kind: 'split', text: 'Both parts edit the notes store', where: 'Part 1' }],
+		});
+		await s.verdict(1, 'comments');
+		expect(s.doc().review!.state).toBe('fixing');
+		// The foreman's turn had ended: the rejection with the batch waits as the decision prompt while the person's message runs.
+		const marker = { kind: 'plan-decision' as const, planId: split.id, approved: false };
+		await s.emit({ kind: 'crew.plan.resolved', id: split.id, approved: false, parts: null });
+		await s.emit({
+			kind: 'prompt.queued',
+			prompt: {
+				id: 'q1',
+				command: { kind: 'prompt', text: 'findings', crew: marker },
+				attachments: [],
+			},
+		});
+		await s.emit({ kind: 'turn.started', text: 'What do you think?' });
+		await s.emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await s.life.turnEnded();
+		expect(s.doc().review!.state).toBe('fixing');
+		expect(s.state.checks).toBe(1);
+		// The decision's turn ends without a new split: the closure check reads the split as it was.
+		await s.emit({ kind: 'turn.started', text: 'findings', queuedPromptId: 'q1', crew: marker });
+		await s.emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await s.life.turnEnded();
+		expect(s.doc().review!.state).toBe('verifying');
+
+		// Read inside the turn that waited in propose_plan: that turn's end is the answer.
+		const live = await setup({ foreman: true });
+		await present(live, split);
+		await live.life.hooks().planVerdict('Codex', 1, {
+			findings: [{ kind: 'split', text: 'Both parts edit the notes store', where: 'Part 1' }],
+		});
+		await live.verdict(1, 'comments');
+		await live.emit({ kind: 'crew.plan.resolved', id: split.id, approved: false, parts: null });
+		await live.emit({ kind: 'turn.completed', reason: 'end_turn' });
+		await live.life.turnEnded();
+		expect(live.doc().review!.state).toBe('verifying');
+	});
+
 	it('a reviewer on another provider reads the plan and the saved sources through the host', async () => {
 		const s = await setup();
 		await saveTaskSource(

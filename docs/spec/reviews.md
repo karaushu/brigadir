@@ -424,7 +424,9 @@ to fix N findings of the plan review that are still open…` with the reviewer's
    `read_plan` with the revision diff. The reviewer answers `approve`, or `submit_plan_review` with
    `{replyTo: <findingId>, text}` per finding still open and `{kind, text, where?, introduced: true}` only for a
    problem the revision brought in; gaps are not asked again. The host refuses other items with the messages of the code
-   loop. When the author's turn ends without presenting the plan again, the check runs on the plan as it was.
+   loop. When the author's turn ends without presenting the plan again, the check runs on the plan as it was. A
+   foreman's turn is the one that read the split's rejection — the turn whose `propose_plan` returned it, or the turn of
+   the decision prompt when that turn had already ended; another turn of the foreman meanwhile is not its answer.
 4. **The person decides** while the plan waits: the open findings stand in the strip with `Fix {n}` / `Accept`.
    `Fix {n}` answers the waiting plan and sends the batch again (step 2), then one more closure check. `Accept` closes
    the review as `accepted`; the plan keeps waiting for approval. A revision presented while the person decides (from

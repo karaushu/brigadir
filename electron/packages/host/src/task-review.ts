@@ -678,14 +678,43 @@ export class TaskReviewLife {
 		if (review.plan?.kind === 'split' && !review.plan.queued) {
 			const sent = review.plan.sentAt;
 			if (sent === undefined) return false;
-			return (
-				presenting ||
-				this.deps
-					.records()
-					.some((record) => record.seq > sent && record.event.kind === 'turn.completed')
-			);
+			return presenting || this.taken(review.batch) || this.splitAnswerEnded(review.plan.id, sent);
 		}
 		return this.taken(review.batch);
+	}
+	/**
+	 * spec/reviews#plan-loop: the split's rejection carried the batch, and the foreman's turn that read it ended — the turn whose
+	 * `propose_plan` returned it, or, when that turn had ended before, the turn of the decision prompt. Another turn of the foreman (a
+	 * message of the person's, a report) is not its answer.
+	 */
+	private splitAnswerEnded(planId: string, sent: number) {
+		const records = this.deps.records(),
+			after = (seq: number, kind: string) =>
+				records.some((record) => record.seq > seq && record.event.kind === kind);
+		const resolved = records.find(
+			(record) =>
+				record.seq > sent &&
+				record.event.kind === 'crew.plan.resolved' &&
+				record.event.id === planId &&
+				!record.event.approved
+		);
+		if (!resolved) return false;
+		const decision = (event: SessionEvent) => {
+			const marker =
+				event.kind === 'turn.started'
+					? event.crew
+					: event.kind === 'prompt.queued'
+						? event.prompt.command.crew
+						: undefined;
+			return marker?.kind === 'plan-decision' && marker.planId === planId;
+		};
+		const prompted = records.find(
+			(record) =>
+				record.seq > resolved.seq && record.event.kind === 'turn.started' && decision(record.event)
+		);
+		if (prompted) return after(prompted.seq, 'turn.completed');
+		if (records.some((record) => record.seq > resolved.seq && decision(record.event))) return false;
+		return after(resolved.seq, 'turn.completed');
 	}
 	/** spec/reviews#plan-loop: the author answered — the closure check reads the revision against the one the reviewer read. */
 	private async planClosure() {

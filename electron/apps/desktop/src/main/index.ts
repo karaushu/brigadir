@@ -3,6 +3,7 @@ import { homedir, tmpdir } from 'node:os';
 import { TaskActivities } from './task-activity';
 import { TaskLabels } from './task-labels';
 import { NoteChats } from './note-chats';
+import { mergeNoteText } from './note-merge';
 import {
 	type AgentTask,
 	type NotesChange,
@@ -300,6 +301,7 @@ import {
 	idleStopped,
 	noteFileName,
 	noteTitle,
+	slackNoteAppended,
 	notificationPermissionChoices,
 	pendingInputs,
 	planSummary,
@@ -1434,6 +1436,11 @@ const noticeLog = new NoticeLog({
 	openRun: (watch) => dispatchWindowAction('ci:open', { watch }),
 	changed: (center) => clients.broadcast('notices:changed', center),
 });
+/** spec/notifications-slack-notes-and-schedules#note-concurrent: one store for every writer of notes (windows, the note chat, Slack), so their writes queue. */
+let notesStoreOnce: Promise<NotesStore> | undefined;
+const sharedNotesStore = () => (notesStoreOnce ??= NotesStore.at(process.env.BRIGADIR_DATA_DIR));
+/** The note chats, once the app is ready: a Slack addition waits while a note's agent answers. */
+let noteChatsOnce: NoteChats | undefined;
 /** spec/notifications-slack-notes-and-schedules#slack: the person's CI bot in Slack; the token is read and kept here, in main. */
 const slack: Slack = new Slack({
 	dataRoot: () => resolveDataRoot(process.env.BRIGADIR_DATA_DIR),
@@ -1498,8 +1505,29 @@ const slack: Slack = new Slack({
 		tasks: (projectId) => slackTaskInfos(projectId),
 		status: (task) => slackTaskStatus(task),
 		createNote: async (project, text) => {
-			const id = await (await NotesStore.at(process.env.BRIGADIR_DATA_DIR)).create(project, text);
+			const id = await (await sharedNotesStore()).create(project, text);
 			clients.broadcast('notes:changed', { id, kind: 'created' });
+			void noticeLog
+				.addPlain({
+					kind: 'info',
+					title: t(currentLocale(), 'Note from Slack'),
+					body: noteTitle(text),
+				})
+				.catch(() => {});
+		},
+		notes: async () =>
+			(await (await sharedNotesStore()).list()).map(({ id, title, project }) => ({
+				id,
+				title,
+				project,
+			})),
+		// spec/notifications-slack-notes-and-schedules#slack-note: the addition goes through the store's queue; an open note re-reads it.
+		appendNote: async (id, addition) => {
+			await noteChatsOnce?.idle(id);
+			const { text } = await (
+				await sharedNotesStore()
+			).edit(id, (note) => slackNoteAppended(note, addition));
+			clients.broadcast('notes:changed', { id, kind: 'written' });
 			void noticeLog
 				.addPlain({
 					kind: 'info',
@@ -3822,7 +3850,7 @@ void app.whenReady().then(async () => {
 	handle('sidebar:completed-collapse', (id, collapsed) => sidebarState.setCompleted(id, collapsed));
 	// spec/notifications-slack-notes-and-schedules#notes: notes are plain files in `~/.brigadir/notes/`; every change goes to all windows so a list and an open note
 	// follow the agent's edits and the other window's.
-	const notesStore = NotesStore.at(process.env.BRIGADIR_DATA_DIR);
+	const notesStore = sharedNotesStore();
 	const notesChanged = (change: NotesChange) => clients.broadcast('notes:changed', change);
 	// spec/notifications-slack-notes-and-schedules#notes: the note's chat — its agent session, journal and Undo.
 	const noteChats = new NoteChats({
@@ -3844,6 +3872,7 @@ void app.whenReady().then(async () => {
 				}
 			: undefined,
 	});
+	noteChatsOnce = noteChats;
 	app.on('will-quit', () => noteChats.closeAll());
 	handle('notes:chat-read', (id: string) => noteChats.read(id));
 	handle('notes:chat-send', (id: string, text: string, choice: NoteChatChoice) => {
@@ -3859,10 +3888,15 @@ void app.whenReady().then(async () => {
 		notesChanged({ id, kind: 'created' });
 		return id;
 	});
-	handle('notes:write', async (id: string, text: string) => {
-		const updatedAt = await (await notesStore).write(id, text);
+	// spec/notifications-slack-notes-and-schedules#note-concurrent: a save carries the text the editor started from; a file changed since is merged.
+	handle('notes:write', async (id: string, text: string, base?: string | null) => {
+		const store = await notesStore;
+		const written =
+			typeof base === 'string'
+				? await store.edit(id, (disk) => mergeNoteText(base, text, disk))
+				: { text, updatedAt: await store.write(id, text) };
 		notesChanged({ id, kind: 'written' });
-		return updatedAt;
+		return written;
 	});
 	handle('notes:set-project', async (id: string, project: string | null) => {
 		await (await notesStore).setProject(id, project);

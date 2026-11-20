@@ -79,3 +79,21 @@ test("links a task under the lines it came from and keeps it among the note's ta
 		await rm(root, { recursive: true, force: true });
 	}
 });
+test('edits the text in one turn of the write queue: a write queued meanwhile reads the edited text', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'notes-'));
+	try {
+		const store = new NotesStore(root);
+		const id = await store.create(null, '# Plan\n');
+		const [first, second] = await Promise.all([
+			store.edit(id, (text) => `${text}\nfirst\n`),
+			store.edit(id, (text) => `${text}second\n`),
+		]);
+		expect(first.text).toBe('# Plan\n\nfirst\n');
+		expect(second.text).toBe('# Plan\n\nfirst\nsecond\n');
+		expect(await readFile(join(root, 'notes', `${id}.md`), 'utf8')).toBe(second.text);
+		await store.delete(id);
+		await expect(store.edit(id, (text) => text)).rejects.toThrow();
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

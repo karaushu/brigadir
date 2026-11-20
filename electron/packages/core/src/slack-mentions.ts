@@ -22,12 +22,16 @@ export function slackPlain(text: string): string {
 		.replace(/&amp;/g, '&');
 }
 
-/** The mention's own words: the bot's `<@U…>` goes, the rest is plain text. */
-export function slackMentionText(text: string, botUser: string | null): string {
+/** The mention's words as the person wrote them: the bot's `<@U…>` goes, the rest is plain text, spacing kept. */
+export function slackMentionWords(text: string, botUser: string | null): string {
 	const bot = botUser
 		? new RegExp(`<@${botUser}(?:\\|[^>]*)?>`, 'g')
 		: /^\s*<@[A-Z0-9]+(?:\|[^>]*)?>/;
-	return slackPlain(text.replace(bot, ' '))
+	return slackPlain(text.replace(bot, ' ')).replace(/^\s+|\s+$/g, '');
+}
+/** The mention's own words: the bot's `<@U…>` goes, the rest is plain text with spaces collapsed. */
+export function slackMentionText(text: string, botUser: string | null): string {
+	return slackMentionWords(text, botUser)
 		.replace(/[ \t]+/g, ' ')
 		.replace(/^\s+|\s+$/g, '');
 }
@@ -39,7 +43,7 @@ export function slackMentionText(text: string, botUser: string | null): string {
 export function slackProjectPrefix(
 	text: string,
 	projects: readonly { id: string; name: string }[]
-): { project: string; rest: string } | { unknown: string; rest: string } | null {
+): { project: string; name: string; rest: string } | { unknown: string; rest: string } | null {
 	const match = /^\s*(?:in|в|у)\s+([^:\n]{1,80}?)\s*:\s*/i.exec(text);
 	if (!match) return null;
 	const name = match[1]!.trim().replace(/^[`*_"'«]+|[`*_"'»]+$/g, ''),
@@ -48,7 +52,7 @@ export function slackProjectPrefix(
 		project =
 			projects.find((item) => item.name.toLowerCase() === key) ??
 			projects.find((item) => item.id.toLowerCase() === key);
-	return project ? { project: project.id, rest } : { unknown: name, rest };
+	return project ? { project: project.id, name, rest } : { unknown: name, rest };
 }
 
 /** A project named anywhere in the text as a whole word («що в роботі в business?»); only when exactly one is named. */
@@ -157,17 +161,14 @@ export function slackTaskTitle(text: string): string {
 export function slackNoteTitle(mention: string, root: string | null): string {
 	return slackTaskTitle(root ? slackPlain(root) : mention) || 'Slack thread';
 }
-/** spec/notifications-slack-notes-and-schedules#notes: the note's text — the title, the link back to the thread, then the thread or its summary. */
-export function slackNoteText(input: {
-	title: string;
+/** spec/notifications-slack-notes-and-schedules#slack-note: the link back to the thread, then the thread, its summary or the person's words. */
+export function slackNoteAddition(input: {
 	channel: string;
 	permalink: string | null;
 	body: string;
 }): string {
 	const label = `${input.channel.startsWith('#') ? input.channel : `#${input.channel}`} thread`;
 	return [
-		`# ${input.title.replace(/\n/g, ' ')}`,
-		'',
 		input.permalink
 			? `From Slack: [${label.replace(/[[\]]/g, '')}](${input.permalink})`
 			: `From Slack: ${label}`,
@@ -175,6 +176,86 @@ export function slackNoteText(input: {
 		input.body.trim(),
 		'',
 	].join('\n');
+}
+/** spec/notifications-slack-notes-and-schedules#slack-note: a new note's text — the title, then the addition. */
+export function slackNoteText(input: {
+	title: string;
+	channel: string;
+	permalink: string | null;
+	body: string;
+}): string {
+	return `# ${input.title.replace(/\n/g, ' ')}\n\n${slackNoteAddition(input)}`;
+}
+/** spec/notifications-slack-notes-and-schedules#slack-note: an existing note with the addition at its end, after a blank line. */
+export function slackNoteAppended(note: string, addition: string): string {
+	const head = note.replace(/\s+$/, '');
+	return head ? `${head}\n\n${addition}` : addition;
+}
+/** Spacing and quote marks aside, case aside — how the person's words are found again. */
+function looseChar(char: string): string {
+	if (/\s/.test(char)) return ' ';
+	if (/[„“”«»″"]/.test(char)) return '"';
+	if (/[‘’‚′`]/.test(char)) return "'";
+	if (/[‐‑‒–—]/.test(char)) return '-';
+	return char.toLowerCase();
+}
+/** The text in loose form and, for each of its characters, where it starts in the original. */
+function loose(text: string): { text: string; at: number[] } {
+	let out = '';
+	const at: number[] = [];
+	for (let index = 0; index < text.length;) {
+		const point = text.codePointAt(index)!,
+			char = String.fromCodePoint(point),
+			mapped = looseChar(char);
+		if (!(mapped === ' ' && out.endsWith(' '))) {
+			out += mapped;
+			for (let k = 0; k < mapped.length; k++) at.push(index);
+		}
+		index += char.length;
+	}
+	return { text: out, at };
+}
+/**
+ * spec/notifications-slack-notes-and-schedules#slack-note: the words the agent says the person asked to save, as the person wrote them —
+ * found in one of `sources` (the message, then the thread) with spacing, quote marks and case aside; `null` when they are not there.
+ */
+export function slackVerbatim(said: string, sources: readonly string[]): string | null {
+	const wanted = loose(said.trim()).text.trim();
+	if (!wanted) return null;
+	for (const source of sources) {
+		const form = loose(source),
+			start = form.text.indexOf(wanted);
+		if (start < 0) continue;
+		const last = form.at[start + wanted.length - 1]!,
+			end = last + String.fromCodePoint(source.codePointAt(last)!).length;
+		return source.slice(form.at[start]!, end).trim();
+	}
+	return null;
+}
+/** A note as the bot may name it. */
+export type SlackNoteRef = { id: string; title: string; project: string | null };
+/**
+ * spec/notifications-slack-notes-and-schedules#slack-note: the notes a name means — exact titles first, else titles that contain it; quotes and case
+ * aside. Several are returned as they are: the bot asks, it never picks one.
+ */
+export function slackFindNotes<T extends SlackNoteRef>(name: string, notes: readonly T[]): T[] {
+	const key = slackTitleKey(name);
+	if (!key) return [];
+	const titled = notes.filter((note) => slackTitleKey(note.title));
+	const exact = titled.filter((note) => slackTitleKey(note.title) === key);
+	return exact.length ? exact : titled.filter((note) => slackTitleKey(note.title).includes(key));
+}
+/** spec/notifications-slack-notes-and-schedules#slack-note: the projects a name means — by name, id or folder, case aside. */
+export function slackProjectsNamed<T extends SlackProjectRef>(
+	name: string,
+	projects: readonly T[]
+): T[] {
+	const key = name.trim().toLowerCase();
+	return key
+		? projects.filter((item) =>
+				[item.id, item.name, item.folder ?? ''].some((value) => value.toLowerCase() === key)
+			)
+		: [];
 }
 /** spec/notifications-slack-notes-and-schedules#slack «Summary»: one request to the helper model, the three sections in this order. */
 export function slackSummaryPrompt(thread: string): string {
@@ -294,13 +375,44 @@ export type SlackStatusInput = {
 	ci: 'running' | 'pass' | 'fail' | 'cancelled' | null;
 	now: number;
 };
+/**
+ * A name inside a reply (a note's title, a project): escaped and fenced off, so the Ukrainian phrases never replace words
+ * in it; `slackLocalize` takes the fences out.
+ */
+const nameOpen = '\uE000',
+	nameClose = '\uE001';
+export function slackName(name: string): string {
+	return slackLabelName(slackEscape(name));
+}
+/** The same fence for a button label: plain text, so nothing is escaped. */
+export function slackLabelName(name: string): string {
+	return `${nameOpen}${name.replace(/[\uE000\uE001]/g, '')}${nameClose}`;
+}
 /** The bot's short answers in a thread (watch-ci shape: emoji, bold head, the subject after a dash). */
 export const slackReply = {
 	taskCreated: (project: string, title: string) =>
 		`🆕 *Task created* — ${slackEscape(project)}\n📋 Task: ${slackEscape(title)}`,
 	taskWaiting: (project: string, title: string) =>
 		`⏳ *Waiting for approval in Brigadir* — ${slackEscape(project)}\n📋 Task: ${slackEscape(title)}`,
-	noteSaved: (title: string) => `📝 *Note saved* — ${slackEscape(title)}`,
+	noteSaved: (project: string | null, title: string) =>
+		`📝 *Note saved* — ${project ? slackName(project) : 'No project'}\n🗒️ Note: ${slackName(title)}`,
+	noteAdded: (project: string | null, title: string) =>
+		`📝 *Added to the note* — ${project ? slackName(project) : 'No project'}\n🗒️ Note: ${slackName(title)}`,
+	noteTextMissing: '🤔 *The note’s text is not in the message* — write it after the mention.',
+	noNote: (name: string) => `🔎 *No note «${slackName(name)}»* — create one?`,
+	/** A note as a button names it: the title, then its project. */
+	noteChoice: (title: string, project: string | null) =>
+		`${slackLabelName(title)} · ${project ? slackLabelName(project) : 'No project'}`,
+	severalNotes: (name: string, notes: readonly { title: string; project: string | null }[]) =>
+		`🤔 *Several notes match «${slackName(name)}»* — ${slackList(
+			notes.map(
+				(note) =>
+					`${slackName(note.title)} (${note.project ? slackName(note.project) : 'No project'})`
+			)
+		)}. Which note?`,
+	severalProjects: (name: string, projects: readonly string[]) =>
+		`🤔 *Several projects match ${slackName(name)}* — ${slackList(projects.map(slackName))}. Which project?`,
+	createNote: 'Create note',
 	unknownProject: (name: string, projects: readonly string[]) =>
 		`🤔 *No project ${slackEscape(name)} in Brigadir*${projects.length ? `\nProjects: ${projects.slice(0, 20).map(slackEscape).join(', ')}` : ''}`,
 	noTask: '🔎 *No task found* — create one?',
@@ -315,12 +427,20 @@ export const slackReply = {
 	failed: (reason: string) => `⛔ *Could not do it* — ${slackEscape(reason)}`,
 } as const;
 
+/** One line of names (already `slackName`d): at most five, `… and N more` after them. */
+function slackList(names: readonly string[]): string {
+	const shown = names.slice(0, 5).join(' · ');
+	return names.length > 5 ? `${shown} … and ${names.length - 5} more` : shown;
+}
+
 /** The action ids of our buttons; Slack sends them back in `block_actions`. */
 export const slackActions = {
 	/** spec/notifications-slack-notes-and-schedules#slack: a Needs you or a schedule's «Ask» answered from Slack; the value says what (see `slackAnswerValue`). */
 	answer: 'brigadir_answer',
 	/** A watch: the value's index picks what to watch, which task or which PR. */
 	watch: 'brigadir_watch',
+	/** spec/notifications-slack-notes-and-schedules#slack-note: the value's index picks the note, the project, or `Create note`. */
+	note: 'brigadir_note',
 } as const;
 export type SlackAction = (typeof slackActions)[keyof typeof slackActions];
 export type SlackButton = {
@@ -400,6 +520,19 @@ const ukPhrases: [string, string][] = [
 	['— at most', '— щонайбільше'],
 	['*Watching*', '*Стежу*'],
 	[' days*', ' днів*'],
+	['The note’s text is not in the message', 'Тексту нотатки немає в повідомленні'],
+	['write it after the mention.', 'напиши його після згадки.'],
+	['Several projects match', 'Підходить кілька проєктів'],
+	['Several notes match', 'Підходить кілька нотаток'],
+	['Added to the note', 'Додано до нотатки'],
+	['Create note', 'Створити нотатку'],
+	['(No project)', '(Без проєкту)'],
+	['— No project', '— Без проєкту'],
+	['· No project', '· Без проєкту'],
+	['🗒️ Note:', '🗒️ Нотатка:'],
+	['Which project?', 'Який проєкт?'],
+	['Which note?', 'Яку нотатку?'],
+	['*No note', '*Немає нотатки'],
 	['Waiting for approval in Brigadir', 'Чекає погодження в Бригадирі'],
 	['Notes are off in Brigadir.', 'Нотатки вимкнені в Бригадирі.'],
 	['Several tasks match', 'Підходить кілька задач'],
@@ -440,26 +573,36 @@ const ukStates: [string, string][] = [
 ];
 /** Puts a reply into the request's language; English passes through. */
 export function slackLocalize(text: string, language: SlackLanguage): string {
-	if (language === 'en') return text;
-	let out = text;
+	// Names stand fenced: the phrases go around them, never into them.
+	const names: string[] = [];
+	const fenced = text.replace(/\uE000([^\uE001]*)\uE001/g, (_, name: string) => {
+		names.push(name);
+		return `\uE000${names.length - 1}\uE001`;
+	});
+	const unfence = (value: string) =>
+		value.replace(/\uE000(\d+)\uE001/g, (_, index: string) => names[Number(index)] ?? '');
+	if (language === 'en') return unfence(fenced);
+	let out = fenced;
 	for (const [en, uk] of ukPhrases) out = out.split(en).join(uk);
 	for (const [en, uk] of ukStates)
 		out = out.split(`*${en}*`).join(`*${uk}*`).split(`— ${en}`).join(`— ${uk}`);
-	return out
-		.replace(/… and (\d+) more/g, '… і ще $1')
-		.replace(/(\d+) of (\d+)/g, '$1 з $2')
-		.replace(/(\d+)m ago/g, '$1 хв тому')
-		.replace(/(\d+)h ago/g, '$1 год тому')
-		.replace(/(\d+)d ago/g, '$1 дн тому')
-		.replace(
-			/(⏱️ Тривалість: )(.+)/,
-			(_, head: string, value: string) =>
-				head +
-				value
-					.replace(/(\d+)h\b/, '$1 год')
-					.replace(/(\d+)m\b/, '$1 хв')
-					.replace(/(\d+)s\b/, '$1 с')
-		);
+	return unfence(
+		out
+			.replace(/… and (\d+) more/g, '… і ще $1')
+			.replace(/(\d+) of (\d+)/g, '$1 з $2')
+			.replace(/(\d+)m ago/g, '$1 хв тому')
+			.replace(/(\d+)h ago/g, '$1 год тому')
+			.replace(/(\d+)d ago/g, '$1 дн тому')
+			.replace(
+				/(⏱️ Тривалість: )(.+)/,
+				(_, head: string, value: string) =>
+					head +
+					value
+						.replace(/(\d+)h\b/, '$1 год')
+						.replace(/(\d+)m\b/, '$1 хв')
+						.replace(/(\d+)s\b/, '$1 с')
+			)
+	);
 }
 
 /** One task as the helper model reads it for a free question. */
@@ -514,7 +657,17 @@ export type SlackAgentStep =
 	| { kind: 'create_task'; projects: string[]; title: string; prompt: string | null }
 	| { kind: 'send_to_task'; task: string; text: string }
 	| { kind: 'ask_task'; task: string; question: string }
-	| { kind: 'note'; note: 'thread' | 'summary' }
+	| {
+			kind: 'note';
+			note: 'thread' | 'summary' | 'text';
+			/** `text`: the words to save as the agent copied them; the bot finds them in the message (`slackVerbatim`). */
+			text: string | null;
+			title: string | null;
+			/** The name of an existing note to add to; `null` — a new note. */
+			append: string | null;
+			/** A project the person named; `null` — the mention's own. */
+			project: string | null;
+	  }
 	| { kind: 'watch'; kinds: SlackWatchKind[] }
 	| { kind: 'unwatch' };
 const text = (value: unknown, limit: number) =>
@@ -541,7 +694,20 @@ function slackAgentStep(name: string, body: unknown): SlackAgentStep | null {
 			question = text(value.question, 4000);
 		return task && question ? { kind: name, task, question } : null;
 	}
-	if (name === 'note') return { kind: name, note: value.kind === 'summary' ? 'summary' : 'thread' };
+	if (name === 'note') {
+		const note = value.kind === 'summary' ? 'summary' : value.kind === 'text' ? 'text' : 'thread',
+			said =
+				typeof value.text === 'string' && value.text.trim() ? value.text.slice(0, 20_000) : null;
+		if (note === 'text' && !said) return null;
+		return {
+			kind: name,
+			note,
+			text: note === 'text' ? said : null,
+			title: text(value.title, 200),
+			append: text(value.append, 200),
+			project: text(value.project, 200),
+		};
+	}
 	if (name === 'watch') {
 		const words = Array.isArray(value.kinds) ? value.kinds.map(String) : [],
 			kinds: SlackWatchKind[] = [];

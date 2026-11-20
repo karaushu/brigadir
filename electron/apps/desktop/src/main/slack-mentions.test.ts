@@ -82,6 +82,10 @@ async function setup(
 	const sockets: FakeSocket[] = [];
 	const created: SlackTaskInput[] = [];
 	const notes: { project: string | null; text: string }[] = [];
+	// spec/notifications-slack-notes-and-schedules#slack-note: the notes `append` can find, and what was added to them.
+	const noteList: { id: string; title: string; project: string | null }[] = [];
+	const appended: { id: string; addition: string }[] = [];
+	const projectList = [{ id: 'p', name: 'business', path: root }];
 	let notesOn = true;
 	const tasks: SlackTaskInfo[] = [];
 	const sent: { task: { projectId: string; id: string }; text: string }[] = [];
@@ -147,7 +151,7 @@ async function setup(
 		dataRoot: async () => root,
 		vault: () => ({ seal: (text) => Buffer.from(`v:${text}`), open: (b) => b.toString().slice(2) }),
 		env: { SLACK_CI_BOT_TOKEN: botToken },
-		projects: async () => [{ id: 'p', name: 'business', path: root }],
+		projects: async () => projectList,
 		settings: () => settings,
 		enabled: () => true,
 		changed: () => {},
@@ -182,6 +186,10 @@ async function setup(
 			status: async () => ({ plan: { done: 1, total: 3, current: 'Write tests' }, ci: null }),
 			createNote: async (project, text) => {
 				notes.push({ project, text });
+			},
+			notes: async () => noteList,
+			appendNote: async (id, addition) => {
+				appended.push({ id, addition });
 			},
 			sendToTask: async (task, text) => {
 				sent.push({ task, text });
@@ -234,6 +242,9 @@ async function setup(
 		sockets,
 		created,
 		notes,
+		noteList,
+		appended,
+		projectList,
 		tasks,
 		sent,
 		answers,
@@ -369,7 +380,9 @@ it('gives the agent Brigadir’s tasks and saves a note when it asks, behind the
 		expect(notes[0]!.project).toBe('p');
 		expect(notes[0]!.text).toContain(`From Slack: [#C0DEPLOY thread](${permalink})`);
 		expect(notes[0]!.text).toContain('Phone field drops the plus');
-		expect(posts().at(-1)?.body.text).toBe('📝 *Нотатку збережено* — Phone field drops the plus');
+		expect(posts().at(-1)?.body.text).toBe(
+			'📝 *Нотатку збережено* — business\n🗒️ Нотатка: Phone field drops the plus'
+		);
 		notesOff();
 		sockets[0]!.emit(mention('U1AB', 'запиши тред'));
 		await settle();
@@ -954,4 +967,227 @@ it('makes one task across the projects the agent names; their folders join it', 
 	expect(test.posts().at(-1)?.body.text).toBe(
 		'🆕 *Задачу створено* — admin + choice\n📋 Задача: Сховати треди'
 	);
+});
+
+/** Presses the button with this label in the bot's last message with buttons. */
+function press(test: Awaited<ReturnType<typeof listening>>, label: string, user = 'U1AB') {
+	const ask = test
+		.posts()
+		.filter((post) => post.body.blocks?.length)
+		.at(-1)!.body;
+	const button = ask.blocks[1].elements.find((item: any) => item.text.text === label);
+	expect(button, label).toBeTruthy();
+	test.sockets[0]!.emit(click(user, { ts: '9.0', text: ask.text }, button, thread));
+	return test.settle();
+}
+const buttonLabels = (test: Awaited<ReturnType<typeof listening>>) =>
+	test
+		.posts()
+		.at(-1)!
+		.body.blocks[1].elements.map((item: any) => item.text.text);
+
+it('saves the person’s own words as a note, titled as asked, in the channel’s project or a named one', async () => {
+	const test = await listening();
+	const { sockets, notes, posts, settle, projectList } = test;
+	projectList.push({ id: 'p2', name: 'admin', path: test.root });
+	codeReply = (question) =>
+		question.includes('Olha')
+			? 'Зберігаю.\nACTION note {"kind": "text", "text": "deploy after 6 pm, ask olha first", "title": "Deploy window"}'
+			: question.includes('admin')
+				? 'ACTION note {"kind": "text", "text": "Кнопка «Далі» сіра", "project": "Admin"}'
+				: question.includes('shop')
+					? 'ACTION note {"kind": "text", "text": "x", "project": "shop"}'
+					: 'ACTION note {"kind": "text", "text": "Buy milk tomorrow", "title": "Milk"}';
+	try {
+		sockets[0]!.emit(mention('U1AB', 'save a note: Deploy after 6 pm,\nask Olha first'));
+		await settle();
+		expect(notes).toEqual([
+			{
+				project: 'p',
+				text: `# Deploy window\n\nFrom Slack: [#C0DEPLOY thread](${permalink})\n\nDeploy after 6 pm,\nask Olha first\n`,
+			},
+		]);
+		expect(posts().at(-1)?.body.text).toBe('📝 *Note saved* — business\n🗒️ Note: Deploy window');
+
+		// A project other than the channel's; no title asked for — the words' first line.
+		sockets[0]!.emit(mention('U1AB', 'запиши в admin: Кнопка «Далі» сіра'));
+		await settle();
+		expect(notes[1]!.project).toBe('p2');
+		expect(notes[1]!.text).toMatch(/^# Кнопка «Далі» сіра\n/);
+		expect(posts().at(-1)?.body.text).toBe(
+			'📝 *Нотатку збережено* — admin\n🗒️ Нотатка: Кнопка «Далі» сіра'
+		);
+
+		// An unknown project is asked back with the list; nothing is saved.
+		sockets[0]!.emit(mention('U1AB', 'note in shop: x'));
+		await settle();
+		expect(notes).toHaveLength(2);
+		expect(posts().at(-1)?.body.text).toBe(
+			'🤔 *No project shop in Brigadir*\nProjects: business, admin'
+		);
+
+		// The words are kept as written, indentation included.
+		codeReply = () =>
+			'ACTION note {"kind": "text", "text": "- ship\\n - tell support", "title": "Release"}';
+		sockets[0]!.emit(mention('U1AB', 'save a note:\n- ship\n    - tell support'));
+		await settle();
+		expect(notes[2]!.text).toContain('\n\n- ship\n    - tell support\n');
+		notes.pop();
+
+		// An `in <project>:` prefix that names no project is asked back, never the channel's project.
+		codeReply = () => 'ACTION note {"kind": "text", "text": "x"}';
+		sockets[0]!.emit(mention('U1AB', 'in shop: save a note: x'));
+		await settle();
+		expect(notes).toHaveLength(2);
+		expect(posts().at(-1)?.body.text).toBe(
+			'🤔 *No project shop in Brigadir*\nProjects: business, admin'
+		);
+		codeReply = () => 'ACTION note {"kind": "text", "text": "Buy milk tomorrow", "title": "Milk"}';
+
+		// Words the person did not write are not saved.
+		sockets[0]!.emit(mention('U1AB', 'save something about groceries'));
+		await settle();
+		expect(notes).toHaveLength(2);
+		expect(posts().at(-1)?.body.text).toBe(
+			'🤔 *The note’s text is not in the message* — write it after the mention.'
+		);
+	} finally {
+		codeReply = () => '';
+	}
+});
+
+it('asks which project when a name means several, and saves where the person pressed', async () => {
+	const test = await listening();
+	test.projectList.push(
+		{ id: 'w', name: 'admin', path: `${test.root}/admin-web` },
+		{ id: 'a', name: 'Admin', path: `${test.root}/admin-api` }
+	);
+	codeReply = () => 'ACTION note {"kind": "text", "text": "rotate keys", "project": "admin"}';
+	try {
+		test.sockets[0]!.emit(mention('U1AB', 'note for admin: rotate keys'));
+		await test.settle();
+		expect(test.posts().at(-1)!.body.text).toBe(
+			'🤔 *Several projects match admin* — admin (admin-web) · Admin (admin-api). Which project?'
+		);
+		// The same name in an `in <project>:` prefix is asked too, not taken as the first project of that name.
+		codeReply = () => 'ACTION note {"kind": "text", "text": "rotate keys"}';
+		test.sockets[0]!.emit(mention('U1AB', 'in admin: note rotate keys'));
+		await test.settle();
+		expect(test.posts().at(-1)!.body.text).toBe(
+			'🤔 *Several projects match admin* — admin (admin-web) · Admin (admin-api). Which project?'
+		);
+		expect(buttonLabels(test)).toEqual(['admin · admin-web', 'Admin · admin-api']);
+		expect(test.notes).toEqual([]);
+		await press(test, 'Admin · admin-api');
+		expect(test.notes.map((note) => note.project)).toEqual(['a']);
+		expect(test.posts().at(-1)!.body.text).toBe('📝 *Note saved* — Admin\n🗒️ Note: rotate keys');
+	} finally {
+		codeReply = () => '';
+	}
+});
+
+it('adds to the one note the name means, asks among several, and offers to create one when none', async () => {
+	const test = await listening();
+	const { sockets, notes, noteList, appended, posts, settle, projectList } = test;
+	projectList.push({ id: 'p2', name: 'admin', path: test.root });
+	noteList.push(
+		{ id: 'n1', title: 'Release plan', project: 'p' },
+		{ id: 'n2', title: 'Release checklist', project: null },
+		{ id: 'n3', title: 'Release checklist', project: 'p2' }
+	);
+	codeReply = (question) =>
+		question.includes('plan')
+			? 'ACTION note {"kind": "text", "text": "freeze at noon", "append": "release plan"}'
+			: question.includes('checklist in admin')
+				? 'ACTION note {"kind": "text", "text": "smoke on staging", "append": "Release checklist", "project": "admin"}'
+				: question.includes('checklist')
+					? 'ACTION note {"kind": "text", "text": "tag the build", "append": "Release checklist"}'
+					: 'ACTION note {"kind": "text", "text": "ask design", "append": "Ideas"}';
+	try {
+		sockets[0]!.emit(mention('U1AB', 'add to the note release plan: freeze at noon'));
+		await settle();
+		expect(appended).toEqual([
+			{
+				id: 'n1',
+				addition: `From Slack: [#C0DEPLOY thread](${permalink})\n\nfreeze at noon\n`,
+			},
+		]);
+		expect(posts().at(-1)?.body.text).toBe(
+			'📝 *Added to the note* — business\n🗒️ Note: Release plan'
+		);
+
+		// Several notes match: one line with the candidates and a button each; nothing is added until one is pressed.
+		sockets[0]!.emit(mention('U1AB', 'add to release checklist: tag the build'));
+		await settle();
+		expect(posts().at(-1)?.body.text).toBe(
+			'🤔 *Several notes match «Release checklist»* — Release checklist (No project) · Release checklist (admin). Which note?'
+		);
+		expect(buttonLabels(test)).toEqual([
+			'Release checklist · No project',
+			'Release checklist · admin',
+		]);
+		expect(appended).toHaveLength(1);
+		await press(test, 'Release checklist · No project');
+		expect(appended.at(-1)).toMatchObject({ id: 'n2' });
+		expect(appended.at(-1)!.addition).toContain('tag the build');
+		expect(posts().at(-1)?.body.text).toBe(
+			'📝 *Added to the note* — No project\n🗒️ Note: Release checklist'
+		);
+
+		// A named project narrows the notes to its own.
+		sockets[0]!.emit(mention('U1AB', 'add to the release checklist in admin: smoke on staging'));
+		await settle();
+		expect(appended.at(-1)).toMatchObject({ id: 'n3' });
+
+		// No note: said so, with `Create note`; nothing is guessed.
+		sockets[0]!.emit(mention('U1AB', 'add to Ideas: ask design'));
+		await settle();
+		expect(posts().at(-1)?.body.text).toBe('🔎 *No note «Ideas»* — create one?');
+		expect(buttonLabels(test)).toEqual(['Create note']);
+		expect(notes).toEqual([]);
+		await press(test, 'Create note');
+		expect(notes).toEqual([
+			{
+				project: 'p',
+				text: `# Ideas\n\nFrom Slack: [#C0DEPLOY thread](${permalink})\n\nask design\n`,
+			},
+		]);
+		expect(posts().at(-1)?.body.text).toBe('📝 *Note saved* — business\n🗒️ Note: Ideas');
+		expect(appended).toHaveLength(3);
+	} finally {
+		codeReply = () => '';
+	}
+});
+
+it('keeps the new note forms behind the Notes module and the allow-list', async () => {
+	const test = await listening();
+	const { sockets, notes, appended, noteList, settle, quick } = test;
+	noteList.push({ id: 'n1', title: 'Release plan', project: 'p' });
+	codeReply = (question) =>
+		question.includes('plan')
+			? 'ACTION note {"kind": "text", "text": "freeze", "append": "Release plan"}'
+			: 'ACTION note {"kind": "text", "text": "buy milk"}';
+	try {
+		// Someone not on the list never reaches the agent.
+		sockets[0]!.emit(mention('U9ZZ', 'save a note: buy milk'));
+		await settle();
+		expect(quick.asks).toEqual([]);
+		expect(ephemerals(test).at(-1)).toMatchObject({
+			user: 'U9ZZ',
+			text: 'Only the people in Brigadir’s Slack settings can create tasks.',
+		});
+		test.notesOff();
+		sockets[0]!.emit(mention('U1AB', 'save a note: buy milk'));
+		await settle();
+		sockets[0]!.emit(mention('U1AB', 'add to Release plan: freeze'));
+		await settle();
+		expect(notes).toEqual([]);
+		expect(appended).toEqual([]);
+		expect(ephemerals(test).slice(-2)).toEqual([
+			expect.objectContaining({ user: 'U1AB', text: 'Notes are off in Brigadir.' }),
+			expect.objectContaining({ user: 'U1AB', text: 'Notes are off in Brigadir.' }),
+		]);
+	} finally {
+		codeReply = () => '';
+	}
 });

@@ -208,7 +208,15 @@ export type DesktopBridge = {
 	/** A new empty note; `project` null — a note without a project. Returns its id. */
 	createNote(project: string | null, text: string): Promise<string>;
 	/** Writes the whole text; returns the note's new `updatedAt`. */
-	writeNote(id: string, text: string): Promise<string>;
+	/**
+	 * spec/notifications-slack-notes-and-schedules#note-concurrent: `base` — the text the editor started from; when the file changed since, main
+	 * merges and returns the merged text.
+	 */
+	writeNote(
+		id: string,
+		text: string,
+		base?: string | null
+	): Promise<{ text: string; updatedAt: string }>;
 	setNoteProject(id: string, project: string | null): Promise<void>;
 	deleteNote(id: string): Promise<void>;
 	onNotesChanged(listener: (change: import('./notes').NotesChange) => void): () => void;

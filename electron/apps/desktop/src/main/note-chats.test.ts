@@ -60,3 +60,16 @@ test("the person's edit between messages is a row of the chat", async () => {
 	const rows = (await chat.read(id)).rows;
 	expect(rows.find((row) => row.kind === 'person-edit')).toMatchObject({ added: 1, removed: 0 });
 });
+test('idle waits for the note agent’s answer, so a Slack addition lands after its edit', async () => {
+	const { store, chat } = await setup();
+	const id = await store.create(null, '# Checkout\n- Кнопка «Далі»\n');
+	await expect(chat.idle(id)).resolves.toBeUndefined();
+	const turn = chat.send(id, 'edit please', { provider: 'claude', model: null });
+	// What idle sees is the finished answer: the agent's edit and the end of the turn are already in the chat.
+	const seen = chat.idle(id).then(async () => (await chat.read(id)).rows.map((row) => row.kind));
+	await expect(chat.send(id, 'again', { provider: 'claude', model: null })).rejects.toThrow();
+	await turn;
+	expect((await seen).slice(-2)).toEqual(['edit', 'done']);
+	const rows = (await chat.read(id)).rows;
+	expect(rows.filter((row) => row.kind === 'edit')).toHaveLength(1);
+});

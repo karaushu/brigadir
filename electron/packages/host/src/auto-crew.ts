@@ -151,6 +151,10 @@ export class AutoCrewHost extends CrewHost {
 		if (!auto) throw new Error('This task is not an Auto task');
 		return auto;
 	}
+	/** spec/composer-steering-queue-and-ghost#steering-conditions: the agent's `hire_workers` call waits for the person's answer in this host. */
+	hireWaiting() {
+		return this.hireWaiter !== null;
+	}
 	override async start() {
 		await super.start();
 		// spec/crew#auto-move: a move that waited for the turn, stopped half-way, or switched the task before this host started goes on. A

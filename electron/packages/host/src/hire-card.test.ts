@@ -9,6 +9,7 @@ import {
 	builtinAgentTemplates,
 	crewPalette,
 	pendingInputs,
+	promptQueue,
 	templateLookup,
 	type AutoTask,
 	type EventRecord,
@@ -133,4 +134,33 @@ it('a host that exits while the hire card waits leaves the task needs-you, with 
 	expect(records.some((record) => record.event.kind === 'host.stopped')).toBe(true);
 	expect(pendingInputs(records).crewHire).not.toBeNull();
 	expect((await store.task(task)).status).toBe('needs-you');
+}, 120_000);
+it('Enter while the hire card waits is held until the card is answered, then reaches the agent', async () => {
+	const { store, task } = await setup();
+	const { client } = await launch(store, task, 'crew-steering');
+	await client.command({ kind: 'prompt', text: hirePrompt });
+	const requested = await until(async () =>
+		(await journal(store, task)).find((record) => record.event.kind === 'crew.hire.requested')
+	);
+	if (requested.event.kind !== 'crew.hire.requested') throw new Error('unreachable');
+	await client.command({ kind: 'prompt', text: 'also add a README', steer: true });
+	// Well past the hold window: the message stays with the host, the call stays in the turn.
+	await delay(1500);
+	let records = await journal(store, task);
+	expect(records.some((record) => record.event.kind === 'prompt.steered')).toBe(false);
+	expect(promptQueue(records).held?.map((item) => item.command.text)).toEqual([
+		'also add a README',
+	]);
+	expect(records.filter((record) => record.event.kind === 'turn.completed')).toHaveLength(0);
+	await client.command({
+		kind: 'decideHire',
+		decision: { id: requested.event.hire.id, approved: false, parts: null },
+	});
+	records = await until(async () => {
+		const value = await journal(store, task);
+		return value.some((record) => record.event.kind === 'prompt.steered') ? value : undefined;
+	});
+	const resolved = records.find((record) => record.event.kind === 'crew.hire.resolved')!,
+		steered = records.find((record) => record.event.kind === 'prompt.steered')!;
+	expect(steered.seq).toBeGreaterThan(resolved.seq);
 }, 120_000);

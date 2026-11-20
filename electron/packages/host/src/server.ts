@@ -892,8 +892,11 @@ export async function startHost(config: HostConfig) {
 			});
 	}
 	/** spec/composer-steering-queue-and-ghost#steering-hold: the step boundary sends every held message (`all`), Claude's window only those older than it. */
+	/** spec/composer-steering-queue-and-ghost#steering-conditions: a hire card's call waits in the turn; held messages wait for its answer. */
+	const hireCallWaits = () => crewHost instanceof AutoCrewHost && crewHost.hireWaiting();
 	function flushHeld(all: boolean) {
 		void serialPrompt(async () => {
+			if (busy && hireCallWaits()) return;
 			const limit = holdWindowMs(),
 				due = (queue.held ?? []).filter(
 					(item) => all || (limit !== null && Date.now() - (heldAt.get(item.id) ?? 0) >= limit)
@@ -903,8 +906,15 @@ export async function startHost(config: HostConfig) {
 			let queued = queue.prompts.some((item) => turnHeld.has(item.id));
 			for (const item of due) {
 				if (!queue.held?.some((entry) => entry.id === item.id)) continue;
+				// spec/crew#auto-move: a hire that moves the task ends the turn; what was held waits for the host in the new folder.
 				const inputs =
-					!queued && busy && transport?.steering && !quotaBlocked() && !budget?.held()
+					!queued &&
+					busy &&
+					transport?.steering &&
+					!quotaBlocked() &&
+					!budget?.held() &&
+					!workspaceDue &&
+					!workspaceHeld
 						? (
 								await assets.resolve(
 									config.key,
@@ -939,7 +949,7 @@ export async function startHost(config: HostConfig) {
 		clearTimeout(heldTimer);
 		const limit = holdWindowMs(),
 			first = queue.held?.[0];
-		if (limit === null || !first || stopping) return;
+		if (limit === null || !first || stopping || (busy && hireCallWaits())) return;
 		heldTimer = setTimeout(
 			() => flushHeld(false),
 			Math.max(0, (heldAt.get(first.id) ?? Date.now()) + limit - Date.now())

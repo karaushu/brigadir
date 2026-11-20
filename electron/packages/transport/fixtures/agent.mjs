@@ -20,7 +20,9 @@ const signedOut=()=>Boolean(process.env.BRIGADIR_TEST_AUTH_FILE)&&!existsSync(pr
 // ended; `steering-codex` ends the running turn and starts its own, reported by codex-shaped `threadStatus`.
 // spec/crew#assignment-after-compaction `crew-compaction`: steering as `steering`, and compactions a crew member's host answers (see the prompt handler).
 const crewCompaction=scenario==='crew-compaction';let crewSteer;
-const steering=scenario==='steering'||scenario==='steering-late'||scenario==='steering-codex'||crewCompaction;let steerWaiter;
+// spec/crew#auto-hire `crew-steering`: the scripted crew agent with steering; a steer is heard at once (`injected`).
+const crewSteering=scenario==='crew-steering';
+const steering=scenario==='steering'||scenario==='steering-late'||scenario==='steering-codex'||crewCompaction||crewSteering;let steerWaiter;
 const threadStatus=(client,type)=>update(client,{sessionUpdate:'session_info_update',_meta:{codex:{threadStatus:{type,...(type==='active'?{activeFlags:[]}:{})}}}});
 // spec/chat-turns-plans-and-questions#agent-started-turns `agent-turn`: Claude Code begins a turn on its own after a background task — the wire of a live
 // run (claude-agent-turn.jsonl). `agent-turn-codex`: the same shape told by codex `threadStatus`.
@@ -94,6 +96,7 @@ connection = agent({name:'fixture'})
  .onRequest('_session/steering',params=>params,async({params,client})=>{
   const text=params.prompt.map(item=>item.type==='text'?item.text:'').join('');record('steer',{text,meta:params._meta});
   // codex-acp with no running turn starts its own; Claude answers promptRequired.
+  if(crewSteering)return {outcome:'injected'};
   if(scenario==='steering-late'||!steerWaiter&&scenario!=='steering-codex')return {outcome:'promptRequired',reason:'noRunningTurn'};
   const waiter=steerWaiter;steerWaiter=undefined;
   // `crew-compaction`: `compact-step-decline` — the turn ends while the steer is out and the agent answers promptRequired; `compact-step-adopt` — codex-acp
@@ -170,7 +173,7 @@ connection = agent({name:'fixture'})
   if(scenario==='catalog')await update(client,{sessionUpdate:'usage_update',used:42,size:100});
   // spec/composer#agent-capsule: the agent announces /compact, so the context popover offers Compact.
   if(scenario==='catalog')await update(client,{sessionUpdate:'available_commands_update',availableCommands:[{name:'compact',description:'Summarise and free context',input:null}]});
-  if(scenario==='crew'&&text.startsWith('Write only a commit message')){
+  if((scenario==='crew'||crewSteering)&&text.startsWith('Write only a commit message')){
    // spec/crew#accept: the one-shot commit message generator of crew acceptance. The answer takes `<type>: [<Area>]` from the repo's
    // recent commits, so a test sees the log reached the call; a part titled «no message» fails it to show the fallback.
    const material=JSON.parse(text.slice(text.indexOf('\n')+1)),changes=Array.isArray(material)?material:material.changes;
@@ -179,7 +182,7 @@ connection = agent({name:'fixture'})
    await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:`${style?.[1]??'feat'}: [${style?.[2]??'Fixture'}] ${material.task??'change'}\n\nFiles: ${files.join(', ')}`}});
    return {stopReason:'end_turn'};
   }
-  if(scenario==='crew'){
+  if(scenario==='crew'||crewSteering){
    // Scripted crew agent: `@call <tool> <json>` calls a brigadir MCP tool, `@write <path> <text>` writes inside cwd. Never a provider.
    const config=mcpServers.find(s=>s.name==='brigadir');let out='';
    let script=params.prompt.filter(item=>item.type==='text'&&!item.text.startsWith('<attached_context')).map(item=>item.text).join('\n');
@@ -201,7 +204,9 @@ connection = agent({name:'fixture'})
      const rest=line.slice(6);const space=rest.indexOf(' ');const name=space<0?rest:rest.slice(0,space);const args=space<0?{}:JSON.parse(rest.slice(space+1));
      const mcp=new Client({name:'fixture',version:'1.0.0'});const stdio=new StdioClientTransport({command:config.command,args:config.args,env:{...process.env,...Object.fromEntries(config.env.map(e=>[e.name,e.value]))}});
      const controller=new AbortController();release=()=>controller.abort();
-     try{await mcp.connect(stdio);const result=await mcp.callTool({name,arguments:args},undefined,{signal:controller.signal,timeout:600000});out+=`${name}: ${result.content.map(item=>item.text??'').join('')}${result.isError?' [error]':''}\n`;record('crew-call',{name,args,result});}
+     // `crew-steering`: the call is a top-level tool of the turn, as in claude-agent-acp; its end is a step boundary for held messages.
+     const toolCallId=`mcp-${name}-${Date.now()}`;if(crewSteering)await update(client,{sessionUpdate:'tool_call',toolCallId,title:name,kind:'other',status:'in_progress'});
+     try{await mcp.connect(stdio);const result=await mcp.callTool({name,arguments:args},undefined,{signal:controller.signal,timeout:600000});if(crewSteering)await update(client,{sessionUpdate:'tool_call_update',toolCallId,status:'completed'});out+=`${name}: ${result.content.map(item=>item.text??'').join('')}${result.isError?' [error]':''}\n`;record('crew-call',{name,args,result});}
      catch(error){if(controller.signal.aborted)return {stopReason:'cancelled'};out+=`${name} failed: ${error.message}\n`;record('crew-call',{name,args,error:error.message});}
      finally{await mcp.close();release=undefined;}
     }

@@ -609,6 +609,17 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Chat about the note | Чат нотатки | | |
 | Edited the note | Змінив нотатку | The agent edit card. | |
 
+### Todo
+
+| English | Ukrainian | Meaning | Avoid |
+|---|---|---|---|
+| Todo | Todo | The rail section of to-do lists; the name stays in Latin in both languages. | «Справи» for the section |
+| to-do | справа | One item of a list: `Add a to-do` · `Додати справу`, `To-do deleted` · `Справу видалено`. | «задача» (that is an agent's task), «пункт» |
+| list | список | A to-do list: `New list` · `Новий список`, `Untitled list` · `Список без назви`. | «перелік» |
+| Done · N | Виконано · N | The folded group of done to-dos under the open ones; `3 of 8 done` · `3 з 8 виконано`, `All done` · `Усе виконано`. | «Готово», «Завершено» |
+| Make a task | Створити задачу | A to-do's menu item: the launch sheet with its title and description. | |
+| Inbox | Вхідні | The list made for a to-do with no list to go to. | |
+
 ## Search
 
 | English | Ukrainian | Meaning | Avoid |
@@ -688,6 +699,19 @@ of the OS. In both languages they are *Notifications* / «Сповіщення»
 | Turn on notifications | Увімкнути сповіщення | | |
 | Retry | Спробувати ще | A failure toast action. | «Повторити» |
 | Slack | Slack | | |
+| Mentions (Slack) | Згадки | The Slack section's group of the last 7 days: where people mentioned the person. | «теги», «повідомлення» |
+| Waiting | Чекає | A mention with an ask the person has not answered; the amber dot on the avatar. | «очікує» |
+| Answered | Відповів | The person wrote after the mention in its thread, or marked it `Done`; the green tick. | «оброблено» |
+| FYI | До відома | A mention with no ask. | «інфо» |
+| Asked of you | Просять тебе | The day summary's asks. | «запити» |
+| You did | Що ти зробив | The day summary's part about the person's own messages. | |
+| Worth knowing | Варто знати | The day summary's decisions, releases and incidents. | «новини» |
+| Made at 18:40 | Зроблено о 18:40 | When a summary was made. | «згенеровано» |
+| Add to Todo | Додати в Todo | A to-do from a mention, an ask or a suggestion. | «у список справ» |
+| In Todo · b2c › Inbox | У Todo · b2c › Inbox | Where a mention's to-do went. | |
+| Suggested to-do | Пропонована справа | The agent's to-do for a mention with an ask. | «задача» (a task is another thing) |
+| Your account (Slack) | Твій акаунт | The person's own Slack token for the Slack section. | «користувач» |
+| Count @here and @channel | Рахувати @here і @channel | Whether `@here` and `@channel` are mentions of the person. | |
 
 ## Agent tool calls
 

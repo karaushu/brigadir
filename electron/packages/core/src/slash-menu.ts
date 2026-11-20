@@ -64,13 +64,15 @@ export function slashTrigger(text: string, caret: number): SlashTrigger | null {
 }
 
 /** The commands the agent announced last, or `null` while it has announced none. */
-export function agentSlashCommands(records: readonly EventRecord[]): SlashCommandInfo[] | null {
+export function agentSlashCommands(
+	records: readonly Pick<EventRecord, 'event'>[]
+): SlashCommandInfo[] | null {
 	const event = records.findLast((record) => record.event.kind === 'commands.changed')?.event;
 	return event?.kind === 'commands.changed' ? event.commands : null;
 }
 /** Tools of other servers the agent already called in this task (spec/chat#mcp-calls), by their exact names. */
 export function loggedMcpTools(
-	records: readonly EventRecord[]
+	records: readonly Pick<EventRecord, 'event'>[]
 ): { server: string; tool: string }[] {
 	const seen = new Map<string, { server: string; tool: string }>();
 	for (const record of records) {

@@ -7,8 +7,8 @@ import {
 	attachmentTotalLimit,
 	imageSizeRefusal,
 	remoteUploadLimit,
+	type AttachmentHolder,
 	type AttachmentInput,
-	type AttachmentOwner,
 	type PromptAttachment,
 } from '@brigadir/core';
 import { fittedPng } from './paste-attachment';
@@ -16,7 +16,7 @@ import { fittedPng } from './paste-attachment';
 // Only native user selection supplies paths; this is not a renderer file-read API.
 export async function pickAttachments(
 	window: BrowserWindow | null,
-	key: AttachmentOwner,
+	key: AttachmentHolder,
 	dataDir?: string
 ) {
 	const store = await SessionStore.at(dataDir);
@@ -72,7 +72,7 @@ export async function uploadPaths(
  * local file gets — a path on this machine, which the agent reads.
  */
 export async function uploadAttachment(
-	key: AttachmentOwner,
+	key: AttachmentHolder,
 	name: string,
 	bytes: Uint8Array,
 	image: boolean,
@@ -95,7 +95,11 @@ export async function uploadAttachment(
 			data: fittedPng(decoded).toString('base64'),
 		});
 	}
-	const dir = await safePath(store.root, 'projects', key.projectId, 'uploads', randomUUID());
+	// A chat keeps its uploads in its own folder (spec/composer#chat-composer).
+	const dir =
+		'chat' in key
+			? await safePath(await assets.ownerDir(key), 'uploads', randomUUID())
+			: await safePath(store.root, 'projects', key.projectId, 'uploads', randomUUID());
 	await mkdir(dir, { recursive: true, mode: 0o700 });
 	const path = await safePath(dir, clean);
 	const file = await open(path, 'wx', 0o600);
@@ -117,7 +121,7 @@ const fileReference = (path: string) =>
 
 /** spec/composer#paste: the same files a person dropped from Finder or copied there and pasted. Preload takes their paths from the
  * dropped or pasted `File` objects (`webUtils.getPathForFile`), so these too come from the person's own gesture. */
-export async function attachPaths(key: AttachmentOwner, picked: string[], dataDir?: string) {
+export async function attachPaths(key: AttachmentHolder, picked: string[], dataDir?: string) {
 	const store = await SessionStore.at(dataDir);
 	await new Attachments(store).ownerDir(key);
 	const paths = [...new Set(picked)];

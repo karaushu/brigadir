@@ -5,6 +5,8 @@ import {
 	isAppToken,
 	isBotToken,
 	isRecord,
+	isUserToken,
+	missingUserScopes,
 	slackButtons,
 	slackMention,
 	slackNoticeButtons,
@@ -12,6 +14,7 @@ import {
 	slackPermalinkTarget,
 	slackText,
 	slackThreadReplyOf,
+	type SlackAccount,
 	type SlackBotState,
 	type SlackListen,
 	type SlackNotice,
@@ -25,6 +28,7 @@ import {
 import { atomicJson, readDocument, safePath } from '@brigadir/persistence';
 import type { KeyVault } from '@brigadir/remote';
 import { SlackAnswers } from './slack-answers';
+import { SlackInbox, type SlackInboxDeps } from './slack-inbox';
 import { SlackMentions, type SlackBrigadir } from './slack-mentions';
 import { SlackSocket, type SocketFactory } from './slack-socket';
 import { SlackWatches, type SlackWatching } from './slack-watches';
@@ -51,6 +55,14 @@ export type SlackDeps = {
 	/** Socket Mode's WebSocket; the global one of Electron's main by default, a fake in tests. */
 	socket?: SocketFactory;
 	backoff?: (attempt: number) => number;
+	/**
+	 * spec/todo-and-slack-inbox#slack-inbox: the Slack section — what it needs beyond Slack itself (the agent, the projects, Todo); without it
+	 * there is no section and the user token is never read.
+	 */
+	inbox?: Omit<
+		SlackInboxDeps,
+		'dataRoot' | 'api' | 'account' | 'botUser' | 'countHere' | 'channelProject' | 'channelName'
+	>;
 };
 type Token = { value: string; source: SlackTokenSource; file: string | null };
 type Thread = { channel: string; ts: string };
@@ -115,8 +127,27 @@ export class Slack {
 	private readonly mentions: SlackMentions | null;
 	private readonly answers: SlackAnswers | null;
 	private readonly watches: SlackWatches | null;
+	/** spec/todo-and-slack-inbox#slack-inbox-source: the person's own token and who it is; never leaves main. */
+	private user: { token: string; id: string; name: string; team: string } | null = null;
+	private account: SlackAccount = { state: 'off' };
+	/** The bot's DM channels with people (learned from its own posts): a message there is for the bot, not a DM of the person. */
+	private botDms = new Set<string>();
+	readonly inbox: SlackInbox | null;
 	constructor(private readonly deps: SlackDeps) {
 		this.loaded = this.loadThreads();
+		this.inbox = deps.inbox
+			? new SlackInbox({
+					...deps.inbox,
+					dataRoot: () => deps.dataRoot(),
+					api: (method, body) => this.call(method, body, { form: true, user: true }),
+					account: () =>
+						this.user && this.deps.enabled() ? { user: this.user.id, team: this.user.team } : null,
+					botUser: () => this.botUser,
+					countHere: () => this.deps.settings().countHere,
+					channelProject: (channel) => this.channelProject(channel),
+					channelName: (channel) => this.channelName(channel),
+				})
+			: null;
 		this.watches =
 			deps.brigadir && deps.watching
 				? new SlackWatches({
@@ -198,7 +229,12 @@ export class Slack {
 			: null;
 	}
 	state(): SlackState {
-		return { ...this.current, listen: this.listening, appToken: !!this.appToken };
+		return {
+			...this.current,
+			listen: this.listening,
+			appToken: !!this.appToken,
+			account: this.account,
+		};
 	}
 	/** `<dataRoot>/slack/<name>`, the folder made on first write; a symlink on the way is refused. */
 	private async file(name: string, write = false) {
@@ -269,6 +305,7 @@ export class Slack {
 	}
 	/** Reads the token again and asks Slack who it is; the module turned off forgets the token. */
 	async refresh(): Promise<SlackState> {
+		await this.refreshUser();
 		if (!this.deps.enabled()) {
 			this.token = null;
 			this.queue = [];
@@ -312,12 +349,8 @@ export class Slack {
 	async listen(): Promise<SlackState> {
 		if (this.appToken === undefined)
 			this.appToken = await this.sealed('app-token.json', isAppToken);
-		const wanted =
-			!!this.mentions &&
-			this.deps.enabled() &&
-			this.deps.settings().mentions.on &&
-			!!this.token &&
-			this.current.state !== 'token';
+		// spec/todo-and-slack-inbox#slack-inbox-source: the Slack section's user events come over the same connection.
+		const wanted = this.mentionsOn() || (!!this.inbox && this.deps.enabled() && !!this.user);
 		if (!wanted) {
 			this.socket.stop();
 			if (this.listening.state !== 'off') this.setListen({ state: 'off' });
@@ -331,6 +364,118 @@ export class Slack {
 		// A refused app token waits for a new one instead of asking Slack again on every settings change.
 		if (!this.socket.active && this.listening.state !== 'token') this.socket.start();
 		return this.state();
+	}
+	private mentionsOn() {
+		return (
+			!!this.mentions &&
+			this.deps.enabled() &&
+			this.deps.settings().mentions.on &&
+			!!this.token &&
+			this.current.state !== 'token'
+		);
+	}
+	/** spec/todo-and-slack-inbox#slack-inbox-source: the sealed user token, asked who it is; the module off forgets it. */
+	private async refreshUser() {
+		if (!this.inbox) return;
+		const before = this.user?.token ?? null;
+		if (!this.deps.enabled()) {
+			this.user = null;
+			this.account = { state: 'off' };
+		} else {
+			const token = await this.sealed('user-token.json', isUserToken);
+			if (!token) {
+				this.user = null;
+				this.account = { state: 'off' };
+			} else
+				try {
+					await this.checkUser(token);
+				} catch (error) {
+					const code = error instanceof SlackError ? error.code : 'error';
+					if (error instanceof SlackError && error.network) {
+						// Slack is unreachable: the same token keeps who it was; a new one waits for the next check.
+						if (this.user?.token !== token) {
+							this.user = null;
+							this.account = { state: 'checking' };
+						}
+					} else {
+						this.user = null;
+						this.account = { state: 'token', error: code };
+					}
+				}
+		}
+		this.deps.changed(this.state());
+		if ((this.user?.token ?? null) !== before) this.inbox.accountChanged();
+	}
+	/** `auth.test` with the person's token: who it is, and the user scopes Slack did not grant. */
+	private async checkUser(token: string) {
+		let response: Response;
+		try {
+			response = await (this.deps.fetch ?? fetch)('https://slack.com/api/auth.test', {
+				method: 'POST',
+				headers: {
+					authorization: `Bearer ${token}`,
+					'content-type': 'application/x-www-form-urlencoded',
+				},
+				body: '',
+				signal: AbortSignal.timeout(15_000),
+			});
+		} catch {
+			throw new SlackError('unreachable', true);
+		}
+		const auth: unknown = await response.json().catch(() => null);
+		if (!isRecord(auth)) throw new SlackError('bad_response', true);
+		if (auth.ok !== true)
+			throw new SlackError(typeof auth.error === 'string' ? auth.error : 'error');
+		if (typeof auth.user_id !== 'string') throw new SlackError('bad_response', true);
+		this.user = {
+			token,
+			id: auth.user_id,
+			name: typeof auth.user === 'string' ? auth.user : auth.user_id,
+			team: typeof auth.team === 'string' ? auth.team : '',
+		};
+		this.account = {
+			state: 'on',
+			user: this.user.name,
+			team: this.user.team,
+			missing: missingUserScopes(response.headers.get('x-oauth-scopes')),
+		};
+		return this.account;
+	}
+	/**
+	 * spec/todo-and-slack-inbox#slack-inbox-source: `Connect` of `Your account` and the Brigadir chat's `slackUserToken` card — sealed in
+	 * `slack/user-token.json` only after `auth.test` accepted it.
+	 */
+	async connectUser(value: string): Promise<SlackState> {
+		const token = value.trim();
+		if (!isUserToken(token)) throw new Error('This is not a user token (xoxp-…).');
+		if (!this.inbox) throw new Error('The Slack section is not available.');
+		const before = this.user?.token ?? null;
+		this.account = { state: 'checking' };
+		this.deps.changed(this.state());
+		try {
+			await this.checkUser(token);
+		} catch (error) {
+			if (before) await this.refreshUser();
+			else this.account = { state: 'off' };
+			this.deps.changed(this.state());
+			throw error;
+		}
+		await atomicJson(await this.file('user-token.json', true), {
+			schemaVersion: 1,
+			sealed: this.deps.vault().seal(token).toString('base64'),
+		});
+		this.deps.changed(this.state());
+		this.inbox.accountChanged();
+		return this.listen();
+	}
+	/** `Disconnect` of `Your account`: the sealed user token is deleted; the section's files stay. */
+	async disconnectUser(): Promise<SlackState> {
+		await rm(await this.file('user-token.json'), { force: true });
+		this.user = null;
+		this.account = { state: 'off' };
+		this.deps.changed(this.state());
+		this.inbox?.accountChanged();
+		return this.listen();
 	}
 	/** The App-Level Token (`xapp-…`): sealed only after `apps.connections.open` accepted it; never shown again. */
 	async setAppToken(value: string): Promise<SlackState> {
@@ -355,8 +500,12 @@ export class Slack {
 	}
 	/** spec/notifications-slack-notes-and-schedules#slack: a mention or a reply in a task's thread; a click on the mentions' buttons or on an answer's. */
 	private envelope(type: 'events_api' | 'interactive', payload: Record<string, unknown>) {
-		if (!this.mentions || !this.answers || !this.socket.active) return;
+		if (!this.socket.active) return;
 		const event = isRecord(payload.event) ? payload.event : null;
+		// spec/todo-and-slack-inbox#slack-inbox-source: every message event also goes to the Slack section, which keeps only the person's mentions.
+		if (type === 'events_api' && event?.type === 'message' && this.inbox && this.user)
+			void this.inbox.event(payload).catch(() => {});
+		if (!this.mentions || !this.answers || !this.mentionsOn()) return;
 		return (
 			type === 'events_api'
 				? event?.type === 'message'
@@ -380,7 +529,19 @@ export class Slack {
 			return;
 		}
 		if (event.channel_type !== 'im' || event.bot_id || typeof event.subtype === 'string') return;
+		// With the Slack section's user events, a DM between the person and someone else arrives here too: only the bot's DM is a mention.
+		if (!this.botDm(payload, event)) return;
 		await this.mentions!.event({ ...payload, event: { ...event, type: 'app_mention' } });
+	}
+	/** A DM event is the bot's: Slack authorized it for the bot, or the channel is a DM the bot posted to; no authorizations — the bot's. */
+	private botDm(payload: Record<string, unknown>, event: Record<string, unknown>): boolean {
+		if (typeof event.channel === 'string' && this.botDms.has(event.channel)) return true;
+		if (!Array.isArray(payload.authorizations)) return true;
+		return payload.authorizations.some(
+			(item) =>
+				isRecord(item) &&
+				(item.is_bot === true || (!!this.botUser && item.user_id === this.botUser))
+		);
 	}
 	/** The project whose `Where` channel this is: typed as the ID, or a name the bot learned or Slack names. */
 	private async channelProject(channel: string): Promise<string | null> {
@@ -492,6 +653,7 @@ export class Slack {
 			app: Boolean(this.appToken),
 			memberId: Boolean(this.deps.settings().memberId),
 			listening: this.listening.state === 'on',
+			user: this.account.state === 'on',
 		};
 	}
 	/** `Move to Keychain`: the token found in the environment or a file is sealed; the file is not changed. */
@@ -586,6 +748,8 @@ export class Slack {
 		const typed = route?.channel.trim().replace(/^#/, '');
 		if (typed && typeof sent.channel === 'string' && typed !== sent.channel)
 			this.channels.set(typed, sent.channel);
+		if (!route?.channel.trim() && typeof sent.channel === 'string' && sent.channel.startsWith('D'))
+			this.botDms.add(sent.channel);
 		if (task && !reply && typeof sent.channel === 'string' && typeof sent.ts === 'string') {
 			this.threads.delete(task);
 			this.threads.set(task, { channel: sent.channel, ts: sent.ts });
@@ -599,9 +763,11 @@ export class Slack {
 	private async call(
 		method: string,
 		body: Record<string, unknown>,
-		options: { app?: boolean; form?: boolean; token?: string } = {}
+		options: { app?: boolean; form?: boolean; token?: string; user?: boolean } = {}
 	): Promise<Record<string, unknown>> {
-		const token = options.token ?? (options.app ? this.appToken : this.token?.value);
+		const token =
+			options.token ??
+			(options.app ? this.appToken : options.user ? this.user?.token : this.token?.value);
 		if (!token) throw new SlackError('not_authed');
 		let response: Response;
 		try {
@@ -816,6 +982,7 @@ export class Slack {
 		return this.watches?.taskEnded(task) ?? Promise.resolve();
 	}
 	dispose() {
+		this.inbox?.dispose();
 		void this.watches?.dispose();
 		if (this.timer) clearTimeout(this.timer);
 		this.timer = null;

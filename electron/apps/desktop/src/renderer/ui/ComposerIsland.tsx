@@ -51,3 +51,8 @@ export function ComposerDropZone({ title, note }: { title: string; note: string 
 		</div>
 	);
 }
+/** spec/composer#mention-menu: where the island's `@` and `/` menus stand (`menu.className` of `useMentionEditor`), and a task row's state glyph in them. */
+export function composerMenuClass(slash: boolean): string {
+	return slash ? `${styles.menu ?? ''} ${styles.slashMenu ?? ''}` : (styles.menu ?? '');
+}
+export const composerMenuTaskIcon = styles.menuTaskIcon ?? '';

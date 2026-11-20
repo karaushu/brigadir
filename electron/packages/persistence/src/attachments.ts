@@ -7,8 +7,9 @@ import {
 	isAttachmentIds,
 	isAttachmentInput,
 	isPromptAttachment,
+	isChatOwner,
+	type AttachmentHolder,
 	type AttachmentInput,
-	type AttachmentOwner,
 	type PromptAttachment,
 	type TaskKey,
 } from '@brigadir/core';
@@ -16,8 +17,26 @@ import { SessionStore, safePath, atomicJson, readDocument } from './session';
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 export class Attachments {
 	constructor(private store: SessionStore) {}
-	/** spec/tasks#backlog-edit: a task keeps its attachments beside task.json; a sheet's draft (`draft`) in the data dir's drafts. */
-	async ownerDir(owner: AttachmentOwner): Promise<string> {
+	/**
+	 * spec/tasks#backlog-edit: a task keeps its attachments beside task.json; a sheet's draft (`draft`) in the data dir's drafts.
+	 * spec/composer#chat-composer: a Brigadir chat in its folder `assistant/chats/<id>/`, a note's chat in `notes/<id>/`; the chat or the
+	 * note must exist.
+	 */
+	async ownerDir(owner: AttachmentHolder): Promise<string> {
+		if ('chat' in owner) {
+			if (!isChatOwner(owner)) throw new Error('Invalid attachment owner');
+			const exists =
+				owner.chat === 'brigadir'
+					? await safePath(this.store.root, 'assistant', 'chats', owner.id, 'chat.json')
+					: await safePath(this.store.root, 'notes', `${owner.id}.md`);
+			if (!(await lstat(exists).catch(() => null))?.isFile()) throw new Error('The chat is gone');
+			const dir =
+				owner.chat === 'brigadir'
+					? await safePath(this.store.root, 'assistant', 'chats', owner.id)
+					: await safePath(this.store.root, 'notes', owner.id);
+			await mkdir(dir, { recursive: true, mode: 0o700 });
+			return dir;
+		}
 		const key = { projectId: owner.projectId, id: owner.id };
 		if (owner.draft === true) {
 			const dir = await this.store.draftDir(key);
@@ -42,7 +61,7 @@ export class Attachments {
 		await rm(await this.store.draftDir(draft), { recursive: true, force: true });
 	}
 	/** spec/tasks#backlog-edit: the metadata of the owner's attachments in the given order; each one must still be there and unchanged. */
-	async list(owner: AttachmentOwner, ids: string[]): Promise<PromptAttachment[]> {
+	async list(owner: AttachmentHolder, ids: string[]): Promise<PromptAttachment[]> {
 		if (!isAttachmentIds(ids)) throw new Error('Too many attachments');
 		const result: PromptAttachment[] = [];
 		let total = 0;
@@ -54,7 +73,7 @@ export class Attachments {
 		}
 		return result;
 	}
-	async create(key: AttachmentOwner, input: AttachmentInput): Promise<PromptAttachment> {
+	async create(key: AttachmentHolder, input: AttachmentInput): Promise<PromptAttachment> {
 		if (!isAttachmentInput(input)) throw new Error('Invalid attachment');
 		const root = await this.ownerDir(key);
 		const bytes =
@@ -97,7 +116,7 @@ export class Attachments {
 		return attachment;
 	}
 	async read(
-		key: AttachmentOwner,
+		key: AttachmentHolder,
 		id: string
 	): Promise<{ attachment: PromptAttachment; input: AttachmentInput; path: string }> {
 		if (!isAttachmentId(id)) throw new Error('Invalid attachment ID');
@@ -135,7 +154,7 @@ export class Attachments {
 	 * image codec). The cache is trusted only while the image is still there at its recorded size; otherwise the image is read
 	 * and verified again, so a deleted or changed image fails here as it does for the full read. */
 	async thumbnail(
-		key: AttachmentOwner,
+		key: AttachmentHolder,
 		id: string,
 		make: (png: Buffer) => Buffer
 	): Promise<Buffer> {
@@ -178,7 +197,7 @@ export class Attachments {
 		await rename(temp, path);
 		return thumb;
 	}
-	async resolve(key: TaskKey, ids: string[]) {
+	async resolve(key: AttachmentHolder, ids: string[]) {
 		if (!isAttachmentIds(ids)) throw new Error('Too many attachments');
 		const result = [];
 		let total = 0;

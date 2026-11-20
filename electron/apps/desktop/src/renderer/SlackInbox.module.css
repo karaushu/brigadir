@@ -1,0 +1,271 @@
+/* spec/todo-and-slack-inbox#slack-inbox-entry: the Slack section — its sidebar rows and its screen (a day, a week, a mention, an archive month). */
+
+/* Sidebar: the avatar's badge is ringed in the sidebar's colour; the time sits at the end of the first line. */
+.row {
+	--avatar-ring: var(--sb);
+}
+.row[aria-pressed='true'] {
+	--avatar-ring: color-mix(in srgb, var(--accent) 12%, var(--sb));
+}
+.where {
+	color: var(--fg3);
+	font-weight: 400;
+}
+.rowTime {
+	flex: none;
+	font-size: var(--text-11) !important;
+	color: var(--fg3) !important;
+}
+
+/* The screen. */
+.head > strong {
+	flex: none;
+	max-width: 40%;
+}
+.head > small {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	--avatar-ring: var(--win);
+}
+.column {
+	flex: none;
+	width: min(calc(100% - 40px), 720px);
+	margin: 0 auto;
+	padding: 22px 0 32px;
+}
+/* A day's and a week's counts: the number over its word. */
+.stats {
+	display: flex;
+	gap: 18px;
+	padding: 0 12px;
+	font-size: var(--text-12);
+	color: var(--fg2);
+}
+.stats b {
+	display: block;
+	font-size: var(--text-19);
+	font-weight: 600;
+	line-height: 24px;
+	color: var(--fg);
+	font-variant-numeric: tabular-nums;
+}
+.stats b[data-amber] {
+	color: var(--amber);
+}
+.section {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 18px 0 6px;
+	padding: 0 12px;
+	font-size: var(--text-12);
+	font-weight: 600;
+	color: var(--fg2);
+}
+.section small {
+	font-weight: 400;
+	color: var(--fg3);
+}
+.people {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 14px;
+	padding: 4px 12px 0;
+}
+.person {
+	width: 48px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 5px;
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.person > span:last-child {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* An ask: the row opens its mention (the button covers the row, rule 15); `Add to Todo` sits above it. */
+.ask {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	border-radius: 8px;
+}
+.ask:hover {
+	background: var(--hover);
+}
+.ask > :not(.askOpen) {
+	position: relative;
+	z-index: 1;
+}
+.askOpen {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--fg);
+	font: inherit;
+	font-size: var(--text-13);
+	line-height: 18px;
+	text-align: left;
+}
+button.askOpen::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+}
+button.askOpen:focus-visible {
+	outline: none;
+}
+.ask:has(button.askOpen:focus-visible) {
+	box-shadow: 0 0 0 2px var(--accent);
+}
+.askOpen small {
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+.list {
+	margin: 0;
+	padding: 0 12px 0 30px;
+	font-size: var(--text-13);
+	line-height: 21px;
+	color: var(--fg);
+}
+.list li {
+	padding: 1px 0;
+}
+.weekLines {
+	margin-top: 14px;
+}
+.note {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 14px 0 0;
+	padding: 0 12px;
+	font-size: var(--text-12-5);
+	color: var(--fg2);
+}
+
+/* A mention: what they want, the thread, the suggestion. */
+.want {
+	margin: 0 0 14px;
+	padding: 12px 14px;
+	border-radius: 10px;
+	background: var(--card);
+	box-shadow: var(--lift);
+	font-size: var(--text-13);
+	line-height: 19px;
+}
+.want > small {
+	display: block;
+	margin-bottom: 3px;
+	font-size: var(--text-11);
+	font-weight: 600;
+	color: var(--fg2);
+}
+.due {
+	display: flex;
+	margin-top: 6px;
+}
+.message {
+	display: flex;
+	gap: 10px;
+	padding: 7px 0;
+}
+.messageBody {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--text-13);
+	line-height: 19px;
+}
+.messageBody > b {
+	font-weight: 600;
+}
+.messageBody > small {
+	margin-left: 6px;
+	font-size: var(--text-11);
+	color: var(--fg3);
+}
+.text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.text a {
+	color: var(--accent);
+}
+/* The mention itself is lit; the person's own messages sit in the accent bubble. */
+.message[data-lit] .text {
+	margin-left: -6px;
+	padding: 2px 6px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--amber) 13%, transparent);
+}
+.message[data-mine] .text {
+	display: inline-block;
+	margin-left: -6px;
+	padding: 2px 8px;
+	border-radius: 8px;
+	background: var(--accent-soft);
+}
+.at {
+	padding: 0 3px;
+	border-radius: 4px;
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.suggestion {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 14px;
+	padding: 11px 12px 11px 14px;
+	border-radius: 10px;
+	background: var(--card);
+	box-shadow: var(--lift);
+	font-size: var(--text-12-5);
+}
+.suggestion > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.suggestionText {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.suggestionText small {
+	font-size: var(--text-11);
+	color: var(--fg2);
+}
+.suggestionText b {
+	font-weight: 500;
+}
+.gap {
+	flex: 1;
+}
+/* The thread's label lines up with the avatars under it. */
+.flush {
+	padding: 0;
+}

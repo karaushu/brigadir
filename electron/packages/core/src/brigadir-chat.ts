@@ -1,5 +1,7 @@
 import type { AgentEvent, AgentProvider } from './agent';
 import type { Locale } from './messages';
+import { isAttachmentList, type PromptAttachment } from './attachments';
+import { slackUserEvents, slackUserScopes } from './slack-inbox';
 
 /**
  * spec/settings-modules-and-onboarding#brigadir-chat: the Brigadir chat — the rail section's chats with Brigadir's own agent. Each chat is
@@ -41,6 +43,16 @@ export type BrigadirCard =
 			detail: string;
 			opened: boolean;
 	  }
+	/** spec/todo-and-slack-inbox#todo-chat-tools: a to-do the agent added; `Open list` shows the list in the Todo section. */
+	| {
+			type: 'todo';
+			id: string;
+			list: string;
+			item: string;
+			title: string;
+			listName: string;
+			project: string | null;
+	  }
 	/** A note the agent saved; `Open note` shows it on the Notes screen. */
 	| { type: 'note'; id: string; note: string; title: string; project: string | null }
 	/** A watched event of a task: CI ended, its PR merged, a turn ended, the task completed. */
@@ -63,10 +75,16 @@ export type BrigadirCard =
 			task?: { projectId: string; id: string };
 	  };
 export type BrigadirSetupKind = 'slack' | 'remoteAccess';
-export type BrigadirSecretKind = 'slackBotToken' | 'slackAppToken';
+export type BrigadirSecretKind = 'slackBotToken' | 'slackAppToken' | 'slackUserToken';
 export type BrigadirStep = { name: string; detail: string; done: boolean };
 export type BrigadirChatEntry =
-	| { kind: 'prompt'; text: string; choice?: BrigadirChatChoice }
+	/** `attachments`: the files and images the message carries; their tokens stand in `text` (spec/composer#chat-composer). */
+	| {
+			kind: 'prompt';
+			text: string;
+			choice?: BrigadirChatChoice;
+			attachments?: PromptAttachment[];
+	  }
 	| { kind: 'event'; event: AgentEvent }
 	| { kind: 'card'; card: BrigadirCard }
 	| { kind: 'done'; milliseconds: number; stopped: boolean }
@@ -109,13 +127,16 @@ export type BrigadirChatEvent =
 export const brigadirChatLimits = { message: 20_000, title: 80 } as const;
 const record = (value: unknown): value is Record<string, unknown> =>
 	typeof value === 'object' && value !== null && !Array.isArray(value);
-const cardTypes = new Set(['setting', 'steps', 'secret', 'link', 'task', 'note', 'event']);
+const cardTypes = new Set(['setting', 'steps', 'secret', 'link', 'task', 'note', 'event', 'todo']);
 export function isBrigadirChatRow(value: unknown): value is BrigadirChatRow {
 	if (!record(value) || !Number.isSafeInteger(value.seq) || typeof value.at !== 'string')
 		return false;
 	switch (value.kind) {
 		case 'prompt':
-			return typeof value.text === 'string';
+			return (
+				typeof value.text === 'string' &&
+				(value.attachments === undefined || isAttachmentList(value.attachments))
+			);
 		case 'event':
 			return record(value.event) && typeof value.event.kind === 'string';
 		case 'card':
@@ -171,6 +192,8 @@ export function brigadirChatPrompt(input: {
 	facts: string;
 	settings: string;
 	setups: string;
+	/** spec/todo-and-slack-inbox#todo-chat-tools: the Todo module is on, so todo_add and todo_lists are there. */
+	todo?: boolean;
 }): string {
 	const fallback = input.language === 'uk' ? 'Ukrainian' : 'English';
 	return [
@@ -191,6 +214,11 @@ export function brigadirChatPrompt(input: {
 		'- Answer from the tasks above when they tell enough. Otherwise find it yourself: read the code and run commands that only read (git log, git show, gh pr list, gh run list, gh run view). Never tell the person to check what you can check. You may not edit files or run anything that changes state: such commands are declined.',
 		'- To change Brigadir, use settings_set; to see the keys, settings_find. Change only what was asked. To set up Slack or remote access, use setup_start and follow the steps it returns; ask for every token with secret_request, never in the chat.',
 		"- New work: create_task. A change to work a task covers: send_to_task. Why something was done in a task: ask_task. To save their words or a summary as a note: note. To tell them here later when a task's CI ends, its PR is merged or it is done: watch.",
+		...(input.todo
+			? [
+					"- A to-do for the person (something they must do, not an agent): todo_add, in the list they name or the project's latest list. To see their lists and what is open: todo_lists.",
+				]
+			: []),
 		'- Only what a tool returned happened: never say a setting changed, a task was made or a token connected before the tool said so. When a tool fails, say so in one line and what to do.',
 		`- Answer in the language the person writes in (when it is unclear, ${fallback}), short, in Markdown. Code only where it helps.`,
 		`Message:\n${cut(input.text, 20_000)}`,
@@ -244,7 +272,7 @@ export function slackManifest(name: string) {
 	return {
 		display_information: {
 			name: shown,
-			description: 'Brigadir on this computer: tasks, notes and answers in Slack.',
+			description: 'Brigadir on this computer: tasks, notes, answers and your mentions in Slack.',
 		},
 		features: {
 			app_home: {
@@ -254,9 +282,13 @@ export function slackManifest(name: string) {
 			},
 			bot_user: { display_name: shown, always_online: true },
 		},
-		oauth_config: { scopes: { bot: [...slackBotScopes] } },
+		// spec/todo-and-slack-inbox#slack-inbox-source: the Slack section reads Slack as the person — user scopes and user events.
+		oauth_config: { scopes: { bot: [...slackBotScopes], user: [...slackUserScopes] } },
 		settings: {
-			event_subscriptions: { bot_events: [...slackBotEvents] },
+			event_subscriptions: {
+				bot_events: [...slackBotEvents],
+				user_events: [...slackUserEvents],
+			},
 			interactivity: { is_enabled: true },
 			org_deploy_enabled: false,
 			socket_mode_enabled: true,

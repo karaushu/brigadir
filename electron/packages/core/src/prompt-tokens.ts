@@ -7,17 +7,19 @@ import type { EventRecord } from './session';
  * spec/composer#mentions: a mention in the composer's text is a token without spaces the person never sees. It is self-delimited
  * (`@[kind:value]`), so text typed right after a pill never becomes part of it:
  * `@[att:<id>]` an attachment in its place (file, text, image, task summary), `@[task:<id>]` a task before sending,
- * `@[agent:<id>]` an agent template before sending, `@[model:<provider>:<model>]` a model reference.
+ * `@[agent:<id>]` an agent template before sending, `@[model:<provider>:<model>]` a model reference,
+ * `@[project:<id>]` a project (the Brigadir chat, spec/composer#chat-composer).
  */
 export type PromptToken =
 	| { kind: 'attachment'; id: string }
 	| { kind: 'task'; id: string }
 	| { kind: 'agent'; id: string }
+	| { kind: 'project'; id: string }
 	| { kind: 'model'; provider: 'claude' | 'codex'; model: string };
 export type PromptPart =
 	{ kind: 'text'; text: string } | { kind: 'token'; token: PromptToken; raw: string };
 
-const tokenPattern = /@\[(att|task|agent|model):([^\]\s]{1,300})\]/g;
+const tokenPattern = /@\[(att|task|agent|project|model):([^\]\s]{1,300})\]/g;
 const attachmentId = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const taskId = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 
@@ -25,6 +27,7 @@ function token(kind: string, value: string): PromptToken | null {
 	if (kind === 'att') return attachmentId.test(value) ? { kind: 'attachment', id: value } : null;
 	if (kind === 'task') return taskId.test(value) ? { kind: 'task', id: value } : null;
 	if (kind === 'agent') return taskId.test(value) ? { kind: 'agent', id: value } : null;
+	if (kind === 'project') return taskId.test(value) ? { kind: 'project', id: value } : null;
 	const model = /^(claude|codex):(.+)$/.exec(value);
 	return model
 		? { kind: 'model', provider: model[1] as 'claude' | 'codex', model: model[2]! }
@@ -60,6 +63,7 @@ export function promptTokenRanges(
 export const attachmentToken = (id: string) => `@[att:${id}]`;
 export const taskToken = (id: string) => `@[task:${id}]`;
 export const agentToken = (id: string) => `@[agent:${id}]`;
+export const projectToken = (id: string) => `@[project:${id}]`;
 export const modelToken = (provider: 'claude' | 'codex', model: string) =>
 	`@[model:${provider}:${model}]`;
 /** Attachment ids in the order the text places them, each once. */
@@ -127,7 +131,8 @@ export function promptDisplayText(
 	text: string,
 	attachments: readonly Pick<PromptAttachment, 'id' | 'kind' | 'name'>[] = [],
 	tasks: readonly Pick<AgentTask, 'id' | 'title'>[] = [],
-	agents: readonly { id: string; name: string }[] = []
+	agents: readonly { id: string; name: string }[] = [],
+	projects: readonly { id: string; name: string }[] = []
 ): string {
 	text = planChatWords(text) ?? text;
 	if (!text.includes('@[')) return text;
@@ -140,6 +145,8 @@ export function promptDisplayText(
 				return `@${tasks.find((task) => task.id === value.id)?.title ?? value.id}`;
 			if (value.kind === 'agent')
 				return `@${agents.find((agent) => agent.id === value.id)?.name ?? value.id}`;
+			if (value.kind === 'project')
+				return `@${projects.find((project) => project.id === value.id)?.name ?? value.id}`;
 			const item = attachments.find((entry) => entry.id === value.id);
 			return item ? `@${attachmentMention(item).label}` : '';
 		})
@@ -169,7 +176,7 @@ export function promptSequence(
 			run += modelMentionText(value.provider, value.model);
 			continue;
 		}
-		if (value.kind === 'task' || value.kind === 'agent') {
+		if (value.kind === 'task' || value.kind === 'agent' || value.kind === 'project') {
 			run += part.raw;
 			continue;
 		}
@@ -182,6 +189,38 @@ export function promptSequence(
 	if (run.trim()) out.push({ kind: 'text', text: run });
 	for (const id of attachmentIds) if (!placed.has(id)) out.push({ kind: 'attachment', id });
 	return out;
+}
+
+/**
+ * spec/composer#chat-composer: what the Brigadir chat's agent reads in place of a task or project pill — the task's title, id and
+ * project, the project's name and folder — so its tools (`open_task`, `send_to_task`, `ask_task`) can name it. A task or project
+ * that is gone keeps its id. Other tokens stay as they are.
+ */
+export function mentionNamesText(
+	text: string,
+	tasks: readonly { id: string; title: string; project: string }[],
+	projects: readonly { id: string; name: string; path: string }[]
+): string {
+	if (!text.includes('@[')) return text;
+	return promptParts(text)
+		.map((part) => {
+			if (part.kind === 'text') return part.text;
+			const value = part.token;
+			if (value.kind === 'task') {
+				const task = tasks.find((item) => item.id === value.id);
+				return task
+					? `the task ${JSON.stringify(task.title)} (id ${task.id}, project ${JSON.stringify(task.project)})`
+					: `the task with id ${value.id}`;
+			}
+			if (value.kind === 'project') {
+				const project = projects.find((item) => item.id === value.id);
+				return project
+					? `the project ${JSON.stringify(project.name)} (folder ${JSON.stringify(project.path)})`
+					: `the project with id ${value.id}`;
+			}
+			return part.raw;
+		})
+		.join('');
 }
 
 /**

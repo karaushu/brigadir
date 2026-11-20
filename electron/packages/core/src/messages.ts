@@ -2439,6 +2439,55 @@ const uk = {
 	'Proposing a task': 'Пропонує задачу',
 	'Proposed a task': 'Запропонував задачу',
 	'Could not propose a task': 'Задачу не запропоновано',
+	// spec/todo-and-slack-inbox#todo: the Todo section — lists, items, the module, the menu items and the chat tools.
+	Todo: 'Todo',
+	'To-do lists, by project or without one.': 'Списки справ — за проєктом чи без нього.',
+	'Filter to-dos': 'Фільтр справ',
+	'New list': 'Новий список',
+	'Untitled list': 'Список без назви',
+	Empty: 'Порожньо',
+	'All done': 'Усе виконано',
+	'{done} of {total} done': '{done} з {total} виконано',
+	'Move to project…': 'Перемістити в проєкт…',
+	'Move to list…': 'Перемістити в список…',
+	'Delete the list?': 'Видалити список?',
+	'The list and its items are deleted.': 'Список і його справи буде видалено.',
+	'Rename the list': 'Перейменувати список',
+	'Select a list': 'Вибери список',
+	'No lists yet': 'Списків ще немає',
+	'Add a to-do': 'Додати справу',
+	'Done · {n}': 'Виконано · {n}',
+	'Edit (to-do)': 'Редагувати',
+	'Make a task': 'Створити задачу',
+	Inbox: 'Вхідні',
+	'To-do deleted': 'Справу видалено',
+	'Could not save the to-do.': 'Не вдалося зберегти справу.',
+	'Could not create the list.': 'Не вдалося створити список.',
+	'Could not rename the list.': 'Не вдалося перейменувати список.',
+	'Could not delete the list.': 'Не вдалося видалити список.',
+	'Could not move the to-do.': 'Не вдалося перемістити справу.',
+	'To-do actions': 'Дії зі справою',
+	'List actions': 'Дії зі списком',
+	'List project': 'Проєкт списку',
+	'Drag to reorder': 'Перетягни, щоб змінити порядок',
+	'Done (to-do)': 'Виконано',
+	'Open in Slack': 'Відкрити в Slack',
+	'Previous to-do': 'Попередня справа',
+	'Next to-do': 'Наступна справа',
+	'Unfold to-do': 'Розгорнути справу',
+	'Fold to-do': 'Згорнути справу',
+	'Edit to-do': 'Редагувати справу',
+	'Toggle done': 'Виконано чи ні',
+	'Delete to-do': 'Видалити справу',
+	'Move up': 'Перемістити вище',
+	'Move down': 'Перемістити нижче',
+	'Open list': 'Відкрити список',
+	'Adding a to-do': 'Додає справу',
+	'Added a to-do': 'Додав справу',
+	'Could not add the to-do': 'Справу не додано',
+	'Reading to-do lists': 'Читає списки справ',
+	'Read to-do lists': 'Прочитав списки справ',
+	'Could not read the to-do lists': 'Списки справ не прочитано',
 	// spec/settings-modules-and-onboarding#brigadir-chat: the Brigadir section and its chat.
 	'Brigadir (section)': 'Бригадир',
 	Setups: 'Налаштування',
@@ -2822,6 +2871,52 @@ const uk = {
 	'Agents can post without confirmation': 'Агенти можуть писати без підтвердження',
 	"No permission card before an agent's message. The message still shows in the chat.":
 		'Без картки дозволу перед повідомленням агента. Повідомлення все одно видно в чаті.',
+	// spec/todo-and-slack-inbox#slack-inbox: the Slack section.
+	'Slack: summaries': 'Slack: підсумки',
+	'Filter mentions': 'Фільтр згадок',
+	Mentions: 'Згадки',
+	Weeks: 'Тижні',
+	'This week (row)': 'Цей тиждень',
+	'Last week': 'Минулий тиждень',
+	'Direct message (mention)': 'Особисте повідомлення',
+	'all answered': 'на все відповів',
+	'Asked of you': 'Просять тебе',
+	'You did': 'Що ти зробив',
+	'Worth knowing': 'Варто знати',
+	'People (Slack)': 'Люди',
+	'green — answered, amber — waiting': 'зелений — відповів, бурштиновий — чекає',
+	'Made at {time}': 'Зроблено о {time}',
+	'Add to Todo': 'Додати в Todo',
+	'In Todo · {target}': 'У Todo · {target}',
+	Answered: 'Відповів',
+	FYI: 'До відома',
+	'What they want': 'Чого хочуть',
+	'Nothing — for your information': 'Нічого — до відома',
+	'By {date}': 'До {date}',
+	'Thread (Slack)': 'Тред',
+	'Suggested to-do': 'Пропонована справа',
+	'Added to {target}': 'Додано в {target}',
+	'Undo (Slack)': 'Скасувати',
+	'Connect your Slack account': 'Підʼєднай свій акаунт Slack',
+	'Open Slack settings': 'Відкрити налаштування Slack',
+	'Connect my Slack account for mentions': 'Підʼєднай мій акаунт Slack для згадок',
+	'Summary not made: the agent is out of quota.':
+		'Підсумок не зроблено: в агента закінчилась квота.',
+	'Could not make the summary.': 'Не вдалося зробити підсумок.',
+	'Making the summary…': 'Створення підсумку…',
+	'No summary yet': 'Підсумку ще немає',
+	'No mentions': 'Немає згадок',
+	'Could not add to Todo.': 'Не вдалося додати в Todo.',
+	'Could not read Slack.': 'Не вдалося прочитати Slack.',
+	'Could not change the mention.': 'Не вдалося змінити згадку.',
+	'Your account': 'Твій акаунт',
+	'User token': 'Токен користувача',
+	'The Slack section: your mentions and day summaries. OAuth & Permissions ▸ User OAuth Token':
+		'Розділ Slack: твої згадки й підсумки днів. OAuth & Permissions ▸ User OAuth Token',
+	'Slack refused the token · {code}': 'Slack не прийняв токен · {code}',
+	'Count @here and @channel': 'Рахувати @here і @channel',
+	'User token (field)': 'Токен користувача',
+	'Slack (section)': 'Slack',
 	'Checking the simulator': 'Перевіряє симулятор',
 	'Checked the simulator': 'Перевірив симулятор',
 	'Could not check the simulator': 'Симулятор не перевірено',
@@ -3098,6 +3193,10 @@ const uk = {
 		'Іде агенту як роль для сабагента: агент запускає його, коли ви попросите.',
 	'Goes to the agent as a task summary: state, branch, requests and changes.':
 		'Іде агенту як підсумок задачі: стан, гілка, запити й зміни.',
+	// spec/composer#chat-composer: the Brigadir chat's task and project pills.
+	'Goes to Brigadir as the task: its title, id and project.':
+		'Іде Бригадиру як задача: назва, id і проєкт.',
+	'Goes to Brigadir as the project: its name and folder.': 'Іде Бригадиру як проєкт: назва й тека.',
 	'Goes to the agent as the text of these lines.': 'Іде агенту як текст цих рядків.',
 	'Goes to the agent as a path: the agent reads the file itself.':
 		'Іде агенту як шлях: агент сам читає файл.',
@@ -5151,8 +5250,17 @@ const english: Partial<Record<MessageKey, string>> = {
 	'Tasks (section)': 'Tasks',
 	'Pull requests (section)': 'Pull requests',
 	'Brigadir (section)': 'Brigadir',
+	'Edit (to-do)': 'Edit',
+	'Done (to-do)': 'Done',
 	'Bot token (field)': 'Bot token',
 	'App-level token (field)': 'App-level token',
+	'This week (row)': 'This week',
+	'Direct message (mention)': 'Direct message',
+	'People (Slack)': 'People',
+	'Undo (Slack)': 'Undo',
+	'Thread (Slack)': 'Thread',
+	'User token (field)': 'User token',
+	'Slack (section)': 'Slack',
 	'Settings (rail)': 'Settings',
 	'Open (column)': 'Open',
 	'In review (column)': 'In review',
@@ -5224,6 +5332,38 @@ export function changedActionCount(locale: Locale, count: number): string {
 			? { one: 'змінена', few: 'змінені', many: 'змінених', other: 'зміненої' }
 			: { one: 'changed', few: 'changed', many: 'changed', other: 'changed' };
 	return `${new Intl.NumberFormat(locale).format(count)} ${forms[form as keyof typeof forms] ?? forms.other}`;
+}
+/**
+ * spec/todo-and-slack-inbox#slack-inbox-entry: the Slack section's counts — `5 mentions`, `2 waiting`, `14 you wrote`, `5 threads`; four forms for uk
+ * (rule 9). `word` alone is the label under a number.
+ */
+export function slackInboxCount(
+	locale: Locale,
+	kind: 'mention' | 'waiting' | 'wrote' | 'thread',
+	count: number
+): { number: string; word: string; text: string } {
+	const form = new Intl.PluralRules(locale).select(count) as 'one' | 'few' | 'many' | 'other';
+	const forms = {
+		mention:
+			locale === 'uk'
+				? { one: 'згадка', few: 'згадки', many: 'згадок', other: 'згадки' }
+				: { one: 'mention', few: 'mentions', many: 'mentions', other: 'mentions' },
+		waiting:
+			locale === 'uk'
+				? { one: 'чекає', few: 'чекають', many: 'чекають', other: 'чекають' }
+				: { one: 'waiting', few: 'waiting', many: 'waiting', other: 'waiting' },
+		wrote:
+			locale === 'uk'
+				? { one: 'твоє', few: 'твої', many: 'твоїх', other: 'твого' }
+				: { one: 'you wrote', few: 'you wrote', many: 'you wrote', other: 'you wrote' },
+		thread:
+			locale === 'uk'
+				? { one: 'тред', few: 'треди', many: 'тредів', other: 'треду' }
+				: { one: 'thread', few: 'threads', many: 'threads', other: 'threads' },
+	}[kind];
+	const number = new Intl.NumberFormat(locale).format(count),
+		word = forms[form] ?? forms.other;
+	return { number, word, text: `${number} ${word}` };
 }
 /** spec/pull-requests-and-ci#review-launch: «3 lines» of the project review notes; four forms for uk (rule 9). */
 export function noteLineCount(locale: Locale, count: number): string {

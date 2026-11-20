@@ -303,3 +303,27 @@ export async function readSlashCatalog(
 		servers: disk.servers.filter((server) => server !== 'brigadir'),
 	};
 }
+
+/**
+ * spec/composer#chat-composer: the `/` list of a chat that is not a task (the Brigadir chat, a note's chat), read from disk before its agent
+ * announces its own: the agent's and the working folder's commands and skills, and the chat's own MCP tools (none for a note).
+ */
+export async function readChatSlashCatalog(
+	provider: 'claude' | 'codex',
+	folder: string,
+	tools: readonly { name: string; description: string }[],
+	homes = agentHomes()
+): Promise<SlashCatalog> {
+	const disk =
+		provider === 'codex' ? await codexCatalog(homes, folder) : await claudeCatalog(homes, folder);
+	return {
+		provider,
+		...disk,
+		tools: tools.map((tool) => ({
+			server: 'brigadir',
+			tool: tool.name,
+			description: tool.description,
+		})),
+		servers: disk.servers.filter((server) => server !== 'brigadir'),
+	};
+}

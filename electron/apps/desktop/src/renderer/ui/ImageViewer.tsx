@@ -4,7 +4,8 @@ import {
 	attachmentLabel,
 	type Locale,
 	type PromptAttachment,
-	type TaskKey,
+	holderKey,
+	type AttachmentHolder,
 } from '@brigadir/core';
 import { PopupClose } from './PopupClose';
 import { Glyph } from './Glyph';
@@ -20,7 +21,7 @@ export function ImageViewer({
 	index: initial,
 	close,
 }: {
-	task: TaskKey;
+	task: AttachmentHolder;
 	locale: Locale;
 	images: PromptAttachment[];
 	index: number;
@@ -75,7 +76,7 @@ export function ImageViewer({
 		return () => {
 			active = false;
 		};
-	}, [task.id, task.projectId, item.id]);
+	}, [holderKey(task), item.id]);
 	const go = (next: number) => {
 		if (next >= 0 && next < images.length) setIndex(next);
 	};
@@ -190,7 +191,7 @@ function StripTile({
 	selected,
 	select,
 }: {
-	task: TaskKey;
+	task: AttachmentHolder;
 	locale: Locale;
 	item: PromptAttachment;
 	selected: boolean;

@@ -58,7 +58,12 @@ import type { ChatMenuAction, ChatMenuState } from './chat-menu';
 import type { TerminalMenuAction, TerminalMenuState } from './terminal-menu';
 import type { SurfaceLayout } from './layout';
 import type { SurfaceDraft, TaskSurface } from './surface';
-import type { AttachmentInput, AttachmentOwner, PromptAttachment } from './attachments';
+import type {
+	AttachmentHolder,
+	AttachmentInput,
+	AttachmentOwner,
+	PromptAttachment,
+} from './attachments';
 /** spec/tasks#sheet-model, spec/tasks#backlog-edit: what the launch sheet adds to a task besides its prompt. `draftId` names the sheet's draft attachments. */
 export type TaskSheet = {
 	name?: string;
@@ -220,14 +225,58 @@ export type DesktopBridge = {
 	setNoteProject(id: string, project: string | null): Promise<void>;
 	deleteNote(id: string): Promise<void>;
 	onNotesChanged(listener: (change: import('./notes').NotesChange) => void): () => void;
+	/** spec/todo-and-slack-inbox#todo: every list with its items. */
+	todoLists(): Promise<import('./todo').TodoList[]>;
+	createTodoList(project: string | null, name: string): Promise<import('./todo').TodoList>;
+	renameTodoList(id: string, name: string): Promise<void>;
+	setTodoListProject(id: string, project: string | null): Promise<void>;
+	deleteTodoList(id: string): Promise<void>;
+	/** A new item at the top of the open items; its id. */
+	addTodoItem(listId: string, title: string, description: string): Promise<string>;
+	updateTodoItem(
+		listId: string,
+		itemId: string,
+		patch: import('./todo').TodoItemPatch
+	): Promise<void>;
+	/** The removed item and its place, for Undo; null when it was gone already. */
+	removeTodoItem(
+		listId: string,
+		itemId: string
+	): Promise<{ item: import('./todo').TodoItem; index: number } | null>;
+	restoreTodoItem(listId: string, item: import('./todo').TodoItem, index: number): Promise<void>;
+	/** A drag: before the open item `before`, null — after the last open item. */
+	placeTodoItem(listId: string, itemId: string, before: string | null): Promise<void>;
+	stepTodoItem(listId: string, itemId: string, delta: -1 | 1): Promise<void>;
+	moveTodoItemToList(listId: string, itemId: string, toListId: string): Promise<void>;
+	onTodoChanged(listener: (change: import('./todo').TodoChange) => void): () => void;
+	/** A list row's menu: what the person chose. */
+	todoListMenu(id: string): Promise<'rename' | 'project' | 'delete' | null>;
+	/** An item's menu, at the point or at the pointer. */
+	todoItemMenu(
+		x: number | null,
+		y: number | null
+	): Promise<'edit' | 'task' | 'move' | 'delete' | null>;
+	/** `Move to project…`: a project id, `none`, or null when dismissed. */
+	todoProjectMenu(id: string, x: number | null, y: number | null): Promise<string | null>;
+	/** `Move to list…`: the other lists; the chosen list's id. */
+	todoListPickMenu(id: string, x: number | null, y: number | null): Promise<string | null>;
 	/** spec/notifications-slack-notes-and-schedules#notes: the note's one chat — its rows, and whether the agent answers now. */
 	readNoteChat(id: string): Promise<import('./note-chat').NoteChatState>;
 	/** A message to the note's agent; the current note goes with it. A new choice of provider or model starts a new session. */
+	/** `attachments`: ids of the note chat's own attachments whose tokens stand in `text` (spec/composer#chat-composer). */
 	sendNoteChat(
 		id: string,
 		text: string,
-		choice: import('./note-chat').NoteChatChoice
+		choice: import('./note-chat').NoteChatChoice,
+		attachments: string[]
 	): Promise<void>;
+	/** spec/composer#chat-composer: what the note chat's agent will see in `/`, read from disk (the note's project, else the notes folder). */
+	readNoteChatSlashCatalog(
+		id: string,
+		provider: 'claude' | 'codex'
+	): Promise<import('./slash-menu').SlashCatalog>;
+	/** spec/composer#chat-composer: a file or folder of the note's project (its path in the main tree) as a reference the note chat's agent reads. */
+	attachNoteChatFile(id: string, path: string): Promise<PromptAttachment>;
 	stopNoteChat(id: string): Promise<void>;
 	/** Undo of the agent's edit `seq`: the note goes back to its text before it, when it still holds the edit's text. */
 	undoNoteEdit(id: string, seq: number): Promise<void>;
@@ -242,7 +291,10 @@ export type DesktopBridge = {
 	unarchiveBrigadirChat(id: string): Promise<void>;
 	readBrigadirChat(id: string): Promise<import('./brigadir-chat').BrigadirChatState>;
 	createBrigadirChat(): Promise<import('./brigadir-chat').BrigadirChatMeta>;
-	sendBrigadirChat(id: string, text: string): Promise<void>;
+	/** `attachments`: ids of the chat's own attachments whose tokens stand in `text` (spec/composer#chat-composer). */
+	sendBrigadirChat(id: string, text: string, attachments: string[]): Promise<void>;
+	/** spec/composer#chat-composer: what the Brigadir chat's agent will see in `/`, read from disk, with the chat's own tools. */
+	readBrigadirSlashCatalog(): Promise<import('./slash-menu').SlashCatalog>;
 	stopBrigadirChat(id: string): Promise<void>;
 	renameBrigadirChat(id: string, title: string): Promise<void>;
 	archiveBrigadirChat(id: string): Promise<void>;
@@ -783,6 +835,25 @@ export type DesktopBridge = {
 	connectSlackApp(token: string): Promise<import('./slack').SlackState>;
 	disconnectSlackApp(): Promise<import('./slack').SlackState>;
 	onSlack(listener: (state: import('./slack').SlackState) => void): () => void;
+	/** spec/todo-and-slack-inbox#slack-inbox-source: the person's own token (`xoxp-…`); sealed after `auth.test`, never read back. */
+	connectSlackUser(token: string): Promise<import('./slack').SlackState>;
+	disconnectSlackUser(): Promise<import('./slack').SlackState>;
+	/** spec/todo-and-slack-inbox#slack-inbox: the Slack section — mentions, days, weeks, the archive's months; the token never comes here. */
+	readSlackInbox(): Promise<import('./slack-inbox').SlackInboxView>;
+	/** The section opened (summaries of past days and of last week are made on the first opening) or closed. */
+	slackInboxOpened(open: boolean): Promise<void>;
+	/** `Refresh`: Slack is read again; the open day or week (or today) is summarized again. */
+	refreshSlackInbox(target: import('./slack-inbox').SlackInboxTarget | null): Promise<void>;
+	/** The open mention's thread, read again from Slack (≤ 20 messages around it). */
+	slackInboxThread(id: string): Promise<import('./slack-inbox').SlackInboxMessage[]>;
+	/** A month of the archive, read-only. */
+	slackInboxMonth(month: string): Promise<import('./slack-inbox').SlackMentionRow[]>;
+	slackInboxDone(id: string): Promise<void>;
+	slackInboxDismiss(id: string): Promise<void>;
+	/** spec/todo-and-slack-inbox#slack-inbox-to-todo: the to-do made and where it went. */
+	slackInboxTodo(id: string): Promise<import('./slack-inbox').SlackTodoRef>;
+	slackInboxUndoTodo(id: string): Promise<void>;
+	onSlackInbox(listener: (view: import('./slack-inbox').SlackInboxView) => void): () => void;
 	saveSettings(settings: AppSettings): Promise<SettingsSnapshot>;
 	/** spec/appearance#evolution-redesign: `Remember for …` of the in-place capsule and `Reset` of Customize per action — one action's agent; null
 	 *  inherits again. Main changes only that entry of the settings it holds. */
@@ -938,25 +1009,25 @@ export type DesktopBridge = {
 	onSurfaceFlush(listener: (request: { id: number; drafts: boolean }) => void): () => void;
 	surfaceFlushed(id: number): Promise<void>;
 	saveSurfaceLayout(layout: SurfaceLayout): Promise<void>;
-	pickAttachments(key: AttachmentOwner): Promise<PromptAttachment[]>;
+	pickAttachments(key: AttachmentHolder): Promise<PromptAttachment[]>;
 	createAttachment(key: TaskKey, input: AttachmentInput): Promise<PromptAttachment>;
 	/** spec/composer#paste: the image on the system clipboard as a prompt attachment, or null when the clipboard holds none. */
-	pasteAttachment(key: AttachmentOwner, name: string): Promise<PromptAttachment | null>;
+	pasteAttachment(key: AttachmentHolder, name: string): Promise<PromptAttachment | null>;
 	/** spec/composer#paste: files dropped from Finder or copied there and pasted; `[]` when none of them is a file on disk. */
-	attachDroppedFiles(key: AttachmentOwner, files: object[]): Promise<PromptAttachment[]>;
-	readAttachment(key: AttachmentOwner, id: string): Promise<AttachmentInput>;
+	attachDroppedFiles(key: AttachmentHolder, files: object[]): Promise<PromptAttachment[]>;
+	readAttachment(key: AttachmentHolder, id: string): Promise<AttachmentInput>;
 	/** spec/design-review#data: a design review's image (a kept screenshot or a copied design image) as a `data:` URL. */
 	readDesignImage(key: TaskKey, file: string): Promise<string>;
 	/** spec/composer#mentions: an attachment's record (name, kind, size), to show the pill of a draft token after a restart. */
-	readAttachmentInfo(key: AttachmentOwner, id: string): Promise<PromptAttachment>;
+	readAttachmentInfo(key: AttachmentHolder, id: string): Promise<PromptAttachment>;
 	/** spec/composer#mentions: attaches a snapshot summary of `source` (same project) to `key`'s next prompt. */
 	attachTaskSummary(key: TaskKey, source: TaskKey): Promise<PromptAttachment>;
 	/** spec/composer#agent-blocks: attaches an agent template of the library to `key`'s next prompt, as a role for a subagent. */
 	attachAgentTemplate(key: TaskKey, templateId: string): Promise<PromptAttachment>;
 	/** spec/chat#images: a small PNG of an image attachment for its tile, as a `data:` URL; rejects when the image is gone or changed. */
-	readAttachmentThumbnail(key: AttachmentOwner, id: string): Promise<string>;
+	readAttachmentThumbnail(key: AttachmentHolder, id: string): Promise<string>;
 	/** spec/chat#context-menu: the whole image attachment onto the system clipboard. */
-	copyAttachmentImage(key: AttachmentOwner, id: string): Promise<void>;
+	copyAttachmentImage(key: AttachmentHolder, id: string): Promise<void>;
 	readAttribution(key: TaskKey, fileId: string, range?: AttributionRange): Promise<Attribution>;
 	attachFile(key: TaskKey, fileId: string): Promise<PromptAttachment>;
 	openFileTerminal(key: TaskKey, fileId: string): Promise<TerminalInfo>;
@@ -1385,7 +1456,7 @@ export type DesktopBridge = {
 	readPullRequestUrl(key: TaskKey, scopeId: string): Promise<string>;
 	/** A file a device read on its own disk, into the owner's attachments on the working machine. */
 	uploadAttachment(
-		key: AttachmentOwner,
+		key: AttachmentHolder,
 		name: string,
 		bytes: Uint8Array,
 		image: boolean

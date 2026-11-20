@@ -1,4 +1,6 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { Attachments, SessionStore } from '@brigadir/persistence';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -7,8 +9,12 @@ import {
 	defaultAppSettings,
 	type AppSettings,
 	type BrigadirChatEvent,
+	attachmentToken,
+	projectToken,
+	taskToken,
 } from '@brigadir/core';
 import { BrigadirChats, type BrigadirChatDeps } from './brigadir-chats';
+import { TodoStore } from './todo-store';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -22,7 +28,7 @@ async function setup(over: Partial<BrigadirChatDeps> = {}) {
 		created: unknown[] = [],
 		opened: string[] = [],
 		notes: string[] = [];
-	const slackState = { bot: false, app: false, memberId: false, listening: false };
+	const slackState = { bot: false, app: false, memberId: false, listening: false, user: false };
 	const deps: BrigadirChatDeps = {
 		root,
 		mcp: {
@@ -70,6 +76,11 @@ async function setup(over: Partial<BrigadirChatDeps> = {}) {
 			},
 			connectApp: async () => {
 				slackState.app = true;
+			},
+			connectUser: async (token) => {
+				if (token === 'bad') throw new Error('invalid_auth');
+				slackState.user = true;
+				return { user: 'andy', team: 'acme', missing: token === 'few' ? ['search:read'] : [] };
 			},
 			state: () => slackState,
 		},
@@ -257,4 +268,88 @@ it('keeps archived chats apart and restores them', async () => {
 	expect(await test.chats.archivedChat(test.chat.id)).toBe(true);
 	await test.chats.unarchive(test.chat.id);
 	expect((await test.chats.list()).chats.map((chat) => chat.id)).toEqual([test.chat.id]);
+});
+
+it('sends attachments in their places and names task and project pills for the tools (spec/composer#chat-composer)', async () => {
+	const fixture = fileURLToPath(
+		new URL('../../../../packages/transport/fixtures/agent.mjs', import.meta.url)
+	);
+	const data = await mkdtemp(join(tmpdir(), 'brigadir-chat-data-'));
+	roots.push(data);
+	const store = await SessionStore.at(data),
+		assets = new Attachments(store),
+		wire = join(data, 'wire.jsonl');
+	const { chats, chat } = await setup({
+		root: join(store.root, 'assistant'),
+		attachments: (id, ids) => assets.resolve({ chat: 'brigadir', id }, ids),
+		projects: async () => [{ id: 'p1', name: 'b2c', path: store.root }],
+		adapter: { command: process.execPath, args: [fixture, 'normal', wire] },
+	});
+	const png =
+		'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+	const image = await assets.create(
+		{ chat: 'brigadir', id: chat.id },
+		{ kind: 'image', name: 'shot.png', mimeType: 'image/png', data: png }
+	);
+	const text = `why ${taskToken('t1')} in ${projectToken('p1')}? ${attachmentToken(image.id)} thanks`;
+	await chats.checkAttachments(chat.id, [image.id]);
+	await chats.send(chat.id, text, [image.id]);
+	chats.closeAll();
+	const state = await chats.read(chat.id);
+	expect(state.rows.find((row) => row.kind === 'prompt')).toMatchObject({
+		text,
+		attachments: [{ id: image.id, kind: 'image' }],
+	});
+	// The title reads names, not tokens.
+	expect(state.meta.title).toBe('why @ATT in @b2c? @shot.png thanks');
+	const blocks = (await readFile(wire, 'utf8'))
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line) as { event: string; params: unknown })
+		.find((line) => line.event === 'prompt-blocks')!.params as {
+		type: string;
+		text?: string;
+		data?: string;
+	}[];
+	expect(blocks.map((block) => block.type)).toEqual(['text', 'image', 'text']);
+	expect(blocks[0]!.text).toContain(
+		`why the task "ATT" (id t1, project "b2c") in the project "b2c" (folder ${JSON.stringify(store.root)})? `
+	);
+	expect(blocks[1]!.data).toBe(png);
+	expect(blocks[2]!.text).toBe(' thanks');
+	await expect(
+		chats.checkAttachments(chat.id, ['0b1c2d3e-0000-4000-8000-000000000009'])
+	).rejects.toThrow();
+});
+
+it('adds a to-do with a card and lists the lists; nothing while Todo is off (spec/todo-and-slack-inbox#todo-chat-tools)', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-todo-'));
+	roots.push(root);
+	const store = new TodoStore(root);
+	let on = true;
+	const test = await setup({
+		todo: {
+			enabled: () => on,
+			addItem: (input) => store.addItem(input),
+			lists: () => store.lists(),
+		},
+	});
+	expect(
+		await test.tool('todo_add', { title: 'Зібрати TestFlight', project: 'B2C', list: 'Release' })
+	).toBe('Added to Release (b2c).');
+	expect((await test.cards()).at(-1)).toMatchObject({
+		type: 'todo',
+		title: 'Зібрати TestFlight',
+		listName: 'Release',
+		project: 'b2c',
+	});
+	expect(await test.tool('todo_lists', { project: 'b2c' })).toBe(
+		'Release (b2c) — 0 of 1 done\n  - Зібрати TestFlight'
+	);
+	expect(await test.tool('todo_lists', { project: 'none' })).toBe('No to-do lists.');
+	await expect(test.tool('todo_add', { title: 'x', project: 'nope' })).rejects.toThrow(
+		'No project nope'
+	);
+	on = false;
+	await expect(test.tool('todo_add', { title: 'x' })).rejects.toThrow('Todo is off');
 });

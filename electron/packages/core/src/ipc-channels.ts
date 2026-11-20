@@ -36,16 +36,19 @@ import {
 import { isProjectView, isBoardColumn } from './board';
 import { isProjectMode } from './pr-board';
 import { isNoteId, isNoteText } from './notes';
+import { isTodoItem, isTodoItemId, isTodoItemPatch, isTodoListId, todoLimits } from './todo';
 import { isReviewPoint, isTaskReviewChoice } from './task-review';
 import { isScheduleDraft, isScheduleId } from './schedules';
 import { noteChatLimits } from './note-chat';
 import { brigadirChatLimits } from './brigadir-chat';
+import { isSlackInboxTarget, isSlackMentionId } from './slack-inbox';
 import type { TaskSheet } from './bridge';
 import { isLaunchInput } from './launch';
 import { isTaskSurface, isSurfaceDraft } from './surface';
 import { isSurfaceLayout } from './layout';
 import {
 	isAttachmentOwner,
+	isAttachmentHolder,
 	isAttachmentInput,
 	isAttachmentId,
 	isAttachmentIds,
@@ -181,6 +184,7 @@ export interface IpcLocalRow {
 export type IpcRow = IpcInvokeRow | IpcSubscribeRow | IpcLocalRow;
 
 const noArgs: IpcValidator = (a) => a.length === 0;
+const todoText = (value: unknown, max: number) => typeof value === 'string' && value.length <= max;
 /** Node's `path.isAbsolute` on POSIX: the working machine is a Mac today (spec/remote-access-and-mobile#architecture, terms). */
 const isAbsolutePath = (value: string) => value.startsWith('/');
 const signature = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 8000;
@@ -438,6 +442,137 @@ export const ipcTable = {
 		validate: (a) => a.length === 1 && isNoteId(a[0]),
 	},
 	onNotesChanged: { kind: 'subscribe', channel: 'notes:changed', class: 'remote' },
+	// spec/todo-and-slack-inbox#todo: the Todo section's lists and items.
+	todoLists: { kind: 'invoke', channel: 'todo:lists', class: 'remote', arity: 0, validate: noArgs },
+	createTodoList: {
+		kind: 'invoke',
+		channel: 'todo:create-list',
+		class: 'remote',
+		arity: 2,
+		validate: (a) =>
+			a.length === 2 && (a[0] === null || isId(a[0])) && todoText(a[1], todoLimits.name),
+	},
+	renameTodoList: {
+		kind: 'invoke',
+		channel: 'todo:rename-list',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTodoListId(a[0]) && todoText(a[1], todoLimits.name),
+	},
+	setTodoListProject: {
+		kind: 'invoke',
+		channel: 'todo:set-project',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTodoListId(a[0]) && (a[1] === null || isId(a[1])),
+	},
+	deleteTodoList: {
+		kind: 'invoke',
+		channel: 'todo:delete-list',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isTodoListId(a[0]),
+	},
+	addTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:add-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			todoText(a[1], todoLimits.title) &&
+			todoText(a[2], todoLimits.description),
+	},
+	updateTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:update-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 && isTodoListId(a[0]) && isTodoItemId(a[1]) && isTodoItemPatch(a[2]),
+	},
+	removeTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:remove-item',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTodoListId(a[0]) && isTodoItemId(a[1]),
+	},
+	restoreTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:restore-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			isTodoItem(a[1]) &&
+			Number.isSafeInteger(a[2]) &&
+			Number(a[2]) >= 0,
+	},
+	placeTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:place-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			isTodoItemId(a[1]) &&
+			(a[2] === null || isTodoItemId(a[2])),
+	},
+	stepTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:step-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 && isTodoListId(a[0]) && isTodoItemId(a[1]) && (a[2] === -1 || a[2] === 1),
+	},
+	moveTodoItemToList: {
+		kind: 'invoke',
+		channel: 'todo:move-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 && isTodoListId(a[0]) && isTodoItemId(a[1]) && isTodoListId(a[2]),
+	},
+	onTodoChanged: { kind: 'subscribe', channel: 'todo:changed', class: 'remote' },
+	todoListMenu: {
+		kind: 'invoke',
+		channel: 'todo:list-menu',
+		class: 'client',
+		arity: 1,
+		validate: (a) => a.length === 1 && isTodoListId(a[0]),
+	},
+	todoItemMenu: {
+		kind: 'invoke',
+		channel: 'todo:item-menu',
+		class: 'client',
+		arity: 2,
+		validate: (a) => a.length === 2 && a.every((value) => value === null || Number.isFinite(value)),
+	},
+	todoProjectMenu: {
+		kind: 'invoke',
+		channel: 'todo:project-menu',
+		class: 'client',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			[a[1], a[2]].every((value) => value === null || Number.isFinite(value)),
+	},
+	todoListPickMenu: {
+		kind: 'invoke',
+		channel: 'todo:pick-list-menu',
+		class: 'client',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			[a[1], a[2]].every((value) => value === null || Number.isFinite(value)),
+	},
 	readNoteChat: {
 		kind: 'invoke',
 		channel: 'notes:chat-read',
@@ -449,9 +584,10 @@ export const ipcTable = {
 		kind: 'invoke',
 		channel: 'notes:chat-send',
 		class: 'remote',
-		arity: 3,
+		arity: 4,
 		validate: (a) =>
-			a.length === 3 &&
+			a.length === 4 &&
+			isAttachmentIds(a[3]) &&
 			isNoteId(a[0]) &&
 			typeof a[1] === 'string' &&
 			a[1].trim().length > 0 &&
@@ -475,6 +611,27 @@ export const ipcTable = {
 		validate: (a) => a.length === 2 && isNoteId(a[0]) && Number.isSafeInteger(a[1]),
 	},
 	onNoteChatEvent: { kind: 'subscribe', channel: 'notes:chat-event', class: 'remote' },
+	// spec/composer#chat-composer: the note chat's `/` list from disk and a file of the note's project picked in its `@` menu.
+	readNoteChatSlashCatalog: {
+		kind: 'invoke',
+		channel: 'notes:chat-slash',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isNoteId(a[0]) && (a[1] === 'claude' || a[1] === 'codex'),
+	},
+	attachNoteChatFile: {
+		kind: 'invoke',
+		channel: 'notes:chat-attach-file',
+		class: 'remote',
+		arity: 2,
+		validate: (a) =>
+			a.length === 2 &&
+			isNoteId(a[0]) &&
+			typeof a[1] === 'string' &&
+			a[1].length > 0 &&
+			a[1].length <= 4096 &&
+			!a[1].includes('\0'),
+	},
 	// spec/settings-modules-and-onboarding#brigadir-chat: the Brigadir chats of the rail section, their cards and setups.
 	readBrigadirChats: {
 		kind: 'invoke',
@@ -501,13 +658,22 @@ export const ipcTable = {
 		kind: 'invoke',
 		channel: 'brigadir:send',
 		class: 'client',
-		arity: 2,
+		arity: 3,
 		validate: (a) =>
-			a.length === 2 &&
+			a.length === 3 &&
+			isAttachmentIds(a[2]) &&
 			isId(a[0]) &&
 			typeof a[1] === 'string' &&
 			a[1].trim().length > 0 &&
 			a[1].length <= brigadirChatLimits.message,
+	},
+	// spec/composer#chat-composer: the Brigadir chat's `/` list from disk, before its agent announces its own.
+	readBrigadirSlashCatalog: {
+		kind: 'invoke',
+		channel: 'brigadir:slash',
+		class: 'client',
+		arity: 0,
+		validate: noArgs,
 	},
 	stopBrigadirChat: {
 		kind: 'invoke',
@@ -2508,7 +2674,7 @@ export const ipcTable = {
 		channel: 'attachment:pick',
 		class: 'client',
 		arity: 1,
-		validate: (a) => a.length === 1 && isAttachmentOwner(a[0]),
+		validate: (a) => a.length === 1 && isAttachmentHolder(a[0]),
 	},
 	createAttachment: {
 		kind: 'invoke',
@@ -2524,7 +2690,7 @@ export const ipcTable = {
 		arity: 2,
 		validate: (a) =>
 			a.length === 2 &&
-			isAttachmentOwner(a[0]) &&
+			isAttachmentHolder(a[0]) &&
 			typeof a[1] === 'string' &&
 			a[1].trim().length > 0 &&
 			a[1].length <= 200,
@@ -2548,7 +2714,7 @@ export const ipcTable = {
 		},
 		validate: (a) =>
 			a.length === 2 &&
-			isAttachmentOwner(a[0]) &&
+			isAttachmentHolder(a[0]) &&
 			Array.isArray(a[1]) &&
 			a[1].length > 0 &&
 			a[1].length <= 10 &&
@@ -2566,7 +2732,7 @@ export const ipcTable = {
 		channel: 'attachment:read',
 		class: 'remote',
 		arity: 2,
-		validate: (a) => a.length === 2 && isAttachmentOwner(a[0]) && isAttachmentId(a[1]),
+		validate: (a) => a.length === 2 && isAttachmentHolder(a[0]) && isAttachmentId(a[1]),
 	},
 	// spec/design-review#data: a kept screenshot or a copied design image of a task, for the design review card.
 	readDesignImage: {
@@ -2582,7 +2748,7 @@ export const ipcTable = {
 		channel: 'attachment:info',
 		class: 'remote',
 		arity: 2,
-		validate: (a) => a.length === 2 && isAttachmentOwner(a[0]) && isAttachmentId(a[1]),
+		validate: (a) => a.length === 2 && isAttachmentHolder(a[0]) && isAttachmentId(a[1]),
 	},
 	attachTaskSummary: {
 		kind: 'invoke',
@@ -2608,14 +2774,14 @@ export const ipcTable = {
 		channel: 'attachment:thumbnail',
 		class: 'remote',
 		arity: 2,
-		validate: (a) => a.length === 2 && isAttachmentOwner(a[0]) && isAttachmentId(a[1]),
+		validate: (a) => a.length === 2 && isAttachmentHolder(a[0]) && isAttachmentId(a[1]),
 	},
 	copyAttachmentImage: {
 		kind: 'invoke',
 		channel: 'attachment:copy-image',
 		class: 'client',
 		arity: 2,
-		validate: (a) => a.length === 2 && isAttachmentOwner(a[0]) && isAttachmentId(a[1]),
+		validate: (a) => a.length === 2 && isAttachmentHolder(a[0]) && isAttachmentId(a[1]),
 	},
 	browserCommand: {
 		kind: 'invoke',
@@ -3558,6 +3724,88 @@ export const ipcTable = {
 		validate: noArgs,
 	},
 	onSlack: { kind: 'subscribe', channel: 'slack:changed', class: 'remote' },
+	// spec/todo-and-slack-inbox#slack-inbox-source: the person's own token of the Slack section; goes one way, into main.
+	connectSlackUser: {
+		kind: 'invoke',
+		channel: 'slack:user-connect',
+		class: 'remote',
+		remote: 'forbidden',
+		arity: 1,
+		validate: (a) => a.length === 1 && typeof a[0] === 'string' && a[0].length <= 256,
+	},
+	disconnectSlackUser: {
+		kind: 'invoke',
+		channel: 'slack:user-disconnect',
+		class: 'remote',
+		remote: 'forbidden',
+		arity: 0,
+		validate: noArgs,
+	},
+	// spec/todo-and-slack-inbox#slack-inbox: the Slack section — its list, the open mention's thread, a month of the archive, its actions.
+	readSlackInbox: {
+		kind: 'invoke',
+		channel: 'slack-inbox:read',
+		class: 'remote',
+		arity: 0,
+		validate: noArgs,
+	},
+	slackInboxOpened: {
+		kind: 'invoke',
+		channel: 'slack-inbox:opened',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && typeof a[0] === 'boolean',
+	},
+	refreshSlackInbox: {
+		kind: 'invoke',
+		channel: 'slack-inbox:refresh',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && (a[0] === null || isSlackInboxTarget(a[0])),
+	},
+	slackInboxThread: {
+		kind: 'invoke',
+		channel: 'slack-inbox:thread',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	slackInboxMonth: {
+		kind: 'invoke',
+		channel: 'slack-inbox:month',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && typeof a[0] === 'string' && /^\d{4}-\d{2}$/.test(a[0]),
+	},
+	slackInboxDone: {
+		kind: 'invoke',
+		channel: 'slack-inbox:done',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	slackInboxDismiss: {
+		kind: 'invoke',
+		channel: 'slack-inbox:dismiss',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	slackInboxTodo: {
+		kind: 'invoke',
+		channel: 'slack-inbox:todo',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	slackInboxUndoTodo: {
+		kind: 'invoke',
+		channel: 'slack-inbox:untodo',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	onSlackInbox: { kind: 'subscribe', channel: 'slack-inbox:changed', class: 'remote' },
 	// spec/remote-access-and-mobile#architecture, spec/remote-access-and-mobile#module-and-settings: a remote client saves settings but never switches the `remoteAccess` module.
 	saveSettings: {
 		kind: 'invoke',
@@ -3967,7 +4215,7 @@ export const ipcTable = {
 		arity: 4,
 		validate: (a) =>
 			a.length === 4 &&
-			isAttachmentOwner(a[0]) &&
+			isAttachmentHolder(a[0]) &&
 			typeof a[1] === 'string' &&
 			a[1].trim().length > 0 &&
 			a[1].length <= 200 &&

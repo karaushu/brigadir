@@ -13,7 +13,8 @@ import {
 import { Button, IconButton } from './ui/Controls';
 import { Glyph } from './ui/Glyph';
 import { TextArea } from './ui/Input';
-import { ChatComposer, type ChatComposerHandle } from './ChatComposer';
+import { ChatComposer, useChatSlash, type ChatComposerHandle } from './ChatComposer';
+import { PromptText } from './ui/PromptText';
 import { ComposerOptions, type CapsuleModelGroup } from './ComposerOptions';
 import { MarkdownStill, markdown } from './MarkdownBlock';
 import { noteLineLinks } from './note-markdown';
@@ -265,11 +266,34 @@ export function NoteChat({
 	useEffect(() => {
 		log.current?.scrollTo({ top: log.current.scrollHeight });
 	}, [rows?.length]);
-	const send = () => {
+	// spec/composer#chat-composer: `/` lists the agent's commands (from disk until it announces them); `@` the files and tasks of the note's
+	// project, or every project's tasks without one. Attachments live in `notes/<id>/`.
+	const events = useMemo(
+		() => (rows ?? []).flatMap((row) => (row.kind === 'event' ? [row] : [])),
+		[rows]
+	);
+	const slash = useChatSlash(
+		`${note.id}:${current.provider}`,
+		() => window.brigadir.readNoteChatSlashCatalog(note.id, current.provider),
+		events,
+		locale
+	);
+	const holder = useMemo(() => ({ chat: 'note' as const, id: note.id }), [note.id]);
+	const mentions = useMemo(
+		() => ({
+			tasksOf: note.project,
+			projects: false,
+			filesOf: note.project,
+			attachFile: (path: string) => window.brigadir.attachNoteChatFile(note.id, path),
+			taskWay: 'Goes to the agent as a task summary: state, branch, requests and changes.' as const,
+		}),
+		[note.id, note.project]
+	);
+	const send = (attachments: string[]) => {
 		const message = draft.trim();
 		if (!message || busy) return;
 		setDraft('');
-		void window.brigadir.sendNoteChat(note.id, message, current).catch(() => {
+		void window.brigadir.sendNoteChat(note.id, message, current, attachments).catch(() => {
 			setDraft(message);
 			toastError(t(locale, 'Could not send the message.'));
 		});
@@ -307,7 +331,18 @@ export function NoteChat({
 					}}>
 					{all.map((turn, index) => (
 						<div key={turn.prompt?.seq ?? `p${index}`} className={s.turn}>
-							{turn.prompt && <div className={s.user}>{turn.prompt.text}</div>}
+							{turn.prompt && (
+								<div className={s.user}>
+									<PromptText
+										owner={holder}
+										locale={locale}
+										text={turn.prompt.text}
+										rowId={`note/${note.id}/${turn.prompt.seq}`}
+										attachments={turn.prompt.attachments ?? []}
+										commands={slash.commands}
+									/>
+								</div>
+							)}
 							{turn.parts.map((part) =>
 								part.kind === 'text' ? (
 									<div key={part.key} className={s.text}>
@@ -382,6 +417,9 @@ export function NoteChat({
 					busy={busy}
 					onSend={send}
 					onStop={() => void window.brigadir.stopNoteChat(note.id)}
+					holder={holder}
+					mentions={mentions}
+					slash={slash}
 					context={
 						changed && (
 							<div className={s.context}>

@@ -16,6 +16,8 @@ import {
 	isBrigadirSetupLink,
 	isRecord,
 	mcpCall,
+	mentionNamesText,
+	promptDisplayText,
 	missingSlackScopes,
 	quickSlackAllows,
 	selectOption,
@@ -24,6 +26,8 @@ import {
 	type AgentEvent,
 	type AgentOption,
 	type AppSettings,
+	type AttachmentInput,
+	type PromptAttachment,
 	type BrigadirCard,
 	type BrigadirChatChoice,
 	type BrigadirChatEntry,
@@ -38,6 +42,9 @@ import {
 	type Locale,
 	type PermissionRequest,
 	type TaskKey,
+	type TodoList,
+	moduleOffMessages,
+	todoListsText,
 } from '@brigadir/core';
 
 /** spec/settings-modules-and-onboarding#brigadir-chat: what the chat needs from the rest of main; injected so a test runs without Electron. */
@@ -78,6 +85,18 @@ export type BrigadirChatDeps = {
 	openTask(task: TaskKey): void;
 	/** Saves a note in Notes; its id. */
 	createNote(project: string | null, text: string): Promise<string>;
+	/** spec/todo-and-slack-inbox#todo-chat-tools: the Todo module's lists while it is on; absent — no to-do tools. */
+	todo?: {
+		enabled(): boolean;
+		addItem(input: {
+			project: string | null;
+			list: string | null;
+			title: string;
+			description: string;
+			source: null;
+		}): Promise<{ listId: string; listName: string; project: string | null; itemId: string }>;
+		lists(): Promise<TodoList[]>;
+	};
 	openExternal(url: string): void;
 	slack: {
 		/** Seals a bot token after `auth.test`; the bot, team, granted scopes and app id when Slack gives them. */
@@ -85,8 +104,24 @@ export type BrigadirChatDeps = {
 			token: string
 		): Promise<{ bot: string; team: string; scopes: string | null; appId: string | null }>;
 		connectApp(token: string): Promise<void>;
-		state(): { bot: boolean; app: boolean; memberId: boolean; listening: boolean };
+		/** spec/todo-and-slack-inbox#slack-inbox-source: the person's own token of the Slack section; who it is and the user scopes it lacks. */
+		connectUser(token: string): Promise<{ user: string; team: string; missing: string[] }>;
+		state(): {
+			bot: boolean;
+			app: boolean;
+			memberId: boolean;
+			listening: boolean;
+			user: boolean;
+		};
 	};
+	/**
+	 * spec/composer#chat-composer: the chat's own attachments by id, in that order, each read and checked (`Attachments` of the chat's folder);
+	 * the limits of a prompt hold. Without it a message carries no attachments.
+	 */
+	attachments?(
+		chat: string,
+		ids: string[]
+	): Promise<{ attachment: PromptAttachment; input: AttachmentInput }[]>;
 	/** A short title for a chat from its first message; null — keep the first line. */
 	title?(text: string): Promise<string | null>;
 	adapter?: AdapterCommand | undefined;
@@ -118,6 +153,13 @@ type Setups = Partial<
 	Record<BrigadirSetupKind, { chat: string | null; name?: string; appId?: string | null }>
 >;
 const writeKinds = new Set(['allow_once', 'allow_always']);
+/** spec/settings-modules-and-onboarding#brigadir-chat-session: the chat works in the open project's main tree, else the first project's. */
+export function chatFolder(
+	projects: readonly { id: string; path: string }[],
+	open: string | null
+): string | null {
+	return (projects.find((item) => item.id === open) ?? projects[0])?.path ?? null;
+}
 const sameChoice = (a: BrigadirChatChoice | null, b: BrigadirChatChoice) =>
 	!!a && a.provider === b.provider && a.model === b.model;
 
@@ -263,17 +305,24 @@ export class BrigadirChats {
 		return this.append(chat, { kind: 'card', card });
 	}
 	// ---------- a turn ----------
-	async send(id: string, text: string) {
+	async send(id: string, text: string, attachmentIds: string[] = []) {
 		const live = this.live.get(id);
 		if (live?.busy) throw new Error('Brigadir is still answering');
 		let meta = await this.meta(id);
 		if (!meta) throw new Error('This chat is gone.');
 		const message = text.trim();
 		if (!message) return;
+		const attachments = attachmentIds.length
+			? (await this.readAttachments(id, attachmentIds)).map((item) => item.attachment)
+			: [];
 		if (!meta.title) {
-			meta = { ...meta, title: brigadirChatTitle(message) };
+			// spec/composer#chat-composer: the title reads names, not tokens.
+			const projects = await this.deps.projects().catch(() => []),
+				{ tasks } = await this.deps.facts().catch(() => ({ tasks: [] })),
+				shown = promptDisplayText(message, attachments, tasks, [], projects);
+			meta = { ...meta, title: brigadirChatTitle(shown) };
 			void this.deps
-				.title?.(message)
+				.title?.(shown)
 				.then(async (title) => {
 					if (title) await this.rename(id, title);
 				})
@@ -281,9 +330,25 @@ export class BrigadirChats {
 		}
 		await this.writeMeta({ ...meta, updatedAt: new Date().toISOString() });
 		void this.broadcastList();
-		await this.turn(id, message);
+		await this.turn(id, message, attachments);
 	}
-	private async turn(id: string, text: string) {
+	private async readAttachments(chat: string, ids: string[]) {
+		if (!this.deps.attachments) throw new Error('This chat takes no attachments.');
+		return this.deps.attachments(chat, ids);
+	}
+	/** Throws when a message's attachments are gone, changed or over the limits: the window keeps its draft. */
+	async checkAttachments(chat: string, ids: string[]) {
+		if (ids.length) await this.readAttachments(chat, ids);
+	}
+	/** spec/composer#chat-composer: where the `/` list is read before the agent starts — the agent the next message runs and its working folder. */
+	async slashPlace(): Promise<{ provider: 'claude' | 'codex'; folder: string }> {
+		const projects = await this.deps.projects().catch(() => []);
+		return {
+			provider: this.deps.choice().provider,
+			folder: chatFolder(projects, this.deps.openProject()) ?? this.deps.root,
+		};
+	}
+	private async turn(id: string, text: string, attachments: PromptAttachment[] = []) {
 		let chat = this.live.get(id);
 		if (!chat) {
 			chat = {
@@ -305,29 +370,56 @@ export class BrigadirChats {
 		const choice = this.deps.choice();
 		try {
 			const rows = await this.rows(id);
-			await this.append(id, { kind: 'prompt', text, choice });
+			await this.append(id, {
+				kind: 'prompt',
+				text,
+				choice,
+				...(attachments.length ? { attachments } : {}),
+			});
 			const fresh = !chat.transport || !sameChoice(chat.choice, choice);
 			const projects = await this.deps.projects();
 			if (fresh) await this.start(chat, choice, rows, projects);
 			const facts = await this.deps.facts().catch(() => ({ text: '', tasks: [] }));
+			// spec/composer#chat-composer: task and project pills become their names and ids; attachments go as blocks where their pills stand.
+			const said = mentionNamesText(
+				text,
+				facts.tasks.map((task) => ({
+					...task,
+					project: projects.find((item) => item.id === task.projectId)?.name ?? task.projectId,
+				})),
+				projects
+			);
+			const inputs = attachments.length
+				? (
+						await this.readAttachments(
+							id,
+							attachments.map((item) => item.id)
+						)
+					).map((item) => ({ ...item.input, id: item.attachment.id }))
+				: [];
 			chat.stopped = false;
 			chat.answering = true;
 			try {
-				await chat.transport!.send({
-					kind: 'prompt',
-					text: fresh
-						? brigadirChatPrompt({
-								text,
-								language: /[а-яіїєґ]/i.test(text) ? 'uk' : this.deps.locale(),
-								today: this.deps.today(),
-								project: projects.find((item) => item.id === this.deps.openProject())?.name ?? null,
-								projects: projects.map(({ name, path }) => ({ name, path })),
-								facts: facts.text,
-								settings: settingsRegistryText(this.deps.settings()),
-								setups: await this.unfinishedSetups(),
-							})
-						: brigadirChatFollowUp({ text, facts: facts.text }),
-				});
+				await chat.transport!.send(
+					{
+						kind: 'prompt',
+						text: fresh
+							? brigadirChatPrompt({
+									text: said,
+									language: /[а-яіїєґ]/i.test(text) ? 'uk' : this.deps.locale(),
+									today: this.deps.today(),
+									project:
+										projects.find((item) => item.id === this.deps.openProject())?.name ?? null,
+									projects: projects.map(({ name, path }) => ({ name, path })),
+									facts: facts.text,
+									settings: settingsRegistryText(this.deps.settings()),
+									setups: await this.unfinishedSetups(),
+									todo: this.deps.todo?.enabled() ?? false,
+								})
+							: brigadirChatFollowUp({ text: said, facts: facts.text }),
+					},
+					inputs
+				);
 			} finally {
 				chat.answering = false;
 			}
@@ -356,8 +448,7 @@ export class BrigadirChats {
 		chat.transport?.close();
 		chat.transport = null;
 		chat.controller = new AbortController();
-		const open = projects.find((item) => item.id === this.deps.openProject()) ?? projects[0];
-		const cwd = open?.path ?? this.deps.root;
+		const cwd = chatFolder(projects, this.deps.openProject()) ?? this.deps.root;
 		await mkdir(this.deps.root, { recursive: true, mode: 0o700 });
 		// After a restart the same provider and model go on with the journal's session.
 		const last = rows.findLast((row) => row.kind === 'prompt'),
@@ -408,8 +499,9 @@ export class BrigadirChats {
 	private event(chat: Live, event: AgentEvent) {
 		if (event.kind === 'session.started' || event.kind === 'options.changed')
 			chat.options = event.options;
-		// A resumed session may replay its history on load; only the answer to our message is the chat's.
-		if (event.kind === 'session.started' || chat.answering)
+		// A resumed session may replay its history on load; only the answer to our message is the chat's. The agent's commands
+		// may come before the first answer; the `/` menu reads them (spec/composer#chat-composer).
+		if (event.kind === 'session.started' || event.kind === 'commands.changed' || chat.answering)
 			void this.append(chat.id, { kind: 'event', event });
 	}
 	/** spec/settings-modules-and-onboarding#brigadir-chat-session: reads and commands that read; every edit and every other command is declined. */
@@ -534,6 +626,15 @@ export class BrigadirChats {
 				);
 			case 'unwatch':
 				return this.unwatch(chat, str('task') ? await this.taskOf(str('task')) : null);
+			case 'todo_add':
+				return this.todoAdd(chat, {
+					title: str('title'),
+					description: str('description'),
+					project: str('project') || null,
+					list: str('list') || null,
+				});
+			case 'todo_lists':
+				return this.todoLists(str('project') || null);
 			default:
 				throw new Error(`Unknown tool ${method}`);
 		}
@@ -558,6 +659,58 @@ export class BrigadirChats {
 			project,
 		});
 		return { note, saved: true };
+	}
+	// ---------- to-dos ----------
+	private todoStore() {
+		const todo = this.deps.todo;
+		if (!todo?.enabled()) throw new Error(moduleOffMessages.todo);
+		return todo;
+	}
+	/** A project by id or name (any case); `none` and null — No project. */
+	private async projectOf(project: string | null) {
+		if (!project || project.trim().toLowerCase() === 'none') return null;
+		const found = (await this.deps.projects()).find(
+			(item) => item.id === project || item.name.toLowerCase() === project.trim().toLowerCase()
+		);
+		if (!found) throw new Error(`No project ${project}.`);
+		return found;
+	}
+	private async todoAdd(
+		chat: string,
+		input: { title: string; description: string; project: string | null; list: string | null }
+	) {
+		const todo = this.todoStore();
+		if (!input.title.trim()) throw new Error('title is empty.');
+		const project = await this.projectOf(input.project);
+		const added = await todo.addItem({
+			project: project?.id ?? null,
+			list: input.list,
+			title: input.title,
+			description: input.description,
+			source: null,
+		});
+		await this.card(chat, {
+			type: 'todo',
+			id: randomUUID(),
+			list: added.listId,
+			item: added.itemId,
+			title: input.title.trim(),
+			listName: added.listName,
+			project: project?.name ?? null,
+		});
+		return `Added to ${added.listName || 'Untitled list'} (${project?.name ?? 'No project'}).`;
+	}
+	private async todoLists(project: string | null) {
+		const todo = this.todoStore();
+		const projects = await this.deps.projects();
+		const only = project === null ? undefined : ((await this.projectOf(project))?.id ?? null);
+		const lists = (await todo.lists()).filter(
+			(list) => only === undefined || list.project === only
+		);
+		return todoListsText(
+			lists,
+			(id) => projects.find((item) => item.id === id)?.name ?? 'No project'
+		);
 	}
 	private async readWatches(): Promise<Watch[]> {
 		const doc = await readDocument(await safePath(this.deps.root, 'watches.json')).catch(
@@ -812,6 +965,9 @@ export class BrigadirChats {
 			state.bot && !state.app
 				? "Next: tell them to open the app's Basic Information ▸ App-Level Tokens, generate one with connections:write, then ask for it with secret_request kind slackAppToken."
 				: '',
+			state.bot && !state.user
+				? "For the Slack section (the person's own mentions and day summaries): the app also needs its User OAuth Token. Tell them to open the app's OAuth & Permissions page, check that User Token Scopes list channels:history, groups:history, im:history, mpim:history, users:read, usergroups:read, search:read (an app made before needs them added and Reinstall to Workspace), then ask for the User OAuth Token (xoxp-…) with secret_request kind slackUserToken. Only when they want the section."
+				: '',
 			!state.memberId
 				? 'Last: their member ID (Profile ▸ ⋯ ▸ Copy member ID, starts with U) — ask them to paste it in the chat (it is not a secret) and save it with settings_set key slack.memberId.'
 				: '',
@@ -874,6 +1030,28 @@ export class BrigadirChats {
 					return missing.length
 						? `Connected as @${bot.bot} in ${bot.team}, but the token lacks scopes: ${missing.join(', ')}. Tell the person to add them on the app's OAuth & Permissions page (the card has the link) and Reinstall to Workspace, then paste the new token: call secret_request again.`
 						: `Connected as @${bot.bot} in ${bot.team}.${bot.appId ? ` The app's pages: https://api.slack.com/apps/${bot.appId}/general` : ''}`;
+				}
+				if (kind === 'slackUserToken') {
+					const account = await this.deps.slack.connectUser(value.trim());
+					const setups = await this.readSetups();
+					const appId = setups.slack?.appId,
+						link = appId
+							? `https://api.slack.com/apps/${appId}/oauth`
+							: 'https://api.slack.com/apps';
+					await this.card(
+						chat,
+						account.missing.length
+							? {
+									...card,
+									state: 'scopes',
+									result: `${account.user} · ${account.team} · missing ${account.missing.join(', ')}`,
+									link,
+								}
+							: { ...card, state: 'connected', result: `${account.user} · ${account.team}` }
+					);
+					return account.missing.length
+						? `Connected as ${account.user} in ${account.team}, but the token lacks user scopes: ${account.missing.join(', ')}. Tell the person to add them under User Token Scopes on the app's OAuth & Permissions page (the card has the link) and Reinstall to Workspace, then paste the new User OAuth Token: call secret_request again.`
+						: `Connected as ${account.user} in ${account.team}. The Slack section now shows their mentions; Socket Mode brings new ones while the app-level token is connected.`;
 				}
 				await this.deps.slack.connectApp(value.trim());
 				await this.card(chat, { ...card, state: 'connected', result: 'Listening for mentions' });

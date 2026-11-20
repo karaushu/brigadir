@@ -16,18 +16,28 @@ export function useSlashCatalog(
 	request: SlashCatalogRequest | null,
 	opened: boolean
 ): SlashCatalog | null {
+	return useSlashCatalogFrom(
+		request ? JSON.stringify(request) : null,
+		() => window.brigadir.readSlashCatalog(request!),
+		opened
+	);
+}
+/** The same for any reader of the catalog (spec/composer#chat-composer: a chat that is not a task); `key` changes when the answer would. */
+export function useSlashCatalogFrom(
+	key: string | null,
+	read: () => Promise<SlashCatalog>,
+	opened: boolean
+): SlashCatalog | null {
 	const [catalog, setCatalog] = useState<SlashCatalog | null>(null),
-		key = request ? JSON.stringify(request) : null,
-		latest = useRef(request);
-	latest.current = request;
+		latest = useRef(read);
+	latest.current = read;
 	useEffect(() => {
 		setCatalog(null);
 	}, [key]);
 	useEffect(() => {
-		const asked = latest.current;
-		if (!asked || key === null) return;
+		if (key === null) return;
 		let alive = true;
-		void window.brigadir.readSlashCatalog(asked).then(
+		void latest.current().then(
 			(value) => {
 				if (alive) setCatalog(value);
 			},

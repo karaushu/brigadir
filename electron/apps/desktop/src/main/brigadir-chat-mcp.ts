@@ -18,7 +18,9 @@ export class BrigadirChatMcp {
 	private readonly chats = new Map<string, { token: string; call: McpCall }>();
 	constructor(
 		private socketPath: string,
-		private readonly relay: string
+		private readonly relay: string,
+		/** spec/settings-modules-and-onboarding#modules: the modules on now; a switch re-lists the tools. */
+		private readonly modules?: Parameters<typeof serveBrigadirChat>[2]
 	) {}
 	private start() {
 		return (this.ready ??= (async () => {
@@ -69,7 +71,7 @@ export class BrigadirChatMcp {
 				throw new Error('Invalid handshake');
 			authed = true;
 			clearTimeout(timer);
-			peer.handOff(serveBrigadirChat(socket, chat.call));
+			peer.handOff(serveBrigadirChat(socket, chat.call, this.modules));
 			return { protocolVersion: 1 };
 		});
 	}

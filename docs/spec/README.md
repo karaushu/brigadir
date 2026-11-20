@@ -15,6 +15,8 @@ today, one file per area. Start with [Overview](overview.md).
   tasks from the main tree.
 - [Sidebar](sidebar.md): layout, project groups and task rows, state icons and the unread dot, status bar chips,
   repo/scope section, filters, done-task rows, crew card rows, width, section rail and opening the last task.
+- [Todo and the Slack inbox](todo-and-slack-inbox.md): to-do lists by project, items with folding descriptions,
+  the Slack section with mentions, what each wants, day and week summaries, `Add to Todo` and the monthly archive.
 
 ## Task window
 

@@ -1,0 +1,306 @@
+/* spec/todo-and-slack-inbox#todo-entry: the Todo screen — a 720 px column under the title strip. */
+.screen {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1;
+}
+.title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.title > svg {
+	flex: none;
+	color: var(--fg2);
+}
+.name {
+	all: unset;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	border-radius: 5px;
+	padding: 1px 4px;
+	margin: 0 -4px;
+	-webkit-app-region: no-drag;
+}
+button.name:hover {
+	background: var(--tint);
+}
+button.name:focus-visible {
+	box-shadow: 0 0 0 2px var(--accent);
+}
+.name[data-untitled] {
+	color: var(--fg2);
+}
+.nameInput {
+	all: unset;
+	min-width: 120px;
+	width: 260px;
+	padding: 1px 4px;
+	margin: 0 -4px;
+	border-radius: 5px;
+	background: var(--field);
+	box-shadow: inset 0 0 0 1px var(--accent);
+	font-weight: 600;
+	-webkit-app-region: no-drag;
+}
+/* The project chip sits after the name in 11 px regular, as the task header's chips do. */
+.chip {
+	display: inline-flex;
+	flex: none;
+	margin-left: 6px;
+	font-size: var(--text-11);
+	font-weight: 400;
+}
+.scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	display: flex;
+	justify-content: center;
+}
+.column {
+	width: min(720px, calc(100% - 48px));
+	padding: 22px 0 40px;
+}
+/* `Add a to-do`: a field on the tint, the plus before it and ↩ after it. */
+.add {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	height: 38px;
+	padding: 0 12px;
+	margin: 0 0 10px;
+	border-radius: 9px;
+	background: var(--tint);
+	color: var(--fg3);
+}
+.add:focus-within {
+	box-shadow: inset 0 0 0 1px var(--accent);
+}
+.addInput {
+	all: unset;
+	flex: 1;
+	min-width: 0;
+	font-size: var(--text-13);
+	color: var(--fg);
+}
+.addInput::placeholder {
+	color: var(--fg3);
+}
+.enter {
+	font: inherit;
+	font-size: var(--text-11);
+	color: var(--fg3);
+	opacity: 0;
+	transition: opacity var(--motion-fast) var(--motion-ease);
+}
+.add:focus-within .enter {
+	opacity: 1;
+}
+.items {
+	display: flex;
+	flex-direction: column;
+	outline: none;
+}
+/* A to-do: the whole row hovers and is selected (rule 15); the handle and «…» come with the hover. */
+.item {
+	position: relative;
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	padding: 8px 12px 8px 30px;
+	border-radius: 8px;
+	transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.item:hover {
+	background: var(--hover);
+}
+.item[data-selected] {
+	background: var(--sel);
+}
+.item[data-editing] {
+	background: transparent;
+	box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.item > input {
+	margin-top: 1px;
+}
+/* The drop line of a drag, above or below the row. */
+.item[data-drop]::before {
+	content: '';
+	position: absolute;
+	left: 30px;
+	right: 12px;
+	height: 2px;
+	border-radius: 1px;
+	background: var(--accent);
+}
+.item[data-drop='before']::before {
+	top: -1px;
+}
+.item[data-drop='after']::before {
+	bottom: -1px;
+}
+.handle {
+	position: absolute;
+	left: 8px;
+	top: 11px;
+	display: none;
+	color: var(--fg3);
+	cursor: grab;
+}
+.item:hover .handle {
+	display: inline-flex;
+}
+.body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+.titleButton {
+	all: unset;
+	align-self: flex-start;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 18px;
+	max-width: 100%;
+	font-size: var(--text-13);
+	line-height: 18px;
+	color: var(--fg);
+	cursor: default;
+}
+.itemTitle {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.item[data-done] .itemTitle {
+	color: var(--fg3);
+	text-decoration: line-through;
+}
+.chevron {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg3);
+	transform: rotate(-90deg);
+	transition: transform var(--motion-travel) var(--motion-ease);
+}
+.chevron[data-open='true'] {
+	transform: none;
+}
+/* The row's hover is the title's too (rule 15); the chevron darkens under the pointer. */
+.titleButton:hover {
+	background: none;
+}
+.titleButton:hover .chevron {
+	color: var(--fg);
+}
+.mini {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg3);
+}
+/* The description under the title, folding with the disclosure motion. */
+.disclosure {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows var(--motion-travel) var(--motion-ease),
+		opacity var(--motion-enter-time) var(--motion-ease);
+}
+.disclosure[data-open='true'] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+}
+.disclosure > div {
+	min-height: 0;
+	overflow: hidden;
+}
+.description {
+	padding-top: 4px;
+	font-size: var(--text-12-5);
+	line-height: 19px;
+	color: var(--fg2);
+}
+.description :global(p) {
+	margin: 0;
+}
+.description :global(p + p),
+.description :global(ul),
+.description :global(ol) {
+	margin-top: 4px;
+}
+.source {
+	display: flex;
+	padding-top: 6px;
+}
+.more {
+	flex: none;
+	margin: -3px -6px -3px auto;
+	opacity: 0;
+	transition: opacity var(--motion-fast) var(--motion-ease);
+}
+.item:hover .more,
+.more:focus-within {
+	opacity: 1;
+}
+/* `Done · N`: the done items under the open ones, folded. */
+.doneHead {
+	all: unset;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 32px;
+	padding: 0 12px;
+	margin-top: 6px;
+	border-radius: 8px;
+	font-size: var(--text-12);
+	font-weight: 600;
+	color: var(--fg2);
+	transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.doneHead:hover {
+	background: var(--hover);
+	color: var(--fg);
+}
+.doneHead .chevron {
+	color: inherit;
+}
+/* Editing in place: the title and the description on the tint, the row's accent ring. */
+.editor {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.editTitle {
+	all: unset;
+	font-size: var(--text-13);
+	line-height: 18px;
+	font-weight: 500;
+	color: var(--fg);
+}
+.editDescription {
+	all: unset;
+	box-sizing: border-box;
+	display: block;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	min-height: 19px;
+	padding: 6px 8px;
+	border-radius: 6px;
+	background: var(--tint);
+	font-size: var(--text-12-5);
+	line-height: 19px;
+	color: var(--fg2);
+}
+.editDescription::placeholder {
+	color: var(--fg3);
+}

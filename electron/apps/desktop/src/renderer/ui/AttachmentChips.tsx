@@ -9,6 +9,7 @@ import {
 	attachmentLines,
 	attachmentSize,
 	type AgentTask,
+	type AttachmentHolder,
 	type TaskKey,
 	type Locale,
 	type PromptAttachment,
@@ -25,7 +26,9 @@ import styles from './AttachmentChips.module.css';
  * message's own spacing). The queue keeps compact chips. Images open the window-wide viewer, text the document sheet. */
 /** spec/chat#code-pills: a pill of lines opens its file in the task's editor with the lines selected; false leaves it to the sheet (the old
  *  side of a diff, a file that is gone or not found once, a sheet's draft with no task yet). */
-async function openLines(owner: TaskKey, item: PromptAttachment) {
+async function openLines(holder: AttachmentHolder, item: PromptAttachment) {
+	if ('chat' in holder) return false;
+	const owner: TaskKey = holder;
 	const lines = attachmentLines(item),
 		task = useWorkspace
 			.getState()
@@ -48,7 +51,7 @@ async function openLines(owner: TaskKey, item: PromptAttachment) {
 }
 /** Opening an attachment: an image in the window-wide viewer (with the message's other images), text in the document sheet. */
 export function useAttachmentPreview(
-	task: TaskKey,
+	task: AttachmentHolder,
 	locale: Locale,
 	attachments: readonly PromptAttachment[]
 ) {
@@ -123,7 +126,7 @@ export function AttachmentChips({
 	spaced = false,
 	description,
 }: {
-	task: TaskKey;
+	task: AttachmentHolder;
 	locale: Locale;
 	attachments: PromptAttachment[];
 	onRemove?: (id: string) => void;
@@ -217,7 +220,7 @@ function AttachmentTile({
 	open,
 	remove,
 }: {
-	task: TaskKey;
+	task: AttachmentHolder;
 	locale: Locale;
 	item: PromptAttachment;
 	open(): void;

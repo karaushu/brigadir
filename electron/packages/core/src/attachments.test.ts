@@ -6,6 +6,9 @@ import {
 	isAttachmentOwner,
 	isPromptAttachment,
 	thumbnailCrop,
+	holderKey,
+	isAttachmentHolder,
+	isChatOwner,
 } from './attachments';
 import { attachmentCount } from './messages';
 import { attachmentLabel } from './messages';
@@ -78,4 +81,25 @@ it('bounds a task attachment list and recognises a sheet draft owner', () => {
 		'21 вкладення',
 	]);
 	expect(attachmentCount('en', 1)).toBe('1 attachment');
+});
+
+describe('chat holders (spec/composer#chat-composer)', () => {
+	it('names a Brigadir chat or a note chat, and nothing else', () => {
+		expect(isChatOwner({ chat: 'brigadir', id: '0b1c2d3e-0000-4000-8000-000000000001' })).toBe(
+			true
+		);
+		expect(isChatOwner({ chat: 'note', id: 'note-abc' })).toBe(true);
+		expect(isChatOwner({ chat: 'note', id: 'abc' })).toBe(false);
+		expect(isChatOwner({ chat: 'slack', id: 'abc' })).toBe(false);
+		expect(isChatOwner({ chat: 'brigadir', id: '../x' })).toBe(false);
+		expect(isChatOwner({ chat: 'brigadir', id: 'a', projectId: 'p' })).toBe(false);
+		expect(isAttachmentHolder({ projectId: 'p1', id: 't1' })).toBe(true);
+		expect(isAttachmentHolder({ chat: 'note', id: 'note-abc' })).toBe(true);
+		expect(holderKey({ chat: 'note', id: 'note-abc' })).not.toBe(
+			holderKey({ projectId: 'chat', id: 'note-abc' })
+		);
+		expect(holderKey({ chat: 'note', id: 'note-abc' })).not.toBe(
+			holderKey({ chat: 'brigadir', id: 'note-abc' })
+		);
+	});
 });

@@ -5,6 +5,7 @@ import { TaskLabels } from './task-labels';
 import { NoteChats } from './note-chats';
 import { BrigadirChats } from './brigadir-chats';
 import { BrigadirChatMcp } from './brigadir-chat-mcp';
+import { TodoStore } from './todo-store';
 import { mergeNoteText } from './note-merge';
 import {
 	type AgentTask,
@@ -50,6 +51,7 @@ import {
 	type HelperAgent,
 	type HelperAction,
 	type SlackAgentAction,
+	type SlackInboxTarget,
 	type TaskAction,
 	type HelperRun,
 	quotaExhausted,
@@ -80,7 +82,8 @@ import { defaultDataDir, readRelayHandoff } from '@brigadir/persistence';
 import { ScopeControls } from './scope-controls';
 import { LaunchLocks } from './launch-locks';
 import { searchProjectFiles } from './project-files';
-import { readSlashCatalog } from './slash-catalog';
+import { readChatSlashCatalog, readSlashCatalog } from './slash-catalog';
+import { brigadirChatTools } from '@brigadir/host/brigadir-tools';
 import { LaunchSettingsStore, unattendedBaseRef } from './launch-settings';
 import { Preparations } from './preparations';
 import { withAutoBranch, branchNamePrompt } from '@brigadir/core';
@@ -114,6 +117,12 @@ import {
 	attachMenuIcons,
 	noteMenuIcons,
 	brigadirChatMenuIcons,
+	todoListMenuIcons,
+	todoItemMenuIcons,
+	todoListName,
+	type TodoItem,
+	type TodoItemPatch,
+	type TodoList,
 	type EditorMenuState,
 	type MenuContext,
 	type TaskKey,
@@ -247,6 +256,7 @@ import {
 	fitWindowBounds,
 	type WindowBounds,
 	type AttachmentOwner,
+	type AttachmentHolder,
 	type TaskSheet,
 	soloRole,
 	soloRoleChecks,
@@ -1450,6 +1460,23 @@ const noticeLog = new NoticeLog({
 /** spec/notifications-slack-notes-and-schedules#note-concurrent: one store for every writer of notes (windows, the note chat, Slack), so their writes queue. */
 let notesStoreOnce: Promise<NotesStore> | undefined;
 const sharedNotesStore = () => (notesStoreOnce ??= NotesStore.at(process.env.BRIGADIR_DATA_DIR));
+/**
+ * spec/todo-and-slack-inbox#todo-file: one store for every writer of to-dos (windows, the Brigadir chat, the Slack section), so writes of a list
+ * queue; each change reaches every window (`todo:changed`). The Slack section adds with `addItem` and undoes with `removeItem`.
+ */
+let todoStoreOnce: Promise<TodoStore> | undefined;
+const sharedTodoStore = () =>
+	(todoStoreOnce ??= TodoStore.at(
+		process.env.BRIGADIR_DATA_DIR,
+		(change) => {
+			clients.broadcast('todo:changed', change);
+			// spec/todo-and-slack-inbox#slack-inbox-to-todo: the Slack section's targets name the lists as they are now.
+			slack.inbox?.viewChanged();
+		},
+		() => t(currentLocale(), 'Inbox')
+	));
+/** spec/settings-modules-and-onboarding#modules: the Brigadir chat's tool list follows the modules (the Todo module's tools). */
+const chatModuleListeners = new Set<() => void>();
 /** The note chats, once the app is ready: a Slack addition waits while a note's agent answers. */
 let noteChatsOnce: NoteChats | undefined;
 /** spec/notifications-slack-notes-and-schedules#slack: the person's CI bot in Slack; the token is read and kept here, in main. */
@@ -1551,6 +1578,44 @@ const slack: Slack = new Slack({
 		},
 	},
 	// spec/notifications-slack-notes-and-schedules#slack «watch and tell me here»: a PR read fresh, its runs and bells (spec/pull-requests-and-ci#ci-bell), a task's state.
+	// spec/todo-and-slack-inbox#slack-inbox: the Slack section — `Slack: summaries` of Customize per action (else the Helper agent) makes its
+	// summaries; `Add to Todo` goes to the shared Todo store while the Todo module is on (spec/todo-and-slack-inbox#slack-inbox-to-todo).
+	inbox: {
+		locale: () => (currentLocale() === 'uk' ? 'uk' : 'en'),
+		agent: async (prompt, characterLimit) => {
+			const signal = AbortSignal.timeout(120_000),
+				target = await ghostTarget(signal, null, 'slackSummaries');
+			if (!target) return { kind: 'none' };
+			if (quotaExhausted(quota.read(), target.provider)) return { kind: 'quota' };
+			const said = await writeHintOneShot(prompt, signal, target, characterLimit, 110_000).catch(
+				() => null
+			);
+			return said ? { kind: 'text', text: said } : { kind: 'failed' };
+		},
+		projects: async () =>
+			(
+				await readWorkspace(
+					process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+				)
+			).projects.map(({ id, name }) => ({ id, name })),
+		todo: () =>
+			appliedSettings.modules.todo
+				? {
+						addTodo: async (input) => (await sharedTodoStore()).addItem(input),
+						removeTodo: async (listId, itemId) => {
+							await (await sharedTodoStore()).removeItem(listId, itemId);
+						},
+						todoLists: async () =>
+							(await (await sharedTodoStore()).lists()).map(({ name, project, updatedAt }) => ({
+								name,
+								project,
+								updatedAt,
+							})),
+					}
+				: null,
+		inboxName: () => t(currentLocale(), 'Inbox'),
+		changed: (view) => clients.broadcast('slack-inbox:changed', view),
+	},
 	watching: {
 		pr: async (pr) => {
 			const detail = await pullRequests.detail(
@@ -2095,6 +2160,17 @@ function postNotice(notice: SlackNotice, projectId: string | null) {
 	brigadirNotice?.(notice);
 }
 /** spec/settings-modules-and-onboarding#brigadir-chat-session: Brigadir's tasks as the Slack agent gets them — the newest of every project (≤ 40), plan and CI for 15. */
+/** spec/composer#agent-blocks: a task's summary as a `@task` pill sends it — built now, without a model. */
+async function taskSummaryOf(source: TaskKey): Promise<{ name: string; text: string }> {
+	const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
+		task = await store.task(source),
+		journal = await store.journal(source),
+		diff = await readRelayDiff(store, source, changes.range(source));
+	return {
+		name: `${taskSummaryPrefix}${task.title}`.slice(0, 200),
+		text: taskSummaryText(task, journal.records, diff.stat).slice(0, 256 * 1024),
+	};
+}
 async function brigadirFacts() {
 	const projects = (
 		await readWorkspace(
@@ -3311,9 +3387,14 @@ void app.whenReady().then(async () => {
 					? 'remoteAccess'
 					: channel.startsWith('notes:')
 						? 'notes'
-						: channel.startsWith('schedules:')
-							? 'schedules'
-							: null;
+						: channel.startsWith('todo:')
+							? 'todo'
+							: channel.startsWith('schedules:')
+								? 'schedules'
+								: // spec/todo-and-slack-inbox#slack-inbox-entry: the Slack section is the Slack module's.
+									channel.startsWith('slack-inbox:') && channel !== 'slack-inbox:opened'
+									? 'slack'
+									: null;
 	// spec/architecture-and-platform#ipc-boundary: the arguments are checked by the channel table's validator (core/ipc-channels) in `dispatch`, the same
 	// for a remote call (spec/remote-access-and-mobile#architecture).
 	function handle(channel: IpcInvokeChannel, action: (...args: any[]) => unknown) {
@@ -3343,6 +3424,22 @@ void app.whenReady().then(async () => {
 	handle('slack:disconnect', () => slack.disconnect());
 	handle('slack:app-connect', (token: string) => slack.setAppToken(token));
 	handle('slack:app-disconnect', () => slack.disconnectApp());
+	// spec/todo-and-slack-inbox#slack-inbox: the person's own token, and the Slack section.
+	handle('slack:user-connect', (token: string) => slack.connectUser(token));
+	handle('slack:user-disconnect', () => slack.disconnectUser());
+	const inbox = () => {
+		if (!slack.inbox) throw new Error('The Slack section is not available.');
+		return slack.inbox;
+	};
+	handle('slack-inbox:read', () => inbox().view());
+	handle('slack-inbox:opened', (open: boolean) => inbox().opened(open));
+	handle('slack-inbox:refresh', (target: SlackInboxTarget | null) => inbox().refresh(target));
+	handle('slack-inbox:thread', (id: string) => inbox().thread(id));
+	handle('slack-inbox:month', (month: string) => inbox().month(month));
+	handle('slack-inbox:done', (id: string) => inbox().done(id));
+	handle('slack-inbox:dismiss', (id: string) => inbox().dismiss(id));
+	handle('slack-inbox:todo', (id: string) => inbox().addTodo(id));
+	handle('slack-inbox:untodo', (id: string) => inbox().undoTodo(id));
 	const saveAppSettings = async (value: AppSettings) => {
 		const keepAwakeChanged =
 				value.agents.keepAwake !== appliedSettings.agents.keepAwake ||
@@ -3354,6 +3451,7 @@ void app.whenReady().then(async () => {
 			authorChanged = value.editor.lineAuthor !== appliedSettings.editor.lineAuthor,
 			columnsChanged = value.taskColumns !== appliedSettings.taskColumns,
 			slackChanged = value.modules.slack !== appliedSettings.modules.slack,
+			todoChanged = value.modules.todo !== appliedSettings.modules.todo,
 			remoteChanged =
 				value.modules.remoteAccess !== appliedSettings.modules.remoteAccess ||
 				JSON.stringify(value.remoteAccess) !== JSON.stringify(appliedSettings.remoteAccess);
@@ -3367,6 +3465,9 @@ void app.whenReady().then(async () => {
 		if (updatesChanged) appUpdates.settingsChanged();
 		if (archiveChanged) void taskArchives.autoArchive().catch(() => {});
 		if (modulesChanged) scheduleSettings?.();
+		// spec/todo-and-slack-inbox#todo: the Slack section's `Add to Todo` follows the Todo module.
+		if (todoChanged) slack.inbox?.viewChanged();
+		if (modulesChanged) for (const listener of chatModuleListeners) listener();
 		if (keymapChanged || modulesChanged || authorChanged || columnsChanged) rebuildMenu?.();
 		if (!saved.modules.browser) browsers.close();
 		if (saved.modules.simulator) {
@@ -3626,17 +3727,21 @@ void app.whenReady().then(async () => {
 	});
 	handle('layout:save', (value) => layout.save(value));
 	// spec/tasks#backlog-edit: an owner is a task or a launch sheet's draft; only the fields that name it go on.
-	const owner = (value: AttachmentOwner): AttachmentOwner => ({
-		projectId: value.projectId,
-		id: value.id,
-		...(value.draft ? { draft: true as const } : {}),
-	});
+	// spec/composer#chat-composer: a chat that is not a task (the Brigadir chat, a note's chat) is named by its kind and id.
+	const owner = (value: AttachmentHolder): AttachmentHolder =>
+		'chat' in value
+			? { chat: value.chat, id: value.id }
+			: {
+					projectId: value.projectId,
+					id: value.id,
+					...(value.draft ? { draft: true as const } : {}),
+				};
 	/**
 	 * spec/remote-access-and-mobile#client-ui-seam: files of this machine for a window of another machine go there as bytes: the picker opens over that
 	 * window, dropped and pasted files are read here, and the machine makes the attachments.
 	 */
 	const upload =
-		(client: Client, key: AttachmentOwner) => (name: string, bytes: Uint8Array, image: boolean) =>
+		(client: Client, key: AttachmentHolder) => (name: string, bytes: Uint8Array, image: boolean) =>
 			client.forward!('attachment:upload', [
 				owner(key),
 				name,
@@ -3697,7 +3802,9 @@ void app.whenReady().then(async () => {
 	// spec/design-review#data: only a kept screenshot or a copied design image of the task (the channel checks the name).
 	handle('design:image', async (key, file: string) => {
 		const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR);
-		const bytes = await readFileNode(await safePath(await store.taskDir(owner(key)), file));
+		const bytes = await readFileNode(
+			await safePath(await store.taskDir({ projectId: key.projectId, id: key.id }), file)
+		);
 		const type = file.endsWith('.jpg') ? 'jpeg' : file.endsWith('.webp') ? 'webp' : 'png';
 		return `data:image/${type};base64,${bytes.toString('base64')}`;
 	});
@@ -3746,17 +3853,12 @@ void app.whenReady().then(async () => {
 				)
 			).attachment
 	);
-	handle('attachment:task-summary', async (key, source) => {
-		const store = await SessionStore.at(process.env.BRIGADIR_DATA_DIR),
-			task = await store.task(source),
-			journal = await store.journal(source),
-			diff = await readRelayDiff(store, source, changes.range(source));
-		return new Attachments(store).create(key, {
+	handle('attachment:task-summary', async (key, source) =>
+		new Attachments(await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).create(key, {
 			kind: 'text',
-			name: `${taskSummaryPrefix}${task.title}`.slice(0, 200),
-			text: taskSummaryText(task, journal.records, diff.stat).slice(0, 256 * 1024),
-		});
-	});
+			...(await taskSummaryOf(source)),
+		})
+	);
 	// spec/composer#agent-blocks: the template as the library has it now; the attachment keeps what the agent read.
 	handle('attachment:agent-template', async (key, templateId) => {
 		const template = soloRoleTemplates(
@@ -3919,6 +4021,25 @@ void app.whenReady().then(async () => {
 				: null,
 		send: (event) => clients.broadcast('notes:chat-event', event),
 		changed: (id) => notesChanged({ id, kind: 'written' }),
+		// spec/composer#chat-composer: the chat's files and images live in `notes/<id>/`; a task pill goes as the task's summary.
+		attachments: async (id, ids) =>
+			new Attachments(await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).resolve(
+				{ chat: 'note', id },
+				ids
+			),
+		attach: async (id, input) =>
+			new Attachments(await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).create(
+				{ chat: 'note', id },
+				input
+			),
+		taskSummary: async (id) => {
+			const task = (
+				await readWorkspace(
+					process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+				)
+			).tasks.find((item) => item.id === id);
+			return task ? taskSummaryOf({ projectId: task.projectId, id: task.id }) : null;
+		},
 		adapter: process.env.BRIGADIR_TEST_AGENT
 			? {
 					command: '/usr/bin/env',
@@ -3932,7 +4053,14 @@ void app.whenReady().then(async () => {
 	const dataRoot = await resolveDataRoot(process.env.BRIGADIR_DATA_DIR);
 	const brigadirMcp = new BrigadirChatMcp(
 		join(dataRoot, 'run', 'brigadir-chat.sock'),
-		join(servicesDir, 'mcp-relay')
+		join(servicesDir, 'mcp-relay'),
+		{
+			current: () => appliedSettings.modules,
+			subscribe: (listener) => {
+				chatModuleListeners.add(listener);
+				return () => void chatModuleListeners.delete(listener);
+			},
+		}
 	);
 	const brigadirChats = new BrigadirChats({
 		root: join(dataRoot, 'assistant'),
@@ -3962,6 +4090,12 @@ void app.whenReady().then(async () => {
 			).projects.map(({ id, name, path }) => ({ id, name, path })),
 		openProject: () => null,
 		facts: () => brigadirFacts(),
+		// spec/composer#chat-composer: the chat's files and images live in `assistant/chats/<id>/`.
+		attachments: async (chat, ids) =>
+			new Attachments(await SessionStore.at(process.env.BRIGADIR_DATA_DIR)).resolve(
+				{ chat: 'brigadir', id: chat },
+				ids
+			),
 		choice: () => {
 			const run = actionChoice(
 				'brigadirChat',
@@ -4013,11 +4147,22 @@ void app.whenReady().then(async () => {
 			clients.broadcast('notes:changed', { id, kind: 'created' });
 			return id;
 		},
+		// spec/todo-and-slack-inbox#todo-chat-tools: todo_add and todo_lists while the Todo module is on.
+		todo: {
+			enabled: () => appliedSettings.modules.todo,
+			addItem: async (input) => (await sharedTodoStore()).addItem(input),
+			lists: async () => (await sharedTodoStore()).lists(),
+		},
 		openExternal: (url) => void shell.openExternal(url),
 		slack: {
 			connectBot: (token) => slack.connectBot(token),
 			connectApp: async (token) => {
 				await slack.setAppToken(token);
+			},
+			connectUser: async (token) => {
+				const account = (await slack.connectUser(token)).account;
+				if (account.state !== 'on') throw new Error('Slack did not accept the token.');
+				return { user: account.user, team: account.team, missing: account.missing };
 			},
 			state: () => slack.setupState(),
 		},
@@ -4082,9 +4227,16 @@ void app.whenReady().then(async () => {
 	handle('brigadir:list', () => brigadirChats.list());
 	handle('brigadir:read', (id: string) => brigadirChats.read(id));
 	handle('brigadir:create', () => brigadirChats.create());
-	handle('brigadir:send', (id: string, text: string) => {
-		// The answer streams by `brigadir:event`; the call returns once the message is on its way.
-		void brigadirChats.send(id, text).catch(() => {});
+	handle('brigadir:send', async (id: string, text: string, attachments: string[]) => {
+		// The answer streams by `brigadir:event`; the call returns once the message is on its way. Attachments that are gone or over
+		// the limits refuse the message, so the window keeps its draft.
+		await brigadirChats.checkAttachments(id, attachments);
+		void brigadirChats.send(id, text, attachments).catch(() => {});
+	});
+	// spec/composer#chat-composer: the chat's `/` list before its agent announces its own; its own tools are Brigadir's chat tools.
+	handle('brigadir:slash', async () => {
+		const place = await brigadirChats.slashPlace();
+		return readChatSlashCatalog(place.provider, place.folder, brigadirChatTools);
 	});
 	handle('brigadir:stop', (id: string) => brigadirChats.stop(id));
 	handle('brigadir:rename', (id: string, title: string) => brigadirChats.rename(id, title));
@@ -4109,10 +4261,20 @@ void app.whenReady().then(async () => {
 		])) as 'rename' | 'archive' | 'restore' | 'delete' | null;
 	});
 	handle('notes:chat-read', (id: string) => noteChats.read(id));
-	handle('notes:chat-send', (id: string, text: string, choice: NoteChatChoice) => {
-		// The answer streams by `notes:chat-event`; the call returns once the message is on its way.
-		void noteChats.send(id, text, choice);
-	});
+	handle(
+		'notes:chat-send',
+		async (id: string, text: string, choice: NoteChatChoice, attachments: string[]) => {
+			// The answer streams by `notes:chat-event`; the call returns once the message is on its way. Attachments that are gone or
+			// over the limits refuse the message, so the window keeps its draft.
+			await noteChats.checkAttachments(id, attachments);
+			void noteChats.send(id, text, choice, attachments).catch(() => {});
+		}
+	);
+	// spec/composer#chat-composer: the note chat's `/` list from disk (no tools of ours), and a file of its project picked in `@`.
+	handle('notes:chat-slash', async (id: string, provider: 'claude' | 'codex') =>
+		readChatSlashCatalog(provider, await noteChats.slashFolder(id), [])
+	);
+	handle('notes:chat-attach-file', (id: string, path: string) => noteChats.attachFile(id, path));
 	handle('notes:chat-stop', (id: string) => noteChats.stop(id));
 	handle('notes:chat-undo', (id: string, seq: number) => noteChats.undo(id, seq));
 	handle('notes:list', async () => (await notesStore).list());
@@ -4227,6 +4389,111 @@ void app.whenReady().then(async () => {
 			{ x, y }
 		)) as string | null;
 	});
+	// spec/todo-and-slack-inbox#todo: the Todo section's lists in `~/.brigadir/todo/`; every change reaches every window (`todo:changed`).
+	const todoStore = sharedTodoStore();
+	const workspaceProjects = async () =>
+		(
+			await readWorkspace(
+				process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+			)
+		).projects;
+	const menuPoint = (x: number | null, y: number | null) =>
+		x === null || y === null ? null : { x, y };
+	handle('todo:lists', async () => (await todoStore).lists());
+	handle('todo:create-list', async (project: string | null, name: string) =>
+		(await todoStore).createList(project, name)
+	);
+	handle('todo:rename-list', async (id: string, name: string) =>
+		(await todoStore).renameList(id, name)
+	);
+	handle('todo:set-project', async (id: string, project: string | null) =>
+		(await todoStore).setProject(id, project)
+	);
+	handle('todo:delete-list', async (id: string) => (await todoStore).deleteList(id));
+	handle('todo:add-item', async (id: string, title: string, description: string) =>
+		(await todoStore).createItem(id, title, description)
+	);
+	handle('todo:update-item', async (id: string, item: string, patch: TodoItemPatch) =>
+		(await todoStore).updateItem(id, item, patch)
+	);
+	handle('todo:remove-item', async (id: string, item: string) =>
+		(await todoStore).removeItem(id, item)
+	);
+	handle('todo:restore-item', async (id: string, item: TodoItem, index: number) =>
+		(await todoStore).restoreItem(id, item, index)
+	);
+	handle('todo:place-item', async (id: string, item: string, before: string | null) =>
+		(await todoStore).placeItem(id, item, before)
+	);
+	handle('todo:step-item', async (id: string, item: string, delta: -1 | 1) =>
+		(await todoStore).stepItem(id, item, delta)
+	);
+	handle('todo:move-item', async (id: string, item: string, to: string) =>
+		(await todoStore).moveItem(id, item, to)
+	);
+	handleClient('todo:list-menu', async (client) => {
+		const locale = currentLocale();
+		return (await ui.menu(client, [
+			{ id: 'rename', label: t(locale, 'Rename…'), icon: todoListMenuIcons.rename },
+			{ id: 'project', label: t(locale, 'Move to project…'), icon: todoListMenuIcons.project },
+			null,
+			{ id: 'delete', label: t(locale, 'Delete…'), icon: todoListMenuIcons.delete },
+		])) as 'rename' | 'project' | 'delete' | null;
+	});
+	handleClient('todo:item-menu', async (client, x: number | null, y: number | null) => {
+		const locale = currentLocale();
+		return (await ui.menu(
+			client,
+			[
+				{ id: 'edit', label: t(locale, 'Edit (to-do)'), icon: todoItemMenuIcons.edit },
+				{ id: 'task', label: t(locale, 'Make a task'), icon: todoItemMenuIcons.task },
+				{ id: 'move', label: t(locale, 'Move to list…'), icon: todoItemMenuIcons.move },
+				null,
+				{ id: 'delete', label: t(locale, 'Delete'), icon: todoItemMenuIcons.delete },
+			],
+			menuPoint(x, y)
+		)) as 'edit' | 'task' | 'move' | 'delete' | null;
+	});
+	handleClient(
+		'todo:project-menu',
+		async (client, id: string, x: number | null, y: number | null) => {
+			const locale = currentLocale(),
+				list = await (await todoStore).read(id),
+				projects = await workspaceProjects();
+			return (await ui.menu(
+				client,
+				[
+					{ id: 'none', label: t(locale, 'No project'), checked: list.project === null },
+					null,
+					...projects.map((project) => ({
+						id: project.id,
+						label: project.name,
+						checked: project.id === list.project,
+					})),
+				],
+				menuPoint(x, y)
+			)) as string | null;
+		}
+	);
+	handleClient(
+		'todo:pick-list-menu',
+		async (client, id: string, x: number | null, y: number | null) => {
+			const locale = currentLocale(),
+				lists = await (await todoStore).lists(),
+				projects = await workspaceProjects();
+			const label = (list: TodoList) =>
+				`${todoListName(locale, list)} · ${
+					projects.find((project) => project.id === list.project)?.name ?? t(locale, 'No project')
+				}`;
+			const others = lists.filter((list) => list.id !== id);
+			if (!others.length) return null;
+			return (await ui.menu(
+				client,
+				others.map((list) => ({ id: list.id, label: label(list), icon: 'todo' as const })),
+				menuPoint(x, y)
+			)) as string | null;
+		}
+	);
 	handle('knowledge:read', (id) => knowledge.read(id));
 	handle('knowledge:prepare', (id, sig, target) => knowledge.prepare(id, sig, target));
 	handle('knowledge:generate', (id, sig, preview) => knowledge.generate(id, sig, preview));
@@ -5807,6 +6074,8 @@ void app.whenReady().then(async () => {
 					...((key) => (key && !shortcutRecording ? { accelerator: key } : {}))(
 						menuAccelerator(command)
 					),
+					// spec/todo-and-slack-inbox#todo-item: a list's own plain key (↑↓, Space, ↩, ⌫) is shown; the focused list acts on it.
+					...(command.fixed ? { registerAccelerator: false } : {}),
 					enabled: false,
 					click: () => {
 						const focus = menuFocus();
@@ -5867,6 +6136,14 @@ void app.whenReady().then(async () => {
 								!(!focus.machine && browsers.isFocused())
 							)
 								(remoteAccess.focusedClient() ?? localClient).send('editor:action', role);
+							// spec/todo-and-slack-inbox#todo-item: ⌘Z on the Todo screen (not in a field) brings back the deleted to-do.
+							else if (
+								role === 'undo' &&
+								focus.context.todoList &&
+								!focus.context.modal &&
+								!(!focus.machine && browsers.isFocused())
+							)
+								dispatchWindowAction('workspace:action', 'todo-undo');
 							else {
 								const target = webContents.getFocusedWebContents();
 								if (role === 'undo') target?.undo();
@@ -6018,6 +6295,10 @@ void app.whenReady().then(async () => {
 							...menuIcon(appMenuIcons.formatting),
 							submenu: commands('Formatting'),
 						},
+						// spec/todo-and-slack-inbox#todo-item: the selected to-do's items, while the Todo module is on.
+						...((items) => (items.length ? [{ type: 'separator' as const }, ...items] : []))(
+							commands('Edit')
+						),
 					],
 				},
 				...(['Editor', 'Navigate', 'Diff', 'Browser', 'Simulator', 'Console'] as const)

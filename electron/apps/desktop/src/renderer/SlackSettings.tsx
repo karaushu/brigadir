@@ -4,6 +4,7 @@ import {
 	isAppToken,
 	isBotToken,
 	isSlackMemberId,
+	isUserToken,
 	selectOption,
 	slackEvents,
 	t,
@@ -276,6 +277,15 @@ export function SlackSettings({
 					))}
 				</SettingsSection>
 			)}
+			<AccountSection
+				locale={locale}
+				state={state}
+				countHere={slack.countHere}
+				busy={busy}
+				save={save}
+				run={run}
+				working={working}
+			/>
 			<MentionsSection
 				locale={locale}
 				enabled={settings.agents.enabled}
@@ -726,5 +736,140 @@ function AgentRow({
 				)}
 			</span>
 		</SettingsRow>
+	);
+}
+
+/**
+ * spec/todo-and-slack-inbox#slack-inbox-source: `Your account` — the person's own token (`xoxp-…`) of the Slack section: `Connect`, then who it is with
+ * `Replace token…` and `Disconnect`, like the bot's; and `Count @here and @channel`.
+ */
+function AccountSection({
+	locale,
+	state,
+	countHere,
+	busy,
+	save,
+	run,
+	working,
+}: {
+	locale: Locale;
+	state: SlackState | null;
+	countHere: boolean;
+	busy: boolean;
+	save(next: Partial<Settings>): void;
+	run(action: () => Promise<SlackState>): Promise<void>;
+	working: boolean;
+}) {
+	const [token, setToken] = useState(''),
+		[replacing, setReplacing] = useState(false);
+	const account = state?.account ?? { state: 'off' as const };
+	const still = busy || working;
+	const connect = async () => {
+		await run(() => window.brigadir.connectSlackUser(token));
+		setToken('');
+		setReplacing(false);
+	};
+	const field = (
+		<SettingsRow
+			label={t(locale, 'User token')}
+			hint={t(
+				locale,
+				'The Slack section: your mentions and day summaries. OAuth & Permissions ▸ User OAuth Token'
+			)}>
+			<span className={styles.inline}>
+				<TextInput
+					size="m"
+					type="password"
+					autoComplete="off"
+					spellCheck={false}
+					placeholder="xoxp-…"
+					value={token}
+					disabled={still}
+					onChange={(event) => setToken(event.currentTarget.value)}
+					aria-label={t(locale, 'User token')}
+					data-slack-user-token
+				/>
+				<Button
+					size="m"
+					appearance="primary"
+					disabled={still || !isUserToken(token.trim())}
+					onClick={() => void connect()}
+					data-slack-user-connect>
+					{t(locale, 'Connect')}
+				</Button>
+				{replacing && (
+					<Button
+						size="m"
+						disabled={working}
+						onClick={() => {
+							setReplacing(false);
+							setToken('');
+						}}>
+						{t(locale, 'Cancel')}
+					</Button>
+				)}
+			</span>
+		</SettingsRow>
+	);
+	const tone =
+		account.state === 'on' ? 'on' : account.state === 'token' ? 'error' : ('idle' as const);
+	return (
+		<SettingsSection title={t(locale, 'Your account')} disabled={still}>
+			{account.state === 'off' || replacing ? (
+				field
+			) : (
+				<SettingsRow
+					label={t(locale, 'Your account')}
+					hint={
+						account.state === 'on'
+							? account.missing.length
+								? t(locale, 'Missing scopes: {scopes}').replace(
+										'{scopes}',
+										account.missing.join(', ')
+									)
+								: t(locale, 'Token in Keychain')
+							: account.state === 'token'
+								? t(locale, 'Slack refused the token · {code}').replace('{code}', account.error)
+								: undefined
+					}
+					warning={
+						account.state === 'token' || (account.state === 'on' && account.missing.length > 0)
+					}>
+					<span className={styles.inline} data-slack-account={account.state}>
+						<span className={styles.status}>
+							<span className={styles.dot} data-on={tone === 'on'} data-tone={tone} />
+							<span>
+								{account.state === 'on'
+									? `${account.user}${account.team ? ` · ${account.team}` : ''}`
+									: account.state === 'token'
+										? t(locale, 'Slack refused the token · {code}').replace('{code}', account.error)
+										: t(locale, 'Checking…')}
+							</span>
+						</span>
+						{account.state !== 'checking' && (
+							<>
+								<Button
+									size="m"
+									onClick={() => void run(() => window.brigadir.disconnectSlackUser())}
+									data-slack-user-disconnect>
+									{t(locale, 'Disconnect')}
+								</Button>
+								<Button size="m" onClick={() => setReplacing(true)}>
+									{t(locale, 'Replace token…')}
+								</Button>
+							</>
+						)}
+					</span>
+				</SettingsRow>
+			)}
+			<SettingsRow label={t(locale, 'Count @here and @channel')}>
+				<Switch
+					label={t(locale, 'Count @here and @channel')}
+					checked={countHere}
+					disabled={busy}
+					onChange={(on) => save({ countHere: on })}
+				/>
+			</SettingsRow>
+		</SettingsSection>
 	);
 }

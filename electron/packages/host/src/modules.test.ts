@@ -17,6 +17,7 @@ it('reads the modules from settings.json and follows an atomic write (spec/setti
 			notes: true,
 			schedules: true,
 			slack: false,
+			todo: true,
 		});
 		const write = async (modules: unknown) => {
 			await writeFile(
@@ -36,6 +37,7 @@ it('reads the modules from settings.json and follows an atomic write (spec/setti
 			notes: true,
 			schedules: true,
 			slack: false,
+			todo: true,
 		});
 		settings.start();
 		const changed = new Promise((resolve) => settings.subscribe(resolve));
@@ -49,6 +51,7 @@ it('reads the modules from settings.json and follows an atomic write (spec/setti
 			notes: true,
 			schedules: true,
 			slack: false,
+			todo: true,
 		});
 		await write({ browser: 'yes' });
 		await settings.load();
@@ -61,6 +64,7 @@ it('reads the modules from settings.json and follows an atomic write (spec/setti
 			notes: true,
 			schedules: true,
 			slack: false,
+			todo: true,
 		});
 	} finally {
 		settings.close();

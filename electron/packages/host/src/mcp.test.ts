@@ -576,6 +576,7 @@ const allModules: AppModules = {
 	notes: true,
 	schedules: true,
 	slack: false,
+	todo: true,
 };
 const offModules: AppModules = {
 	browser: false,
@@ -586,6 +587,7 @@ const offModules: AppModules = {
 	notes: false,
 	schedules: false,
 	slack: false,
+	todo: true,
 };
 async function initialize(
 	role: CrewProcessRole | null,

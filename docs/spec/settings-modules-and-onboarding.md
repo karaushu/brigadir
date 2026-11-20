@@ -139,7 +139,8 @@ A module is a part of the app that switches off whole: its column or section, to
 | `remoteAccess` | `Remote access` | Control this machine from another computer. | on (access itself stays off) | yes |
 | `notes` | `Notes` | Markdown notes with their own agent chat. | on | no |
 | `schedules` | `Scheduled tasks` | Run a task later or on repeat. | on | no |
-| `slack` | `Slack` | Task and CI messages from your CI bot. | off | yes |
+| `todo` | `Todo` | To-do lists, by project or without one. | on | no |
+| `slack` | `Slack` | Task and CI messages from your CI bot, and your mentions. | off | yes |
 
 - `withModuleDefaults`: a file written before a module existed takes that module's default, and the keys it has stay as read. Main and host parse it the same way.
 - The simulator is off by default because only projects with a mobile app need it, and its tools cost context in every session. The other modules shipped as on before they could be switched off, so an update must not remove them.
@@ -278,7 +279,7 @@ A chat with Brigadir itself — the same agent that answers in Slack ([Slack age
 
 - The agent of `Brigadir chat` in Customize per action (its own group `Brigadir`; unset → the Default agent). It is a `QuickAsks` session of mode `aboutCode`, as the Slack agent's is: it starts in the open project's main tree (else the first project's) with every project's folder added, reads files and runs only [commands that read](notifications-slack-notes-and-schedules.md#slack-side-commands); every edit and every other command is declined.
 - Its prompt (English, [rule 12](../../AGENTS.md)) is the Slack agent's ([what the agent gets](notifications-slack-notes-and-schedules.md#slack-agent)): every project, today's date, Brigadir's tasks (the open task first, then the newest of every project) — plus the [settings registry](#settings-registry) as a list (key, label, tab, type, allowed values, current value) and the setup guides. The task list is refreshed with each message. It answers in the language the person writes in, in the app's Markdown, with code where it helps (unlike Slack).
-- **Chats.** Each chat is its own agent session, kept as normalized events in `~/.brigadir/assistant/chats/<id>/events.jsonl` ([rule 2](../../AGENTS.md)) with `chat.json` (title, times, archived); it survives a restart and its session resumes on the next message. The session closes after 10 idle minutes. `New chat` starts an empty one; settings already changed and secrets already sealed live in Brigadir, not in a chat. A chat is not a task: no board column, branch or PR.
+- **Chats.** Each chat is its own agent session, kept as normalized events in `~/.brigadir/assistant/chats/<id>/events.jsonl` ([rule 2](../../AGENTS.md)) with `chat.json` (title, times, archived) and the messages' attachments in `attachments/` ([chat composer](composer.md#chat-composer)); it survives a restart and its session resumes on the next message. The session closes after 10 idle minutes. `New chat` starts an empty one; settings already changed and secrets already sealed live in Brigadir, not in a chat. A chat is not a task: no board column, branch or PR.
 - **A setup outlives its chat.** Each setup's progress (which steps are done, the Slack app id, the chat that runs it) is kept in `~/.brigadir/assistant/setups.json`. A new chat's prompt lists the setups left unfinished, and the agent offers to go on: `Continue the Slack setup (3 of 5)?`.
 
 <a id="settings-registry"></a>
@@ -295,7 +296,7 @@ One typed list in `core/settings-registry.ts` describes every setting a person c
 | `settings_set {key, value}` | validates and saves; `confirm` entries first show a card with `Apply` · `Cancel` | the new value, or the refusal and its reason |
 | `settings_open {key}` | opens Settings at the row, lit as from Search Everywhere | `opened` |
 | `setup_start {kind}` | starts a guided setup (`slack`, `remoteAccess`) and shows its steps card | the steps and which are done |
-| `secret_request {kind}` | shows a secret card (`slackBotToken`, `slackAppToken`); the value goes from the field to main and the key store | the check's result: `connected as @<bot>`, missing scopes, or Slack's error — never the value |
+| `secret_request {kind}` | shows a secret card (`slackBotToken`, `slackAppToken`, `slackUserToken`); the value goes from the field to main and the key store | the check's result: `connected as @<bot>` (the person's name for a user token), missing scopes, or Slack's error — never the value |
 | `open_link {url}` | opens a link the setup built (Slack's app pages) in the browser, after the person clicks it | `opened` |
 | `create_task {projects, title, prompt, base}` | the [agent-created task](tasks.md#agent-created-tasks) card in the chat, `Start` · `Decline`; `base` as in [Slack](notifications-slack-notes-and-schedules.md#slack-agent) | the task's id, or `declined` |
 | `send_to_task {task, text}` | the message goes to that task's agent, as a steer from the person | `sent` or the refusal (gone, archived, busy) |
@@ -328,10 +329,12 @@ One typed list in `core/settings-registry.ts` describes every setting a person c
 `setup_start {kind: "slack"}`, from `Set up with Brigadir` or the person's words. Steps:
 
 1. **Name** — the agent asks what the bot is called (default `Brigadir`). The bot's name is set in Slack, and agents know the bot by it ([bot name](notifications-slack-notes-and-schedules.md#slack-bot-name)).
-2. **Create in Slack** — a link to `https://api.slack.com/apps?new_app=1&manifest_json=<manifest>` with that name, every bot scope Brigadir uses (`chat:write`, `users:read`, `channels:read`, `groups:read`, `app_mentions:read`, `channels:history`, `groups:history`, `im:history`), the bot events `app_mention`, `message.channels`, `message.groups`, `message.im`, Socket Mode, Interactivity and the app's Messages tab. The person picks the workspace and presses `Create`.
+2. **Create in Slack** — a link to `https://api.slack.com/apps?new_app=1&manifest_json=<manifest>` with that name, every bot scope Brigadir uses (`chat:write`, `users:read`, `channels:read`, `groups:read`, `app_mentions:read`, `channels:history`, `groups:history`, `im:history`), the bot events `app_mention`, `message.channels`, `message.groups`, `message.im`, the [Slack section's](todo-and-slack-inbox.md#slack-inbox-source) user scopes and user events, Socket Mode, Interactivity and the app's Messages tab. The person picks the workspace and presses `Create`.
 3. **Bot token** — `Install to Workspace`, then the secret card for `xoxb-…`. The check is `auth.test`; scopes missing from its `x-oauth-scopes` are named with a link to the app's `OAuth & Permissions` page and `Reinstall to Workspace`.
 4. **App-level token** — a link to the app's `Basic Information ▸ App-Level Tokens` (`connections:write`), then the secret card for `xapp-…`, checked with `apps.connections.open`. `Create tasks from Slack` turns on.
 5. **You** — the person's member ID (`Profile ▸ ⋯ ▸ Copy member ID`), saved as `slack.memberId`; the agent ends with a mention test: «Write @<bot> hi in any channel».
+
+The [Slack section](todo-and-slack-inbox.md#slack-inbox-source) is not a step: when the person wants it (`Connect my Slack account for mentions`), the agent asks for the app's User OAuth Token (`OAuth & Permissions`, after `Reinstall to Workspace` for an app made before) with `secret_request {kind: "slackUserToken"}`; missing user scopes are named with the link to that page.
 
 Every developer needs their own Slack app: Slack spreads one app's Socket Mode events across all its open connections, so with a shared app a mention would reach a random person's Brigadir. The agent says so when the person mentions a team.
 

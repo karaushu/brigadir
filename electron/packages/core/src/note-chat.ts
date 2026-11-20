@@ -1,11 +1,19 @@
 import type { AgentEvent, AgentProvider, ToolPatch } from './agent';
+import { isAttachmentList, type PromptAttachment } from './attachments';
 /**
  * spec/notifications-slack-notes-and-schedules#notes: the chat of a note — one per note, kept in `notes/<id>.chat.jsonl`. Rows are the person's messages,
  * the agent's normalized events of each answer (rule 2), the agent's edits of the note with their text before and after
  * (for Undo), the person's edits between messages, and the end of each answer.
  */
 export type NoteChatEntry =
-	| { kind: 'prompt'; text: string; note: string; choice?: NoteChatChoice }
+	/** `attachments`: the files and images the message carries; their tokens stand in `text` (spec/composer#chat-composer). */
+	| {
+			kind: 'prompt';
+			text: string;
+			note: string;
+			choice?: NoteChatChoice;
+			attachments?: PromptAttachment[];
+	  }
 	| { kind: 'event'; event: AgentEvent }
 	| { kind: 'edit'; before: string; after: string; added: number; removed: number }
 	| { kind: 'undo'; of: number }
@@ -24,7 +32,11 @@ export function isNoteChatRow(value: unknown): value is NoteChatRow {
 		return false;
 	switch (value.kind) {
 		case 'prompt':
-			return typeof value.text === 'string' && typeof value.note === 'string';
+			return (
+				typeof value.text === 'string' &&
+				typeof value.note === 'string' &&
+				(value.attachments === undefined || isAttachmentList(value.attachments))
+			);
 		case 'event':
 			return record(value.event) && typeof value.event.kind === 'string';
 		case 'edit':

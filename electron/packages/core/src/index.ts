@@ -98,11 +98,13 @@ export * from './pr-board';
 
 export * from './knowledge';
 export * from './notes';
+export * from './todo';
 export * from './schedules';
 export * from './slack';
 export * from './slack-mentions';
 export * from './slack-answers';
 export * from './slack-watches';
+export * from './slack-inbox';
 export * from './note-chat';
 export * from './sidebar';
 

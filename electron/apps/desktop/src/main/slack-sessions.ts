@@ -22,7 +22,7 @@ export type SlackSessionDeps = {
 		request: QuickAskRequest,
 		mode: SlackSessionMode,
 		thread: string | null,
-		slack?: { projects?: SlackSessionProject[]; facts?: string }
+		slack?: { projects?: SlackSessionProject[]; facts?: string; bot?: string | null }
 	): Promise<void>;
 	followUp(
 		key: TaskKey,
@@ -57,6 +57,8 @@ export type SlackSessionAsk = {
 	projects?: SlackSessionProject[];
 	/** Brigadir's tasks as text, for a new session's prompt. */
 	facts?: string;
+	/** spec/notifications-slack-notes-and-schedules#slack-bot-name: the bot's name in Slack, for a new session's prompt. */
+	bot?: string | null;
 	/** spec/notifications-slack-notes-and-schedules#slack-agent: the agent's `ACK: …` line, as soon as it is written. */
 	ack?(text: string): void;
 };
@@ -162,6 +164,7 @@ export class SlackSessions {
 				this.deps.ask(key, request, mode, input.context ?? null, {
 					...(input.projects ? { projects: input.projects } : {}),
 					...(input.facts ? { facts: input.facts } : {}),
+					...(input.bot ? { bot: input.bot } : {}),
 				}),
 			input.ack
 		);

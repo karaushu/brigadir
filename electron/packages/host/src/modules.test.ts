@@ -67,3 +67,27 @@ it('reads the modules from settings.json and follows an atomic write (spec/setti
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+it('reads the Slack bot name the app writes and tells the sessions when it changes (spec/notifications-slack-notes-and-schedules#slack-bot-name)', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-bot-name-'));
+	const settings = new ModuleSettings(root);
+	try {
+		await settings.load();
+		expect(settings.slackBot()).toBeNull();
+		const write = async (name: string | null) => {
+			await writeFile(join(root, 'bot.tmp'), JSON.stringify({ schemaVersion: 1, name }));
+			await rename(join(root, 'bot.tmp'), join(root, 'slack-bot.json'));
+		};
+		await write('Jarvis');
+		expect(await settings.load()).toBe(true);
+		expect(settings.slackBot()).toBe('Jarvis');
+		settings.start();
+		const changed = new Promise((resolve) => settings.subscribe(resolve));
+		await write(null);
+		await changed;
+		expect(settings.slackBot()).toBeNull();
+	} finally {
+		settings.close();
+		await rm(root, { recursive: true, force: true });
+	}
+});

@@ -318,10 +318,12 @@ export function quickCodePrompt(input: {
 	projects?: { name: string; path: string }[];
 	/** Brigadir's tasks as plain lines (id, title, project, state, branch, PR, CI). */
 	facts?: string;
+	/** spec/notifications-slack-notes-and-schedules#slack-bot-name: the bot's name in Slack, the name people call the agent by. */
+	bot?: string | null;
 }): string {
 	const language = input.language === 'uk' ? 'Ukrainian' : 'English';
 	return [
-		'You are Brigadir’s agent in Slack: a teammate wrote to you there. Answer them, look it up, or get it done through Brigadir. The bot only carries messages; you decide.',
+		`You are ${input.bot ? `@${cut(input.bot.replace(/^@/, ''), 80)} in Slack, ` : ''}Brigadir’s agent in Slack: a teammate wrote to you there${input.bot ? ' and calls you by that name' : ''}. Answer them, look it up, or get it done through Brigadir. The bot only carries messages; you decide.`,
 		input.projects?.length
 			? [
 					'Projects (name — folder); people name them loosely («админка» → admin), so work out which one is meant from the message and the thread:',

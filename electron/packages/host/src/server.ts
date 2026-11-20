@@ -642,7 +642,7 @@ export async function startHost(config: HostConfig) {
 		...(task.agentRole ? { role: task.agentRole.instructions } : {}),
 		subagents: task.provider === 'claude' && Boolean(await claudeSubagentModel(store.root)),
 		commands: modules.current().commands && Boolean(project.commands?.length),
-		tools: modules.current(),
+		tools: { ...modules.current(), slackBot: modules.slackBot() },
 		cli: task.transport === 'terminal',
 		...(classTask ? { classes: autoTask ? ('auto' as const) : ('solo' as const) } : {}),
 	});

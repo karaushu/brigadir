@@ -587,8 +587,16 @@ const offModules: AppModules = {
 	schedules: false,
 	slack: false,
 };
-async function initialize(role: CrewProcessRole | null, modules: AppModules) {
-	const source: ModuleSource = { current: () => modules, subscribe: () => () => {} };
+async function initialize(
+	role: CrewProcessRole | null,
+	modules: AppModules,
+	slackBot: string | null = null
+) {
+	const source: ModuleSource = {
+		current: () => modules,
+		slackBot: () => slackBot,
+		subscribe: () => () => {},
+	};
 	const mcp = await served(role, async () => null, source);
 	try {
 		mcp.send(
@@ -631,6 +639,19 @@ it('tells the agent in initialize what it has, from the modules on and its role 
 		(tool) => tool.name === 'slack_post'
 	);
 	expect(post?.description).toContain("posts under the person's own name");
+	// spec/notifications-slack-notes-and-schedules#slack-bot-name: the agent knows the bot by its Slack name.
+	expect((await initialize(null, slackOn, 'Jarvis')).instructions).toContain(
+		'In Slack this bot is @Jarvis: when the person asks Jarvis (or @Jarvis) to post, write, reply or tell something in Slack, that is slack_post.'
+	);
+	expect(solo.instructions).not.toContain('In Slack this bot is');
+	const named = (
+		mcpTools(null, slackOn, false, undefined, 'Jarvis').list.tools as {
+			name: string;
+			description: string;
+		}[]
+	).find((tool) => tool.name === 'slack_post');
+	expect(named?.description).toContain('In Slack this bot is @Jarvis');
+	expect(post?.description).not.toContain('In Slack this bot is');
 	// A module switched off is not named; with none of the three on, only the console is (spec/terminal-and-cli-agents#agent-console-tools).
 	const browserOnly = await initialize(null, { ...offModules, browser: true });
 	expect(browserOnly.instructions).toContain('browser_open');

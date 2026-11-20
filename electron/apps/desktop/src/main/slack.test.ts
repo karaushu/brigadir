@@ -152,3 +152,19 @@ it('posts nothing for an event switched off', async () => {
 	await settle();
 	expect(calls.map((call) => call.method)).toEqual(['auth.test']);
 });
+
+it('writes the bot name for the task hosts, and forgets it with the token (spec/notifications-slack-notes-and-schedules#slack-bot-name)', async () => {
+	const env: Record<string, string> = { SLACK_CI_BOT_TOKEN: token };
+	const { slack, root } = await setup({ env });
+	const name = async () =>
+		(JSON.parse(await readFile(join(root, 'slack-bot.json'), 'utf8')) as { name: string | null })
+			.name;
+	await slack.refresh();
+	expect(await name()).toBe('team_ci_bot');
+	expect(await slack.botHandle()).toBe('team_ci_bot');
+	delete env.SLACK_CI_BOT_TOKEN;
+	await slack.refresh();
+	expect(await name()).toBeNull();
+	expect(await slack.botHandle()).toBeNull();
+	slack.dispose();
+});

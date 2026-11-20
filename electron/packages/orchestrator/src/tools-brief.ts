@@ -18,10 +18,24 @@ function words(items: readonly (string | false | undefined)[], last: 'and' | 'or
 		: (kept[0] ?? '');
 }
 /** The workspace modules, plus Slack: `slack_post` is the person's tool, so only the root agent of a task hears of it. */
-type BriefTools = WorkspaceTools & { slack?: boolean };
-/** spec/notifications-slack-notes-and-schedules#slack-agent-post: a task's Slack messages come from Brigadir's bot unless the person asks for their own name. */
-export const slackRule =
-	"Every Slack message you send goes through slack_post, from Brigadir's bot, also when the person only says to write or reply in Slack. Another Slack tool or connector of yours posts under the person's own name: send with it only when the person asks in words for a message from themselves; reading Slack with it is fine. When slack_post cannot post, tell the person the reason and do not post as them instead.";
+export type BriefTools = WorkspaceTools & {
+	slack?: boolean;
+	/** spec/notifications-slack-notes-and-schedules#slack-bot-name: the name the bot has in Slack; `null` — unknown. */
+	slackBot?: string | null;
+};
+/**
+ * spec/notifications-slack-notes-and-schedules#slack-agent-post: a task's Slack messages come from Brigadir's bot unless the person asks for their own name;
+ * spec/notifications-slack-notes-and-schedules#slack-bot-name: the agent knows the bot by the name it has in Slack.
+ */
+export function slackRule(bot?: string | null): string {
+	const name = bot?.replace(/^@/, '').trim();
+	const known = name
+		? ` In Slack this bot is @${name}: when the person asks ${name} (or @${name}) to post, write, reply or tell something in Slack, that is slack_post.`
+		: '';
+	return `Every Slack message you send goes through slack_post, from Brigadir's bot, also when the person only says to write or reply in Slack.${known} ${slackRuleRest}`;
+}
+const slackRuleRest =
+	"Another Slack tool or connector of yours posts under the person's own name: send with it only when the person asks in words for a message from themselves; reading Slack with it is fine. When slack_post cannot post, tell the person the reason and do not post as them instead.";
 const sharedSimulator =
 	'You get a device of your own when one can start, and your own Metro port (RCT_METRO_PORT, in your session and terminals): start Metro in your worktree on it. When no device can start (the device cap, low memory), you share one with your crew: while another agent uses it, your call waits up to 60 seconds; if it is still busy, do other work and retry later.';
 const deviceKinds =
@@ -56,7 +70,8 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: BriefTool
 	lines.push(
 		'- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.'
 	);
-	if (tools.slack && humanToolsAllowed(role)) lines.push(`- Slack (slack_post). ${slackRule}`);
+	if (tools.slack && humanToolsAllowed(role))
+		lines.push(`- Slack (slack_post). ${slackRule(tools.slackBot)}`);
 	const asks = words(
 			[
 				tools.browser && 'open a page',
@@ -106,7 +121,7 @@ export function toolsBrief(role: CrewProcessRole | null, tools: BriefTools): str
 		tools.simulator && simulatorQueued(role)
 			? ' You get a simulator device and a Metro port of your own when one can start; otherwise a call may wait for the shared device, and if it stays busy, retry later.'
 			: '';
-	const slack = tools.slack && humanToolsAllowed(role) ? ` ${slackRule}` : '';
+	const slack = tools.slack && humanToolsAllowed(role) ? ` ${slackRule(tools.slackBot)}` : '';
 	const smoke = smokeBrief(role, tools);
 	return `This app gives you ${list}.${check}${smoke ? ` ${smoke}` : ''}${queue}${slack}`;
 }

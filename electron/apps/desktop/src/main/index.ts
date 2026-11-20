@@ -1495,6 +1495,7 @@ const slack: Slack = new Slack({
 					: {}),
 				...(agent?.facts ? { facts: agent.facts } : {}),
 				...(agent?.ack ? { ack: agent.ack } : {}),
+				bot: await slack.botHandle().catch(() => null),
 			});
 		},
 		sideSession: (channel, ts) => slackSessions.session(channel, ts),

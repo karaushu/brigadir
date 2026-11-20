@@ -259,7 +259,7 @@ This step exists only while the `remoteAccess` module is on and the window is no
 <a id="brigadir-chat"></a>
 ## Brigadir chat
 
-A chat with Brigadir itself: the person says what they want of the app in their own words («set up Slack», «three columns instead of two», «code font one size bigger», «turn on remote access») and an agent does it through Brigadir's own tools. It changes settings and walks through setups; it never edits files, runs commands or sees a secret.
+A chat with Brigadir itself — the same agent that answers in Slack ([Slack agent](notifications-slack-notes-and-schedules.md#slack-agent)), here in the app and with the app's settings in its hands. The person asks in their own words: about tasks («what's with the ATT task in b2c?»), about code in any project («how does b2c decide when to show consent mode?»), for work («make a task from master in b2c…»), or of the app itself («set up Slack», «three columns instead of two», «code font one size bigger»). It answers, looks things up read-only, makes and hands over tasks, changes settings and walks through setups; it never edits files and never sees a secret.
 
 <a id="brigadir-chat-entry"></a>
 ### Where it is
@@ -274,8 +274,8 @@ A chat with Brigadir itself: the person says what they want of the app in their 
 <a id="brigadir-chat-session"></a>
 ### The agent
 
-- The agent of the action `Brigadir chat` in Customize per action, else the Helper agent. It runs in `~/.brigadir/assistant/` with no project folder; every permission of its own tools (files, shell, web) is declined, so only Brigadir's MCP tools below act.
-- Its prompt (English, [rule 12](../../AGENTS.md)): what it is for, the [settings registry](#settings-registry) as a list (key, label, tab, type, allowed values, current value), and the setup guides. It answers in the language the person writes in.
+- The agent of the action `Brigadir chat` in Customize per action, else the Default agent. It is a `QuickAsks` session of mode `aboutCode`, as the Slack agent's is: it starts in the open project's main tree (else the first project's) with every project's folder added, reads files and runs only [commands that read](notifications-slack-notes-and-schedules.md#slack-side-commands); every edit and every other command is declined.
+- Its prompt (English, [rule 12](../../AGENTS.md)) is the Slack agent's ([what the agent gets](notifications-slack-notes-and-schedules.md#slack-agent)): every project, today's date, Brigadir's tasks (the open task first, then the newest of every project) — plus the [settings registry](#settings-registry) as a list (key, label, tab, type, allowed values, current value) and the setup guides. The task list is refreshed with each message. It answers in the language the person writes in, in the app's Markdown, with code where it helps (unlike Slack).
 - **One chat.** The conversation is kept as normalized events in `~/.brigadir/assistant/events.jsonl` ([rule 2](../../AGENTS.md)) and survives a restart. `New chat` deletes it and starts an empty one with a fresh agent session; settings already changed and secrets already sealed stay, since they live in Brigadir, not in the chat. The chat is not a task: no board column, branch or PR.
 - **A setup outlives its chat.** Each setup's progress (which steps are done, the Slack app id) is kept in `~/.brigadir/assistant/setups.json`. A new chat's prompt lists the setups left unfinished, and the agent's first line offers to go on: `Continue the Slack setup (3 of 5)?`.
 
@@ -295,6 +295,13 @@ One typed list in `core/settings-registry.ts` describes every setting a person c
 | `setup_start {kind}` | starts a guided setup (`slack`, `remoteAccess`) and shows its steps card | the steps and which are done |
 | `secret_request {kind}` | shows a secret card (`slackBotToken`, `slackAppToken`); the value goes from the field to main and the key store | the check's result: `connected as @<bot>`, missing scopes, or Slack's error — never the value |
 | `open_link {url}` | opens a link the setup built (Slack's app pages) in the browser, after the person clicks it | `opened` |
+| `create_task {projects, title, prompt, base}` | the [agent-created task](tasks.md#agent-created-tasks) card in the chat, `Start` · `Decline`; `base` as in [Slack](notifications-slack-notes-and-schedules.md#slack-agent) | the task's id, or `declined` |
+| `send_to_task {task, text}` | the message goes to that task's agent, as a steer from the person | `sent` or the refusal (gone, archived, busy) |
+| `ask_task {task, question}` | a [quick question](composer-steering-queue-and-ghost.md#quick-question) to that task's agent in its own side session | its answer |
+| `open_task {task}` | opens the task in Tasks | `opened` |
+| `note`, `watch` | as the Slack agent's actions, posting to the chat instead of a thread | what was done |
+
+- The task and note tools are the Slack agent's `ACTION` lines as MCP tools: one implementation in main serves both.
 
 - A pasted secret never enters the conversation, the journal, a log or the agent's context; the card shows `Token in Keychain` once it is sealed.
 - `open_link` opens only links Brigadir built for a setup (the Slack manifest link, `https://api.slack.com/apps/<app id>/…`); any other URL is refused.

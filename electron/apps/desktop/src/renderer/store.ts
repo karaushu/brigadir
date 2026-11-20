@@ -34,6 +34,8 @@ type State = {
 	closeSchedules(): void;
 };
 let loadGeneration = 0;
+/** Counts the appearances main published: a load that began before one must not put its older reading back. */
+let appearancePublished = 0;
 const texts = new WeakMap<object, string>();
 const serialized = (task: object) => {
 	let text = texts.get(task);
@@ -121,7 +123,8 @@ export const useWorkspace = create<State>((set, get) => ({
 		return task;
 	},
 	async load() {
-		const generation = ++loadGeneration;
+		const generation = ++loadGeneration,
+			published = appearancePublished;
 		set((state) => (state.error ? { error: false } : state));
 		try {
 			const [workspace, appearance] = await Promise.all([
@@ -132,7 +135,9 @@ export const useWorkspace = create<State>((set, get) => ({
 			// An unchanged appearance keeps its identity so fonts and editors do not remeasure.
 			set((state) => ({
 				workspace: shareTasks(state.workspace, workspace),
+				// spec/appearance#theme: an appearance published while this load ran is newer than what it read.
 				appearance:
+					published !== appearancePublished ||
 					JSON.stringify(appearance) === JSON.stringify(state.appearance)
 						? state.appearance
 						: appearance,
@@ -148,6 +153,7 @@ export const useWorkspace = create<State>((set, get) => ({
 		}
 	},
 	setAppearance: (appearance) => {
+		appearancePublished++;
 		const before = get().appearance.diffBase;
 		set((state) =>
 			JSON.stringify(appearance) === JSON.stringify(state.appearance) ? state : { appearance }

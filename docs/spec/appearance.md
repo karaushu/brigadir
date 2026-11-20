@@ -12,7 +12,7 @@ Related: the Settings window and its tabs in [Settings, modules and onboarding](
 | `appearance` | `system`, `light`, `dark` | `system` | at once |
 
 - The row is `Settings ▸ Appearance ▸ Appearance ▸ Theme` (`System` / `Light` / `Dark`, a `Popup`).
-- Main sets `nativeTheme.themeSource = settings.appearance`. `system` follows the OS live: `nativeTheme` `updated` republishes the appearance to every window.
+- Main sets `nativeTheme.themeSource = settings.appearance`. `system` follows the OS live: `nativeTheme` `updated` republishes the appearance to every window. A published appearance is the newest: a workspace read that began before it does not put its older reading back.
 - The renderer sets `data-theme="light|dark"` on `<html>` (`useApplyAppearance` in `renderer/apply-appearance.ts`). All tokens switch on that attribute. On Windows and Linux the same hook pushes the strip colour and `--fg` to the OS caption buttons after every theme or accent change.
 - `appearance`, `accent` and `editor.codeTheme` are independent fields. A code theme recolours only syntax tokens of the editor and the diff, so adding a code theme never needs a settings migration.
 - High contrast: `@media (prefers-contrast: more)` darkens or lightens the filled warning and danger colours and syntax comments. Components do nothing extra.

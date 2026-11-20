@@ -16,7 +16,7 @@ import { settingLocation } from '@brigadir/core';
 import { Button, IconButton } from './ui/Controls';
 import { Glyph, type GlyphName } from './ui/Glyph';
 import { TextArea, TextInput } from './ui/Input';
-import { ComposerIsland, ComposerBar } from './ui/ComposerIsland';
+import { ChatComposer } from './ChatComposer';
 import { ChatCard } from './ui/ChatCard';
 import { MarkdownStill, markdown } from './MarkdownBlock';
 import { toastError } from './ui/Toast';
@@ -146,8 +146,7 @@ export function BrigadirChat({
 }) {
 	const { rows, busy, title } = useBrigadirChat(chat),
 		[draft, setDraft] = useState(''),
-		log = useRef<HTMLDivElement>(null),
-		field = useRef<HTMLTextAreaElement>(null);
+		log = useRef<HTMLDivElement>(null);
 	const all = useMemo(() => turns(rows ?? []), [rows]);
 	/** Brigadir's own tools read as what they did (`Changed a setting`); another tool keeps its title. */
 	const toolTitle = (part: Extract<Part, { kind: 'tool' }>) => {
@@ -317,45 +316,15 @@ export function BrigadirChat({
 				</div>
 			)}
 			<div className={`${n.compose} ${s.compose}`}>
-				<ComposerIsland
-					onSubmit={(event) => {
-						event.preventDefault();
-						send();
-					}}>
-					<TextArea
-						ref={field}
-						embedded
-						className={n.field}
-						rows={Math.min(8, Math.max(2, draft.split('\n').length))}
-						value={draft}
-						placeholder={t(locale, 'Ask about tasks, code or settings')}
-						aria-label={t(locale, 'Ask about tasks, code or settings')}
-						onChange={(event) => setDraft(event.target.value)}
-						onKeyDown={(event) => {
-							if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-								event.preventDefault();
-								send();
-							}
-						}}
-					/>
-					<ComposerBar attach={null}>
-						{busy && chat ? (
-							<IconButton
-								label={t(locale, 'Stop')}
-								onClick={() => void window.brigadir.stopBrigadirChat(chat)}>
-								<Glyph name="stop" size={12} />
-							</IconButton>
-						) : (
-							<Button
-								appearance="primary"
-								type="submit"
-								aria-label={t(locale, 'Send')}
-								disabled={!draft.trim()}>
-								<Glyph name="send" size={13} />
-							</Button>
-						)}
-					</ComposerBar>
-				</ComposerIsland>
+				<ChatComposer
+					locale={locale}
+					value={draft}
+					onChange={setDraft}
+					placeholder={t(locale, 'Ask about tasks, code or settings')}
+					busy={busy && !!chat}
+					onSend={send}
+					onStop={() => chat && void window.brigadir.stopBrigadirChat(chat)}
+				/>
 			</div>
 		</section>
 	);

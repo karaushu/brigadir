@@ -12,10 +12,15 @@ The composer is the glass "island" at the bottom of a task's chat column: a Mark
 | Environment footer (`ComposerEnvironment`) | Worktree or branch, `+N −M`, base, repo count, class S notice chips |
 | Drop zone (`ComposerDropZone`) | Overlay shown only while a file is dragged over the island |
 
-- One look, one component: `ui/ComposerIsland` (`ComposerIsland`, `ComposerText`, `ComposerBar`, `ComposerDropZone`) is used by the task chat and by the intro's sample window. The feature places it (margins, width); the look lives in `ui/`.
+- One look, one component: `ui/ComposerIsland` (`ComposerIsland`, `ComposerText`, `ComposerBar`, `ComposerDropZone`) is used by the task chat, the [chat composer](#chat-composer) and the intro's sample window. The feature places it (margins, width); the look lives in `ui/`.
 - Column: `--conversation-column-width` is 880 px. The island is `calc(100% - 24px)` wide, capped at the column width minus 24, centred, margins `8px 12px 12px`. Transcript and composer share the column width.
 - An archived task's island is `inert` at 50 % opacity until restored.
 - Attachments of a queued prompt and of a terminal (CLI) task do not use the island; see [queue deck](#queue-deck) and the [CLI context shelf](terminal-and-cli-agents.md).
+
+<a id="chat-composer"></a>
+### Chat composer
+
+The [Brigadir chat](settings-modules-and-onboarding.md#brigadir-chat-entry) and the [note chat](notifications-slack-notes-and-schedules.md#note-chat) use the task composer simplified (`renderer/ChatComposer.tsx`): the same island, the same editor (Markdown keys, `↩` sends, `⇧↩` breaks the line, up to 8 lines) and the same Send and Stop circles (`ComposerSend`, M 28). There is no `+`, no `@` or `/` menu, no context ring, no environment footer and no steering or queue: while the agent answers, only Stop shows. A chat adds its own row over the text (the note chat's «changed» chip) and its own controls before Send (the note chat's model capsule).
 
 <a id="glass-overlay"></a>
 ### Glass, overlay and focus

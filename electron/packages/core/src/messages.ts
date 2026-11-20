@@ -2602,6 +2602,10 @@ const uk = {
 	'hires workers': 'наймає воркерів',
 	'more than a small task': 'більше за малу задачу',
 	'after the hired parts': 'після найнятих частин',
+	'plan mode': 'режим плану',
+	'for a Medium task': 'для середньої задачі',
+	'for a Large task': 'для великої задачі',
+	'after the approved plan': 'після погодженого плану',
 	'Small task limit': 'Межа малої задачі',
 	'A small task that grows past this gets a mid-task review.':
 		'Мала задача, що виросла понад цю межу, дістає ревʼю посеред задачі.',

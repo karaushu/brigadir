@@ -155,6 +155,8 @@ export type CrewTurnMarker =
 	| { kind: 'review-continue' }
 	/** spec/smoke-run#limit: the host asks for the report of a smoke run that is still open. */
 	| { kind: 'smoke-report' }
+	/** spec/reviews#plan-mode: the host asks for the plan a class owes. */
+	| { kind: 'plan-ask' }
 	/** spec/crew#auto-hire: the person decided a hire after the agent's call was gone (its turn ended, or the host restarted). */
 	| { kind: 'hire-decision'; hireId: string; approved: boolean }
 	/** spec/crew#auto-guard: the Auto agent changed files of a zone it hired out. */
@@ -353,6 +355,7 @@ export function isCrewTurnMarker(value: unknown): value is CrewTurnMarker {
 			);
 		case 'review-continue':
 		case 'smoke-report':
+		case 'plan-ask':
 			return Object.keys(value).length === 1;
 		case 'hire-decision':
 			return isId(value.hireId) && typeof value.approved === 'boolean';

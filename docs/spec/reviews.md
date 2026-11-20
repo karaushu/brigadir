@@ -541,15 +541,60 @@ not list it. `reason` (1–200 characters) is one line on why, shown in the chat
   - Any class, with the browser or the simulator module on, adds: run one [smoke](smoke-run.md#who) before the review
     before the PR when the change shows in the running app.
   - Medium and Large: save the ticket or the contract with `save_source`, then present a plan for approval before any
-    edit — a Claude session with `EnterPlanMode` and `ExitPlanMode`; a Codex session, which cannot enter its plan mode by
-    itself, writes the plan in its reply and ends its turn without edits. Large adds: call `request_review` after a layer
-    other work builds on; in an Auto task, hire only independent parts, and a mid-task review starts when the hired
-    parts are back.
+    edit. How depends on the session's [plan mode](#plan-mode): already in it — research without editing and present
+    the plan from there; a plan mode in the catalog — enter it yourself if you can (`EnterPlanMode`, for example),
+    else end the turn now without editing, and the host switches the session into it and asks for the plan; no plan
+    mode — write the plan in the reply and end the turn without editing. A class that owes no plan (one was approved
+    already, or the host raised the class) says no new plan is asked and to go on. Large adds: call `request_review` after a
+    layer other work builds on; in an Auto task, hire only independent parts, and a mid-task review starts when the
+    hired parts are back.
 - The same class again journals nothing and returns the same answer. Another class journals `task.class` with
   `previous`. A class below Large while workers of the task run is refused: `Workers run in this task: it stays Large
   until they are dismissed.` A task that writes no code refuses the call: `This task changes no code.`
 - The host holds no edit back: it cannot see an edit before it lands. A plan presented for approval starts its plan
   review as always, whatever the class.
+
+<a id="plan-mode"></a>
+
+### Plan mode by the host
+
+An agent that cannot enter its plan mode by itself (Codex) still presents the plan a class asks for as a plan for
+approval: the host switches the session into its plan mode between turns.
+
+- **The plan mode** is a choice of the session's catalog whose value or name is `plan`: of the `mode` option, else of
+  another select option (Codex `Collaboration mode`), else a legacy mode. No table per agent (rule 7). A session
+  without one gets no switch; its class's `next` asks for the plan in the reply.
+- **A plan is owed** from the agent's `set_task_class` to Medium or Large until a plan for approval is approved. A plan
+  approved after the class was last Small (or since the task's start) settles it, so a class stated after an approved
+  plan owes none; Small clears it. The host's own raises owe no plan: the tripwire fires after the work has landed and
+  its answer is the mid-task review, and an approved hire is the person's approval of its parts (plan mode would also
+  stop the Auto agent's crew tools while its workers run).
+- **Between turns only.** Before each turn of a task that owes a plan, a session that is not in its plan mode is
+  switched into it (`session/set_config_option`, or `session/set_mode` for a legacy mode), and the host journals
+  `plan.mode`. Never during a turn: a turn that has already edited goes on to its end, and Codex takes a collaboration
+  mode only from its next turn anyway. A switch the agent refuses is left; the turn runs as it is.
+- **The ask.** A turn that ends while a plan is owed, with no plan for approval presented and no ask sent since it
+  became owed, gets one ask: a prompt in front of the queue, also of messages held for the turn (marker `plan-ask`, no
+  row of the person's; one the queue refuses is asked again at the next turn end), `This task is
+  <Medium|Large>: present a plan for approval before you change anything more. Brigadir switched this session into plan
+  mode: research without editing files, then present the plan. If files were already changed, the plan covers what is
+  done and what is left.` (rule 12). Its turn starts in plan mode, as above.
+- **The plan** arrives as any plan for approval (Codex: `plan_update`, then `Implement this plan?` with `implement_plan`), so
+  the [plan review](#plan-start) and [the approval](chat-turns-plans-and-questions.md#plan-approval) run unchanged.
+- **Back to writing.** The agent leaves its plan mode on approval: Codex sets `Collaboration mode` to `Default` and goes
+  on in the same turn with `Implement the approved plan.`; Claude through the approval's option. A turn with an approval
+  that ends with the session still in the plan choice the host set — never left since the switch — is followed by the
+  host setting the value from before its switch (`plan.mode`, `on: false`), before the next turn starts. A plan the
+  session entered again after leaving the host's is not the host's to undo.
+- **The person's choice wins.** The capsule shows the switched value as any option (`Collaboration mode · Plan`). A
+  plan mode the person picked is left as it is. When the person moves the option off the plan after the host's switch,
+  the host journals `plan.mode` (`by: person`, `on: false`) and does not switch again while that class owes its plan;
+  the change and its record go before any next turn starts.
+- **A restart while the plan waits.** The waiting plan ends with the old host's turn and no turn starts by itself.
+  The adapter may open the session without its plan mode; the next turn, whoever sends it, is switched into it again
+  unless the person moved it off.
+- **The row** (`list` glyph): `plan mode`, the option and its choice (`Collaboration mode · Plan`), then `for a Medium
+  task` (`Large`); the host's switch back reads `after the approved plan`. The person's own change has no row.
 
 <a id="class-raise"></a>
 
@@ -643,7 +688,11 @@ introduced?, accepted?}` (`disputed` of older files reads as `open`).
   `findings`), `task-review.finished` (`state` ∈ `passed | accepted | stopped | failed | outdated`, `failure?`, `open?` and
   `approval?` when the plan's approval ended it). `source.saved` (`id`, `title`, `url?`, `chars`). `task.class`
   (`class` ∈ `small | medium | large`, `reason` — the agent's line, empty for the host's, `by` ∈ `agent | host`,
-  `previous?`, `cause?` ∈ `threshold | hire` for the host's, `files?` and `lines?` of a tripwire). The proposal keeps `review.proposed`, `review.dismissed` and `review.replied`. The kinds of older
+  `previous?`, `cause?` ∈ `threshold | hire` for the host's, `files?` and `lines?` of a tripwire). `plan.mode`
+  ([Plan mode by the host](#plan-mode): `on`, `by` ∈ `host | person`, `class` — the class that owes the plan, `option?` —
+  the option's id, absent for a legacy mode, `name` — the option's name as the agent gave it, `value` and `valueName` —
+  the choice set, `previous?` — the value before a host switch). A host prompt with the marker `plan-ask`
+  is the ask. The proposal keeps `review.proposed`, `review.dismissed` and `review.replied`. The kinds of older
   journals — `review.started`, `review.finished` and the task's own `crew.review` rows — stay valid and replay as they
   were drawn.
 - Host commands: `startReview` (the resolved reviewers, `who`, `reviewer`, `point`, `instructions`, `guidance`,
@@ -654,7 +703,6 @@ introduced?, accepted?}` (`disputed` of older files reads as `open`).
 
 ## Later
 
-- A Codex session switched into its plan mode by the host when its class asks for a plan.
 - A review strip on the phone.
 
 <a id="non-goals"></a>

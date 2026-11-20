@@ -731,6 +731,8 @@ export function CrewEventRow({
 			marker.kind === 'review-continue' ||
 			// spec/smoke-run#limit: the host's ask for the smoke report is not the person's message.
 			marker.kind === 'smoke-report' ||
+			// spec/reviews#plan-mode: nor is its ask for the plan a class owes; the `plan.mode` row says it.
+			marker.kind === 'plan-ask' ||
 			marker.kind === 'hire-decision' ||
 			marker.kind === 'zone-touched'
 		)

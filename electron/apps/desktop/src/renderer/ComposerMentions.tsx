@@ -28,6 +28,7 @@ import {
 	type ProviderCatalog,
 	type SlashAction,
 } from '@brigadir/core';
+import { attachmentPillTitle } from './composer-mentions';
 import { slashMenuGroups, useSlashWords } from './slash-menu-items';
 import { useSlashCatalog } from './use-slash-catalog';
 import {
@@ -420,7 +421,7 @@ export function useComposerEditor({
 						type: 'task',
 						label: item.title,
 						glyph: item.crew ? glyphs.helmet : glyphs.person,
-						title: item.title,
+						title: `${item.title}\n${t(locale, 'Goes to the agent as a task summary: state, branch, requests and changes.')}`,
 					}
 				: {
 						kind: 'pill',
@@ -468,7 +469,7 @@ export function useComposerEditor({
 								? glyphs.folder
 								: glyphs.file,
 			mono: mention.kind === 'file' || mention.kind === 'folder',
-			title: item.name,
+			title: attachmentPillTitle(locale, item),
 			attachment: item.id,
 		};
 	};

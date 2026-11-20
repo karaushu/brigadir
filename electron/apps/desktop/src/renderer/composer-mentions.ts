@@ -1,4 +1,11 @@
-import { slashTrigger } from '@brigadir/core';
+import {
+	attachmentLines,
+	attachmentMention,
+	slashTrigger,
+	t,
+	type Locale,
+	type PromptAttachment,
+} from '@brigadir/core';
 import { mentionTrigger } from './prompt-mentions';
 
 /**
@@ -38,4 +45,29 @@ export function replaceTrigger(
 	if (!insert && (!head || /\s$/.test(head)) && tail.startsWith(' ')) tail = tail.slice(1);
 	const glue = insert && !/^\s/.test(tail) ? ' ' : '';
 	return { text: head + insert + glue + tail, caret: head.length + insert.length + glue.length };
+}
+
+/** spec/composer#mentions: a pill's title — its full name, then how it goes to the agent. */
+export function attachmentPillTitle(
+	locale: Locale,
+	item: Pick<PromptAttachment, 'kind' | 'name'>,
+	name = item.name
+): string {
+	const kind = attachmentMention(item).kind,
+		way =
+			kind === 'task'
+				? t(locale, 'Goes to the agent as a task summary: state, branch, requests and changes.')
+				: kind === 'agent'
+					? t(
+							locale,
+							'Goes to the agent as a role for a subagent: the agent starts one when you ask.'
+						)
+					: attachmentLines(item)
+						? t(locale, 'Goes to the agent as the text of these lines.')
+						: kind === 'folder'
+							? t(locale, 'Goes to the agent as a path: the agent reads the folder itself.')
+							: kind === 'file'
+								? t(locale, 'Goes to the agent as a path: the agent reads the file itself.')
+								: t(locale, 'Goes to the agent as text.');
+	return kind === 'image' ? name : `${name}\n${way}`;
 }

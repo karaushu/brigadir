@@ -378,6 +378,8 @@ export type SelfReviewHooks = {
 		reviewId: string,
 		round: readonly { tree: string }[]
 	): Promise<DesignGateInput | null>;
+	/** spec/reviews#reviewer-sessions: a review of the task is open — its reviewers keep their worktrees. */
+	live?(): boolean;
 };
 /** spec/reviews#loop: a file of one repo — the same path in two repos of a project is two files. */
 export const scopedPath = (scopeId: string, path: string) => `${scopeId}\0${path}`;
@@ -3886,6 +3888,61 @@ export class CrewHost {
 			// Once per finished check: a reviewer the human resumes by hand is not stopped again until a new round.
 			this.retired.add(reviewer.taskId);
 			await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
+		}
+	}
+	/**
+	 * spec/reviews#reviewer-sessions: the reviewers of the task's own reviews that ended give up their worktrees and branches; their tasks and
+	 * logs stay. The reviewers of the review still open keep theirs. A reviewer's host stops first: its agent runs in that worktree.
+	 */
+	async dropReviewers() {
+		const root = this.deps.context.spec.root;
+		for (const worker of this.workers) {
+			const agent = findSpecAgent(root, worker.nodeId);
+			if (
+				agent?.role !== 'reviewer' ||
+				this.checks(agent) ||
+				this.isReviewWorker(agent) ||
+				this.dropping.has(worker.taskId) ||
+				(this.deps.self?.live?.() && this.checksSelf(worker.nodeId))
+			)
+				continue;
+			this.dropping.add(worker.taskId);
+			await this.dropReviewer(worker)
+				.catch(() => {})
+				.finally(() => this.dropping.delete(worker.taskId));
+		}
+	}
+	private dropping = new Set<string>();
+	private async dropReviewer(worker: CrewWorkerRecord) {
+		const key = this.workerKey(worker),
+			store = this.deps.store,
+			trees = new Worktrees(
+				store,
+				new ProcessCoordinator(join(dirname(this.deps.services.mcpEntry), 'process-owner'))
+			),
+			state = await trees.read(key);
+		if (!state || this.stopping) return;
+		const link = await this.link(key);
+		if (link) {
+			this.retired.add(worker.taskId);
+			await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
+			await Promise.race([link.closed, delay(15_000)]);
+			if (this.links.get(name(key)) === link) return;
+		}
+		await trees.remove(key);
+		await store.clearPreparation(key);
+		// The branch goes only when another branch holds its commits: the reviewer writes none, so it is the task's own history.
+		for (const repo of state.repositories) {
+			const ref = `refs/heads/${state.branch}`;
+			const holders = await gitText(repo.source, [
+				'for-each-ref',
+				'--format=%(refname)',
+				'--contains',
+				ref,
+				'refs/heads',
+			]).catch(() => '');
+			if (holders.split('\n').some((line) => line && line !== ref))
+				await gitText(repo.source, ['branch', '-D', '--', state.branch]).catch(() => {});
 		}
 	}
 	async stopWorkers() {

@@ -83,7 +83,8 @@ export function ownReviewCrew(
  *  findings itself, so its closure check opens when its own fixing turn ends, whatever its workers do. */
 export const closureWaitsForCrew = (role: string | null) => role === 'foreman';
 /** What the crew host offers the task's review: its rounds on the task itself (`checkSelf`), the agent's replies and the stop. */
-export type SelfReviewHost = Pick<CrewHost, 'checkSelf' | 'replySelf' | 'stopSelf' | 'selfTrees'>;
+export type SelfReviewHost = Pick<CrewHost, 'checkSelf' | 'replySelf' | 'stopSelf' | 'selfTrees'> &
+	Partial<Pick<CrewHost, 'dropReviewers'>>;
 export type TaskReviewDeps = {
 	store: SessionStore;
 	key: TaskKey;
@@ -165,6 +166,8 @@ export class TaskReviewLife {
 				throw error;
 		}
 		this.host = this.deps.existing();
+		// spec/reviews#reviewer-sessions: leftovers of reviews that ended earlier go once, at the start.
+		void this.host?.dropReviewers?.().catch(() => {});
 		// spec/reviews#data: a version-1 review read while the agent fixed has no batch id; the journal holds the batch it was sent.
 		const review = this.doc.review;
 		if (review?.state === 'fixing' && !review.batch) {
@@ -561,6 +564,8 @@ export class TaskReviewLife {
 			state,
 			...(approval ? { approval: true, open: approval.open } : {}),
 		});
+		// spec/reviews#reviewer-sessions: the ended review's reviewers give up their worktrees and branches.
+		void this.host?.dropReviewers?.().catch(() => {});
 	}
 	// ── the plan review (spec/reviews#plan-review) ─────────────────────────────
 
@@ -955,6 +960,7 @@ export class TaskReviewLife {
 	hooks(): SelfReviewHooks {
 		return {
 			id: () => this.doc.review?.id ?? '',
+			live: () => taskReviewLive(this.doc.review),
 			point: () => this.doc.review?.point ?? 'pre-pr',
 			base: () => this.doc.review?.base ?? null,
 			guidance: () => this.doc.review?.guidance ?? '',

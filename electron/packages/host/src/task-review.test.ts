@@ -714,3 +714,76 @@ it('a restart between the verdicts of two reviewers keeps the first one’s find
 		/left 2 findings in the review before the pull request/
 	);
 }, 300_000);
+
+/** Where a reviewer's worktree lives and its branch, read while it has them. */
+async function reviewerTree(store: SessionStore, key: TaskKey) {
+	const reviewerTask = await until(async () => {
+		const value = await store.task(key);
+		return value.preparation?.state === 'ready' && value.worktreeBranch ? value : undefined;
+	});
+	return {
+		path: (await store.projectForTask(reviewerTask)).path,
+		branch: reviewerTask.worktreeBranch!,
+	};
+}
+const gone = async (repo: string, tree: { path: string; branch: string }) =>
+	!(await readFile(join(tree.path, 'README.md'), 'utf8').then(
+		() => true,
+		() => false
+	)) &&
+	!(await git(repo, 'worktree', 'list')).stdout.includes(tree.path) &&
+	!(await git(repo, 'branch', '--list', tree.branch)).stdout.trim();
+
+// Decision of the walkthrough (I, question 7): every review left a worktree and a branch in the person's repo until the archive.
+it('an ended review’s reviewer gives up its worktree and branch, keeping its task and log; leftovers go at the next start (spec/reviews#reviewer-sessions)', async () => {
+	const { repo, store, task } = await setup('Clean output');
+	const client = await launch(store, task);
+	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(client, (r) => r.event.kind === 'turn.completed');
+	await client.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const key = await reviewerOf(client, task);
+	const tree = await reviewerTree(store, key);
+	expect(await gone(repo, tree)).toBe(false);
+	const finished = await find(client, (r) => r.event.kind === 'task-review.finished', 90_000);
+	expect(finished.event).toMatchObject({ state: 'passed' });
+	await until(async () => ((await gone(repo, tree)) ? true : undefined), 60_000);
+	// The record and the log stay: the reviewer's task, its journal, and the review on disk.
+	expect((await store.task(key)).readOnlyAgent).toBe(true);
+	expect((await journalOf(store, key)).some((r) => r.event.kind === 'turn.started')).toBe(true);
+	expect((await git(repo, 'branch', '--list')).stdout).toContain('main');
+
+	// A review that ended while no host ran (here: marked ended on disk) leaves its reviewer's tree; the next host removes it.
+	const left = await setup('hold the verdict');
+	const log = join(left.store.root, 'agents.log');
+	const first = await launchHost(left.store, left.task, ['crew', log]);
+	await first.client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(first.client, (r) => r.event.kind === 'turn.completed');
+	await first.client.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const leftKey = await reviewerOf(first.client, left.task);
+	const leftTree = await reviewerTree(left.store, leftKey);
+	await holding(log);
+	first.child.kill('SIGKILL');
+	await new Promise((done) => first.child.once('exit', done));
+	const file = join(await left.store.taskDir(left.task), 'task-review.json');
+	const doc = JSON.parse(await readFile(file, 'utf8'));
+	await atomicJson(file, {
+		...doc,
+		review: { ...doc.review, state: 'stopped', finishedAt: new Date().toISOString() },
+	});
+	await launchHost(left.store, left.task, ['crew', log]);
+	// The reviewer's host, still holding its read, stops first.
+	await until(async () => ((await gone(left.repo, leftTree)) ? true : undefined), 60_000);
+	expect((await left.store.task(leftKey)).worktreeBranch).toBeUndefined();
+}, 300_000);

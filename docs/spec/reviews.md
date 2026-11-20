@@ -58,6 +58,11 @@ provider's own option catalog.
   `readOnlyAgent`): isolated in a worktree on branch `<task branch>-<reviewer slug>` (the
   [worker naming rule](crew.md#workers)), the task's repos, no setup command and no `.env` copying. Writes are refused
   ("You check the work and do not write code.").
+- **When the review ends** (`passed`, `accepted`, `stopped`, `failed`, a plan's approval included) the host stops its
+  reviewers' hosts and removes their worktrees and branches; their tasks stay as the review's log, with their journals and
+  the review's record. A branch goes only when another branch of the repo holds its commits (the reviewer writes none),
+  and a branch checked out elsewhere stays. The reviewers of a review still open keep theirs. A host that starts removes
+  what reviews that ended earlier left behind. Nothing of the person's is touched.
 - **Its tree is the round's snapshot.** Before a round the host sets every repo of the reviewer's worktree to the round's
   result tree (`git read-tree -u --reset <tree>`), so the files on disk are the task's state under review, uncommitted
   changes included.
@@ -160,7 +165,8 @@ problem the fix brought in) is accepted.`), a `replyTo` that is not this reviewe
    recorded as accepted and their threads resolved.
 
 - **Stop.** `Stop` (strip) cancels the open round and shuts the reviewers down; their tasks stay as the review's log until
-  the task is archived or deleted. The review ends `stopped`.
+  the task is archived or deleted, and their worktrees and branches go ([Reviewer sessions](#reviewer-sessions)). The
+  review ends `stopped`.
 - **Restart.** The review's record and its runs are on disk; after a host restart the review continues from its state:
   a round being read is dispatched again, a review that waited for the agent's turn reads (no turn runs after a
   restart), a batch waiting for the agent's turn stays queued, a review waiting for the person keeps waiting.

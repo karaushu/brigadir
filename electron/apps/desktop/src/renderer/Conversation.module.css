@@ -252,7 +252,7 @@
 	opacity: 0;
 	transform: rotate(-90deg);
 	transition:
-		transform var(--motion-fast),
+		transform var(--motion-nudge) var(--motion-ease),
 		opacity var(--motion-fast);
 }
 .tool > summary:is(:hover, :focus-visible) > svg:first-child,
@@ -451,27 +451,7 @@
 	padding-inline: 16px;
 }
 
-/* Native disclosure transitions: no entrance replay when virtualized rows mount. */
-@supports (interpolate-size: allow-keywords) {
-	.tool::details-content,
-	.thought::details-content,
-	.toolGroup > details::details-content {
-		interpolate-size: allow-keywords;
-		block-size: 0;
-		opacity: 0;
-		overflow: clip;
-		transition:
-			block-size var(--motion-travel) var(--motion-ease),
-			opacity var(--motion-enter-time) ease,
-			content-visibility var(--motion-travel) allow-discrete;
-	}
-	.tool[open]::details-content,
-	.thought[open]::details-content,
-	.toolGroup > details[open]::details-content {
-		block-size: auto;
-		opacity: 1;
-	}
-}
+/* Disclosures open through the shared <details> rule in tokens.css (spec/appearance#motion). */
 
 .composer {
 	width: calc(100% - 24px);
@@ -562,7 +542,7 @@
 	opacity: 0;
 	transform: rotate(-90deg);
 	transition:
-		transform var(--motion-fast),
+		transform var(--motion-nudge) var(--motion-ease),
 		opacity var(--motion-fast);
 }
 .planRow > summary:is(:hover, :focus-visible) > svg:first-child,

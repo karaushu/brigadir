@@ -23,6 +23,7 @@ import { NoticeLabel } from './ui/NoticeChip';
 import { OptionIcon } from './ui/OptionIcon';
 import { Popover } from './ui/Popover';
 import { useSurfaceLayout } from './surface-layout';
+import { motionTime } from './ui/motion';
 import styles from './ComposerOptions.module.css';
 
 type Entry = {
@@ -195,15 +196,27 @@ export function ComposerOptions({
 	// spec/composer#agent-capsule: a mode that changes while the capsule is on screen flashes the accent once (⇧Tab, the menu).
 	const modeEntry = entries.find((entry) => entry.kind === 'mode'),
 		modeValue = modeEntry ? `${modeEntry.key}=${String(modeEntry.option.value)}` : null,
-		lastMode = useRef(modeValue),
-		[flash, setFlash] = useState<string | null>(null);
+		lastMode = useRef(modeValue);
 	useEffect(() => {
 		const was = lastMode.current;
 		lastMode.current = modeValue;
 		if (was === null || modeValue === null || was === modeValue || !modeEntry?.shown) return;
-		setFlash(modeEntry.key);
-		const timer = setTimeout(() => setFlash(null), 1200);
-		return () => clearTimeout(timer);
+		// spec/appearance#motion: accent at once, then a fade over --motion-flash; a repeat starts the fade again.
+		const button = root.current?.querySelector<HTMLElement>('[data-option-kind="mode"] > button');
+		if (!button) return;
+		button
+			.getAnimations()
+			.filter((animation) => animation.id === 'mode-flash')
+			.forEach((animation) => animation.cancel());
+		const animation = button.animate(
+			[
+				{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)', offset: 0 },
+				{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)', offset: 0.3 },
+				{ backgroundColor: 'transparent' },
+			],
+			{ duration: motionTime('--motion-flash'), easing: 'ease' }
+		);
+		animation.id = 'mode-flash';
 	}, [modeValue]);
 	const command = (entry: Entry, value: string | boolean): SessionCommand =>
 		entry.legacy
@@ -343,11 +356,7 @@ export function ComposerOptions({
 			data-level={level}>
 			<span className={styles.capsule} data-open={open !== null} data-agent-segments>
 				{visible.map((entry, index) => (
-					<span
-						key={entry.key}
-						className={styles.entry}
-						data-option-kind={entry.kind}
-						data-flash={flash === entry.key || undefined}>
+					<span key={entry.key} className={styles.entry} data-option-kind={entry.kind}>
 						{index > 0 && (
 							<span className={styles.dot} aria-hidden="true">
 								·

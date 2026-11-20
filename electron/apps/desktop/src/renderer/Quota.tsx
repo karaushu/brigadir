@@ -343,7 +343,9 @@ function ProviderLimits({
 									aria-valuemax={100}
 									aria-valuenow={Math.round(left * 100)}
 									aria-valuetext={`${quotaPercent(locale, left)} ${t(locale, 'left')}`}>
-									<span style={{ width: `${Math.round(left * 100)}%` }} />
+									<span
+										style={{ clipPath: `inset(0 ${100 - Math.round(left * 100)}% 0 0 round 2px)` }}
+									/>
 								</div>
 								<span className={s.caption}>{quotaResetLabel(locale, window, now)}</span>
 								{/* spec/agents-and-providers#usage: the eye picks the window the indicator shows; pressing the chosen one returns to the tightest. */}

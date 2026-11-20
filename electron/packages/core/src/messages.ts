@@ -2982,6 +2982,7 @@ const uk = {
 	Changed: 'Змінено',
 	'View diff': 'Переглянути диф',
 	'Reverted: {file}': 'Відкочено: {file}',
+	'Hold to revert {file}': 'Утримуй, щоб відкотити {file}',
 	'The file changed after the question. It cannot be reverted.':
 		'Файл змінився після питання. Відкотити не можна.',
 	'The answer stays until the window closes.': 'Відповідь доступна до закриття вікна.',

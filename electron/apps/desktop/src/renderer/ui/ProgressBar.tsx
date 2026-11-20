@@ -20,7 +20,7 @@ export function ProgressBar({
 			data-done={!tone && total > 0 && value >= total ? true : undefined}
 			data-tone={tone}
 			aria-hidden="true">
-			<i style={{ width: `${Math.round(share * 100)}%` }} />
+			<i style={{ clipPath: `inset(0 ${100 - Math.round(share * 100)}% 0 0 round 2px)` }} />
 		</span>
 	);
 }

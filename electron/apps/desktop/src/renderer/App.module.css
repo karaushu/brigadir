@@ -257,7 +257,6 @@
 .sidebar {
 	position: relative;
 	overflow: hidden;
-	transition: opacity var(--motion-fast) var(--motion-ease);
 }
 .layout[data-sidebar-hidden='true'] .sidebar {
 	opacity: 0;
@@ -476,7 +475,7 @@
 }
 .projectCollapse svg {
 	transform: rotate(-90deg);
-	transition: transform var(--motion-travel) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .projectCollapse[aria-expanded='true'] svg {
 	transform: rotate(0);
@@ -751,7 +750,7 @@
 	color: var(--fg2);
 }
 .crewChevron svg {
-	transition: transform var(--motion-travel) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .crewChevron[aria-expanded='false'] svg {
 	transform: rotate(-90deg);
@@ -859,18 +858,18 @@
    No forward fill: when an animation ends the row's own state (selection, status fill) shows again. */
 @media (prefers-reduced-motion: no-preference) {
 	.task[data-attention='turn-ended'] {
-		animation: attention-wave 1100ms cubic-bezier(0.2, 0.7, 0.3, 1);
+		animation: attention-wave 400ms ease;
 	}
 	.task[data-attention='turn-ended'] > span[role='img'],
 	.workerRow[data-attention='turn-ended'] [role='img'] {
-		animation: attention-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1);
+		animation: attention-pop var(--motion-enter-time) var(--motion-ease);
 	}
 	.task[data-attention='turn-ended'] .taskHead > .unread,
 	.workerRow[data-attention='turn-ended'] > .unread {
-		animation: attention-pop 380ms 260ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
+		animation: attention-pop var(--motion-enter-time) 260ms var(--motion-ease) backwards;
 	}
 	.task[data-attention='needs-you'] {
-		animation: attention-amber 600ms ease-out;
+		animation: attention-amber 400ms ease;
 	}
 	.task[data-attention='needs-you'] > span[role='img'],
 	.workerRow[data-attention='needs-you'] [role='img'] {
@@ -888,7 +887,7 @@
 		animation: attention-ring 900ms 150ms ease-out 2 backwards;
 	}
 	.projectAttention[data-attention] {
-		animation: attention-pop 420ms 300ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
+		animation: attention-pop var(--motion-enter-time) 300ms var(--motion-ease) backwards;
 	}
 }
 @keyframes attention-wave {
@@ -903,7 +902,7 @@
 }
 @keyframes attention-pop {
 	0% {
-		transform: scale(0.4);
+		transform: scale(0.95);
 		opacity: 0;
 	}
 	100% {
@@ -911,7 +910,7 @@
 		opacity: 1;
 	}
 }
-/* A peak of amber at ≈150 ms that fades over ≈450 ms back to the row's own calm (no resting fill). */
+/* A peak of amber at ≈100 ms that fades over ≈300 ms back to the row's own calm (no resting fill). */
 @keyframes attention-amber {
 	0% {
 		background: transparent;
@@ -1105,7 +1104,7 @@
 }
 .doneFold svg {
 	flex: none;
-	transition: transform var(--motion-travel) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .doneFold[aria-expanded='false'] svg {
 	transform: rotate(-90deg);
@@ -1206,23 +1205,13 @@
 .taskBackground > svg {
 	flex: none;
 	color: var(--fg2);
-	animation: spin 1.6s steps(8) infinite;
+	animation: var(--motion-spinner-ticks);
 }
 .taskBackground > span {
 	min-width: 0;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
-}
-@keyframes spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.taskBackground > svg {
-		animation: none;
-	}
 }
 
 /* spec/notifications-slack-notes-and-schedules#schedules: a quiet scheduled run, shown by the status filter's «Quiet scheduled runs» — a pale row. */

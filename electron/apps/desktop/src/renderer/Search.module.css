@@ -15,16 +15,19 @@
 		0 18px 44px var(--shadow);
 	overflow: hidden;
 	font-size: var(--text-13);
-	transition:
-		opacity var(--motion-enter-time) var(--motion-ease),
-		translate var(--motion-travel) var(--motion-ease),
-		width var(--motion-travel) var(--motion-ease),
-		display var(--motion-travel) allow-discrete,
-		overlay var(--motion-travel) allow-discrete;
+	/* spec/appearance#motion-frequency: opened by double Shift many times an hour, so it appears and goes at once, and the
+	   Text tab's width snaps. */
+	opacity: 1;
+	translate: none;
+	transition: none;
 }
 .dialog[open] {
 	display: flex;
 	flex-direction: column;
+}
+.dialog::backdrop {
+	opacity: 1;
+	transition: none;
 }
 .dialog[data-tab='text'] {
 	width: min(1000px, calc(100vw - 32px));
@@ -328,17 +331,7 @@
 	border-radius: 50%;
 	border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
 	border-top-color: var(--accent);
-	animation: search-spin 900ms linear infinite;
-}
-@keyframes search-spin {
-	to {
-		rotate: 1turn;
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.spinner {
-		animation: none;
-	}
+	animation: var(--motion-spinner);
 }
 
 /* Text: options, progress, the split with the preview. */
@@ -417,11 +410,9 @@
 }
 .progress i {
 	position: absolute;
-	left: 0;
-	top: 0;
-	bottom: 0;
+	inset: 0;
 	background: var(--accent);
-	transition: width var(--motion-fast) linear;
+	transition: clip-path var(--motion-fast) linear;
 }
 .split {
 	flex: 1;

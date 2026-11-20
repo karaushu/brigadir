@@ -24,7 +24,7 @@
 	color: var(--fg);
 	font: var(--text-12) / 1.4 var(--ui-family);
 	pointer-events: auto;
-	animation: var(--motion-fade);
+	/* spec/appearance#motion-frequency: opened with ⌘F, it appears at once. */
 }
 .panel > .row {
 	align-self: flex-start;

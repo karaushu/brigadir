@@ -76,7 +76,7 @@
 	align-items: center;
 	justify-content: center;
 	pointer-events: none;
-	transition: inset var(--motion-fast) var(--motion-ease);
+	/* It follows the pointer while dragging; the zone snaps (spec/appearance#motion: no animated inset). */
 }
 .zone[data-zone='right'] {
 	inset: 6px 6px 6px 50%;

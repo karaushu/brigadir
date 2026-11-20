@@ -67,7 +67,7 @@
 	transition:
 		background-color var(--motion-fast) ease,
 		box-shadow var(--motion-fast) ease,
-		transform var(--motion-fast) ease;
+		transform var(--motion-nudge) var(--motion-ease);
 }
 .documents .tab:hover {
 	background: var(--hover);
@@ -254,12 +254,7 @@
 	color: var(--accent);
 }
 .opening > svg {
-	animation: tab-opening-spin 900ms linear infinite;
-}
-@keyframes tab-opening-spin {
-	to {
-		transform: rotate(360deg);
-	}
+	animation: var(--motion-spinner);
 }
 .conflictDot {
 	flex: none;
@@ -274,9 +269,6 @@
 	}
 	.documents .tab:has(> button[role='tab']:active) {
 		transform: none;
-	}
-	.opening > svg {
-		animation: none;
 	}
 }
 

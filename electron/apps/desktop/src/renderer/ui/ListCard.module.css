@@ -10,7 +10,7 @@
 .row {
 	border-top: 1px solid var(--sep);
 	margin-top: -1px;
-	transition: opacity 0.3s ease;
+	transition: opacity var(--motion-enter-time) ease;
 }
 .row[data-off='true'] {
 	opacity: 0.5;

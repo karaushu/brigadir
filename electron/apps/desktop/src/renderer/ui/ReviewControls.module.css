@@ -268,7 +268,7 @@
 	animation: var(--motion-reveal);
 }
 .collapse svg {
-	transition: transform var(--motion-travel) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .generalNote {
 	height: auto;

@@ -5,7 +5,6 @@
 	display: flex;
 	flex-direction: column;
 	background: var(--content);
-	animation: var(--motion-fade);
 }
 .header {
 	flex: none;

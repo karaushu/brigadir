@@ -74,7 +74,7 @@ A settings row (`SettingsRow`, and the `Rights` row in Templates) whose control 
 - Mechanics: the switch's `::after { inset: 0 }` covers the row. The switch has no hover of its own.
 - Nested buttons (`Check now`, `Sign in…`, `Check`, `How to install`) and the copyable install command sit on top with their own hover. Clicking them does not toggle, and the row underneath stays hovered.
 - Radio options (`SettingsOption`) use the same tokens: hover `--tint`, pressed `--segment-press`.
-- The same pressed style applies to the icon buttons in the PR panel header (`Find PR`, `Refresh`, `Open on GitHub`): hover `--tint` + `--fg`, pressed `--segment-press` + `scale .96`, with no scale under reduced motion. While reading, the `Refresh` glyph spins at 0.8 s per turn and finishes its turn after the reply. Under reduced motion it does not spin and shows at 55 %.
+- The same pressed style applies to the icon buttons in the PR panel header (`Find PR`, `Refresh`, `Open on GitHub`): hover `--tint` + `--fg`, pressed `--segment-press` + the shared press scale ([motion](appearance.md#motion)). While reading, the `Refresh` glyph spins at `--motion-spin` and finishes its turn after the reply; under reduced motion it turns at 2.4 s.
 
 <a id="agents-tab"></a>
 ### Agents tab and launch defaults

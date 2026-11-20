@@ -25,7 +25,7 @@ its size from the [control scale](#control-scale), never from a local `height`, 
 | `[data-size='s' \| 'm' \| 'l' \| 'xl']` | a control or a row | the working control set `--c-*` |
 | `[data-appearance='…']` | a control | the appearance set `--ap-*` |
 | `@media (prefers-contrast: more)` | the OS | stronger filled warning and danger, darker or lighter comments |
-| `@media (prefers-reduced-motion: reduce)` | the OS | motion durations 0 ([motion.md](motion.md)) |
+| `@media (prefers-reduced-motion: reduce)` | the OS | movement off, fades kept, spinners slower ([motion.md](motion.md)) |
 
 ## Surfaces and text
 
@@ -273,8 +273,9 @@ identity.
 
 ## Motion
 
-`--motion-fast`, `--motion-enter-time`, `--motion-travel`, `--motion-ease`, `--motion-enter`, `--motion-reveal` and
-`--motion-fade`. Values and rules are in [motion.md](motion.md).
+`--motion-fast`, `--motion-nudge`, `--motion-enter-time`, `--motion-travel`, `--motion-flash`, `--motion-hold`,
+`--motion-spin`, `--motion-ease`, `--motion-ease-move`, `--motion-enter`, `--motion-reveal`, `--motion-fade`,
+`--motion-spinner` and `--motion-spinner-ticks`. Values and rules are in [motion.md](motion.md).
 
 ## Radii
 

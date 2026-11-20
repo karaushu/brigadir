@@ -212,7 +212,7 @@ by the leading glyph and, for needs-you, the amber second line.
 - Click opens the task; right click / context-menu key / Shift+F10 opens the [task menu](#task-menu). All actions address
   the clicked row, not the current selection.
 - Rows are memoised per task, locale and selection; a workspace reload keeps unchanged task objects.
-- Reordering animates retained rows only (`useSidebarOrder`, FLIP with `--motion-travel`); new, filtered or disclosed rows
+- Reordering animates retained rows only (`useSidebarOrder`, FLIP with `--motion-travel` and `--motion-ease-move`); new, filtered or disclosed rows
   never replay an entrance; reduced motion disables it.
 - A quiet scheduled run shown through the filter is drawn at 0.7 opacity.
 
@@ -305,7 +305,7 @@ One leading glyph per row. **Shape distinguishes, colour reinforces** — colour
 - `StatusIcon` / `StatusGlyph` (`ui/Controls`) are the one implementation, used by sidebar rows, crew workers (12 px),
   board cards and list, Search Everywhere, the Live agents popup and the Archive window.
 - Only the glyph is coloured; titles and state captions keep their own colours.
-- Only running states animate: one CSS rotation, `1s steps(8)`, no per-row timers; `prefers-reduced-motion` stops it.
+- Only running states animate: one CSS rotation at `--motion-spin`, `steps(8)`, no per-row timers; `prefers-reduced-motion` slows it to 2.4 s.
 - `needs-you` is the only state allowed to be loud. Failed and other coloured states get no fill: fill would mean «live»,
   not «important».
 - Arrival of `done` / `needs-you` plays the attention flash, and a waiting row repeats it every 30 s until seen; see

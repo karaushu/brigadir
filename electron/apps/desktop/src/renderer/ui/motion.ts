@@ -7,3 +7,7 @@ export function cssTime(value: string) {
 export function motionTime(token: `--motion-${string}`) {
 	return cssTime(getComputedStyle(document.documentElement).getPropertyValue(token));
 }
+/** Resolved shared easing token (`--motion-ease`, `--motion-ease-move`) for the Web Animations API. */
+export function motionEase(token: `--motion-ease${string}`) {
+	return getComputedStyle(document.documentElement).getPropertyValue(token).trim() || 'ease';
+}

@@ -51,7 +51,7 @@
 }
 .chevron {
 	display: flex;
-	transition: transform var(--motion-travel) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .chevron[data-open='true'] {
 	transform: rotate(180deg);

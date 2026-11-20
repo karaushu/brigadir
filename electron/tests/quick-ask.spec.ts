@@ -145,10 +145,13 @@ test('the popover asks a stopped task: stream, Esc and âŒ˜I again, Apply with âŒ
 			'data-appearance',
 			'primary'
 		);
-		expect(await menuItem(app, 'Ask the agent')).toEqual({
-			enabled: true,
-			accelerator: 'CmdOrCtrl+I',
-		});
+		// The menu learns of the selection over IPC, so its state is awaited.
+		await expect
+			.poll(() => menuItem(app, 'Ask the agent'))
+			.toEqual({
+				enabled: true,
+				accelerator: 'CmdOrCtrl+I',
+			});
 		await askButton.click();
 		await expect(popover(page)).toBeVisible();
 		await expect(actions).toHaveCount(0);
@@ -279,10 +282,15 @@ test('the popover asks a stopped task: stream, Esc and âŒ˜I again, Apply with âŒ
 			files: ['sample.ts'],
 		});
 		expect(journal.filter((event) => event.kind === 'turn.started')).toEqual([]);
-		await change.getByRole('button', { name: 'Revert', exact: true }).click();
+		// Revert runs only after a hold (spec/appearance#hold-to-confirm): a click does nothing, a held Space reverts.
+		const revert = change.getByRole('button', { name: 'Hold to revert sample.ts', exact: true });
+		await revert.click();
+		await revert.focus();
+		await page.keyboard.down(' ');
 		await expect(popover(page).locator('[data-quick-change="reverted"]')).toContainText(
 			'Reverted: sample.ts'
 		);
+		await page.keyboard.up(' ');
 		await expect.poll(() => readFile(join(repo, 'sample.ts'), 'utf8')).toBe(source);
 		// A permission in the manual mode is asked in the popover.
 		await popover(page)

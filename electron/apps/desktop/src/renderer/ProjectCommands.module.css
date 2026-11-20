@@ -54,7 +54,7 @@
 	color: var(--accent);
 }
 .glyph[data-state='starting'] svg {
-	animation: command-spin 1s linear infinite;
+	animation: var(--motion-spinner);
 }
 .glyph[data-state='failed'] {
 	color: var(--red);
@@ -68,11 +68,6 @@
 	border-radius: 50%;
 	background: var(--green);
 	box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--green) 20%, transparent);
-}
-@keyframes command-spin {
-	to {
-		transform: rotate(360deg);
-	}
 }
 
 .rows {

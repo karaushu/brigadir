@@ -439,7 +439,7 @@ Entry points:
 | --- | --- |
 | File ▸ `Archive task` | `⌃⌘A` (Windows/Linux `Ctrl+Alt+Shift+A`); always in the menu bar, disabled without an archivable open task |
 | Card menu | `Archive ⌃⌘A` before `Delete task…` |
-| Sidebar swipe | Two-finger swipe left on a card (`swipeAction`): completed/backlog → archive (accent); in progress with no agent at work (`done`, `interrupted`, `failed`, not queued, no busy descendant) → complete (`--green`, `boards.move(key, 'completed')`). Partial swipe reveals the 92 px action, ≥ 92 px at gesture end performs it. Working/waiting/preparing/queued/rate-limited: no swipe. |
+| Sidebar swipe | Two-finger swipe left on a card (`swipeAction`): completed/backlog → archive (accent); in progress with no agent at work (`done`, `interrupted`, `failed`, not queued, no busy descendant) → complete (`--green`, `boards.move(key, 'completed')`). Partial swipe reveals the 92 px action; its label is dimmed and slightly smaller until the swipe reaches 92 px, then it is armed (full opacity and size). The action runs at gesture end when the swipe reached 92 px or ended in a flick (> 0.11 px/ms over its last 80 ms, at least 24 px). Past 140 px the card follows at a quarter of the distance instead of stopping. Working/waiting/preparing/queued/rate-limited: no swipe. |
 | Board Completed column | Header `Archive the list` (native dialog with the count: "Keeps tasks and history. Removes clean worktrees; preserves uncommitted changes."), per-card archive button (no question) |
 | Toast | Bottom of the sidebar, 6 s: `«<title>» is in the archive` or `“<title>” completed`, with `Restore` (undo; for complete it moves the task back to in progress → `done`) |
 

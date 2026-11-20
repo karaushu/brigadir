@@ -73,6 +73,21 @@
 	gap: 3px;
 	font-size: var(--text-11);
 	font-weight: 500;
+	/* spec/tasks#archive: dimmed and a little smaller until the swipe reaches the action, then armed. */
+	opacity: 0.6;
+	scale: 0.92;
+	transition:
+		opacity var(--motion-fast) ease,
+		scale var(--motion-nudge) var(--motion-ease);
+}
+.swipe[data-armed] .swipeAction > span {
+	opacity: 1;
+	scale: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+	.swipeAction > span {
+		scale: none;
+	}
 }
 .swipe[data-swiping='true'] > :last-child {
 	background-color: var(--sb);

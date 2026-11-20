@@ -120,7 +120,16 @@ export async function restoreTasks(tasks: readonly TaskKey[]) {
 /* ── Swipe two fingers left over a card (spec/tasks#archive): partial shows the action, full archives ── */
 const swipeWidth = 92,
 	swipeMax = 140,
-	swipeEndMs = 160;
+	swipeEndMs = 160,
+	/** A flick: px per ms over the last 80 ms of the gesture (spec/tasks#archive). */
+	flickSpeed = 0.11,
+	flickWindowMs = 80,
+	/** A flick still has to be a swipe: shorter than this it is a stray touch. */
+	flickMin = 24;
+/** Past the end the card follows at a quarter of the distance instead of stopping. */
+function damped(raw: number) {
+	return raw <= swipeMax ? raw : swipeMax + (raw - swipeMax) * 0.25;
+}
 /** `row`: the child is a completed task's quiet row (spec/sidebar#done-rows), the action takes its radius. */
 export function SwipeToArchive({
 	task,
@@ -138,11 +147,19 @@ export function SwipeToArchive({
 	const [offset, setOffset] = useState(0),
 		[settling, setSettling] = useState(false),
 		current = useRef(0),
+		samples = useRef<{ at: number; dx: number }[]>([]),
 		timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 	const action = swipeAction(task, tasks);
 	useEffect(() => () => clearTimeout(timer.current), []);
 	const end = () => {
-		const reached = current.current >= swipeWidth;
+		const recent = samples.current.filter(
+				({ at }) => at >= (samples.current.at(-1)?.at ?? 0) - flickWindowMs
+			),
+			span = recent.length > 1 ? recent.at(-1)!.at - recent[0]!.at : 0,
+			speed = span > 0 ? recent.slice(1).reduce((sum, { dx }) => sum + dx, 0) / span : 0;
+		const reached =
+			current.current >= swipeWidth || (current.current >= flickMin && speed > flickSpeed);
+		samples.current = [];
 		setSettling(true);
 		current.current = 0;
 		setOffset(reached ? swipeMax : 0);
@@ -171,12 +188,17 @@ export function SwipeToArchive({
 			data-row={row || undefined}
 			data-swiping={offset > 0 || undefined}
 			data-settling={settling || undefined}
+			data-armed={offset >= swipeWidth || undefined}
 			onWheel={(event) => {
 				if (!action || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
-				const next = Math.max(0, Math.min(swipeMax, current.current + event.deltaX));
+				const next = Math.max(0, Math.min(swipeMax * 3, current.current + event.deltaX));
 				current.current = next;
+				samples.current = [
+					...samples.current.slice(-15),
+					{ at: event.timeStamp, dx: event.deltaX },
+				];
 				setSettling(false);
-				setOffset(next);
+				setOffset(damped(next));
 				clearTimeout(timer.current);
 				timer.current = setTimeout(end, swipeEndMs);
 			}}

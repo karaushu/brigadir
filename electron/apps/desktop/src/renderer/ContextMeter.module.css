@@ -55,8 +55,9 @@
 	height: 100%;
 	border-radius: 2px;
 	background: var(--context-color);
+	/* spec/appearance#motion: the fill grows by its clip, not its width. */
 	transition:
-		width var(--motion-travel) var(--motion-ease),
+		clip-path var(--motion-travel) var(--motion-ease),
 		background-color var(--motion-fast) ease;
 }
 .actions {

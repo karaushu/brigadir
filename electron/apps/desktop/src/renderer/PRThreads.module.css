@@ -255,20 +255,10 @@
 }
 .thinking > svg {
 	color: var(--accent);
-	animation: thinking 900ms linear infinite;
+	animation: var(--motion-spinner);
 }
 .thinking small {
 	font-size: var(--text-10);
-}
-@keyframes thinking {
-	to {
-		transform: rotate(360deg);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.thinking > svg {
-		animation: none;
-	}
 }
 /* spec/diff-and-review#diff-selection: the quote's place in a new comment on a selection. */
 .thread .quote {

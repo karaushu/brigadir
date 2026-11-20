@@ -2,7 +2,8 @@
 .menu.menu {
 	position: absolute;
 	width: 280px;
-	animation: var(--motion-fade);
+	/* spec/appearance#motion-frequency: typing `@` or `/` opens it, so it appears at once. */
+	transition: none;
 }
 .menu.menu[data-mention-tabs] {
 	width: 360px;

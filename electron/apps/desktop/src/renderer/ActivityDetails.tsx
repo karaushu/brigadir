@@ -23,6 +23,7 @@ import { ChangeCounts } from './ui/ChangeCounts';
 import { useSecondTick } from './ui/second-tick';
 import { toastError, toastWarning } from './ui/Toast';
 import { SkeletonText } from './ui/Loading';
+import { motionTime } from './ui/motion';
 export function ToolDiff({
 	task,
 	seq,
@@ -409,7 +410,7 @@ function BackgroundChip({
 				{ boxShadow: 'inset 0 0 0 1.5px var(--accent)' },
 				{ boxShadow: 'inset 0 0 0 1.5px transparent' },
 			],
-			{ duration: 900, easing: 'ease-out' }
+			{ duration: motionTime('--motion-flash'), easing: 'ease' }
 		);
 		deck.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
 	};

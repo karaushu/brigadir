@@ -11,6 +11,7 @@ import { create } from 'zustand';
 import { t, timesCount, type Locale } from '@brigadir/core';
 import { Button } from './Controls';
 import { Glyph } from './Glyph';
+import { motionTime } from './motion';
 import { PopupClose } from './PopupClose';
 import s from './Toast.module.css';
 
@@ -303,45 +304,103 @@ export function ToastRegion({
 					{expanded ? t(locale, 'Show less') : t(locale, '{n} more').replace('{n}', String(hidden))}
 				</button>
 			)}
-			<div className={s.stack}>
-				{visible.map((toast) => (
-					<div
-						key={toast.id}
-						data-toast-id={toast.id}
-						data-kind={toast.kind}
-						className={s.toast}
-						role={toast.kind === 'warning' || toast.kind === 'error' ? 'alert' : 'status'}
-						onKeyDown={(event) => {
-							if (event.key !== 'Escape') return;
-							event.preventDefault();
-							event.stopPropagation();
-							close(toast, true);
-						}}>
-						<Glyph name={GLYPH[toast.kind]} size={14} />
-						<span className={s.text}>{body(toast)}</span>
-						{toast.count > 1 && (
-							<span className={s.count} aria-label={timesCount(locale, toast.count)}>
-								×{toast.count}
-							</span>
-						)}
-						{toast.action && (
-							<Button
-								size="s"
-								appearance="primary"
-								variant="ghost"
-								className={s.action}
-								onClick={() => {
-									const action = toast.action!;
-									close(toast, false);
-									action.run();
-								}}>
-								{toast.action.label}
-							</Button>
-						)}
-						<PopupClose locale={locale} close={() => close(toast, false)} />
-					</div>
-				))}
-			</div>
+			<ToastStack toasts={visible} locale={locale} close={close} />
 		</section>
 	);
+}
+
+/** The drawn toasts with the ones leaving (spec/notifications-slack-notes-and-schedules#toasts). */
+function ToastStack({
+	toasts,
+	locale,
+	close,
+}: {
+	toasts: readonly Toast[];
+	locale: Locale;
+	close(toast: Toast, restore: boolean): void;
+}) {
+	const rows = useLeaving(toasts);
+	return (
+		<div className={s.stack}>
+			{rows.map(({ toast, leaving }) => (
+				<div
+					key={toast.id}
+					className={s.slot}
+					data-leaving={leaving || undefined}
+					inert={leaving || undefined}
+					aria-hidden={leaving || undefined}>
+					<div className={s.cell}>
+						<div
+							data-toast-id={leaving ? undefined : toast.id}
+							data-kind={toast.kind}
+							className={s.toast}
+							role={
+								leaving
+									? undefined
+									: toast.kind === 'warning' || toast.kind === 'error'
+										? 'alert'
+										: 'status'
+							}
+							onKeyDown={(event) => {
+								if (event.key !== 'Escape') return;
+								event.preventDefault();
+								event.stopPropagation();
+								close(toast, true);
+							}}>
+							<Glyph name={GLYPH[toast.kind]} size={14} />
+							<span className={s.text}>{body(toast)}</span>
+							{toast.count > 1 && (
+								<span className={s.count} aria-label={timesCount(locale, toast.count)}>
+									×{toast.count}
+								</span>
+							)}
+							{toast.action && (
+								<Button
+									size="s"
+									appearance="primary"
+									variant="ghost"
+									className={s.action}
+									onClick={() => {
+										const action = toast.action!;
+										close(toast, false);
+										action.run();
+									}}>
+									{toast.action.label}
+								</Button>
+							)}
+							<PopupClose locale={locale} close={() => close(toast, false)} />
+						</div>
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
+
+/** spec/notifications-slack-notes-and-schedules#toasts: a toast that left the stack (closed, timed out, its action ran, pushed
+ *  out by a newer one) stays where it stood for one travel, inert, while it fades down and its row closes. */
+function useLeaving(visible: readonly Toast[]) {
+	const last = useRef(visible),
+		[leaving, setLeaving] = useState<{ toast: Toast; index: number }[]>([]);
+	const ids = visible.map((toast) => toast.id).join(',');
+	useLayoutEffect(() => {
+		const now = new Set(visible.map((toast) => toast.id)),
+			gone = last.current
+				.map((toast, index) => ({ toast, index }))
+				.filter(({ toast }) => !now.has(toast.id));
+		last.current = visible;
+		const time = motionTime('--motion-enter-time');
+		if (!gone.length || !time) return;
+		const away = new Set(gone.map(({ toast }) => toast.id));
+		setLeaving((list) => [...list.filter(({ toast }) => !away.has(toast.id)), ...gone]);
+		setTimeout(
+			() => setLeaving((list) => list.filter(({ toast }) => !away.has(toast.id))),
+			Math.max(time, motionTime('--motion-travel'))
+		);
+	}, [ids]);
+	const rows = visible.map((toast) => ({ toast, leaving: false }));
+	for (const { toast, index } of leaving)
+		if (!rows.some((row) => row.toast.id === toast.id))
+			rows.splice(Math.min(index, rows.length), 0, { toast, leaving: true });
+	return rows;
 }

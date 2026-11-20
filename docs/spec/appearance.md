@@ -416,21 +416,37 @@ One size sets the height, padding, radius, font, icon, gap, box and switch of ev
 <a id="motion"></a>
 ## Motion
 
-The UI moves: segment indicators slide between options, menus, dialogs and comments appear smoothly, expanding has a transition, and buttons react.
+Motion explains a change: where something came from, that a press was heard, that a state changed. How often a person sees a thing decides whether it moves at all.
 
-| Token | Value |
-| --- | --- |
-| `--motion-fast` | 120 ms (colour transitions on buttons) |
-| `--motion-enter-time` | 180 ms |
-| `--motion-travel` | 240 ms |
-| `--motion-ease` | `cubic-bezier(0.2, 0.8, 0.2, 1)` |
-| `--motion-enter` / `--motion-reveal` / `--motion-fade` | rise 6 px / clip reveal / fade |
+| Token | Value | Use |
+| --- | --- | --- |
+| `--motion-fast` | 120 ms | colour and opacity on hover and state |
+| `--motion-nudge` | 120 ms | small movement: press scale, chevron turn |
+| `--motion-enter-time` | 180 ms | fades in and out |
+| `--motion-travel` | 240 ms | movement and height: rises, slides, disclosures |
+| `--motion-flash` | 900 ms | a one-off highlight that fades out (a line jumped to, a changed mode) |
+| `--motion-hold` | 2 s | hold to confirm |
+| `--motion-spin` | 0.9 s | one spinner turn |
+| `--motion-ease` | `cubic-bezier(0.23, 1, 0.32, 1)` | enter, exit, reveal |
+| `--motion-ease-move` | `cubic-bezier(0.77, 0, 0.175, 1)` | something already on screen moves (segment indicator, switch knob, sidebar reorder) |
+| `--motion-enter` / `--motion-reveal` / `--motion-fade` | rise 6 px / clip reveal / fade | entrances |
 
-- Durations and easing belong to the shared tokens (`ui/motion.ts` reads them in JS). Features use no `transition: all` and no ad-hoc easings.
-- Actions run at once and never wait for an animation. A quick repeat interrupts a transition from its current state.
-- `dialog` fades and rises 8 px in, with `@starting-style` and `allow-discrete` for exit.
-- `prefers-reduced-motion: reduce` sets all durations to 0 and removes spatial animation. Spinners slow to 2.4 s.
-- Not animated: code, native selection, scrolling, focus, native browser bounds, virtualised rows on scroll, and streamed tokens.
+<a id="motion-frequency"></a>
+- **Frequency.** What starts from the keyboard or happens many times an hour does not animate: Search Everywhere, find in a panel (`⌘F`), the `@` and `/` menu, a segment changed with arrow keys, file tree navigation, hiding the sidebar, switching tasks and projects (panels do not fade in when they remount, and selection fills snap). Pointer controls seen all day only change colour over `--motion-fast`.
+- **Easing.** Enter and exit use `--motion-ease`, movement on screen `--motion-ease-move`, colour `ease`, constant progress `linear`. No `ease-in`, no curves outside the tokens, no `transition: all`. JS reads the tokens through `ui/motion.ts`.
+- **Duration.** Nothing runs longer than 300 ms except toasts and the sidebar attention wave (400 ms `ease`), the needs-you ring, highlights (`--motion-flash`), hold to confirm and spinners. The intro, seen once on first run, may take longer beats, an overshoot and a stagger.
+- **Nothing grows from nothing.** An entrance starts at scale 0.9–0.97 with opacity 0, never at scale 0. Popovers and menus scale from 0.97 on the side of their anchor (`transform-origin` points at the trigger) and rise 4–6 px. Dialogs stay centred.
+- **Press.** `Button` and `IconButton` scale to 0.97 while pressed (`--motion-nudge`). A split button presses as a whole; a disabled button does not move.
+<a id="hold-to-confirm"></a>
+- **Hold to confirm.** `Button` with `hold` runs a destructive action without a dialog only after a hold: while the pointer, Space or Enter is held, a fill sweeps across the button over `--motion-hold` (`clip-path`, linear), and the action runs when it is full. Releasing early snaps the fill back over `--motion-nudge`. The accessible name starts with `Hold to`, and the tooltip says the same.
+- **Interruptible.** Actions run at once and never wait for an animation. Anything that can repeat quickly (toasts, toggles, highlights) uses transitions, not keyframes, so a repeat continues from the current state.
+- **Cheap properties.** Animate `transform`, `translate`, `scale`, `opacity` and `clip-path`. Height animates only in disclosures. Progress fills grow by `clip-path` (an inset from the right that keeps the round end). `width`, `top`, `left`, `inset` and margins are not animated.
+- **Disclosures.** Every `<details>` opens through one rule in `tokens.css`: height and opacity over `--motion-travel` (`::details-content` with `interpolate-size`). Grid-row reveals (`grid-template-rows: 0fr → 1fr`) follow the same timing. Chevrons turn over `--motion-nudge`.
+- **Dialogs.** `dialog` fades and rises 8 px with `@starting-style` and `allow-discrete` for exit. That is its only entrance; `ModalDialog` adds none.
+- **Toasts** enter from 6 px below and leave the same way, and the stack closes the gap over `--motion-travel` ([toasts](notifications-slack-notes-and-schedules.md#toasts)).
+- **Spinners** are one keyframe, `brigadir-spin`, at `--motion-spin`.
+- **Reduced motion** (`prefers-reduced-motion: reduce`) removes movement and keeps fades and colour: `--motion-travel` and `--motion-nudge` are 0, rises and reveals become a fade, scale and translate are off. Spinners slow to 2.4 s and never stop. Hold to confirm keeps its time.
+- Not animated: code, native selection, scrolling, focus, native browser bounds, virtualised rows on scroll, streamed tokens, and everything under **Frequency**.
 
 <a id="dialogs"></a>
 ## Dialogs

@@ -1402,7 +1402,7 @@ export function Search({
 					{text.running && (
 						<i
 							style={{
-								width: `${text.total ? Math.round((text.scanned / text.total) * 100) : 0}%`,
+								clipPath: `inset(0 ${100 - (text.total ? Math.round((text.scanned / text.total) * 100) : 0)}% 0 0)`,
 							}}
 						/>
 					)}

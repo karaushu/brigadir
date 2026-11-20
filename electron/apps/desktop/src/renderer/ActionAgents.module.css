@@ -51,7 +51,7 @@
 	display: inline-flex;
 	color: var(--fg2);
 	transform: rotate(-90deg);
-	transition: transform var(--motion-fast) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .disclosure[data-open] .chevron {
 	transform: none;

@@ -20,6 +20,36 @@
 	background-color: var(--ap-soft, var(--tint));
 	color: var(--ap-text, var(--fg));
 }
+/* spec/appearance#motion: a pressed button gives way a little (the scale rides the global button transition, --motion-nudge).
+   A split button presses as one capsule; a disabled or busy-lost one does not move. */
+.button:not(.split > *):active:not(:disabled, [aria-disabled='true']),
+.split:has(> button:active:not(:disabled, [aria-disabled='true'])) {
+	scale: 0.97;
+}
+.split {
+	transition: scale var(--motion-nudge) var(--motion-ease);
+}
+/* spec/appearance#hold-to-confirm: while held, a fill of the button's own colour sweeps across over --motion-hold; let go
+   early and it snaps back. The sweep is the action's timer made visible, so reduced motion keeps it. */
+.button[data-hold] {
+	position: relative;
+	isolation: isolate;
+	overflow: hidden;
+}
+.button[data-hold]::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	background: color-mix(in srgb, currentColor 22%, transparent);
+	clip-path: inset(0 100% 0 0);
+	pointer-events: none;
+	transition: clip-path var(--motion-nudge) var(--motion-ease);
+}
+.button[data-holding]::before {
+	clip-path: inset(0);
+	transition: clip-path var(--motion-hold) linear;
+}
 .button[data-variant='solid'] {
 	background-color: var(--ap, var(--accent-fill));
 	color: var(--ap-fg, var(--selfg));
@@ -127,10 +157,10 @@
 	background: var(--dot, transparent);
 	box-shadow: 0 0 0 1.5px var(--dot-ring, var(--sb));
 	pointer-events: none;
-	transform: scale(0);
+	transform: scale(0.9);
 	opacity: 0;
 	transition:
-		transform var(--motion-enter-time) var(--motion-ease),
+		transform var(--motion-travel) var(--motion-ease),
 		opacity var(--motion-fast) var(--motion-ease),
 		background-color var(--motion-fast) var(--motion-ease);
 }
@@ -273,7 +303,7 @@
 	border-radius: 50%;
 	background: var(--fg3);
 	transition:
-		transform var(--motion-travel) var(--motion-ease),
+		transform var(--motion-travel) var(--motion-ease-move),
 		background-color var(--motion-fast) ease;
 }
 .toggle[aria-checked='true'] .track,
@@ -387,9 +417,9 @@
 }
 .segments[data-motion-ready='true'] .segmentIndicator {
 	transition:
-		transform var(--motion-travel) var(--motion-ease),
-		width var(--motion-travel) var(--motion-ease),
-		height var(--motion-travel) var(--motion-ease),
+		transform var(--motion-travel) var(--motion-ease-move),
+		width var(--motion-travel) var(--motion-ease-move),
+		height var(--motion-travel) var(--motion-ease-move),
 		background-color var(--motion-fast) ease;
 }
 .segments[data-moving][data-selected] button[aria-checked='true'],
@@ -508,7 +538,7 @@
 	-webkit-app-region: no-drag;
 	transition:
 		background-color var(--motion-fast) ease,
-		transform var(--motion-fast) ease;
+		scale var(--motion-nudge) var(--motion-ease);
 }
 .switches > button:hover {
 	background: var(--segment-hover);
@@ -520,7 +550,7 @@
 	color: var(--fg);
 }
 .switches > button:active {
-	transform: scale(0.96);
+	scale: 0.97;
 }
 .switches > button[data-menu] {
 	min-width: 18px;
@@ -690,30 +720,37 @@
 .menu {
 	opacity: 1;
 	translate: 0 0;
+	scale: 1;
+	/* spec/appearance#motion: a menu grows from its button's corner, on the side it opens from. */
+	transform-origin: left top;
 	transition:
 		opacity var(--motion-enter-time) var(--motion-ease),
-		translate var(--motion-enter-time) var(--motion-ease);
+		translate var(--motion-enter-time) var(--motion-ease),
+		scale var(--motion-enter-time) var(--motion-ease);
 }
 .menu[data-open='false'] {
 	opacity: 0;
 	translate: 0 4px;
+	scale: 0.97;
 	pointer-events: none;
 }
 @starting-style {
 	.menu[data-open='true'] {
 		opacity: 0;
 		translate: 0 6px;
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.menu,
-	.menu[data-open='false'] {
-		translate: none;
+		scale: 0.97;
 	}
 }
 .menu[data-align='end'] {
 	left: auto;
 	right: 0;
+	transform-origin: right top;
+}
+.menu[data-side='top'] {
+	transform-origin: left bottom;
+}
+.menu[data-side='top'][data-align='end'] {
+	transform-origin: right bottom;
 }
 .menu > div[aria-disabled='true'],
 .menu > [role='listbox'] > div[aria-disabled='true'] {
@@ -775,6 +812,21 @@
 }
 .menu[data-side='top'][data-open='false'] {
 	translate: 0 -4px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.menu,
+	.menu[data-open='false'],
+	.menu[data-side='top'][data-open='false'] {
+		translate: none;
+		scale: none;
+	}
+	@starting-style {
+		.menu[data-open='true'],
+		.menu[data-side='top'][data-open='true'] {
+			translate: none;
+			scale: none;
+		}
+	}
 }
 /* spec/composer-steering-queue-and-ghost#ghost-headless: groups of a Popup — a header per provider, a line between groups; headers are not options and take no hover.
    spec/pull-requests-and-ci#from-into: with a search field the rows sit in `[role=listbox]` — the header and the line there too, not as an option. */
@@ -1159,28 +1211,21 @@ label:hover > .choice:not(:checked):not(:disabled) {
 }
 .status[data-status='working'] svg,
 .status[data-status='preparing'] svg {
-	animation: spin 1s steps(8) infinite;
+	animation: var(--motion-spinner-ticks);
 	transform-origin: 50% 50%;
 }
 .spin {
 	transform-origin: 8px 8px;
-	animation: spin 1s linear infinite;
-}
-@keyframes spin {
-	to {
-		transform: rotate(360deg);
-	}
+	animation: var(--motion-spinner);
 }
 @media (prefers-reduced-motion: reduce) {
-	.spin {
-		animation: none;
-	}
-	.status[data-status='working'] svg,
-	.status[data-status='preparing'] svg {
-		animation: none;
-	}
 	.track::after {
 		transition: none;
+	}
+	.button:not(.split > *):active:not(:disabled, [aria-disabled='true']),
+	.split:has(> button:active:not(:disabled, [aria-disabled='true'])),
+	.switches > button:active {
+		scale: none;
 	}
 }
 .badge {

@@ -1,6 +1,7 @@
 import { Glyph } from './Glyph';
 import { ClearField } from './ClearField';
 import { usePresence } from './use-presence';
+import { motionTime } from './motion';
 import { TextInput } from './Input';
 import { BranchName } from './BranchName';
 import {
@@ -16,6 +17,7 @@ import {
 	type ButtonHTMLAttributes,
 	type CSSProperties,
 	type InputHTMLAttributes,
+	type KeyboardEvent as ReactKeyboardEvent,
 	type PointerEvent as ReactPointerEvent,
 	type ReactNode,
 	type Ref,
@@ -38,6 +40,8 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 	 *  a menu or popup. */ disclosure?: boolean;
 	/** spec/appearance#component-details: a button that opens a popover keeps a neutral look while open, not the selected `--accent-soft` — a
 	 *  ghost one (the quota rings) its hover `--tint`, a soft one (the sheet's When rule) its rest `--tint`. */ opensPopover?: boolean;
+	/** spec/appearance#hold-to-confirm: a destructive action that runs only after a hold (pointer, Space or Enter) of
+	 *  `--motion-hold`; a click does nothing. The accessible name should start with «Hold to». */ onHold?: () => void;
 };
 export function Button({
 	size,
@@ -45,13 +49,16 @@ export function Button({
 	variant,
 	disclosure,
 	opensPopover,
+	onHold,
 	className = '',
 	...props
 }: ButtonProps) {
+	const hold = useHold(onHold);
 	return (
 		<button
 			type="button"
 			{...props}
+			{...hold}
 			className={`${s.button} ${className}`}
 			data-size={size}
 			data-appearance={appearance}
@@ -60,6 +67,47 @@ export function Button({
 			data-opens-popover={opensPopover || undefined}
 		/>
 	);
+}
+/** The hold of `Button onHold`: `data-holding` sweeps the fill (CSS), a timer of `--motion-hold` runs the action. */
+function useHold(onHold: (() => void) | undefined) {
+	const [holding, setHolding] = useState(false),
+		timer = useRef<ReturnType<typeof setTimeout>>(undefined),
+		action = useRef(onHold);
+	action.current = onHold;
+	useEffect(() => () => clearTimeout(timer.current), []);
+	if (!onHold) return {};
+	const start = () => {
+		clearTimeout(timer.current);
+		setHolding(true);
+		timer.current = setTimeout(() => {
+			setHolding(false);
+			action.current?.();
+		}, motionTime('--motion-hold'));
+	};
+	const stop = () => {
+		clearTimeout(timer.current);
+		setHolding(false);
+	};
+	return {
+		'data-hold': true,
+		'data-holding': holding || undefined,
+		onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => {
+			if (event.button === 0) start();
+		},
+		onPointerUp: stop,
+		onPointerLeave: stop,
+		onPointerCancel: stop,
+		onBlur: stop,
+		onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+			if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+				event.preventDefault();
+				start();
+			}
+		},
+		onKeyUp: (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+			if (event.key === ' ' || event.key === 'Enter') stop();
+		},
+	};
 }
 /** A choice with its consequence on a second line, XL and full width (rule 17): the merge's conflict exits, spec/git#main-tree-branches's dirty step. */
 export function ChoiceButton({
@@ -311,6 +359,7 @@ export function Segments({
 		[rootRef]
 	);
 	const shown = useRef<string | null>(null),
+		fromKeys = useRef(false),
 		settle = useRef<ReturnType<typeof setTimeout>>(undefined);
 	const optionKey = options.map((option) => `${option.value}:${option.label}`).join('|');
 	useEffect(() => () => clearTimeout(settle.current), []);
@@ -320,8 +369,11 @@ export function Segments({
 		// slides to another segment. A transformed layer at rest draws the same token differently from group to group, and an
 		// indicator measured before its group has a size shows nothing at all.
 		const before = shown.current,
-			wasSelected = group.dataset.selected === 'true';
+			wasSelected = group.dataset.selected === 'true',
+			// spec/appearance#motion-frequency: a change made with arrow keys, Home or End snaps.
+			keyed = fromKeys.current;
 		shown.current = value;
+		fromKeys.current = false;
 		const update = () => {
 			const active = group.querySelector<HTMLButtonElement>(
 				'button[aria-checked="true"],button[aria-selected="true"]'
@@ -336,15 +388,18 @@ export function Segments({
 					// A strip that scrolls sideways (`keepFocus` tabs) moves its segments, not its box: the indicator lies in the content.
 					left = Math.round((own.left - box.left) / scale - group.clientLeft + group.scrollLeft),
 					right = Math.round((own.right - box.left) / scale - group.clientLeft + group.scrollLeft);
-				group.style.setProperty('--segment-x', `${left}px`);
-				group.style.setProperty('--segment-width', `${right - left}px`);
-				group.style.setProperty('--segment-height', `${Math.round(own.height / scale)}px`);
+				// On the indicator itself, not the group: a variable on the group restyles every segment (spec/appearance#motion).
+				const indicator = group.querySelector<HTMLElement>(`.${s.segmentIndicator}`)?.style;
+				indicator?.setProperty('--segment-x', `${left}px`);
+				indicator?.setProperty('--segment-width', `${right - left}px`);
+				indicator?.setProperty('--segment-height', `${Math.round(own.height / scale)}px`);
 			}
 		};
 		update();
 		if (
 			before !== null &&
 			before !== value &&
+			!keyed &&
 			wasSelected &&
 			group.dataset.selected === 'true' &&
 			group.dataset.motionReady === 'true'
@@ -419,10 +474,16 @@ export function Segments({
 						? {
 								onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => {
 									event.preventDefault();
+									fromKeys.current = false;
 									onChange(option.value);
 								},
 							}
-						: { onClick: () => onChange(option.value) })}
+						: {
+								onClick: () => {
+									fromKeys.current = false;
+									onChange(option.value);
+								},
+							})}
 					onKeyDown={(event) => {
 						if (keepFocus) return;
 						const direction =
@@ -439,6 +500,7 @@ export function Segments({
 								: event.key === 'End'
 									? options.length - 1
 									: (index + direction + options.length) % options.length;
+						fromKeys.current = true;
 						onChange(options[next]!.value);
 						event.currentTarget.parentElement
 							?.querySelectorAll<HTMLButtonElement>('button')

@@ -14,7 +14,7 @@ const frame=Buffer.alloc(12);frame[0]=1;frame.writeBigUInt64BE(1000n,1);frame.se
 let buffer='',taken=false;process.stdin.on('data',chunk=>{buffer+=chunk;let index;while((index=buffer.indexOf('\\n'))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);log.write(line+'\\n');const message=JSON.parse(line);
   if(message.cmd==='keyframe')out(3,frame);
   if(message.cmd==='tap'){taken=true;out(3,frame);}
-  if(typeof message.id==='number')out(1,message.cmd==='ui'&&fs.existsSync(process.env.HELPER_LOG+'.noui')?{event:'reply',id:message.id,error:'The device did not describe its screen.'}:message.cmd==='text'&&/[^\\x20-\\x7e]/.test(message.text)?{event:'reply',id:message.id,error:'Only ASCII text can be typed; paste the rest.'}:{event:'reply',id:message.id,result:message.cmd==='screenshot'?{jpeg:'/9j/',width:10,height:20}:message.cmd==='ui'?{width:402,height:874,elements:[...(fs.existsSync(process.env.HELPER_LOG+'.turned')?[{role:'Application',label:'App',frame:[0,0,874,402]}]:[]),...(taken?[{role:'Text',label:'Order taken',id:'status',frame:[12,560,378,40]}]:[]),...(fs.existsSync(process.env.HELPER_LOG+'.extra')?[{role:'Text',label:'Extra',id:'extra',frame:[12,500,378,40]}]:[]),{role:'Button',label:'Take order',id:'take-order',frame:[12,622,378,48]}]}:null});}});
+  if(typeof message.id==='number')out(1,message.cmd==='ui'&&fs.existsSync(process.env.HELPER_LOG+'.noui')?{event:'reply',id:message.id,error:'The device did not describe its screen.'}:message.cmd==='text'&&/[^\\x20-\\x7e]/.test(message.text)?{event:'reply',id:message.id,error:'Only ASCII text can be typed; paste the rest.'}:{event:'reply',id:message.id,result:message.cmd==='screenshot'?(fs.existsSync(process.env.HELPER_LOG+'.jpeg')?{jpeg:'/9j/',width:10,height:20}:{png:'iVBOR',width:10,height:20}):message.cmd==='ui'?{width:402,height:874,elements:[...(fs.existsSync(process.env.HELPER_LOG+'.turned')?[{role:'Application',label:'App',frame:[0,0,874,402]}]:[]),...(taken?[{role:'Text',label:'Order taken',id:'status',frame:[12,560,378,40]}]:[]),...(fs.existsSync(process.env.HELPER_LOG+'.extra')?[{role:'Text',label:'Extra',id:'extra',frame:[12,500,378,40]}]:[]),{role:'Button',label:'Take order',id:'take-order',frame:[12,622,378,48]}]}:null});}});
 process.stdin.on('end',()=>process.exit(0));
 `;
 /** The task whose simulator tab sends the person's commands. */
@@ -160,9 +160,15 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 		});
 		await simulators.command(view, { kind: 'touch', phase: 'down', x: 0.5, y: 0.25 });
 		expect(await simulators.command(view, { kind: 'screenshot' })).toEqual({
-			image: '/9j/',
-			mimeType: 'image/jpeg',
+			image: 'iVBOR',
+			mimeType: 'image/png',
 		});
+		// spec/design-review#shots: a lossy screenshot is refused; the helper answers lossless PNG.
+		await writeFile(log + '.jpeg', '');
+		await expect(simulators.command(view, { kind: 'screenshot' })).rejects.toThrow(
+			'The device sent no screenshot.'
+		);
+		await rm(log + '.jpeg');
 		await expect(simulators.command(view, { kind: 'text', text: 'é' })).rejects.toThrow(
 			'Only ASCII'
 		);
@@ -199,8 +205,8 @@ it('lists iOS devices, remembers the project device, boots it, streams frames an
 			simulators.agent(key, { tool: 'act', action: 'tap', id: 'missing' })
 		).rejects.toThrow('No element #missing on the screen.');
 		expect(await simulators.agent(key, { tool: 'screenshot' })).toEqual({
-			image: '/9j/',
-			mimeType: 'image/jpeg',
+			image: 'iVBOR',
+			mimeType: 'image/png',
 		});
 		expect(await simulators.agent(key, { tool: 'state' })).toContain(
 			'iPhone 17 Pro · iOS 27 · running · screen 402×874 pt'
@@ -411,7 +417,7 @@ it('lists AVDs, starts the emulator without a window, runs the Android helper wi
 		helper,
 		helperSource
 			.replace(
-				"result:message.cmd==='screenshot'?{jpeg:'/9j/',width:10,height:20}",
+				"result:message.cmd==='screenshot'?(fs.existsSync(process.env.HELPER_LOG+'.jpeg')?{jpeg:'/9j/',width:10,height:20}:{png:'iVBOR',width:10,height:20})",
 				"result:message.cmd==='screenshot'?{png:'iVBOR',width:10,height:20}"
 			)
 			.replace("message.cmd==='text'&&", 'false&&')

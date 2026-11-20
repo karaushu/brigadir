@@ -179,7 +179,7 @@ A popover over the chat, 500 px wide: the head is the node's name, its id (mono,
 
 ## Data
 
-- `shots/shots.json`, `schemaVersion: 1` (rule 10): `shots` — `id`, `file` (`s12.jpg`), `tool` ∈ `simulator |
+- `shots/shots.json`, `schemaVersion: 1` (rule 10): `shots` — `id`, `file` (`s12.png`), `tool` ∈ `simulator |
   browser`, `device?`, `at`, `trees` (`scopeId`, `tree`), `kept?` — and `next` (the next number). One image file per shot.
 - `design/design-reviews.json`, `schemaVersion: 1`: `reviews`, the last 50 — `id`, `screen`, `at`, `state`,
   `reviewId?`, `trees` (the trees it was filed on) and `nodes` as in the event. A node's design image is copied to

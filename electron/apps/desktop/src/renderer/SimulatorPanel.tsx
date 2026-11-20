@@ -231,13 +231,13 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 			image?: unknown;
 			mimeType?: unknown;
 		} | null;
-		if (typeof result?.image !== 'string') return;
-		const image = result.image;
+		// Both helpers answer a PNG, the format of chat attachments (spec/browser-and-simulator#simulator).
+		if (typeof result?.image !== 'string' || result.mimeType !== 'image/png') return;
 		await attachTaskContext(task, {
 			kind: 'image',
 			mimeType: 'image/png',
 			name: t(locale, 'Screenshot'),
-			data: result.mimeType === 'image/png' ? image : await pngFromJpeg(image),
+			data: result.image,
 		}).catch(() => notify('error', t(locale, 'Could not attach the screenshot.')));
 	}
 	// The box of a turned canvas is the upright interface; the touch goes back to the device frame.
@@ -620,20 +620,4 @@ export function SimulatorPanel({ task, locale }: { task: AgentTask; locale: Loca
 			)}
 		</section>
 	);
-}
-/** Chat attachments carry PNG (spec/browser-and-simulator#browser); the device answers JPEG, the column re-encodes it once. */
-async function pngFromJpeg(jpeg: string) {
-	const bitmap = await createImageBitmap(
-		new Blob([Uint8Array.from(atob(jpeg), (char) => char.charCodeAt(0))], { type: 'image/jpeg' })
-	);
-	const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-	canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
-	bitmap.close();
-	const bytes = new Uint8Array(
-		await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer()
-	);
-	let binary = '';
-	for (let index = 0; index < bytes.length; index += 0x8000)
-		binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-	return btoa(binary);
 }

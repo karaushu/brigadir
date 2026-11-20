@@ -142,9 +142,20 @@ codex-acp completes a compaction when its `contextCompaction` item ends (`thread
 Journals written before the capability keep their `Compact conversation` tool rows.
 
 <a id="compaction-cost"></a>
-### What a compaction costs
+### Compaction is the agent's
 
-Measured on claude-agent-acp 0.109.0 (SDK 0.3.328) with Sonnet 5.5 and Haiku 5.5, from the per-turn `modelUsage` rows: a compaction of a 150–170k context, automatic in the middle of a turn or `/compact` between turns, reads the conversation from the prompt cache and costs about 10k new input (the summary instructions), 3k output and a cache read of the context; the retained context is 14–17k. `/compact` reads only the system prompt and tools from the cache when it follows a single long turn or a compaction of the same session. codex-acp reports no tokens for a compaction.
+Brigadir does not compact a session itself: the host sends no `/compact` between turns, and Codex's `model_post_turn_compact_threshold_percent` (compaction after a turn's final answer) stays unset. Each agent compacts on its own at the [compaction window](#compaction-window), in the middle of a turn or at the start of the next one.
+
+**Why.** A compaction between turns costs the same as the agent's own and adds one that may never be needed, after a task's last turn. Measured on claude-agent-acp 0.109.0 (SDK 0.3.328) from the per-turn `modelUsage` rows, window 200k:
+
+| Model | Compaction | Context before → after | New input | Cache read | Output |
+| --- | --- | --- | --- | --- | --- |
+| Sonnet 5.5 | `/compact` between turns | 150k → 14k | 9.6k | 143k | 1.2k |
+| Sonnet 5.5 | automatic, mid-turn | 170k → 17k | 9.5k | 160k | 2.0k |
+| Haiku 5.5 | `/compact` between turns | 153k → 15k | 9.6k | 146k | 3.1k |
+| Haiku 5.5 | automatic, mid-turn | 171k → 17k | 9.5k | 160k | 2.7k |
+
+Both read the conversation from the prompt cache; the new input is the summary instructions. `/compact` can cost more: right after a single long turn or after a compaction of the same session it reads only the system prompt and tools from the cache (56k and 30k new input at 94k and 57k contexts). codex-acp reports no tokens for a compaction.
 
 <a id="codex-adapter"></a>
 ## Codex adapter: verified behaviour
@@ -512,7 +523,6 @@ Two read-only tools of the `brigadir` server, input schema `{}`. The agent pulls
 - `_session/goal` and `agentFileChangeReport` (advertised, unused).
 - Codex `session_info_update.title` as the task title.
 - Verify whether two Codex processes on one `~/.codex` race on token refresh; status line `rate_limits` on Team plans.
-- Compaction at the turn boundary: when a turn ends with the context near the [compaction window](#compaction-window) and nothing is queued, the host sends `/compact` before the next prompt. An automatic compaction in the middle of a turn was measured as mostly uncached; one at a turn boundary is several times cheaper. It needs a marker on the host's own `turn.started` so the chat draws it as a service row, crew hosts that do not take that turn's end for a worker's report, a trigger point per provider (Claude compacts about 33k under the window, so 80 % of 200k leaves only 7k), and a check of Codex's own `model_post_turn_compact_threshold_percent`.
 - Verify a Codex compaction at the configured limit in a live run.
 
 <a id="non-goals"></a>
@@ -524,4 +534,5 @@ Two read-only tools of the `brigadir` server, input schema `{}`. The agent pulls
 - Mixing two providers in one host process.
 - Auto-approving permissions or answering human questions with placeholders.
 - A Brigadir system prompt other than the appended [session brief](#session-brief) and MCP instructions.
+- Compacting a session between turns ([compaction is the agent's](#compaction-cost)).
 - Proxies or account rotation around provider limits.

@@ -110,6 +110,7 @@ import {
 	turnMenuIcons,
 	attachMenuIcons,
 	noteMenuIcons,
+	brigadirChatMenuIcons,
 	type EditorMenuState,
 	type MenuContext,
 	type TaskKey,
@@ -3935,20 +3936,14 @@ void app.whenReady().then(async () => {
 		openSettings: (key) => {
 			const edit = settingEdit(key);
 			if (!edit) return false;
-			const place = settingLocation(edit.id, currentLocale()) ?? {
-				tab: 'modules' as const,
-				section: null,
-				label: t(currentLocale(), 'Modules'),
-			};
-			clients.broadcast('brigadir:open-settings', place);
+			const place = settingLocation(edit.id, currentLocale());
+			clients.broadcast(
+				'brigadir:open-settings',
+				place ? { tab: place.tab, setting: edit.id } : { tab: 'modules' }
+			);
 			return true;
 		},
-		openRemoteSettings: () =>
-			clients.broadcast('brigadir:open-settings', {
-				tab: 'remote',
-				section: null,
-				label: t(currentLocale(), 'Remote access'),
-			}),
+		openRemoteSettings: () => clients.broadcast('brigadir:open-settings', { tab: 'remote' }),
 		projects: async () =>
 			(
 				await readWorkspace(
@@ -4029,6 +4024,15 @@ void app.whenReady().then(async () => {
 	);
 	handle('brigadir:undo', (chat: string, card: string) => brigadirChats.undo(chat, card));
 	handle('brigadir:open-link', (chat: string, card: string) => brigadirChats.openLink(chat, card));
+	handleClient('brigadir:menu', async (client) => {
+		const locale = currentLocale();
+		return (await ui.menu(client, [
+			{ id: 'rename', label: t(locale, 'Rename…'), icon: brigadirChatMenuIcons.rename },
+			{ id: 'archive', label: t(locale, 'Archive'), icon: brigadirChatMenuIcons.archive },
+			null,
+			{ id: 'delete', label: t(locale, 'Delete…'), icon: brigadirChatMenuIcons.delete },
+		])) as 'rename' | 'archive' | 'delete' | null;
+	});
 	handle('notes:chat-read', (id: string) => noteChats.read(id));
 	handle('notes:chat-send', (id: string, text: string, choice: NoteChatChoice) => {
 		// The answer streams by `notes:chat-event`; the call returns once the message is on its way.

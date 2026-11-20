@@ -252,17 +252,15 @@ export type DesktopBridge = {
 		value: string | null
 	): Promise<boolean>;
 	undoBrigadirCard(chat: string, card: string): Promise<void>;
+	/** A chat row's menu: what the person chose. */
+	brigadirChatMenu(id: string): Promise<'rename' | 'archive' | 'delete' | null>;
 	openBrigadirLink(chat: string, card: string): Promise<void>;
 	onBrigadirEvent(
 		listener: (event: import('./brigadir-chat').BrigadirChatEvent) => void
 	): () => void;
 	/** The chat's `settings_open`: Settings at a row, lit as from Search Everywhere. */
 	onBrigadirOpenSettings(
-		listener: (place: {
-			tab: import('./search').SettingsTab;
-			section: string | null;
-			label: string;
-		}) => void
+		listener: (target: { tab: import('./search').SettingsTab; setting?: string }) => void
 	): () => void;
 	/** The «…» menu of a note: what the person chose; `reveal` and `copy` are done by the menu itself. */
 	noteMenu(id: string): Promise<'task' | 'chat' | 'delete' | null>;

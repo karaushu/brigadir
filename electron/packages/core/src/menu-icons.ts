@@ -69,6 +69,7 @@ export const menuIconNames = [
 	'group-next',
 	'group-previous',
 	'helmet',
+	'helmet-chat',
 	'hide-others',
 	'history',
 	'image',
@@ -277,6 +278,12 @@ export const noteMenuIcons = {
 	reveal: 'folder',
 	copy: 'copy',
 	markdown: 'copy-text',
+	delete: 'trash',
+} as const satisfies Record<string, MenuIcon>;
+/** spec/settings-modules-and-onboarding#brigadir-chat-entry: a chat's row menu in the Brigadir section. */
+export const brigadirChatMenuIcons = {
+	rename: 'edit',
+	archive: 'archive-box',
 	delete: 'trash',
 } as const satisfies Record<string, MenuIcon>;
 /** spec/notifications-slack-notes-and-schedules#schedules: a schedule's row menu in the Schedules section, and the menu bar's Schedules items. */

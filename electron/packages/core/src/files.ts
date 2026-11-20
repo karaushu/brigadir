@@ -153,6 +153,7 @@ export type WorkspaceAction =
 	| 'sidebar-toggle'
 	| 'section-tasks'
 	| 'section-prs'
+	| 'section-brigadir'
 	| 'layout-chat'
 	| 'layout-work'
 	| 'layout-panel'

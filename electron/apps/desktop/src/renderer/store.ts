@@ -32,6 +32,11 @@ type State = {
 	openSchedules(schedule?: { projectId: string; id: string } | 'all'): void;
 	openScheduleTask(projectId: string, id: string): void;
 	closeSchedules(): void;
+	/** spec/settings-modules-and-onboarding#brigadir-chat-entry: the Brigadir section — its open chat (null — none, the example tiles) and a
+	 *  message to send in a new chat (Search Everywhere's `Ask Brigadir`); null — the section is closed. */
+	brigadir: { chat: string | null; ask?: string } | null;
+	openBrigadir(chat?: string | null, ask?: string): void;
+	closeBrigadir(): void;
 };
 let loadGeneration = 0;
 /** Counts the appearances main published: a load that began before one must not put its older reading back. */
@@ -85,14 +90,35 @@ export const useWorkspace = create<State>((set, get) => ({
 	mainTree: null,
 	notes: null,
 	schedules: null,
+	brigadir: null,
 	selectProject: (id) =>
-		set({ selectedProject: id, selectedTask: null, mainTree: null, notes: null, schedules: null }),
+		set({
+			selectedProject: id,
+			selectedTask: null,
+			mainTree: null,
+			notes: null,
+			schedules: null,
+			brigadir: null,
+		}),
+	openBrigadir: (chat, ask) =>
+		set((state) => ({
+			brigadir: {
+				chat: chat === undefined ? (state.brigadir?.chat ?? null) : chat,
+				...(ask ? { ask } : {}),
+			},
+			selectedTask: null,
+			mainTree: null,
+			notes: null,
+			schedules: null,
+		})),
+	closeBrigadir: () => set({ brigadir: null }),
 	openNotes: (note) =>
 		set((state) => ({
 			notes: { note: note === undefined ? (state.notes?.note ?? null) : note },
 			selectedTask: null,
 			mainTree: null,
 			schedules: null,
+			brigadir: null,
 		})),
 	closeNotes: () => set({ notes: null }),
 	openSchedules: (schedule) =>
@@ -101,6 +127,7 @@ export const useWorkspace = create<State>((set, get) => ({
 			selectedTask: null,
 			mainTree: null,
 			notes: null,
+			brigadir: null,
 		})),
 	openScheduleTask: (projectId, id) =>
 		set((state) => ({
@@ -109,6 +136,7 @@ export const useWorkspace = create<State>((set, get) => ({
 			selectedTask: { projectId, id },
 			mainTree: null,
 			notes: null,
+			brigadir: null,
 		})),
 	closeSchedules: () => set({ schedules: null }),
 	async openMainTree(projectId, scopeId) {
@@ -119,6 +147,7 @@ export const useWorkspace = create<State>((set, get) => ({
 			mainTree: { task, scopeId },
 			notes: null,
 			schedules: null,
+			brigadir: null,
 		});
 		return task;
 	},
@@ -168,5 +197,6 @@ export const useWorkspace = create<State>((set, get) => ({
 			mainTree: null,
 			notes: null,
 			schedules: null,
+			brigadir: null,
 		}),
 }));

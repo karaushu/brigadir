@@ -19,11 +19,44 @@ export function RenameTask({
 	close(): void;
 	saved(): Promise<void>;
 }) {
+	return (
+		<RenameDialog
+			locale={locale}
+			initial={task.title}
+			title={t(locale, 'Rename task')}
+			label={t(locale, 'Task title')}
+			error={t(locale, 'Could not rename the task.')}
+			close={close}
+			save={async (title) => {
+				await window.brigadir.renameTask(task, title);
+				await saved();
+			}}
+		/>
+	);
+}
+/** The rename dialog of a task, and of a Brigadir chat (spec/settings-modules-and-onboarding#brigadir-chat-entry): one look (rule 17). */
+export function RenameDialog({
+	locale,
+	initial,
+	title: heading,
+	label,
+	error: failure,
+	close,
+	save,
+}: {
+	locale: Locale;
+	initial: string;
+	title: string;
+	label: string;
+	error: string;
+	close(): void;
+	save(title: string): Promise<void>;
+}) {
 	const input = useRef<HTMLInputElement>(null),
 		alive = useRef(true),
 		pending = useRef(false),
 		form = useId(),
-		[title, setTitle] = useState(task.title),
+		[title, setTitle] = useState(initial),
 		[saving, setSaving] = useState(false),
 		[error, setError] = useState(false);
 	useEffect(() => {
@@ -44,8 +77,7 @@ export function RenameTask({
 		setSaving(true);
 		setError(false);
 		try {
-			await window.brigadir.renameTask(task, title);
-			await saved();
+			await save(title.trim());
 			pending.current = false;
 			if (alive.current) close();
 		} catch {
@@ -61,7 +93,7 @@ export function RenameTask({
 			radius={10}
 			width={420}
 			top="center"
-			title={t(locale, 'Rename task')}
+			title={heading}
 			locale={locale}
 			close={dismiss}
 			initialFocus={input}
@@ -74,14 +106,14 @@ export function RenameTask({
 						appearance="primary"
 						type="submit"
 						form={form}
-						disabled={saving || !isTaskTitle(title) || title.trim() === task.title}>
+						disabled={saving || !isTaskTitle(title) || title.trim() === initial}>
 						{t(locale, saving ? 'Saving…' : 'Save')}
 					</Button>
 				</>
 			}>
 			<form id={form} className={s.form} onSubmit={(event) => void submit(event)}>
 				<label>
-					<span>{t(locale, 'Task title')}</span>
+					<span>{label}</span>
 					<TextInput
 						size="l"
 						ref={input}
@@ -91,7 +123,7 @@ export function RenameTask({
 						onChange={(event) => setTitle(event.target.value)}
 					/>
 				</label>
-				{error && <p role="alert">{t(locale, 'Could not rename the task.')}</p>}
+				{error && <p role="alert">{failure}</p>}
 			</form>
 		</ModalDialog>
 	);

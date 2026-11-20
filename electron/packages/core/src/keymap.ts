@@ -234,6 +234,7 @@ const pcKeys: Record<string, string> = {
 	'section-tasks': 'Alt+1',
 	'section-prs': 'Alt+2',
 	schedules: 'Alt+4',
+	'section-brigadir': 'Alt+5',
 };
 const printable = (key: string) =>
 	/^[A-Z0-9]$/.test(key) ||

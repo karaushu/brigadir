@@ -6,7 +6,7 @@ import { Rail, RailSection } from './ui/Rail';
 import { useCommandShortcut } from './ui/use-command-shortcut';
 
 /** spec/sidebar#section-rail: the rail's sections — Tasks, Pull requests, Notes (spec/notifications-slack-notes-and-schedules#notes) and Schedules (spec/notifications-slack-notes-and-schedules#schedules). */
-export type SectionId = 'tasks' | 'prs' | 'notes' | 'schedules';
+export type SectionId = 'tasks' | 'prs' | 'notes' | 'schedules' | 'brigadir';
 
 /**
  * spec/sidebar#section-rail (rule 17): the sections rail as the window has it — Tasks · Pull requests · Notes · Schedules on
@@ -24,6 +24,7 @@ export function SectionsRail({
 	onOpen,
 	tileRefs,
 	tools,
+	brigadirDot = false,
 }: {
 	locale: Locale;
 	/** ☰ on Windows and Linux; nothing under the macOS traffic lights. */ strip?: ReactNode;
@@ -44,6 +45,7 @@ export function SectionsRail({
 		Record<SectionId, Ref<HTMLButtonElement>>
 	>;
 	tools: ReactNode;
+	/** spec/sidebar#rail-sections: the Brigadir tile's accent dot — a setup is left unfinished. */ brigadirDot?: boolean;
 }) {
 	const shortcut = useCommandShortcut();
 	const tile = (
@@ -89,6 +91,10 @@ export function SectionsRail({
 							'schedule',
 							scheduleDot === undefined ? {} : { dot: scheduleDot }
 						)}
+					{/* spec/settings-modules-and-onboarding#brigadir-chat-entry: Brigadir is the fifth section, ⌃⌘5; not a module, always there. */}
+					{tile('brigadir', t(locale, 'Brigadir (section)'), 'section-brigadir', 'helmet-chat', {
+						...(brigadirDot ? { dot: 'var(--accent)' } : {}),
+					})}
 				</>
 			}
 			tools={tools}

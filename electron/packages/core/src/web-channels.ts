@@ -87,6 +87,7 @@ export const webChannels: Readonly<Record<IpcMethod, WebAccess>> = {
 	undoBrigadirCard: 'deny',
 	openBrigadirLink: 'deny',
 	onBrigadirEvent: 'deny',
+	brigadirChatMenu: 'deny',
 	onBrigadirOpenSettings: 'deny',
 	noteCopyMenu: 'deny',
 	noteProjectMenu: 'deny',

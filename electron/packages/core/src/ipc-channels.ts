@@ -568,6 +568,13 @@ export const ipcTable = {
 		arity: 2,
 		validate: (a) => a.length === 2 && isId(a[0]) && isId(a[1]),
 	},
+	brigadirChatMenu: {
+		kind: 'invoke',
+		channel: 'brigadir:menu',
+		class: 'client',
+		arity: 1,
+		validate: (a) => a.length === 1 && isId(a[0]),
+	},
 	onBrigadirEvent: { kind: 'subscribe', channel: 'brigadir:event', class: 'client' },
 	onBrigadirOpenSettings: { kind: 'subscribe', channel: 'brigadir:open-settings', class: 'client' },
 	noteMenu: {

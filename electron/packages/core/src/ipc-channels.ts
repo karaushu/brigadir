@@ -39,6 +39,7 @@ import { isNoteId, isNoteText } from './notes';
 import { isReviewPoint, isTaskReviewChoice } from './task-review';
 import { isScheduleDraft, isScheduleId } from './schedules';
 import { noteChatLimits } from './note-chat';
+import { brigadirChatLimits } from './brigadir-chat';
 import type { TaskSheet } from './bridge';
 import { isLaunchInput } from './launch';
 import { isTaskSurface, isSurfaceDraft } from './surface';
@@ -474,6 +475,101 @@ export const ipcTable = {
 		validate: (a) => a.length === 2 && isNoteId(a[0]) && Number.isSafeInteger(a[1]),
 	},
 	onNoteChatEvent: { kind: 'subscribe', channel: 'notes:chat-event', class: 'remote' },
+	// spec/settings-modules-and-onboarding#brigadir-chat: the Brigadir chats of the rail section, their cards and setups.
+	readBrigadirChats: {
+		kind: 'invoke',
+		channel: 'brigadir:list',
+		class: 'client',
+		arity: 0,
+		validate: noArgs,
+	},
+	readBrigadirChat: {
+		kind: 'invoke',
+		channel: 'brigadir:read',
+		class: 'client',
+		arity: 1,
+		validate: (a) => a.length === 1 && isId(a[0]),
+	},
+	createBrigadirChat: {
+		kind: 'invoke',
+		channel: 'brigadir:create',
+		class: 'client',
+		arity: 0,
+		validate: noArgs,
+	},
+	sendBrigadirChat: {
+		kind: 'invoke',
+		channel: 'brigadir:send',
+		class: 'client',
+		arity: 2,
+		validate: (a) =>
+			a.length === 2 &&
+			isId(a[0]) &&
+			typeof a[1] === 'string' &&
+			a[1].trim().length > 0 &&
+			a[1].length <= brigadirChatLimits.message,
+	},
+	stopBrigadirChat: {
+		kind: 'invoke',
+		channel: 'brigadir:stop',
+		class: 'client',
+		arity: 1,
+		validate: (a) => a.length === 1 && isId(a[0]),
+	},
+	renameBrigadirChat: {
+		kind: 'invoke',
+		channel: 'brigadir:rename',
+		class: 'client',
+		arity: 2,
+		validate: (a) =>
+			a.length === 2 &&
+			isId(a[0]) &&
+			typeof a[1] === 'string' &&
+			a[1].trim().length > 0 &&
+			a[1].length <= 200,
+	},
+	archiveBrigadirChat: {
+		kind: 'invoke',
+		channel: 'brigadir:archive',
+		class: 'client',
+		arity: 1,
+		validate: (a) => a.length === 1 && isId(a[0]),
+	},
+	deleteBrigadirChat: {
+		kind: 'invoke',
+		channel: 'brigadir:delete',
+		class: 'client',
+		arity: 1,
+		validate: (a) => a.length === 1 && isId(a[0]),
+	},
+	answerBrigadirCard: {
+		kind: 'invoke',
+		channel: 'brigadir:answer',
+		class: 'client',
+		arity: 4,
+		validate: (a) =>
+			a.length === 4 &&
+			isId(a[0]) &&
+			isId(a[1]) &&
+			['apply', 'cancel', 'secret', 'start', 'decline', 'close'].includes(a[2] as string) &&
+			(a[3] === null || (typeof a[3] === 'string' && a[3].length <= 500)),
+	},
+	undoBrigadirCard: {
+		kind: 'invoke',
+		channel: 'brigadir:undo',
+		class: 'client',
+		arity: 2,
+		validate: (a) => a.length === 2 && isId(a[0]) && isId(a[1]),
+	},
+	openBrigadirLink: {
+		kind: 'invoke',
+		channel: 'brigadir:open-link',
+		class: 'client',
+		arity: 2,
+		validate: (a) => a.length === 2 && isId(a[0]) && isId(a[1]),
+	},
+	onBrigadirEvent: { kind: 'subscribe', channel: 'brigadir:event', class: 'client' },
+	onBrigadirOpenSettings: { kind: 'subscribe', channel: 'brigadir:open-settings', class: 'client' },
 	noteMenu: {
 		kind: 'invoke',
 		channel: 'notes:menu',

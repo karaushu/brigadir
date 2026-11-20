@@ -63,7 +63,8 @@ export type SlackTaskInput = {
 	context: string | null;
 	/** `New task: Start` — starts now; `Ask in Brigadir` — waits in the backlog with a notice. */
 	start: boolean;
-	thread: SlackThreadRef;
+	/** `null` — a task from the Brigadir chat, with no Slack thread. */
+	thread: SlackThreadRef | null;
 	/** spec/notifications-slack-notes-and-schedules#slack-agent: the other projects the agent named for the task; their folders join it. */
 	alsoProjects: string[];
 	/** The branch the agent named to start from (`master`, `origin/release`); `null` — the project's base. */

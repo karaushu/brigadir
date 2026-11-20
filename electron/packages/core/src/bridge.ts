@@ -232,6 +232,38 @@ export type DesktopBridge = {
 	/** Undo of the agent's edit `seq`: the note goes back to its text before it, when it still holds the edit's text. */
 	undoNoteEdit(id: string, seq: number): Promise<void>;
 	onNoteChatEvent(listener: (event: import('./note-chat').NoteChatEvent) => void): () => void;
+	/** spec/settings-modules-and-onboarding#brigadir-chat: the chats of the Brigadir section (newest first) and the setups' states. */
+	readBrigadirChats(): Promise<{
+		chats: import('./brigadir-chat').BrigadirChatMeta[];
+		setups: import('./brigadir-chat').BrigadirSetupState[];
+	}>;
+	readBrigadirChat(id: string): Promise<import('./brigadir-chat').BrigadirChatState>;
+	createBrigadirChat(): Promise<import('./brigadir-chat').BrigadirChatMeta>;
+	sendBrigadirChat(id: string, text: string): Promise<void>;
+	stopBrigadirChat(id: string): Promise<void>;
+	renameBrigadirChat(id: string, title: string): Promise<void>;
+	archiveBrigadirChat(id: string): Promise<void>;
+	deleteBrigadirChat(id: string): Promise<void>;
+	/** The person's answer to a card that waits: Apply/Cancel, a pasted secret, Start/Decline, closing a secret field. */
+	answerBrigadirCard(
+		chat: string,
+		card: string,
+		action: 'apply' | 'cancel' | 'secret' | 'start' | 'decline' | 'close',
+		value: string | null
+	): Promise<boolean>;
+	undoBrigadirCard(chat: string, card: string): Promise<void>;
+	openBrigadirLink(chat: string, card: string): Promise<void>;
+	onBrigadirEvent(
+		listener: (event: import('./brigadir-chat').BrigadirChatEvent) => void
+	): () => void;
+	/** The chat's `settings_open`: Settings at a row, lit as from Search Everywhere. */
+	onBrigadirOpenSettings(
+		listener: (place: {
+			tab: import('./search').SettingsTab;
+			section: string | null;
+			label: string;
+		}) => void
+	): () => void;
 	/** The «…» menu of a note: what the person chose; `reveal` and `copy` are done by the menu itself. */
 	noteMenu(id: string): Promise<'task' | 'chat' | 'delete' | null>;
 	/** `Copy note` (spec/notifications-slack-notes-and-schedules#note-file): the menu under (x, y); main copies `text` as Markdown or as a `.md` file. */

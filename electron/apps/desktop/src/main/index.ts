@@ -3,6 +3,8 @@ import { homedir, tmpdir } from 'node:os';
 import { TaskActivities } from './task-activity';
 import { TaskLabels } from './task-labels';
 import { NoteChats } from './note-chats';
+import { BrigadirChats } from './brigadir-chats';
+import { BrigadirChatMcp } from './brigadir-chat-mcp';
 import { mergeNoteText } from './note-merge';
 import {
 	type AgentTask,
@@ -14,6 +16,11 @@ import {
 } from '@brigadir/core';
 import { relayToLoopback } from '@brigadir/remote';
 import {
+	settingEdit,
+	settingLocation,
+	slackActive,
+	slackFactsText,
+	type SlackTaskFacts,
 	agentOptionKind,
 	catalogOptions,
 	ghostModelPlan,
@@ -1643,7 +1650,7 @@ async function createSlackTask(input: SlackTaskInput) {
 	task = await store.updateTask(task, {
 		...(launchOptions.length ? { launchOptions } : {}),
 		title: input.title,
-		slackThread: input.thread,
+		...(input.thread ? { slackThread: input.thread } : {}),
 		...(attachments.length ? { attachments } : {}),
 	});
 	clients.broadcast('session:event', { key: task, record: null });
@@ -2075,6 +2082,31 @@ function slackAskAgent(
 		choice: slackCodeChoice() ?? {},
 		context: thread?.context ?? null,
 	});
+}
+/** spec/settings-modules-and-onboarding#brigadir-chat-session: Brigadir's tasks as the Slack agent gets them — the newest of every project (≤ 40), plan and CI for 15. */
+async function brigadirFacts() {
+	const projects = (
+		await readWorkspace(
+			process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+		)
+	).projects;
+	const all: { task: SlackTaskInfo; project: string }[] = [];
+	for (const project of projects)
+		for (const task of await slackTaskInfos(project.id).catch(() => [] as SlackTaskInfo[]))
+			if (!task.archived) all.push({ task, project: project.name });
+	all.sort((a, b) => (b.task.updatedAt ?? '').localeCompare(a.task.updatedAt ?? ''));
+	const facts: SlackTaskFacts[] = [];
+	for (const [index, item] of all.slice(0, 40).entries())
+		facts.push({
+			...item,
+			...(index < 15 && slackActive(item.task)
+				? await slackTaskStatus(item.task).catch(() => ({ plan: null, ci: null }))
+				: { plan: null, ci: null }),
+		});
+	return {
+		text: slackFactsText(facts, Date.now()),
+		tasks: all.map(({ task }) => ({ projectId: task.projectId, id: task.id, title: task.title })),
+	};
 }
 /** spec/appearance#evolution-redesign: the agent of «Slack: code questions» while it is set and its provider on; `null` — the default. */
 function slackCodeChoice() {
@@ -3300,7 +3332,7 @@ void app.whenReady().then(async () => {
 	handle('slack:disconnect', () => slack.disconnect());
 	handle('slack:app-connect', (token: string) => slack.setAppToken(token));
 	handle('slack:app-disconnect', () => slack.disconnectApp());
-	handle('settings:save', async (value) => {
+	const saveAppSettings = async (value: AppSettings) => {
 		const keepAwakeChanged =
 				value.agents.keepAwake !== appliedSettings.agents.keepAwake ||
 				value.agents.keepDisplayOn !== appliedSettings.agents.keepDisplayOn,
@@ -3338,7 +3370,8 @@ void app.whenReady().then(async () => {
 		publishAppearance();
 		void launches.kick();
 		return settingsSnapshot(saved);
-	});
+	};
+	handle('settings:save', (value) => saveAppSettings(value));
 	// spec/appearance#evolution-redesign: one action's agent — `Remember for …` of a capsule, `Reset` in Settings; the rest of the settings stays.
 	// spec/pull-requests-and-ci#review-crew: an agent and a crew of one action exclude each other — remembering one forgets the other.
 	handle('settings:action-agent', async (action: AgentAction, agent: HelperAgent | null) => {
@@ -3884,6 +3917,118 @@ void app.whenReady().then(async () => {
 	});
 	noteChatsOnce = noteChats;
 	app.on('will-quit', () => noteChats.closeAll());
+	// spec/settings-modules-and-onboarding#brigadir-chat: the Brigadir section's chats; their tools are served here through `mcp-relay`.
+	const dataRoot = await resolveDataRoot(process.env.BRIGADIR_DATA_DIR);
+	const brigadirMcp = new BrigadirChatMcp(
+		join(dataRoot, 'run', 'brigadir-chat.sock'),
+		join(servicesDir, 'mcp-relay')
+	);
+	const brigadirChats = new BrigadirChats({
+		root: join(dataRoot, 'assistant'),
+		mcp: brigadirMcp,
+		send: (event) => clients.broadcast('brigadir:event', event),
+		locale: () => currentLocale(),
+		settings: () => appliedSettings,
+		saveSettings: async (next) => {
+			await saveAppSettings(next);
+		},
+		openSettings: (key) => {
+			const edit = settingEdit(key);
+			if (!edit) return false;
+			const place = settingLocation(edit.id, currentLocale()) ?? {
+				tab: 'modules' as const,
+				section: null,
+				label: t(currentLocale(), 'Modules'),
+			};
+			clients.broadcast('brigadir:open-settings', place);
+			return true;
+		},
+		openRemoteSettings: () =>
+			clients.broadcast('brigadir:open-settings', {
+				tab: 'remote',
+				section: null,
+				label: t(currentLocale(), 'Remote access'),
+			}),
+		projects: async () =>
+			(
+				await readWorkspace(
+					process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+				)
+			).projects.map(({ id, name, path }) => ({ id, name, path })),
+		openProject: () => null,
+		facts: () => brigadirFacts(),
+		choice: () => {
+			const run = actionChoice(
+				'slackCode',
+				null,
+				appliedSettings.actionAgents,
+				appliedSettings.agents.enabled,
+				knownCatalogs()
+			).run;
+			return run
+				? { provider: run.provider, model: run.model }
+				: { provider: appliedSettings.agents.provider, model: null };
+		},
+		today: () => new Date().toString().replace(/ \(.*\)$/, ''),
+		createTask: async (input) => {
+			const created = await createSlackTask({
+				projectId: input.projectId,
+				title: input.title,
+				prompt: input.prompt,
+				context: null,
+				start: true,
+				thread: null,
+				alsoProjects: input.alsoProjects,
+				...(input.baseRef ? { baseRef: input.baseRef } : {}),
+			});
+			return { projectId: created.projectId, id: created.id };
+		},
+		sendToTask: async (key, text) => {
+			const result = await sendToTask(key, text);
+			return result === 'sent' ? 'sent' : `not sent: ${result}`;
+		},
+		askTask: (key, question, chat) =>
+			slackAskAgent(key, question, currentLocale() === 'uk' ? 'uk' : 'en', {
+				channel: 'brigadir',
+				ts: chat,
+				context: null,
+			}),
+		openTask: (key) => openTask(key),
+		openExternal: (url) => void shell.openExternal(url),
+		slack: {
+			connectBot: (token) => slack.connectBot(token),
+			connectApp: async (token) => {
+				await slack.setAppToken(token);
+			},
+			state: () => slack.setupState(),
+		},
+		adapter: process.env.BRIGADIR_TEST_AGENT
+			? {
+					command: '/usr/bin/env',
+					args: ['ELECTRON_RUN_AS_NODE=1', process.execPath, process.env.BRIGADIR_TEST_AGENT],
+				}
+			: undefined,
+	});
+	app.on('will-quit', () => {
+		brigadirChats.closeAll();
+		void brigadirMcp.close();
+	});
+	handle('brigadir:list', () => brigadirChats.list());
+	handle('brigadir:read', (id: string) => brigadirChats.read(id));
+	handle('brigadir:create', () => brigadirChats.create());
+	handle('brigadir:send', (id: string, text: string) => {
+		// The answer streams by `brigadir:event`; the call returns once the message is on its way.
+		void brigadirChats.send(id, text).catch(() => {});
+	});
+	handle('brigadir:stop', (id: string) => brigadirChats.stop(id));
+	handle('brigadir:rename', (id: string, title: string) => brigadirChats.rename(id, title));
+	handle('brigadir:archive', (id: string) => brigadirChats.archive(id));
+	handle('brigadir:delete', (id: string) => brigadirChats.remove(id));
+	handle('brigadir:answer', (chat: string, card: string, action: string, value: string | null) =>
+		brigadirChats.answer(chat, card, action, value ?? undefined)
+	);
+	handle('brigadir:undo', (chat: string, card: string) => brigadirChats.undo(chat, card));
+	handle('brigadir:open-link', (chat: string, card: string) => brigadirChats.openLink(chat, card));
 	handle('notes:chat-read', (id: string) => noteChats.read(id));
 	handle('notes:chat-send', (id: string, text: string, choice: NoteChatChoice) => {
 		// The answer streams by `notes:chat-event`; the call returns once the message is on its way.

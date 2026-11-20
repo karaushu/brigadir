@@ -8,7 +8,9 @@ import {
 	designLimits,
 	designNodeLabel,
 	designReviewState,
+	imageSize,
 	imageSizeRefusal,
+	type ImageSize,
 	isDesignArea,
 	isRecord,
 	isShotId,
@@ -261,7 +263,8 @@ export function submitDesignReview(deps: DesignReviewDeps, input: Record<string,
 			shots = await readShots(deps.store, deps.key),
 			id = randomUUID(),
 			dir = await deps.store.taskDir(deps.key);
-		const nodes: DesignNode[] = [];
+		const nodes: DesignNode[] = [],
+			warnings: string[] = [];
 		for (const [index, node] of checked.nodes.entries()) {
 			const base = {
 				name: node.name,
@@ -281,8 +284,10 @@ export function submitDesignReview(deps: DesignReviewDeps, input: Record<string,
 			const image = node.figmaImage
 				? await readDesignImage(node.figmaImage, deps.fetch)
 				: { reason: 'figmaImage is missing' };
-			let figmaFile: string | undefined;
+			let figmaFile: string | undefined,
+				figmaSize: ImageSize | null = null;
 			if ('bytes' in image) {
+				figmaSize = imageSize(image.bytes);
 				figmaFile = `design/${id}/figma-${index + 1}.${image.kind}`;
 				await mkdir(await safePath(dir, 'design', id), { recursive: true });
 				await atomicText(await safePath(dir, figmaFile), image.bytes);
@@ -308,6 +313,12 @@ export function submitDesignReview(deps: DesignReviewDeps, input: Record<string,
 						: state === 'old-shot'
 							? `${node.shot} was taken before the files changed. Take a new screenshot of this node and submit the screen again.`
 							: undefined;
+			if (state === 'ok' && shot)
+				warnings.push(
+					...areaWarning(node, figmaSize, await shotSize(join(dir, shot.file))).map(
+						(text) => `${node.name}: ${text}`
+					)
+				);
 			nodes.push({
 				...base,
 				...(figmaFile ? { figmaFile } : {}),
@@ -348,11 +359,54 @@ export function submitDesignReview(deps: DesignReviewDeps, input: Record<string,
 			...(review.reviewId ? { reviewId: review.reviewId } : {}),
 			nodes,
 		});
-		return designAnswer(review);
+		return designAnswer(review, warnings);
 	});
 }
+/** The width and height of a kept screenshot, from its header. */
+async function shotSize(path: string): Promise<ImageSize | null> {
+	try {
+		const handle = await open(path, 'r');
+		try {
+			const head = new Uint8Array(64 * 1024),
+				{ bytesRead } = await handle.read(head, 0, head.length, 0);
+			return imageSize(head.subarray(0, bytesRead));
+		} finally {
+			await handle.close();
+		}
+	} catch {
+		return null;
+	}
+}
+/** spec/design-review#area: how far apart the shapes of the area and the design image may be before the answer says so (1.5 — half again). */
+export const designAreaRatio = 1.5;
+/**
+ * spec/design-review#area: the area should fit the node as tightly as the design image does. The host warns and accepts: a node the app
+ * really draws much taller or wider is a mismatch the agent must be able to file.
+ */
+export function areaWarning(
+	node: { area?: DesignArea },
+	figma: ImageSize | null,
+	shot: ImageSize | null
+): string[] {
+	if (!node.area)
+		return [
+			'pass its area on the screenshot, tight around the node, so the person sees the node next to its design.',
+		];
+	if (!figma || !shot || !figma.width || !figma.height) return [];
+	const width = node.area.width * shot.width,
+		height = node.area.height * shot.height;
+	if (!width || !height) return ['its area is empty: give the node’s frame on the screenshot.'];
+	const area = width / height,
+		design = figma.width / figma.height,
+		ratio = Math.max(area / design, design / area);
+	if (ratio <= designAreaRatio) return [];
+	const shape = (value: number) => `${value.toFixed(2)}:1`;
+	return [
+		`its area on the screenshot is ${shape(area)} (width to height), the design image ${shape(design)}. Fit the area tightly around this node (its frame from simulator_ui or browser_ui), not the screen or a section around it, and check the rows you read from it. If the app really draws the node that much ${area > design ? 'wider' : 'taller'}, keep the area and say so in a row.`,
+	];
+}
 /** spec/design-review#answer */
-export function designAnswer(review: DesignReview) {
+export function designAnswer(review: DesignReview, warnings: readonly string[] = []) {
 	const counts = designCounts(review.nodes);
 	const redo = review.nodes
 		.filter((node) => node.state !== 'ok')
@@ -377,6 +431,7 @@ export function designAnswer(review: DesignReview) {
 			'Fix the mismatches, take new screenshots of those nodes and submit the screen again.'
 		);
 	if (review.state === 'passed') lines.push('The design review passed.');
+	lines.push(...warnings);
 	return {
 		id: review.id,
 		state: review.state,
@@ -384,6 +439,7 @@ export function designAnswer(review: DesignReview) {
 		notAccepted: counts.notAccepted,
 		redo,
 		mismatches,
+		...(warnings.length ? { warnings } : {}),
 		next: lines.join('\n'),
 	};
 }

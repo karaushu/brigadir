@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -60,6 +60,10 @@ async function setup(title: string) {
 	return { repo, store, task };
 }
 async function launch(store: SessionStore, key: TaskKey) {
+	return (await launchHost(store, key)).client;
+}
+/** The task's host and its client; `child` lets a test kill the host as a crash would. */
+async function launchHost(store: SessionStore, key: TaskKey) {
 	const config = join(await store.taskDir(key), 'config.json');
 	await atomicJson(config, {
 		schemaVersion: 1,
@@ -93,7 +97,7 @@ async function launch(store: SessionStore, key: TaskKey) {
 	await until(async () =>
 		(await client.snapshot()).records.find((r) => r.event.kind === 'session.started')
 	);
-	return client;
+	return { client, child };
 }
 const find = (client: HostClient, test: (record: EventRecord) => boolean, timeout = 60_000) =>
 	until(async () => (await client.snapshot()).records.find(test), timeout);
@@ -395,3 +399,51 @@ it('refuses the approval of a task with a Figma link until a passed design revie
 	);
 	expect(finished.event).toMatchObject({ state: 'passed', point: 'pre-pr' });
 }, 300_000);
+
+// From the walkthrough's code audit: a review that waits for the agent's turn started only on `turn.completed`.
+it('a review waiting for a turn that fails, or for a turn a restart cut off, reads when that turn is over (spec/reviews#start)', async () => {
+	/** A review starts while the agent's turn runs `spend 1 <mode>`; `end` ends that turn and returns the client that sees the rest. */
+	const readsAfter = async (
+		mode: string,
+		end: (host: {
+			store: SessionStore;
+			task: TaskKey;
+			child: ChildProcess;
+			client: HostClient;
+		}) => Promise<HostClient>
+	) => {
+		const { store, task } = await setup('Write the output');
+		const { client, child } = await launchHost(store, task);
+		await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+		await find(client, (r) => r.event.kind === 'turn.completed');
+		await client.command({ kind: 'prompt', text: `spend 1 ${mode}` });
+		await find(
+			client,
+			(r) => r.event.kind === 'turn.started' && r.event.text === `spend 1 ${mode}`
+		);
+		await client.command({
+			kind: 'startReview',
+			reviewers: [reviewer],
+			who: { kind: 'agent' },
+			instructions: '',
+			guidance: '',
+		});
+		await find(client, (r) => r.event.kind === 'task-review.started');
+		const file = join(await store.taskDir(task), 'task-review.json');
+		expect(JSON.parse(await readFile(file, 'utf8')).review.state).toBe('waiting');
+		const next = await end({ store, task, child, client });
+		const read = await find(next, (r) => r.event.kind === 'task-review.findings', 90_000);
+		expect(read.event).toMatchObject({ findings: 1, reviewers: ['Reviewer'] });
+	};
+	// The turn fails: the journal gets `session.failed`, never `turn.completed`.
+	await readsAfter('slow fail', async ({ client }) => {
+		await find(client, (r) => r.event.kind === 'session.failed');
+		return client;
+	});
+	// The host dies in the middle of the turn; the next host finds the review still waiting.
+	await readsAfter('hold', async ({ store, task, child }) => {
+		child.kill('SIGKILL');
+		await new Promise((done) => child.once('exit', done));
+		return (await launchHost(store, task)).client;
+	});
+}, 360_000);

@@ -1709,6 +1709,8 @@ export async function startHost(config: HostConfig) {
 					}
 				}
 			if (event.kind === 'turn.completed' && !stopping) void taskReview.turnEnded().catch(() => {});
+			if (event.kind === 'session.failed' && !stopping)
+				void taskReview.turnStopped().catch(() => {});
 			// spec/reviews#tripwire, spec/reviews#class-raise, spec/reviews#large-review
 			if (!stopping) classEvent(event);
 			// spec/reviews#plan-start: a presented plan starts its review or answers one; an approval ends it.
@@ -3789,6 +3791,8 @@ export async function startHost(config: HostConfig) {
 			if (spec) crewHost = await crewHostFor(selfContext(spec));
 		}
 		await taskReview.load();
+		// spec/reviews#loop: no turn runs after a restart; a review that waited for the old host's turn reads now.
+		void taskReview.turnStopped().catch(() => {});
 		// spec/reviews#classes: the class checks start once the review's record is loaded.
 		void taskClass.start().catch(() => {});
 		// spec/reviews#plan-review: a root foreman's split that still waits after a restart.

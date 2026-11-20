@@ -511,6 +511,13 @@ export class TaskReviewLife {
 			if (await this.step({ kind: 'answered' })) await this.round();
 		});
 	}
+	/** spec/reviews#start: the turn a review waits for ended without `turn.completed` — it failed, or the host restarted under it: the review
+	 *  reads now. */
+	turnStopped() {
+		return this.serial(async () => {
+			if (this.doc.review?.state === 'waiting' && this.host) await this.read();
+		});
+	}
 	/** A turn took the last batch; this runs when a turn ends, so that turn or a later one has ended. */
 	private taken(batch: string | undefined) {
 		if (!batch) return false;

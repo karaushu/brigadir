@@ -92,7 +92,7 @@ not start the review: …` and `Retry`.
   returns at once with `proposed: true`; the proposal stays until the person starts the review or dismisses it with
   `Not now`. Refused while a review runs: `A review of this task is already running.`
 - A review the person starts, or a review before the PR the host starts, while the task's agent is in a turn waits for
-  that turn to end and reads its snapshot. A mid-task review — the agent's or the host's — reads at once (the host takes
+  that turn to end and reads its snapshot. A turn that fails, or that a host restart cuts off, has ended too. A mid-task review — the agent's or the host's — reads at once (the host takes
   a checkpoint first) while the agent works on. A plan review reads at once: the agent's turn waits for the plan's
   answer.
 
@@ -161,8 +161,8 @@ problem the fix brought in) is accepted.`), a `replyTo` that is not this reviewe
 - **Stop.** `Stop` (strip) cancels the open round and shuts the reviewers down; their tasks stay as the review's log until
   the task is archived or deleted. The review ends `stopped`.
 - **Restart.** The review's record and its runs are on disk; after a host restart the review continues from its state:
-  a round being read is dispatched again, a batch waiting for the agent's turn stays queued, a review waiting for the
-  person keeps waiting.
+  a round being read is dispatched again, a review that waited for the agent's turn reads (no turn runs after a
+  restart), a batch waiting for the agent's turn stays queued, a review waiting for the person keeps waiting.
 - **Outdated.** A later change of the task's tree (agent or person) makes a passed or accepted review before the PR
   `outdated`: it covers only the snapshot it read. A mid-task review stays as it ended: the agent works on after it.
 - **A mid-task review that ends** `passed` with no findings, or `accepted`, while the task's agent waits prompts it once

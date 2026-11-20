@@ -154,7 +154,7 @@ A subagent the agent runs in the background (Claude `Agent` with `run_in_backgro
 
 | Entity | Who | Source | Where |
 | --- | --- | --- | --- |
-| **Plan row** (`PlanRow`) | Any agent | ACP `session/update` `plan`, normalized to `plan.changed {entries}` | One row in the transcript |
+| **Plan row** (`PlanRow`) | Any agent | ACP `session/update` `plan`, or `plan_update` kind `items` (Claude's todo list), normalized to `plan.changed {entries}` | One row in the transcript |
 | **Plan for approval** | Any agent in plan mode | A permission whose tool kind is ACP `switch_mode`; plan documents `plan.document` | A card in the chat |
 | **Plan card** (`PlanCard`) | The Foreman | `crew.plan.requested` / `crew.plan.resolved` | A card in the Foreman's chat |
 
@@ -193,7 +193,7 @@ A plan the agent writes in plan mode, so the person can read it, edit it and app
 **Rules** (`core/plan-approval.ts`, `PlanApproval.tsx`):
 
 1. **What counts.** A permission request with `tool.category === 'switch_mode'` (`isPlanApproval`). The plan text is the tool's text `content`, else the last plan document of the session before the request that was not removed (`planApprovalText`). `rawInput` (for example `planFilePath`) is never read. A `switch_mode` permission without any text stays an ordinary permission card.
-2. **Plan documents.** The transport declares `clientCapabilities.plan` and maps `plan_update` kind `markdown` → `plan.document {planId, text}` and `plan_removed` → `plan.removed`. Kinds `items` and `file` are not shown. While the agent writes a plan without a request, the transcript shows a `Plan · <agent> is writing…` card at the place of that `planId`'s first `plan.document`, updated in place.
+2. **Plan documents.** The transport declares `clientCapabilities.plan` and maps `plan_update` kind `markdown` → `plan.document {planId, text}`, kind `items` → `plan.changed {entries}` (the step checklist, as `plan`), and `plan_removed` → `plan.removed`. Kind `file` is not shown. While the agent writes a plan without a request, the transcript shows a `Plan · <agent> is writing…` card at the place of that `planId`'s first `plan.document`, updated in place.
 3. **Card.** It takes the request's place in the chat, at the width of the conversation column.
    - Header: a "waiting for you" dot, the document glyph, `Plan for approval`, `<agent> is waiting for approval`, an `edited in the editor` badge when it applies, and `Open in editor` on the right.
    - Body: the chat's Markdown renderer, folded to about 210 px with a fade, plus `Whole plan · N lines` / `Collapse plan`.
@@ -352,7 +352,7 @@ After `Finish turns, then stop` or `Stop now` the task stays held at its budget 
 
 - Marks on the turn rail for a turn that failed or waits for a permission, coloured like the sidebar state.
 - Background commands for Codex. Its background terminals exist only through AIR `asyncTasks`, which alters `exitCode` and `rawOutput` of ordinary calls.
-- Plan documents of kinds `items` and `file`.
+- Plan documents of kind `file`.
 - Comparing any two revisions of a plan, not only a revision and the one before it.
 
 <a id="non-goals"></a>

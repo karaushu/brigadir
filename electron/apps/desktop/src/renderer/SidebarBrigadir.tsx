@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
 	relativeAge,
+	setupInProgress,
 	t,
 	type BrigadirChatMeta,
 	type BrigadirSetupState,
@@ -17,12 +18,9 @@ import { RenameDialog } from './RenameTask';
 import { useBrigadirList } from './brigadir-data';
 import styles from './App.module.css';
 
-const setupNames: Record<
-	BrigadirSetupState['kind'],
-	{ name: MessageKey; glyph: GlyphName; ask: MessageKey }
-> = {
-	slack: { name: 'Slack', glyph: 'slack', ask: 'Set up a Slack bot for me' },
-	remoteAccess: { name: 'Remote access', glyph: 'remote', ask: 'Turn on access from my laptop' },
+const setupNames: Record<BrigadirSetupState['kind'], MessageKey> = {
+	slack: 'Slack',
+	remoteAccess: 'Remote access',
 };
 /** A setup's state as the list's second line, in the interface language. */
 function setupStatus(locale: Locale, status: string) {
@@ -56,6 +54,7 @@ export function SidebarBrigadir({
 		[collapsed, setCollapsed] = useState<string[]>(['In the archive']);
 	const needle = query.trim().toLowerCase();
 	const matches = (chat: BrigadirChatMeta) => !needle || chat.title.toLowerCase().includes(needle);
+	const running = (list?.setups ?? []).filter(setupInProgress);
 	const chats = (list?.chats ?? []).filter(matches),
 		archived = (list?.archived ?? []).filter(matches);
 	const menu = async (chat: BrigadirChatMeta) => {
@@ -125,7 +124,15 @@ export function SidebarBrigadir({
 					<span className={styles.taskTitle}>{chat.title || t(locale, 'New chat')}</span>
 				</span>
 				<small className={styles.prLine}>
-					<time dateTime={chat.updatedAt}>{relativeAge(locale, chat.updatedAt)}</time>
+					{(() => {
+						// spec/settings-modules-and-onboarding#brigadir-chat-entry: the chat that runs an unfinished setup says where it stands.
+						const setup = running.find((item) => item.chat === chat.id);
+						return setup ? (
+							`${t(locale, setupNames[setup.kind])} · ${setupStatus(locale, setup.status)}`
+						) : (
+							<time dateTime={chat.updatedAt}>{relativeAge(locale, chat.updatedAt)}</time>
+						);
+					})()}
 				</small>
 			</span>
 		</button>
@@ -155,34 +162,6 @@ export function SidebarBrigadir({
 					<SkeletonRows count={4} height={46} />
 				) : (
 					<>
-						{group(
-							'Setups',
-							'settings',
-							list.setups.length,
-							list.setups.map((setup) => {
-								const names = setupNames[setup.kind];
-								return (
-									<button
-										key={setup.kind}
-										className={styles.task}
-										data-brigadir-setup={setup.kind}
-										aria-pressed={!!setup.chat && setup.chat === selected}
-										onClick={() =>
-											setup.chat ? onOpen(setup.chat) : onOpen(null, t(locale, names.ask))
-										}>
-										<span className={styles.noteGlyph}>
-											<Glyph name={names.glyph} size={14} />
-										</span>
-										<span className={styles.taskCopy}>
-											<span className={styles.taskHead}>
-												<span className={styles.taskTitle}>{t(locale, names.name)}</span>
-											</span>
-											<small className={styles.prLine}>{setupStatus(locale, setup.status)}</small>
-										</span>
-									</button>
-								);
-							})
-						)}
 						{chats.length > 0 && group('Chats', 'chat', chats.length, chats.map(chatRow))}
 						{archived.length > 0 &&
 							group('In the archive', 'archive-box', archived.length, archived.map(chatRow))}

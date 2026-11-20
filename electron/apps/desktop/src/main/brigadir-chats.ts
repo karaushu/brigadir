@@ -8,6 +8,7 @@ import {
 	brigadirChatFollowUp,
 	brigadirChatPrompt,
 	brigadirChatTitle,
+	setupInProgress,
 	changeSetting,
 	findSettings,
 	isBrigadirChatMeta,
@@ -764,7 +765,7 @@ export class BrigadirChats {
 	private async unfinishedSetups(): Promise<string> {
 		const states = await this.setupStates();
 		return states
-			.filter((state) => !state.done && state.status !== 'Not set up')
+			.filter(setupInProgress)
 			.map((state) => `- ${state.kind}: ${state.status}`)
 			.join('\n');
 	}

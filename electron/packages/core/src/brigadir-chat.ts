@@ -93,6 +93,10 @@ export type BrigadirSetupState = {
 	/** The chat that runs it, to open on a click. */
 	chat: string | null;
 };
+/** A setup the person began and left unfinished: the rail tile's dot and the second line of the chat that runs it. */
+export function setupInProgress(setup: BrigadirSetupState): boolean {
+	return !setup.done && setup.status !== 'Not set up';
+}
 export type BrigadirChatEvent =
 	| { kind: 'row'; id: string; row: BrigadirChatRow }
 	| { kind: 'busy'; id: string; busy: boolean }

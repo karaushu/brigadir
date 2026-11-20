@@ -25,6 +25,7 @@ import {
 	sidebarMatches,
 	type SidebarFilter,
 	layoutLimits,
+	setupInProgress,
 } from '@brigadir/core';
 import {
 	ArchiveHeaderButton,
@@ -368,9 +369,7 @@ export function App() {
 		brigadirOpened.current = brigadirRoute;
 	}, [brigadirRoute]);
 	/** spec/sidebar#rail-sections: the tile's dot — a setup the person began and left unfinished. */
-	const brigadirDot = !!brigadirList?.setups.some(
-		(setup) => !setup.done && setup.status !== 'Not set up'
-	);
+	const brigadirDot = !!brigadirList?.setups.some(setupInProgress);
 	// spec/notifications-slack-notes-and-schedules#notes: the Notes screen, while its module is on.
 	const notesOpen = !!notesRoute && appearance.modules.notes;
 	// spec/notifications-slack-notes-and-schedules#schedules: the Schedules section, while its module is on; a run's task opened from it keeps the section's sidebar.

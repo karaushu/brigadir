@@ -131,7 +131,7 @@ Before every hire and before every `accept_task`, the agent's uncommitted edits 
 After a hire the agent no longer writes inside the zones of its running workers.
 
 - A write through the app's file layer (ACP `fs/write_text_file`) inside such a zone is refused: `This file belongs to «{part}», the part you hired out to {worker}…`.
-- Claude (claude-agent-acp) and Codex (codex-acp) write files themselves and do not call `fs/write_text_file`, so that refusal rarely fires. After each turn of the agent, the host compares the task's tree in each repo with the commit the hire started from (`git diff --name-only` and untracked files) and names the files the agent changed inside a running worker's zone: `crew.zone.touched` in the journal and a prompt marked `zone-touched` that asks the agent to put them back or hand the change to the worker. Each file is named once. Accepting the part would otherwise conflict, which the merge strip shows.
+- Claude (claude-agent-acp) and Codex (codex-acp) write files themselves and do not call `fs/write_text_file`, so that refusal rarely fires. After each turn of the agent, the host compares the task's tree in each repo with the commit the hire started from (`git diff --name-only` and untracked files) and names the files the agent changed inside a running worker's zone: `crew.zone.touched` in the journal and a prompt marked `zone-touched` that asks the agent to put them back or hand the change to the worker. Each file is named once, also after a restart of the host: what the journal's `crew.zone.touched` already names (up to 500 paths per event) is not named again. Accepting the part would otherwise conflict, which the merge strip shows.
 - A zone is free again when its worker is dismissed.
 
 <a id="auto-dismiss"></a>

@@ -126,6 +126,8 @@ export function uniqueName(base: string, taken: ReadonlySet<string>, limit = 80)
 		if (!taken.has(name)) return name;
 	}
 }
+/** spec/crew#auto-guard: the paths one `crew.zone.touched` names; what is named is not named again, also after a restart. */
+const zoneTouchedLimit = 500;
 export class AutoCrewHost extends CrewHost {
 	private hireWaiter: {
 		hire: AutoHire;
@@ -954,6 +956,15 @@ export class AutoCrewHost extends CrewHost {
 	 * spec/crew#auto-guard: Claude and Codex write files themselves, not through the app's file layer, so after each turn of the agent the host
 	 * compares its tree with the commit the hire started from and names the files it changed inside a hired zone.
 	 */
+	private namedInZone(taskId: string) {
+		return new Set(
+			this.deps
+				.records()
+				.flatMap(({ event }) =>
+					event.kind === 'crew.zone.touched' && event.taskId === taskId ? event.paths : []
+				)
+		);
+	}
 	async checkZones(): Promise<void> {
 		const project = await this.deps.store.projectForTask(this.deps.key).catch(() => null);
 		if (!project) return;
@@ -973,7 +984,8 @@ export class AutoCrewHost extends CrewHost {
 					if (zoneOwns(worker.zone, full)) paths.push(full);
 				}
 			}
-			const seen = this.touched.get(worker.taskId) ?? new Set<string>(),
+			// The files already named are in the journal, so a restarted host does not name them again.
+			const seen = this.touched.get(worker.taskId) ?? this.namedInZone(worker.taskId),
 				fresh = [...new Set(paths)].filter((path) => !seen.has(path));
 			if (!fresh.length) continue;
 			for (const path of fresh) seen.add(path);
@@ -983,7 +995,7 @@ export class AutoCrewHost extends CrewHost {
 				taskId: worker.taskId,
 				name: worker.name,
 				title: worker.title,
-				paths: fresh.slice(0, 50),
+				paths: fresh.slice(0, zoneTouchedLimit),
 			});
 			await this.deps.prompt(
 				`You changed files inside «${worker.title}», the part you hired out to ${worker.name}: ${fresh.slice(0, 20).join(', ')}. Put them back as they were at the hire, or hand the change to ${worker.name} with prompt_task; otherwise accepting its part will conflict.`,

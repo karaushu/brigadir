@@ -514,6 +514,23 @@ describe('spec/crew#auto-dismiss, spec/crew#auto-budget, spec/crew#auto-guard', 
 		await host.checkZones();
 		expect(events.filter((event) => event.kind === 'crew.zone.touched')).toHaveLength(1);
 	});
+	it('a restarted host does not name the same files again', async () => {
+		const { host, make, repo, events } = await hired();
+		await writeFile(join(repo, 'apps', 'api', 'clients.ts'), 'export const clients = [1];\n');
+		await host.checkZones();
+		await host.stop();
+		const restarted = make();
+		cleanup.push(() => restarted.stop());
+		restarted['launchWorker'] = async () => {};
+		await restarted.start();
+		await restarted.checkZones();
+		expect(events.filter((event) => event.kind === 'crew.zone.touched')).toHaveLength(1);
+		await writeFile(join(repo, 'apps', 'api', 'more.ts'), 'export const more = 1;\n');
+		await restarted.checkZones();
+		expect(events.filter((event) => event.kind === 'crew.zone.touched').at(-1)).toMatchObject({
+			paths: ['apps/api/more.ts'],
+		});
+	});
 	it('counts working minutes inside turns and tokens without cache reads', () => {
 		const at = (minute: number) => new Date(Date.UTC(2026, 0, 1, 0, minute)).toISOString();
 		const records: EventRecord[] = [

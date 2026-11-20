@@ -139,7 +139,8 @@ A module is a part of the app that switches off whole: its column or section, to
 | `remoteAccess` | `Remote access` | Control this machine from another computer. | on (access itself stays off) | yes |
 | `notes` | `Notes` | Markdown notes with their own agent chat. | on | no |
 | `schedules` | `Scheduled tasks` | Run a task later or on repeat. | on | no |
-| `slack` | `Slack` | Task and CI messages from your CI bot. | off | yes |
+| `todo` | `Todo` | To-do lists, by project or without one. | on | no |
+| `slack` | `Slack` | Task and CI messages from your CI bot, and your mentions. | off | yes |
 
 - `withModuleDefaults`: a file written before a module existed takes that module's default, and the keys it has stay as read. Main and host parse it the same way.
 - The simulator is off by default because only projects with a mobile app need it, and its tools cost context in every session. The other modules shipped as on before they could be switched off, so an update must not remove them.

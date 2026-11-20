@@ -42,6 +42,9 @@ import {
 	type Locale,
 	type PermissionRequest,
 	type TaskKey,
+	type TodoList,
+	moduleOffMessages,
+	todoListsText,
 } from '@brigadir/core';
 
 /** spec/settings-modules-and-onboarding#brigadir-chat: what the chat needs from the rest of main; injected so a test runs without Electron. */
@@ -82,6 +85,18 @@ export type BrigadirChatDeps = {
 	openTask(task: TaskKey): void;
 	/** Saves a note in Notes; its id. */
 	createNote(project: string | null, text: string): Promise<string>;
+	/** spec/todo-and-slack-inbox#todo-chat-tools: the Todo module's lists while it is on; absent — no to-do tools. */
+	todo?: {
+		enabled(): boolean;
+		addItem(input: {
+			project: string | null;
+			list: string | null;
+			title: string;
+			description: string;
+			source: null;
+		}): Promise<{ listId: string; listName: string; project: string | null; itemId: string }>;
+		lists(): Promise<TodoList[]>;
+	};
 	openExternal(url: string): void;
 	slack: {
 		/** Seals a bot token after `auth.test`; the bot, team, granted scopes and app id when Slack gives them. */
@@ -391,6 +406,7 @@ export class BrigadirChats {
 									facts: facts.text,
 									settings: settingsRegistryText(this.deps.settings()),
 									setups: await this.unfinishedSetups(),
+									todo: this.deps.todo?.enabled() ?? false,
 								})
 							: brigadirChatFollowUp({ text: said, facts: facts.text }),
 					},
@@ -602,6 +618,15 @@ export class BrigadirChats {
 				);
 			case 'unwatch':
 				return this.unwatch(chat, str('task') ? await this.taskOf(str('task')) : null);
+			case 'todo_add':
+				return this.todoAdd(chat, {
+					title: str('title'),
+					description: str('description'),
+					project: str('project') || null,
+					list: str('list') || null,
+				});
+			case 'todo_lists':
+				return this.todoLists(str('project') || null);
 			default:
 				throw new Error(`Unknown tool ${method}`);
 		}
@@ -626,6 +651,58 @@ export class BrigadirChats {
 			project,
 		});
 		return { note, saved: true };
+	}
+	// ---------- to-dos ----------
+	private todoStore() {
+		const todo = this.deps.todo;
+		if (!todo?.enabled()) throw new Error(moduleOffMessages.todo);
+		return todo;
+	}
+	/** A project by id or name (any case); `none` and null — No project. */
+	private async projectOf(project: string | null) {
+		if (!project || project.trim().toLowerCase() === 'none') return null;
+		const found = (await this.deps.projects()).find(
+			(item) => item.id === project || item.name.toLowerCase() === project.trim().toLowerCase()
+		);
+		if (!found) throw new Error(`No project ${project}.`);
+		return found;
+	}
+	private async todoAdd(
+		chat: string,
+		input: { title: string; description: string; project: string | null; list: string | null }
+	) {
+		const todo = this.todoStore();
+		if (!input.title.trim()) throw new Error('title is empty.');
+		const project = await this.projectOf(input.project);
+		const added = await todo.addItem({
+			project: project?.id ?? null,
+			list: input.list,
+			title: input.title,
+			description: input.description,
+			source: null,
+		});
+		await this.card(chat, {
+			type: 'todo',
+			id: randomUUID(),
+			list: added.listId,
+			item: added.itemId,
+			title: input.title.trim(),
+			listName: added.listName,
+			project: project?.name ?? null,
+		});
+		return `Added to ${added.listName || 'Untitled list'} (${project?.name ?? 'No project'}).`;
+	}
+	private async todoLists(project: string | null) {
+		const todo = this.todoStore();
+		const projects = await this.deps.projects();
+		const only = project === null ? undefined : ((await this.projectOf(project))?.id ?? null);
+		const lists = (await todo.lists()).filter(
+			(list) => only === undefined || list.project === only
+		);
+		return todoListsText(
+			lists,
+			(id) => projects.find((item) => item.id === id)?.name ?? 'No project'
+		);
 	}
 	private async readWatches(): Promise<Watch[]> {
 		const doc = await readDocument(await safePath(this.deps.root, 'watches.json')).catch(

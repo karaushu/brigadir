@@ -51,6 +51,8 @@ import { SectionsRail, SettingsTile } from './SectionsRail';
 import { SidebarPRs } from './SidebarPRs';
 import { SidebarNotes } from './SidebarNotes';
 import { SidebarBrigadir } from './SidebarBrigadir';
+import { SidebarTodo } from './SidebarTodo';
+import { TodoScreen, type TodoTaskSeed } from './TodoScreen';
 import { BrigadirChat } from './BrigadirChat';
 import { useBrigadirList } from './brigadir-data';
 import { SidebarSchedules } from './SidebarSchedules';
@@ -358,6 +360,9 @@ export function App() {
 		brigadir: brigadirRoute,
 		openBrigadir,
 		closeBrigadir,
+		todo: todoRoute,
+		openTodo,
+		closeTodo,
 	} = useWorkspace();
 	// spec/settings-modules-and-onboarding#brigadir-chat-entry: the Brigadir section — its chat in the main area, its list in the sidebar.
 	const brigadirOpen = !!brigadirRoute;
@@ -370,6 +375,8 @@ export function App() {
 	}, [brigadirRoute]);
 	/** spec/sidebar#rail-sections: the tile's dot — a setup the person began and left unfinished. */
 	const brigadirDot = !!brigadirList?.setups.some(setupInProgress);
+	// spec/todo-and-slack-inbox#todo-entry: the Todo section — its open list in the main area, its lists in the sidebar, while its module is on.
+	const todoOpen = !!todoRoute && appearance.modules.todo;
 	// spec/notifications-slack-notes-and-schedules#notes: the Notes screen, while its module is on.
 	const notesOpen = !!notesRoute && appearance.modules.notes;
 	// spec/notifications-slack-notes-and-schedules#schedules: the Schedules section, while its module is on; a run's task opened from it keeps the section's sidebar.
@@ -687,8 +694,11 @@ export function App() {
 			  }
 			| undefined
 		>();
+	/** spec/todo-and-slack-inbox#todo-item: `Make a task` — the sheet with the to-do's title and description. */
+	const [todoSheet, setTodoSheet] = useState<{ name: string; prompt: string } | undefined>();
 	const showNew = (id: string, backlog = false) => {
 		setNewWhen('now');
+		setTodoSheet(undefined);
 		setNoteSheet(undefined);
 		setDuplicateSource(undefined);
 		setProposalSheet(undefined);
@@ -764,6 +774,13 @@ export function App() {
 		});
 		setNewBacklog(false);
 		setNewProject(projectId);
+	};
+	// spec/todo-and-slack-inbox#todo-item: a to-do of a list without a project asks where the task goes, as a note does.
+	const todoTask = async (seed: TodoTaskSeed) => {
+		const projectId = seed.project ?? (await window.brigadir.noteTaskProjectMenu());
+		if (!projectId) return;
+		showNew(projectId);
+		setTodoSheet({ name: seed.title.slice(0, 80), prompt: seed.prompt });
 	};
 	const openNoteTask = (projectId: string, taskId: string) => {
 		const found = workspace?.tasks.find(
@@ -845,10 +862,11 @@ export function App() {
 	/** spec/sidebar#section-rail: a section's tile or key opens it with the sidebar; the open section's own hides and shows the sidebar. */
 	const openSection = (next: typeof section) => {
 		// spec/notifications-slack-notes-and-schedules#notes + spec/sidebar#section-rail: from the Notes screen a section's tile goes back to that section's board, the sidebar shown.
-		if (notesOpen || schedulesOpen || brigadirOpen) {
+		if (notesOpen || schedulesOpen || brigadirOpen || todoOpen) {
 			useWorkspace.getState().closeNotes();
 			useWorkspace.getState().closeSchedules();
 			closeBrigadir();
+			closeTodo();
 			setSidebarHidden(false);
 			if (next === section) return;
 		}
@@ -1047,7 +1065,8 @@ export function App() {
 	);
 	const needsYou = live.filter((task) => task.status === 'needs-you');
 	useMenuContext(
-		!!activeProject && route !== '#kit',
+		// spec/todo-and-slack-inbox#todo-item: on the Todo screen ⌘N is Add a to-do, not New task.
+		!!activeProject && route !== '#kit' && !todoOpen,
 		!!(task || mainTree) && route !== '#kit',
 		needsYou.length > 0 && route !== '#kit',
 		!!task && !task.archived && !['backlog', 'preparing'].includes(task.status) && route !== '#kit',
@@ -1108,6 +1127,14 @@ export function App() {
 				if (action === 'section-tasks') openSection('tasks');
 				if (action === 'section-prs' && prsModule) openSection('prs');
 				// spec/settings-modules-and-onboarding#brigadir-chat-entry: ⌃⌘5 opens Brigadir; there it hides and shows the sidebar.
+				// spec/todo-and-slack-inbox#todo-entry: ⌃⌘6 opens Todo; there it hides and shows the sidebar.
+				if (action === 'section-todo' && useWorkspace.getState().appearance.modules.todo) {
+					if (useWorkspace.getState().todo) setSidebarHidden((value) => !value);
+					else {
+						setSidebarHidden(false);
+						useWorkspace.getState().openTodo();
+					}
+				}
 				if (action === 'section-brigadir') {
 					if (useWorkspace.getState().brigadir) setSidebarHidden((value) => !value);
 					else {
@@ -1277,15 +1304,18 @@ export function App() {
 										prs: prsModule,
 										notes: appearance.modules.notes,
 										schedules: appearance.modules.schedules,
+										todo: appearance.modules.todo,
 									}}
 									selected={
-										brigadirOpen
-											? 'brigadir'
-											: notesOpen
-												? 'notes'
-												: schedulesOpen
-													? 'schedules'
-													: section
+										todoOpen
+											? 'todo'
+											: brigadirOpen
+												? 'brigadir'
+												: notesOpen
+													? 'notes'
+													: schedulesOpen
+														? 'schedules'
+														: section
 									}
 									counts={{
 										tasks: needsYou.length,
@@ -1302,6 +1332,12 @@ export function App() {
 											else {
 												setSidebarHidden(false);
 												openSchedules();
+											}
+										} else if (id === 'todo') {
+											if (todoOpen) setSidebarHidden((value) => !value);
+											else {
+												setSidebarHidden(false);
+												openTodo();
 											}
 										} else if (id === 'brigadir') {
 											if (brigadirOpen) setSidebarHidden((value) => !value);
@@ -1336,7 +1372,15 @@ export function App() {
 									aria-label={t(locale, 'Projects')}>
 									<div className={styles.sidebarChrome} data-sidebar-strip />
 									{/* spec/sidebar#section-rail: the section the rail picked — Tasks, or Pull requests in the same look. */}
-									{brigadirOpen ? (
+									{todoOpen && workspace ? (
+										<SidebarTodo
+											locale={locale}
+											projects={workspace.projects}
+											colors={colors}
+											selected={todoRoute.list}
+											onOpen={(id) => openTodo(id)}
+										/>
+									) : brigadirOpen ? (
 										<SidebarBrigadir
 											locale={locale}
 											selected={brigadirRoute.chat}
@@ -1686,22 +1730,37 @@ export function App() {
 									)}
 								</aside>
 								<main className={styles.content} tabIndex={-1}>
-									{!task && !boardProject && !notesOpen && !schedulesOpen && !brigadirOpen && (
-										<header className={styles.titlebar}>
-											<span>{activeProject?.name ?? t(locale, 'Brigadir')}</span>
-											<AgentsButton />
-											<IconButton
-												label={t(locale, 'Search Everywhere')}
-												onClick={() => setSearch('search')}>
-												<Glyph name="search" size={16} />
-											</IconButton>
-										</header>
-									)}
+									{!task &&
+										!boardProject &&
+										!notesOpen &&
+										!schedulesOpen &&
+										!brigadirOpen &&
+										!todoOpen && (
+											<header className={styles.titlebar}>
+												<span>{activeProject?.name ?? t(locale, 'Brigadir')}</span>
+												<AgentsButton />
+												<IconButton
+													label={t(locale, 'Search Everywhere')}
+													onClick={() => setSearch('search')}>
+													<Glyph name="search" size={16} />
+												</IconButton>
+											</header>
+										)}
 									{error ? (
 										<div role="alert" className={styles.empty}>
 											<h1>{t(locale, 'Some data could not be read.')}</h1>
 											<Button onClick={handleRetry}>{t(locale, 'Retry')}</Button>
 										</div>
+									) : todoOpen && workspace ? (
+										<SurfaceBoundary surface="project" locale={locale} resetKey="todo">
+											<TodoScreen
+												locale={locale}
+												projects={workspace.projects}
+												selected={todoRoute.list}
+												onSelect={(id) => openTodo(id)}
+												onMakeTask={(seed) => void todoTask(seed)}
+											/>
+										</SurfaceBoundary>
 									) : brigadirOpen ? (
 										<SurfaceBoundary surface="project" locale={locale} resetKey="brigadir">
 											<BrigadirChat
@@ -1942,6 +2001,7 @@ export function App() {
 								{...(relaySource ? { relaySource } : {})}
 								{...(proposalSheet ? { proposal: proposalSheet } : {})}
 								{...(noteSheet ? { note: noteSheet } : {})}
+								{...(todoSheet ? { seed: todoSheet } : {})}
 								{...(editing ? { editing } : {})}
 								when={newWhen}
 								scheduled={(schedule) => {
@@ -1969,14 +2029,15 @@ export function App() {
 									/* spec/tasks#agent-created-tasks: a task from a proposal leaves you in the chat it came from; its row there opens it. */ if (
 										proposalSheet
 									) {
-									} else if (noteSheet) {
-										// The person stays in the note; the link to the task is there.
+									} else if (noteSheet || todoSheet) {
+										// The person stays in the note or the list.
 									} else if (task.status === 'backlog') selectProject(task.projectId);
 									else useWorkspace.getState().selectTask(task.projectId, task.id);
 									setNewProject(null);
 									setEditing(undefined);
 									setProposalSheet(undefined);
 									setNoteSheet(undefined);
+									setTodoSheet(undefined);
 								}}
 							/>
 						)}

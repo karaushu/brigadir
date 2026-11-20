@@ -5,6 +5,7 @@ import { TaskLabels } from './task-labels';
 import { NoteChats } from './note-chats';
 import { BrigadirChats } from './brigadir-chats';
 import { BrigadirChatMcp } from './brigadir-chat-mcp';
+import { TodoStore } from './todo-store';
 import { mergeNoteText } from './note-merge';
 import {
 	type AgentTask,
@@ -115,6 +116,12 @@ import {
 	attachMenuIcons,
 	noteMenuIcons,
 	brigadirChatMenuIcons,
+	todoListMenuIcons,
+	todoItemMenuIcons,
+	todoListName,
+	type TodoItem,
+	type TodoItemPatch,
+	type TodoList,
 	type EditorMenuState,
 	type MenuContext,
 	type TaskKey,
@@ -1452,6 +1459,19 @@ const noticeLog = new NoticeLog({
 /** spec/notifications-slack-notes-and-schedules#note-concurrent: one store for every writer of notes (windows, the note chat, Slack), so their writes queue. */
 let notesStoreOnce: Promise<NotesStore> | undefined;
 const sharedNotesStore = () => (notesStoreOnce ??= NotesStore.at(process.env.BRIGADIR_DATA_DIR));
+/**
+ * spec/todo-and-slack-inbox#todo-file: one store for every writer of to-dos (windows, the Brigadir chat, the Slack section), so writes of a list
+ * queue; each change reaches every window (`todo:changed`). The Slack section adds with `addItem` and undoes with `removeItem`.
+ */
+let todoStoreOnce: Promise<TodoStore> | undefined;
+const sharedTodoStore = () =>
+	(todoStoreOnce ??= TodoStore.at(
+		process.env.BRIGADIR_DATA_DIR,
+		(change) => clients.broadcast('todo:changed', change),
+		() => t(currentLocale(), 'Inbox')
+	));
+/** spec/settings-modules-and-onboarding#modules: the Brigadir chat's tool list follows the modules (the Todo module's tools). */
+const chatModuleListeners = new Set<() => void>();
 /** The note chats, once the app is ready: a Slack addition waits while a note's agent answers. */
 let noteChatsOnce: NoteChats | undefined;
 /** spec/notifications-slack-notes-and-schedules#slack: the person's CI bot in Slack; the token is read and kept here, in main. */
@@ -3324,9 +3344,11 @@ void app.whenReady().then(async () => {
 					? 'remoteAccess'
 					: channel.startsWith('notes:')
 						? 'notes'
-						: channel.startsWith('schedules:')
-							? 'schedules'
-							: null;
+						: channel.startsWith('todo:')
+							? 'todo'
+							: channel.startsWith('schedules:')
+								? 'schedules'
+								: null;
 	// spec/architecture-and-platform#ipc-boundary: the arguments are checked by the channel table's validator (core/ipc-channels) in `dispatch`, the same
 	// for a remote call (spec/remote-access-and-mobile#architecture).
 	function handle(channel: IpcInvokeChannel, action: (...args: any[]) => unknown) {
@@ -3380,6 +3402,7 @@ void app.whenReady().then(async () => {
 		if (updatesChanged) appUpdates.settingsChanged();
 		if (archiveChanged) void taskArchives.autoArchive().catch(() => {});
 		if (modulesChanged) scheduleSettings?.();
+		if (modulesChanged) for (const listener of chatModuleListeners) listener();
 		if (keymapChanged || modulesChanged || authorChanged || columnsChanged) rebuildMenu?.();
 		if (!saved.modules.browser) browsers.close();
 		if (saved.modules.simulator) {
@@ -3965,7 +3988,14 @@ void app.whenReady().then(async () => {
 	const dataRoot = await resolveDataRoot(process.env.BRIGADIR_DATA_DIR);
 	const brigadirMcp = new BrigadirChatMcp(
 		join(dataRoot, 'run', 'brigadir-chat.sock'),
-		join(servicesDir, 'mcp-relay')
+		join(servicesDir, 'mcp-relay'),
+		{
+			current: () => appliedSettings.modules,
+			subscribe: (listener) => {
+				chatModuleListeners.add(listener);
+				return () => void chatModuleListeners.delete(listener);
+			},
+		}
 	);
 	const brigadirChats = new BrigadirChats({
 		root: join(dataRoot, 'assistant'),
@@ -4051,6 +4081,12 @@ void app.whenReady().then(async () => {
 			const id = await (await sharedNotesStore()).create(project, text);
 			clients.broadcast('notes:changed', { id, kind: 'created' });
 			return id;
+		},
+		// spec/todo-and-slack-inbox#todo-chat-tools: todo_add and todo_lists while the Todo module is on.
+		todo: {
+			enabled: () => appliedSettings.modules.todo,
+			addItem: async (input) => (await sharedTodoStore()).addItem(input),
+			lists: async () => (await sharedTodoStore()).lists(),
 		},
 		openExternal: (url) => void shell.openExternal(url),
 		slack: {
@@ -4283,6 +4319,111 @@ void app.whenReady().then(async () => {
 			{ x, y }
 		)) as string | null;
 	});
+	// spec/todo-and-slack-inbox#todo: the Todo section's lists in `~/.brigadir/todo/`; every change reaches every window (`todo:changed`).
+	const todoStore = sharedTodoStore();
+	const workspaceProjects = async () =>
+		(
+			await readWorkspace(
+				process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+			)
+		).projects;
+	const menuPoint = (x: number | null, y: number | null) =>
+		x === null || y === null ? null : { x, y };
+	handle('todo:lists', async () => (await todoStore).lists());
+	handle('todo:create-list', async (project: string | null, name: string) =>
+		(await todoStore).createList(project, name)
+	);
+	handle('todo:rename-list', async (id: string, name: string) =>
+		(await todoStore).renameList(id, name)
+	);
+	handle('todo:set-project', async (id: string, project: string | null) =>
+		(await todoStore).setProject(id, project)
+	);
+	handle('todo:delete-list', async (id: string) => (await todoStore).deleteList(id));
+	handle('todo:add-item', async (id: string, title: string, description: string) =>
+		(await todoStore).createItem(id, title, description)
+	);
+	handle('todo:update-item', async (id: string, item: string, patch: TodoItemPatch) =>
+		(await todoStore).updateItem(id, item, patch)
+	);
+	handle('todo:remove-item', async (id: string, item: string) =>
+		(await todoStore).removeItem(id, item)
+	);
+	handle('todo:restore-item', async (id: string, item: TodoItem, index: number) =>
+		(await todoStore).restoreItem(id, item, index)
+	);
+	handle('todo:place-item', async (id: string, item: string, before: string | null) =>
+		(await todoStore).placeItem(id, item, before)
+	);
+	handle('todo:step-item', async (id: string, item: string, delta: -1 | 1) =>
+		(await todoStore).stepItem(id, item, delta)
+	);
+	handle('todo:move-item', async (id: string, item: string, to: string) =>
+		(await todoStore).moveItem(id, item, to)
+	);
+	handleClient('todo:list-menu', async (client) => {
+		const locale = currentLocale();
+		return (await ui.menu(client, [
+			{ id: 'rename', label: t(locale, 'Rename…'), icon: todoListMenuIcons.rename },
+			{ id: 'project', label: t(locale, 'Move to project…'), icon: todoListMenuIcons.project },
+			null,
+			{ id: 'delete', label: t(locale, 'Delete…'), icon: todoListMenuIcons.delete },
+		])) as 'rename' | 'project' | 'delete' | null;
+	});
+	handleClient('todo:item-menu', async (client, x: number | null, y: number | null) => {
+		const locale = currentLocale();
+		return (await ui.menu(
+			client,
+			[
+				{ id: 'edit', label: t(locale, 'Edit (to-do)'), icon: todoItemMenuIcons.edit },
+				{ id: 'task', label: t(locale, 'Make a task'), icon: todoItemMenuIcons.task },
+				{ id: 'move', label: t(locale, 'Move to list…'), icon: todoItemMenuIcons.move },
+				null,
+				{ id: 'delete', label: t(locale, 'Delete'), icon: todoItemMenuIcons.delete },
+			],
+			menuPoint(x, y)
+		)) as 'edit' | 'task' | 'move' | 'delete' | null;
+	});
+	handleClient(
+		'todo:project-menu',
+		async (client, id: string, x: number | null, y: number | null) => {
+			const locale = currentLocale(),
+				list = await (await todoStore).read(id),
+				projects = await workspaceProjects();
+			return (await ui.menu(
+				client,
+				[
+					{ id: 'none', label: t(locale, 'No project'), checked: list.project === null },
+					null,
+					...projects.map((project) => ({
+						id: project.id,
+						label: project.name,
+						checked: project.id === list.project,
+					})),
+				],
+				menuPoint(x, y)
+			)) as string | null;
+		}
+	);
+	handleClient(
+		'todo:pick-list-menu',
+		async (client, id: string, x: number | null, y: number | null) => {
+			const locale = currentLocale(),
+				lists = await (await todoStore).lists(),
+				projects = await workspaceProjects();
+			const label = (list: TodoList) =>
+				`${todoListName(locale, list)} · ${
+					projects.find((project) => project.id === list.project)?.name ?? t(locale, 'No project')
+				}`;
+			const others = lists.filter((list) => list.id !== id);
+			if (!others.length) return null;
+			return (await ui.menu(
+				client,
+				others.map((list) => ({ id: list.id, label: label(list), icon: 'todo' as const })),
+				menuPoint(x, y)
+			)) as string | null;
+		}
+	);
 	handle('knowledge:read', (id) => knowledge.read(id));
 	handle('knowledge:prepare', (id, sig, target) => knowledge.prepare(id, sig, target));
 	handle('knowledge:generate', (id, sig, preview) => knowledge.generate(id, sig, preview));
@@ -5863,6 +6004,8 @@ void app.whenReady().then(async () => {
 					...((key) => (key && !shortcutRecording ? { accelerator: key } : {}))(
 						menuAccelerator(command)
 					),
+					// spec/todo-and-slack-inbox#todo-item: a list's own plain key (↑↓, Space, ↩, ⌫) is shown; the focused list acts on it.
+					...(command.fixed ? { registerAccelerator: false } : {}),
 					enabled: false,
 					click: () => {
 						const focus = menuFocus();
@@ -5923,6 +6066,14 @@ void app.whenReady().then(async () => {
 								!(!focus.machine && browsers.isFocused())
 							)
 								(remoteAccess.focusedClient() ?? localClient).send('editor:action', role);
+							// spec/todo-and-slack-inbox#todo-item: ⌘Z on the Todo screen (not in a field) brings back the deleted to-do.
+							else if (
+								role === 'undo' &&
+								focus.context.todoList &&
+								!focus.context.modal &&
+								!(!focus.machine && browsers.isFocused())
+							)
+								dispatchWindowAction('workspace:action', 'todo-undo');
 							else {
 								const target = webContents.getFocusedWebContents();
 								if (role === 'undo') target?.undo();
@@ -6074,6 +6225,10 @@ void app.whenReady().then(async () => {
 							...menuIcon(appMenuIcons.formatting),
 							submenu: commands('Formatting'),
 						},
+						// spec/todo-and-slack-inbox#todo-item: the selected to-do's items, while the Todo module is on.
+						...((items) => (items.length ? [{ type: 'separator' as const }, ...items] : []))(
+							commands('Edit')
+						),
 					],
 				},
 				...(['Editor', 'Navigate', 'Diff', 'Browser', 'Simulator', 'Console'] as const)

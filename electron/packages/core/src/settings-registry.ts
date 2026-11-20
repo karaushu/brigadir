@@ -52,6 +52,7 @@ const modules = [
 	'notes',
 	'schedules',
 	'slack',
+	'todo',
 ] as const;
 
 export const settingEdits: readonly SettingEdit[] = [

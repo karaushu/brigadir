@@ -104,6 +104,9 @@ const verbs = {
 	note: ['Saving a note', 'Saved a note', 'Could not save the note'],
 	watch: ['Watching a task', 'Watching a task', 'Could not watch the task'],
 	unwatch: ['Stopping a watch', 'Stopped watching', 'Could not stop watching'],
+	// spec/todo-and-slack-inbox#todo-chat-tools
+	todo_add: ['Adding a to-do', 'Added a to-do', 'Could not add the to-do'],
+	todo_lists: ['Reading to-do lists', 'Read to-do lists', 'Could not read the to-do lists'],
 	add_folder: ['Adding a folder', 'Added a folder', 'Could not add the folder'],
 	slack_post: ['Posting to Slack', 'Posted to Slack', 'Could not post to Slack'],
 	tasks_list: ['Looking up tasks', 'Looked up tasks', 'Could not look up tasks'],
@@ -265,6 +268,8 @@ const brigadirChatToolNames = new Set([
 	'note',
 	'watch',
 	'unwatch',
+	'todo_add',
+	'todo_lists',
 ]);
 export function mcpModule(tool: string): McpModule {
 	if (

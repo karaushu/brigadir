@@ -94,6 +94,7 @@ export function NewTask({
 	duplicateSource,
 	proposal,
 	note,
+	seed,
 	when: initialWhen = 'now',
 	scheduled,
 }: {
@@ -117,6 +118,10 @@ export function NewTask({
 		name: string;
 		range: string | null;
 	};
+	/** spec/todo-and-slack-inbox#todo-item: `Make a task` from a to-do — its title as the task's title, its description as the prompt. */ seed?: {
+		name: string;
+		prompt: string;
+	};
 	close(): void;
 	created(task: AgentTask): Promise<void>;
 }) {
@@ -131,7 +136,12 @@ export function NewTask({
 		loadRevision = useRef(0);
 	const [transport, setTransport] = useState<'gui' | 'terminal'>('gui');
 	const [text, setText] = useState(
-		editing?.prompt ?? duplicateSource?.prompt ?? duplicateSource?.title ?? note?.prompt ?? ''
+		editing?.prompt ??
+			duplicateSource?.prompt ??
+			duplicateSource?.title ??
+			note?.prompt ??
+			seed?.prompt ??
+			''
 	);
 	const [backlog, setBacklog] = useState(initialBacklog || !!editing);
 	const schedulesModule = useWorkspace((state) => state.appearance.modules.schedules);
@@ -193,7 +203,7 @@ export function NewTask({
 			? manualTitle(editing)
 			: duplicateSource
 				? manualTitle(duplicateSource)
-				: (note?.name ?? '')
+				: (note?.name ?? seed?.name ?? '')
 	);
 	// spec/agents-and-providers#catalog: a pick is kept with the provider (and every other option with the model) it was made for, so a switch falls back to the catalog without an effect.
 	const [modelPick, setModelPick] = useState<{ provider: string; value: string } | null>(null),

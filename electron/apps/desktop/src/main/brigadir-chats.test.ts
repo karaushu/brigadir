@@ -14,6 +14,7 @@ import {
 	taskToken,
 } from '@brigadir/core';
 import { BrigadirChats, type BrigadirChatDeps } from './brigadir-chats';
+import { TodoStore } from './todo-store';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -314,4 +315,36 @@ it('sends attachments in their places and names task and project pills for the t
 	await expect(
 		chats.checkAttachments(chat.id, ['0b1c2d3e-0000-4000-8000-000000000009'])
 	).rejects.toThrow();
+});
+
+it('adds a to-do with a card and lists the lists; nothing while Todo is off (spec/todo-and-slack-inbox#todo-chat-tools)', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'brigadir-todo-'));
+	roots.push(root);
+	const store = new TodoStore(root);
+	let on = true;
+	const test = await setup({
+		todo: {
+			enabled: () => on,
+			addItem: (input) => store.addItem(input),
+			lists: () => store.lists(),
+		},
+	});
+	expect(
+		await test.tool('todo_add', { title: 'Зібрати TestFlight', project: 'B2C', list: 'Release' })
+	).toBe('Added to Release (b2c).');
+	expect((await test.cards()).at(-1)).toMatchObject({
+		type: 'todo',
+		title: 'Зібрати TestFlight',
+		listName: 'Release',
+		project: 'b2c',
+	});
+	expect(await test.tool('todo_lists', { project: 'b2c' })).toBe(
+		'Release (b2c) — 0 of 1 done\n  - Зібрати TestFlight'
+	);
+	expect(await test.tool('todo_lists', { project: 'none' })).toBe('No to-do lists.');
+	await expect(test.tool('todo_add', { title: 'x', project: 'nope' })).rejects.toThrow(
+		'No project nope'
+	);
+	on = false;
+	await expect(test.tool('todo_add', { title: 'x' })).rejects.toThrow('Todo is off');
 });

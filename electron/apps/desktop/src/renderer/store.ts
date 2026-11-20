@@ -37,6 +37,10 @@ type State = {
 	brigadir: { chat: string | null; ask?: string } | null;
 	openBrigadir(chat?: string | null, ask?: string): void;
 	closeBrigadir(): void;
+	/** spec/todo-and-slack-inbox#todo-entry: the Todo section — its open list (null — none); null — the section is closed. */
+	todo: { list: string | null } | null;
+	openTodo(list?: string | null): void;
+	closeTodo(): void;
 };
 let loadGeneration = 0;
 /** Counts the appearances main published: a load that began before one must not put its older reading back. */
@@ -91,6 +95,7 @@ export const useWorkspace = create<State>((set, get) => ({
 	notes: null,
 	schedules: null,
 	brigadir: null,
+	todo: null,
 	selectProject: (id) =>
 		set({
 			selectedProject: id,
@@ -99,6 +104,7 @@ export const useWorkspace = create<State>((set, get) => ({
 			notes: null,
 			schedules: null,
 			brigadir: null,
+			todo: null,
 		}),
 	openBrigadir: (chat, ask) =>
 		set((state) => ({
@@ -106,12 +112,23 @@ export const useWorkspace = create<State>((set, get) => ({
 				chat: chat === undefined ? (state.brigadir?.chat ?? null) : chat,
 				...(ask ? { ask } : {}),
 			},
+			todo: null,
 			selectedTask: null,
 			mainTree: null,
 			notes: null,
 			schedules: null,
 		})),
 	closeBrigadir: () => set({ brigadir: null }),
+	openTodo: (list) =>
+		set((state) => ({
+			todo: { list: list === undefined ? (state.todo?.list ?? null) : list },
+			selectedTask: null,
+			mainTree: null,
+			notes: null,
+			schedules: null,
+			brigadir: null,
+		})),
+	closeTodo: () => set({ todo: null }),
 	openNotes: (note) =>
 		set((state) => ({
 			notes: { note: note === undefined ? (state.notes?.note ?? null) : note },
@@ -119,6 +136,7 @@ export const useWorkspace = create<State>((set, get) => ({
 			mainTree: null,
 			schedules: null,
 			brigadir: null,
+			todo: null,
 		})),
 	closeNotes: () => set({ notes: null }),
 	openSchedules: (schedule) =>
@@ -128,6 +146,7 @@ export const useWorkspace = create<State>((set, get) => ({
 			mainTree: null,
 			notes: null,
 			brigadir: null,
+			todo: null,
 		})),
 	openScheduleTask: (projectId, id) =>
 		set((state) => ({
@@ -137,6 +156,7 @@ export const useWorkspace = create<State>((set, get) => ({
 			mainTree: null,
 			notes: null,
 			brigadir: null,
+			todo: null,
 		})),
 	closeSchedules: () => set({ schedules: null }),
 	async openMainTree(projectId, scopeId) {
@@ -148,6 +168,7 @@ export const useWorkspace = create<State>((set, get) => ({
 			notes: null,
 			schedules: null,
 			brigadir: null,
+			todo: null,
 		});
 		return task;
 	},
@@ -198,5 +219,6 @@ export const useWorkspace = create<State>((set, get) => ({
 			notes: null,
 			schedules: null,
 			brigadir: null,
+			todo: null,
 		}),
 }));

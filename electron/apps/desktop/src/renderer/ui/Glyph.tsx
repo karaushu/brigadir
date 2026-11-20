@@ -238,6 +238,7 @@ export type GlyphName =
 	| 'hide'
 	| 'file'
 	| 'file-new'
+	| 'todo'
 	| 'trash'
 	| 'edit'
 	| 'save'
@@ -2933,6 +2934,26 @@ export function Glyph({ name, size = 12 }: { name: GlyphName; size?: number }) {
 						strokeWidth="1.6"
 						strokeLinecap="round"
 					/>
+				</svg>
+			);
+		// spec/todo-and-slack-inbox#todo-entry: the Todo section — a ticked box beside a line, an empty box beside a line.
+		case 'todo':
+			return (
+				<svg
+					data-glyph={name}
+					aria-hidden="true"
+					width={size}
+					height={size}
+					viewBox="0 0 16 16"
+					fill="none"
+					stroke="currentColor"
+					strokeWidth="1.3"
+					strokeLinecap="round"
+					strokeLinejoin="round">
+					<rect x="2.1" y="2.4" width="4.8" height="4.8" rx="1.3" />
+					<path d="M3.4 4.9l1 1 1.6-1.9" strokeWidth="1.2" />
+					<rect x="2.1" y="8.8" width="4.8" height="4.8" rx="1.3" />
+					<path d="M9.2 4.8h4.7M9.2 11.2h4.7" />
 				</svg>
 			);
 		case 'note':

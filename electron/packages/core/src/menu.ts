@@ -54,6 +54,10 @@ export const menuContextKeys = [
 	'fileTree',
 	/** spec/tasks#move-to-worktree: the open task can move into a worktree now. */
 	'movable',
+	/** spec/todo-and-slack-inbox#todo-item: the Todo screen shows a list; `todoList` — and the focus is not in a field; `todoItem` — and an item is selected. */
+	'todo',
+	'todoList',
+	'todoItem',
 ] as const;
 export type MenuContext = Record<(typeof menuContextKeys)[number], boolean>;
 export const emptyMenuContext = Object.fromEntries(
@@ -74,6 +78,8 @@ type Command = {
 	channel: 'workspace' | 'editor';
 	action: WorkspaceAction | EditorAction;
 	when: keyof MenuContext | 'always';
+	/** The key is the focused list's own (↑↓, Space, ↩, ⌫): the menu shows it, the list acts on it, the keymap does not change it. */
+	fixed?: true;
 };
 const workspace = (
 	group: MessageKey,
@@ -82,6 +88,18 @@ const workspace = (
 	accelerator: string | undefined,
 	when: Command['when']
 ): Command => ({ id: action, group, label, action, accelerator, when, channel: 'workspace' });
+/** spec/todo-and-slack-inbox#todo-item: an item key of the Todo screen; `fixed` — a plain key the list itself acts on. */
+const todo = (
+	group: MessageKey,
+	label: MessageKey,
+	action: WorkspaceAction,
+	accelerator: string,
+	when: 'todo' | 'todoList' | 'todoItem',
+	fixed = false
+): Command => ({
+	...workspace(group, label, action, accelerator, when),
+	...(fixed ? { fixed: true as const } : {}),
+});
 const editor = (label: MessageKey, action: EditorAction, accelerator?: string): Command => ({
 	id: `editor-${action}`,
 	group: action === 'save' ? 'File' : action.startsWith('location-') ? 'Navigate' : 'Editor',
@@ -233,6 +251,8 @@ export const menuCommands: readonly Command[] = [
 	workspace('View', 'Schedules', 'schedules', 'Ctrl+Command+4', 'always'),
 	// spec/settings-modules-and-onboarding#brigadir-chat-entry: Brigadir is the fifth section; not a module, so always there.
 	workspace('View', 'Brigadir (section)', 'section-brigadir', 'Ctrl+Command+5', 'always'),
+	// spec/todo-and-slack-inbox#todo-entry: Todo is the sixth section, the module's.
+	workspace('View', 'Todo', 'section-todo', 'Ctrl+Command+6', 'always'),
 	// spec/task-window-workspace#layout-switch: View ▸ Layout — the three switches of the task toolbar's Layout, ⌘1–⌘3 (the routes are ⇧⌘1 / ⇧⌘2),
 	// then Show all and Reset column widths.
 	workspace('Layout', 'Chat', 'layout-chat', 'CmdOrCtrl+1', 'task'),
@@ -329,6 +349,17 @@ export const menuCommands: readonly Command[] = [
 		'permission'
 	),
 	workspace('View', 'Deny permission', 'permission-deny', 'CmdOrCtrl+Backspace', 'permission'),
+	// spec/todo-and-slack-inbox#todo-item: the Todo screen's keys (rule 11) — View moves through the list, Edit changes the selected item.
+	todo('View', 'Add a to-do', 'todo-add', 'CmdOrCtrl+N', 'todo'),
+	todo('View', 'Previous to-do', 'todo-previous', 'Up', 'todoList', true),
+	todo('View', 'Next to-do', 'todo-next', 'Down', 'todoList', true),
+	todo('View', 'Unfold to-do', 'todo-unfold', 'Right', 'todoItem', true),
+	todo('View', 'Fold to-do', 'todo-fold', 'Left', 'todoItem', true),
+	todo('Edit', 'Edit to-do', 'todo-edit', 'Enter', 'todoItem', true),
+	todo('Edit', 'Toggle done', 'todo-toggle', 'Space', 'todoItem', true),
+	todo('Edit', 'Delete to-do', 'todo-delete', 'Backspace', 'todoItem', true),
+	todo('Edit', 'Move up', 'todo-move-up', 'CmdOrCtrl+Alt+Up', 'todoItem'),
+	todo('Edit', 'Move down', 'todo-move-down', 'CmdOrCtrl+Alt+Down', 'todoItem'),
 ];
 /** spec/search-menus-and-commands#menu-glyphs: the glyph of every menu-bar command; next/previous pairs show their object with the arrow. A test keeps it whole. */
 export const menuCommandIcons: Readonly<Record<string, MenuIcon>> = {
@@ -417,6 +448,17 @@ export const menuCommandIcons: Readonly<Record<string, MenuIcon>> = {
 	'section-tasks': 'board',
 	'section-prs': 'pr-branch',
 	'section-brigadir': 'helmet-chat',
+	'section-todo': 'todo',
+	'todo-add': 'plus',
+	'todo-previous': 'turn-previous',
+	'todo-next': 'turn-next',
+	'todo-unfold': 'expand-all',
+	'todo-fold': 'collapse-all',
+	'todo-edit': 'edit',
+	'todo-toggle': 'check-pass',
+	'todo-delete': 'trash',
+	'todo-move-up': 'back',
+	'todo-move-down': 'forward',
 	notes: 'note',
 	'note-new': 'note',
 	schedules: 'schedule',
@@ -534,6 +576,7 @@ export const menuGroupStarts: ReadonlySet<string> = new Set([
 	'turns',
 	'pull-requests-refresh',
 	'review-send',
+	'todo-add',
 ]);
 /** Puts a separator before each group start that has items above it; hidden modules never leave two in a row. */
 export function withGroupSeparators<T extends { id?: string; type?: string }>(

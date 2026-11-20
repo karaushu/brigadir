@@ -36,6 +36,7 @@ import {
 import { isProjectView, isBoardColumn } from './board';
 import { isProjectMode } from './pr-board';
 import { isNoteId, isNoteText } from './notes';
+import { isTodoItem, isTodoItemId, isTodoItemPatch, isTodoListId, todoLimits } from './todo';
 import { isReviewPoint, isTaskReviewChoice } from './task-review';
 import { isScheduleDraft, isScheduleId } from './schedules';
 import { noteChatLimits } from './note-chat';
@@ -182,6 +183,7 @@ export interface IpcLocalRow {
 export type IpcRow = IpcInvokeRow | IpcSubscribeRow | IpcLocalRow;
 
 const noArgs: IpcValidator = (a) => a.length === 0;
+const todoText = (value: unknown, max: number) => typeof value === 'string' && value.length <= max;
 /** Node's `path.isAbsolute` on POSIX: the working machine is a Mac today (spec/remote-access-and-mobile#architecture, terms). */
 const isAbsolutePath = (value: string) => value.startsWith('/');
 const signature = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 8000;
@@ -439,6 +441,137 @@ export const ipcTable = {
 		validate: (a) => a.length === 1 && isNoteId(a[0]),
 	},
 	onNotesChanged: { kind: 'subscribe', channel: 'notes:changed', class: 'remote' },
+	// spec/todo-and-slack-inbox#todo: the Todo section's lists and items.
+	todoLists: { kind: 'invoke', channel: 'todo:lists', class: 'remote', arity: 0, validate: noArgs },
+	createTodoList: {
+		kind: 'invoke',
+		channel: 'todo:create-list',
+		class: 'remote',
+		arity: 2,
+		validate: (a) =>
+			a.length === 2 && (a[0] === null || isId(a[0])) && todoText(a[1], todoLimits.name),
+	},
+	renameTodoList: {
+		kind: 'invoke',
+		channel: 'todo:rename-list',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTodoListId(a[0]) && todoText(a[1], todoLimits.name),
+	},
+	setTodoListProject: {
+		kind: 'invoke',
+		channel: 'todo:set-project',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTodoListId(a[0]) && (a[1] === null || isId(a[1])),
+	},
+	deleteTodoList: {
+		kind: 'invoke',
+		channel: 'todo:delete-list',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isTodoListId(a[0]),
+	},
+	addTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:add-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			todoText(a[1], todoLimits.title) &&
+			todoText(a[2], todoLimits.description),
+	},
+	updateTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:update-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 && isTodoListId(a[0]) && isTodoItemId(a[1]) && isTodoItemPatch(a[2]),
+	},
+	removeTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:remove-item',
+		class: 'remote',
+		arity: 2,
+		validate: (a) => a.length === 2 && isTodoListId(a[0]) && isTodoItemId(a[1]),
+	},
+	restoreTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:restore-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			isTodoItem(a[1]) &&
+			Number.isSafeInteger(a[2]) &&
+			Number(a[2]) >= 0,
+	},
+	placeTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:place-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			isTodoItemId(a[1]) &&
+			(a[2] === null || isTodoItemId(a[2])),
+	},
+	stepTodoItem: {
+		kind: 'invoke',
+		channel: 'todo:step-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 && isTodoListId(a[0]) && isTodoItemId(a[1]) && (a[2] === -1 || a[2] === 1),
+	},
+	moveTodoItemToList: {
+		kind: 'invoke',
+		channel: 'todo:move-item',
+		class: 'remote',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 && isTodoListId(a[0]) && isTodoItemId(a[1]) && isTodoListId(a[2]),
+	},
+	onTodoChanged: { kind: 'subscribe', channel: 'todo:changed', class: 'remote' },
+	todoListMenu: {
+		kind: 'invoke',
+		channel: 'todo:list-menu',
+		class: 'client',
+		arity: 1,
+		validate: (a) => a.length === 1 && isTodoListId(a[0]),
+	},
+	todoItemMenu: {
+		kind: 'invoke',
+		channel: 'todo:item-menu',
+		class: 'client',
+		arity: 2,
+		validate: (a) => a.length === 2 && a.every((value) => value === null || Number.isFinite(value)),
+	},
+	todoProjectMenu: {
+		kind: 'invoke',
+		channel: 'todo:project-menu',
+		class: 'client',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			[a[1], a[2]].every((value) => value === null || Number.isFinite(value)),
+	},
+	todoListPickMenu: {
+		kind: 'invoke',
+		channel: 'todo:pick-list-menu',
+		class: 'client',
+		arity: 3,
+		validate: (a) =>
+			a.length === 3 &&
+			isTodoListId(a[0]) &&
+			[a[1], a[2]].every((value) => value === null || Number.isFinite(value)),
+	},
 	readNoteChat: {
 		kind: 'invoke',
 		channel: 'notes:chat-read',

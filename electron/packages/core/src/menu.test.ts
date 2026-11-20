@@ -173,7 +173,7 @@ it('splits Editor and View into groups without changing the order (spec/search-m
 	);
 	expect(editor.filter((item) => (item as { type?: string }).type === 'separator')).toHaveLength(4);
 	const view = withGroupSeparators(ids('View'));
-	expect(view.filter((item) => (item as { type?: string }).type === 'separator')).toHaveLength(6);
+	expect(view.filter((item) => (item as { type?: string }).type === 'separator')).toHaveLength(7);
 	// No leading separator and none twice in a row, even when a module hides the group's first item.
 	const hidden = withGroupSeparators(
 		ids('View').filter((item) => item.id !== 'turns' && item.id !== 'cancel')

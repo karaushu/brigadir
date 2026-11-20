@@ -43,6 +43,7 @@ const moduleRows: Record<AppModule, { glyph: GlyphName; name: MessageKey; detail
 		detail: 'Run a task later or on repeat.',
 	},
 	slack: { glyph: 'slack', name: 'Slack', detail: 'Task and CI messages from your CI bot.' },
+	todo: { glyph: 'todo', name: 'Todo', detail: 'To-do lists, by project or without one.' },
 };
 /** spec/settings-modules-and-onboarding#module-settings-popup: the ⚙ button's name and tooltip, for the modules that have settings. */
 const settingsLabels: Partial<Record<AppModule, MessageKey>> = {

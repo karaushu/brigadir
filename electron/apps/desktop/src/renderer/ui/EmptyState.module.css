@@ -1,0 +1,31 @@
+.empty {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	padding: 24px;
+	text-align: center;
+}
+.mark {
+	width: 44px;
+	height: 44px;
+	border-radius: 12px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--tint);
+	color: var(--fg2);
+}
+.empty h2 {
+	margin: 0;
+	font-size: var(--text-15);
+	font-weight: 600;
+	color: var(--fg);
+}
+.actions {
+	display: flex;
+	gap: 8px;
+}

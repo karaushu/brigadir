@@ -609,6 +609,17 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Chat about the note | Чат нотатки | | |
 | Edited the note | Змінив нотатку | The agent edit card. | |
 
+### Todo
+
+| English | Ukrainian | Meaning | Avoid |
+|---|---|---|---|
+| Todo | Todo | The rail section of to-do lists; the name stays in Latin in both languages. | «Справи» for the section |
+| to-do | справа | One item of a list: `Add a to-do` · `Додати справу`, `To-do deleted` · `Справу видалено`. | «задача» (that is an agent's task), «пункт» |
+| list | список | A to-do list: `New list` · `Новий список`, `Untitled list` · `Список без назви`. | «перелік» |
+| Done · N | Виконано · N | The folded group of done to-dos under the open ones; `3 of 8 done` · `3 з 8 виконано`, `All done` · `Усе виконано`. | «Готово», «Завершено» |
+| Make a task | Створити задачу | A to-do's menu item: the launch sheet with its title and description. | |
+| Inbox | Вхідні | The list made for a to-do with no list to go to. | |
+
 ## Search
 
 | English | Ukrainian | Meaning | Avoid |

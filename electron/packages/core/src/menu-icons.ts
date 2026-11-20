@@ -158,6 +158,7 @@ export const menuIconNames = [
 	'tab-previous',
 	'task-new',
 	'text-replace',
+	'todo',
 	'trash',
 	'turn-next',
 	'turn-previous',
@@ -285,6 +286,18 @@ export const brigadirChatMenuIcons = {
 	rename: 'edit',
 	archive: 'archive-box',
 	restore: 'archive-restore',
+	delete: 'trash',
+} as const satisfies Record<string, MenuIcon>;
+/** spec/todo-and-slack-inbox#todo-entry: a list's row menu in the Todo section; spec/todo-and-slack-inbox#todo-item: an item's menu. */
+export const todoListMenuIcons = {
+	rename: 'edit',
+	project: 'folder',
+	delete: 'trash',
+} as const satisfies Record<string, MenuIcon>;
+export const todoItemMenuIcons = {
+	edit: 'edit',
+	task: 'task-new',
+	move: 'list',
 	delete: 'trash',
 } as const satisfies Record<string, MenuIcon>;
 /** spec/notifications-slack-notes-and-schedules#schedules: a schedule's row menu in the Schedules section, and the menu bar's Schedules items. */

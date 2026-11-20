@@ -37,6 +37,7 @@ import { useMobile, useOffline } from '../store';
 import { renderChatRow, type ChatRow } from '../chat/ChatRows';
 import { CrewPlanCard } from '../chat/CrewPlanCard';
 import { CrewQuestionCard } from '../chat/CrewQuestionCard';
+import { leadsCrew } from '../../renderer/worker-row';
 import { ProposalCard } from '../chat/ProposalCard';
 import { useConnection } from '../context';
 import { Loading } from '../ui/Loading';
@@ -339,6 +340,7 @@ export function Task({
 				card: (
 					<CrewQuestionCard
 						question={question}
+						foreman={leadsCrew(task, workspace?.tasks ?? [])}
 						locale={locale}
 						disabled={offline}
 						send={(command) => void send(command)}

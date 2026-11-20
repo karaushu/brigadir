@@ -526,7 +526,7 @@ A node with `agents` is a **lead**: its host runs with `BRIGADIR_ROLE=lead`, the
 <a id="activity"></a>
 ## Activity rows and chat
 
-The foreman's activity shows crew events as service rows (shared chat row engine, see [Chat](chat.md)): `crew.plan.requested`/`resolved`, `crew.worker.created` and `crew.part.started` (same row: glyph, `worker`, `<agent> · <part title>`), `crew.part.dropped` (`<agent> · merge aborted, part withdrawn`), `crew.report`, `crew.review` (`round {n} of 2`, `approved`, `disputed`), `crew.note`, `crew.question.*` (`waiting for the foreman`, `answered by the foreman`, `answered by you`), `crew.accepted`, `crew.worker.stopped`. Turn markers on the foreman's `turn.started`: `report`, `question`, `plan-decision`, `branch-report`, `part-dropped`.
+The foreman's activity shows crew events as service rows (shared chat row engine, see [Chat](chat.md)): `crew.plan.requested`/`resolved`, `crew.worker.created` and `crew.part.started` (same row: glyph, `worker`, `<agent> · <part title>`), `crew.part.dropped` (`<agent> · merge aborted, part withdrawn`), `crew.report`, `crew.review` (`round {n} of 2`, `approved`, `disputed`), `crew.note`, `crew.question.*` (`waiting for the foreman`, `answered by the foreman`, `answered by you`; in the chat of an Auto agent, a solo agent or a developer, which lead no named crew, `waiting for the agent` and `answered by the agent`), `crew.accepted`, `crew.worker.stopped`. Turn markers on the foreman's `turn.started`: `report`, `question`, `plan-decision`, `branch-report`, `part-dropped`.
 
 Tool rows use verbs such as `Assigning a part` / `Assigned a part`, `Accepting the part`, `Asking the foreman`, `Answered the worker`, `Reading the crew log`.
 

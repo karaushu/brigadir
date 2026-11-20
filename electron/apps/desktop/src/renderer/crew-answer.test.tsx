@@ -21,6 +21,7 @@ it('folds the answer to a crew question into one plate with the question (spec/c
 			question={question}
 			answer={'Yes, keep it.\n- Remove in wave 2.'}
 			answeredBy="foreman"
+			foreman
 			locale="uk"
 			open={false}
 			onToggle={noop}
@@ -40,6 +41,7 @@ it('folds the answer to a crew question into one plate with the question (spec/c
 				question={question}
 				answer="Yes"
 				answeredBy="human"
+				foreman
 				locale="en"
 				open
 				onToggle={noop}
@@ -53,6 +55,7 @@ it('shows an interrupted answer as a plate without a disclosure', () => {
 			question={question}
 			answer={null}
 			answeredBy={null}
+			foreman
 			locale="en"
 			open={false}
 			onToggle={noop}
@@ -60,4 +63,19 @@ it('shows an interrupted answer as a plate without a disclosure', () => {
 	);
 	expect(html).not.toContain('<details');
 	expect(html).toContain('Interrupted');
+});
+it('says the agent answered in a task without a foreman (spec/crew#ask-foreman)', () => {
+	const html = renderToStaticMarkup(
+		<CrewAnswerRow
+			question={question}
+			answer="Yes"
+			answeredBy="foreman"
+			foreman={false}
+			locale="en"
+			open={false}
+			onToggle={noop}
+		/>
+	);
+	expect(html).toContain('answered by the agent');
+	expect(html).not.toContain('answered by the foreman');
 });

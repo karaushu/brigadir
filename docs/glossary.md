@@ -270,7 +270,10 @@ Names" category of STE.
 | Answer | Відповісти | The button of the question card. | |
 | Your answer… | Своя відповідь… | The free-text field of the question card. | |
 | Skip | Пропустити | Do not answer; the agent continues alone. | |
+| waiting for the foreman | чекає бригадира | A worker's question in the chat of a named crew's foreman. | |
 | answered by the foreman | відповів бригадир | | |
+| waiting for the agent | чекає агента | The same row in the chat of an Auto agent, a solo agent or a developer. | |
+| answered by the agent | відповів агент | | |
 | Permission | Дозвіл | | |
 | Allow / Deny | Дозволити / Відмовити | The buttons of the permission card. | |
 | Plan | План | The step plan of the agent, one row in the chat. | |

@@ -429,7 +429,11 @@ export function PermissionCard({
 				? t(locale, 'Show')
 				: showPage && option.id === 'decline'
 					? t(locale, 'Decline (show the page)')
-					: option.name,
+					: worktree !== null && option.id === 'add'
+						? t(locale, 'Allow')
+						: worktree !== null && option.id === 'deny'
+							? t(locale, 'Deny')
+							: option.name,
 		primary =
 			request.options.find((option) => option.kind === 'allow_once') ??
 			request.options.find((option) => option.kind.startsWith('allow'));

@@ -1,6 +1,8 @@
 import {
+	findSpecAgent,
 	findingCount,
 	t,
+	type AgentTask,
 	type CrewWorkerRow,
 	type Locale,
 	type TaskReviewMember,
@@ -79,4 +81,15 @@ export function currentReviewerRows<Row extends Pick<CrewWorkerRow, 'task' | 're
  */
 export function reviewCardShown(task: { crew?: unknown }, rows: readonly unknown[]): boolean {
 	return Boolean(task.crew) || rows.length > 0;
+}
+/**
+ * spec/crew#ask-foreman: the task's agent leads a named crew — its root or a lead of it. An Auto agent, a solo agent and a
+ * developer answer the questions that reach them as `the agent`, not as a foreman.
+ */
+export function leadsCrew(task: AgentTask | undefined, tasks: readonly AgentTask[]): boolean {
+	if (!task || task.auto) return false;
+	if (task.crew) return true;
+	const root = task.crewTaskId ? tasks.find((item) => item.id === task.crewTaskId) : undefined;
+	if (!root?.crew || root.auto || !task.crewNodeId) return false;
+	return findSpecAgent(root.crew.root, task.crewNodeId)?.role === 'foreman';
 }

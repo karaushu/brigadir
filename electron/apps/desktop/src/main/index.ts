@@ -2092,7 +2092,7 @@ function knownModels() {
 	) as Partial<Record<'claude' | 'codex', string[] | null>>;
 }
 const slackSessions = new SlackSessions({
-	ask: (key, request, mode, thread) => quickAsks.ask(key, request, mode, thread),
+	ask: (key, request, mode, thread, slack) => quickAsks.ask(key, request, mode, thread, slack),
 	followUp: (key, id, question, language) => quickAsks.followUp(key, id, question, language),
 	stop: (id) => quickAsks.stop(id),
 	close: (id) => quickAsks.close(id),

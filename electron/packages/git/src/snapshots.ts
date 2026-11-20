@@ -366,29 +366,28 @@ export class Snapshots {
 					selected,
 				})),
 			};
-			await this.store.updateTask(this.key, {
-				launch: {
-					...launch,
-					scopes: [
-						...launch.scopes.filter((item) => item.id !== choice.id),
-						{ ...choice, selected: true },
-					],
-				},
-			});
+			const next = {
+				...launch,
+				scopes: [
+					...launch.scopes.filter((item) => item.id !== choice.id),
+					{ ...choice, selected: true },
+				],
+			};
+			// spec/tasks#agent-worktrees: the start tree is written before the task names the folder, so a crash in between never makes the
+			// folder as it is now the base.
+			const joining = !!start && isSha(start) && choice.kind === 'external';
+			if (joining) await this.startTree(choice.id, choice.path, start, next);
+			await this.store.updateTask(this.key, { launch: next });
 			const scope = this.document.scopes.find((item) => item.id === choice.id);
 			if (scope) scope.selected = true;
-			if (start && isSha(start) && choice.kind === 'external') {
-				await this.startTree(choice.id, choice.path, start);
-				return this.captureNow('join');
-			}
-			return this.captureNow('refresh');
+			return this.captureNow(joining ? 'join' : 'refresh');
 		});
 		this.tail = result.catch(() => {});
 		return result;
 	}
 	/** spec/tasks#agent-worktrees: the `join` checkpoint of a joined worktree: its tree at `start`, beside the other repos' latest trees. Skipped when
 	 *  the repo already has a snapshot in the task (it joined before). */
-	private async startTree(scopeId: string, path: string, start: string) {
+	private async startTree(scopeId: string, path: string, start: string, launch: TaskLaunch) {
 		if (this.document.checkpoints.some((point) => point.trees.some((t) => t.scopeId === scopeId)))
 			return;
 		const tree = await gitText(path, ['rev-parse', '--verify', '--quiet', `${start}^{tree}`]);
@@ -420,7 +419,7 @@ export class Snapshots {
 			? this.document.scopes
 			: [
 					...this.document.scopes,
-					...(await launchExtras((await this.store.task(this.key)).launch))
+					...(await launchExtras(launch))
 						.filter((scope) => scope.id === scopeId)
 						.map((scope) => ({ ...scope, selected: true, available: true })),
 				];

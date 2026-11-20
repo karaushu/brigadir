@@ -299,6 +299,7 @@ const uk = {
 	removed: 'видалено',
 	'branch {branch} kept': 'гілку {branch} збережено',
 	'branch deleted': 'гілку видалено',
+	'Add worktree {name} to the task': 'Додати worktree {name} до задачі',
 	'over budget': 'понад бюджет',
 	'{used} of {budget}': '{used} з {budget}',
 	zone: 'зона',

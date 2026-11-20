@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rename, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, writeFile, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SessionStore } from '@brigadir/persistence';
@@ -126,3 +126,53 @@ it('explains historical lines after shifts and rename, bounds the end, and prese
 		await writer.close();
 	}
 }, 20000);
+// spec/diff-and-review#why-changed, spec/tasks#agent-worktrees: a worktree the agent made joins after its turn ended; what it held then is
+// that turn's work, not an unattributed change.
+it('attributes the join capture of the agent’s worktree to the agent’s last turn', async () => {
+	const root = await realpath(await mkdtemp(join(tmpdir(), 'brigadir-attribution-join-')));
+	roots.push(root);
+	const repo = join(root, 'repo'),
+		worktree = join(root, 'repo-feature');
+	await mkdir(repo);
+	await git(repo, ['init', '-q']);
+	await git(repo, ['config', 'user.name', 'F']);
+	await git(repo, ['config', 'user.email', 'f@x']);
+	await writeFile(join(repo, 'file.txt'), 'base\n');
+	await git(repo, ['add', '-A']);
+	await git(repo, ['commit', '-qm', 'base']);
+	const store = await SessionStore.at(join(root, 'data')),
+		project = await store.addProject(repo),
+		task = await store.createTask(project.id, 'Join', 'claude');
+	const snapshots = await Snapshots.open(store, task);
+	await snapshots.capture('baseline');
+	const writer = await store.writer(task),
+		changes = new Changes(store.root, resolve('apps/desktop/out/services/diff.cjs'));
+	try {
+		const start = (await git(repo, ['rev-parse', 'HEAD'])).toString().trim();
+		const turn = await writer.append({ kind: 'turn.started', text: 'Make a worktree' });
+		await git(repo, ['worktree', 'add', '-q', '-b', 'feature', worktree]);
+		await writeFile(join(worktree, 'file.txt'), 'agent line\n');
+		await writer.append({ kind: 'turn.completed', reason: 'end_turn' });
+		const id = '1f2e3d4c5b6a7980';
+		await writer.append({
+			kind: 'worktree.joined',
+			scopeId: id,
+			name: 'repo-feature',
+			path: worktree,
+			repo: 'repo',
+			branch: 'feature',
+			standsForRoot: true,
+			by: 'agent',
+		});
+		const point = (await snapshots.addScope(
+			{ id, name: 'repo-feature', kind: 'external', path: worktree, selected: true },
+			start
+		))!;
+		await writer.append({ kind: 'checkpoint.created', checkpoint: point.id });
+		const file = (await changes.read(task)).files.find((item) => item.scopeId === id)!;
+		const result = await changes.attribution(task, file.id, { start: 1, end: 1 });
+		expect(result.entries[0]).toMatchObject({ author: 'agent', turn: turn.seq });
+	} finally {
+		await writer.close();
+	}
+});

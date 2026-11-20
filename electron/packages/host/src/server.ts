@@ -702,7 +702,9 @@ export async function startHost(config: HostConfig) {
 				restartAfterStop = true;
 				setImmediate(() => void stop('moved'));
 			} else {
-				// The move failed and the task stays here: the watcher and the agent's session come back, then the queue goes on.
+				// The move failed and the task stays here: snapshots, the watcher and the agent's session come back, then the queue goes on.
+				if (!stopping && !snapshots)
+					snapshots = await Snapshots.open(store, config.key).catch(() => null);
 				workspaceHeld = false;
 				if (!stopping) {
 					startScopeWatch();
@@ -1184,6 +1186,8 @@ export async function startHost(config: HostConfig) {
 			(snapshots?.current.scopes ?? []).some(
 				(scope) => scope.path === path && scope.selected && scope.available !== false
 			),
+		scopeIdOf: (path) =>
+			(snapshots?.current.scopes ?? []).find((scope) => scope.path === path)?.id ?? null,
 		join: joinWorktree,
 		leave: leaveWorktree,
 		ask: askWorktree,
@@ -1192,6 +1196,8 @@ export async function startHost(config: HostConfig) {
 	const worktreeTools = new Map<string, string>();
 	/** True while `saving` is the host's own scope change, which commands wait for instead of being refused. */
 	let hostScopeChange = false;
+	/** The worktree cards that wait for the person (they are not the agent's, so a new session does not close them). */
+	const worktreeCards = new Set<string>();
 	function agentRepos() {
 		return (snapshots?.current.scopes ?? [])
 			.filter((scope) => isGitScope(scope) && writableByAgent(scope) && scope.available !== false)
@@ -1270,7 +1276,8 @@ export async function startHost(config: HostConfig) {
 			id: randomUUID(),
 			tool: {
 				id: randomUUID(),
-				title: `Add worktree ${basename(found.path)}${found.branch ? ` · ${found.branch}` : ''} to the task`,
+				name: worktreeCard.tool,
+				title: worktreeCardTitle(basename(found.path), found.branch),
 				category: 'edit',
 				input: found.path,
 			},
@@ -1279,11 +1286,16 @@ export async function startHost(config: HostConfig) {
 				{ id: 'deny', name: 'Deny', kind: 'reject_once' },
 			],
 		};
-		const answer = permission(request, new AbortController().signal);
-		await emit({ kind: 'permission.requested', request });
-		const result = await answer;
-		if (result === 'add') return true;
-		return stopping ? null : false;
+		worktreeCards.add(request.id);
+		try {
+			const answer = permission(request, new AbortController().signal);
+			await emit({ kind: 'permission.requested', request });
+			const result = await answer;
+			if (result === 'add') return true;
+			return stopping ? null : false;
+		} finally {
+			worktreeCards.delete(request.id);
+		}
 	}
 	let toolCount = 0;
 	let lastCheckpoint: number | undefined;
@@ -3250,6 +3262,8 @@ export async function startHost(config: HostConfig) {
 					previous?.close();
 					terminals.unwatchAll();
 					uiVisible = false;
+					// spec/tasks#agent-worktrees: a worktree found while no window could describe it joins once one is there.
+					setImmediate(() => adoptAgentWorktrees());
 				}
 				// `stdio` is `mcp-relay`: after this reply the socket carries the agent's MCP session.
 				else if (params.role === 'mcp' && sameToken(params.token, identity.mcpToken)) {
@@ -3646,7 +3660,9 @@ export async function startHost(config: HostConfig) {
 		for (const p of stale.proposals)
 			await emit({ kind: 'task.proposal.resolved', id: p.id, task: null });
 		for (const p of stale.permissions)
-			await emit({ kind: 'permission.resolved', id: p.id, optionId: null });
+			// spec/tasks#agent-worktrees: the host's own worktree card outlives the agent's session; it waits for the person.
+			if (!worktreeCards.has(p.id))
+				await emit({ kind: 'permission.resolved', id: p.id, optionId: null });
 		let replaying = previous?.kind === 'session.started';
 		sentScopeContext = '';
 		briefPending = !replaying;
@@ -3989,5 +4005,10 @@ export async function startHost(config: HostConfig) {
 import { relayContext } from './relay-context';
 import { WorkspaceMover } from './workspace-mover';
 import { AgentWorktrees, type FoundWorktree } from './agent-worktrees';
-import { moveRefusal, type WorktreeJoinedEvent } from '@brigadir/core';
+import {
+	moveRefusal,
+	worktreeCard,
+	worktreeCardTitle,
+	type WorktreeJoinedEvent,
+} from '@brigadir/core';
 import { finishSwitch } from './workspace-move';

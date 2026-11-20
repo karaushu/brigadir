@@ -13,6 +13,8 @@ import {
 	type Locale,
 	type PermissionRequest,
 	browserShowCard,
+	worktreeCard,
+	worktreeCardName,
 } from '@brigadir/core';
 import { Button, Choice, Segments } from './Controls';
 import styles from './SessionInputs.module.css';
@@ -415,9 +417,13 @@ export function PermissionCard({
 	// The raw input shows only when the title names no target; «Reject» only when the agent gives no reject option of its own.
 	// spec/browser-and-simulator#background: the host's own «Needs you» request of `browser_show` reads in the person's language.
 	const showPage = request.tool.name === browserShowCard.tool,
+		// spec/tasks#agent-worktrees: the host's worktree card reads in the person's language too.
+		worktree = worktreeCardName(request.tool),
 		head = showPage
 			? { name: t(locale, browserShowCard.title), target: '' }
-			: toolHeadline(request.tool),
+			: worktree !== null
+				? { name: t(locale, worktreeCard.title).replace('{name}', worktree), target: '' }
+				: toolHeadline(request.tool),
 		optionName = (option: PermissionRequest['options'][number]) =>
 			showPage && option.id === 'show'
 				? t(locale, 'Show')

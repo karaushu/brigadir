@@ -1022,7 +1022,9 @@ export function App() {
 		!!task && !task.archived && !['backlog', 'preparing'].includes(task.status) && route !== '#kit',
 		!!task && !!workspace && canArchive(task, workspace.tasks) && route !== '#kit',
 		// spec/tasks#move-to-worktree: the same rule as the menus; the host repeats it with what only it knows.
-		!!task && moveRefusal(task, { moving: false, git: true }) === null && route !== '#kit'
+		!!task &&
+			moveRefusal(task, { moving: false, git: !!task.taskTree }) === null &&
+			route !== '#kit'
 	);
 	useEffect(
 		() =>

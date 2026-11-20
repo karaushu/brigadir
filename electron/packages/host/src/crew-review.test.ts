@@ -229,3 +229,50 @@ it('keeps pr_comment with the foreman: a crew worker neither lists nor calls it 
 	expect(humanToolsAllowed('reviewer')).toBe(false);
 	expect(humanToolsAllowed('foreman')).toBe(true);
 });
+// spec/reviews#reviewer-sessions, spec/tasks#agent-worktrees: the reviewer's root reads the joined checkout of the root's repo; a repo from
+// outside is read under its own name.
+it('gives the reviewer’s root the tree of the joined stand-in and keeps read_diff paths of outside repos under their name', async () => {
+	const { reviewerTrees, scopePrefix } = await import('./crew');
+	const own = [
+		{ id: 'aaaaaaaaaaaaaaaa', name: '.', kind: 'root' as const },
+		{ id: 'bbbbbbbbbbbbbbbb', name: 'repo-feature', kind: 'external' as const },
+		{ id: 'cccccccccccccccc', name: 'kit', kind: 'submodule' as const },
+	];
+	const theirs = [
+		{ name: '.', path: '/r', available: true },
+		{ name: 'kit', path: '/r/kit', available: true },
+	];
+	const items = [
+		{ scopeId: 'aaaaaaaaaaaaaaaa', result: 'root-tree' },
+		{ scopeId: 'bbbbbbbbbbbbbbbb', result: 'joined-tree' },
+		{ scopeId: 'cccccccccccccccc', result: 'kit-tree' },
+	];
+	const launch = (worktreeOf?: string) => ({
+		isolation: 'in-place' as const,
+		branch: '',
+		baseRef: '',
+		setupCommand: '',
+		scopes: [
+			{ id: 'aaaaaaaaaaaaaaaa', name: '.', kind: 'root' as const, selected: true },
+			{
+				id: 'bbbbbbbbbbbbbbbb',
+				name: 'repo-feature',
+				kind: 'external' as const,
+				path: '/w',
+				selected: true,
+				...(worktreeOf ? { worktreeOf } : {}),
+			},
+		],
+	});
+	expect(reviewerTrees(items, own, theirs, launch('aaaaaaaaaaaaaaaa'))).toEqual([
+		{ path: '/r', tree: 'joined-tree' },
+		{ path: '/r/kit', tree: 'kit-tree' },
+	]);
+	expect(reviewerTrees(items, own, theirs, launch())).toEqual([
+		{ path: '/r', tree: 'root-tree' },
+		{ path: '/r/kit', tree: 'kit-tree' },
+	]);
+	expect(scopePrefix({ path: '/w', name: 'repo-feature' }, '/p')).toBe('repo-feature/');
+	expect(scopePrefix({ path: '/p/kit', name: 'kit' }, '/p')).toBe('kit/');
+	expect(scopePrefix({ path: '/p', name: '.' }, '/p')).toBe('');
+});

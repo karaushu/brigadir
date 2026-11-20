@@ -230,6 +230,14 @@ it('a worktree made by someone else does not join silently: outside the turns it
 	);
 	if (asked.event.kind !== 'permission.requested') throw new Error('unreachable');
 	expect(asked.event.request.tool.title).toBe('Add worktree other-tree · other to the task');
+	// The card is the host's: another turn of the agent does not close it.
+	const cardId = asked.event.request.id;
+	await turn(client, 'hello');
+	expect(
+		(await journal(store, task)).some(
+			(record) => record.event.kind === 'permission.resolved' && record.event.id === cardId
+		)
+	).toBe(false);
 	await client.command({ kind: 'answerPermission', id: asked.event.request.id, optionId: 'deny' });
 	await turn(client, 'hello');
 	const records = await journal(store, task);
@@ -250,6 +258,12 @@ it('the person moves an idle task into a worktree: only its changes go, the proj
 	const { client } = await launch(store, task);
 	const statusBefore = await git(repo, 'status', '--porcelain', '--untracked-files=all');
 	await turn(client, "sh echo 'export const api = 1;' > api.ts");
+	// A worktree the agent made before the move keeps its changes in the task's diff after it.
+	const { root } = { root: repo.slice(0, repo.lastIndexOf('/')) };
+	const feature = join(root, 'repo-feature');
+	await turn(client, `worktree-add feature ${feature}`);
+	await until(async () => kinds(await journal(store, task), 'worktree.joined').at(0));
+	await turn(client, `sh cd ${feature} && echo joined > joined.txt`);
 	await client.command({ kind: 'moveToWorktree' });
 	const moved = await until(
 		async () =>
@@ -270,6 +284,7 @@ it('the person moves an idle task into a worktree: only its changes go, the proj
 	expect(await readFile(join(worktree, 'api.ts'), 'utf8')).toBe('export const api = 1;\n');
 	await expect(readFile(join(worktree, 'notes.txt'))).rejects.toThrow();
 	expect(await git(repo, 'status', '--porcelain', '--untracked-files=all')).toBe(statusBefore);
+	expect((await readChanges(store, task)).files.map((file) => file.path)).toContain('joined.txt');
 	// The next prompt starts with where the task now runs, once.
 	const next = await attach(store, task);
 	await turn(next, 'hello');
@@ -337,9 +352,77 @@ it('a move during a turn waits for it; a waiting move can be cancelled; a failed
 	expect(await git(repo, 'status', '--porcelain', '--untracked-files=all')).toBe(statusAtMove);
 	expect(await readFile(join(repo, 'api.ts'), 'utf8')).toBe('export const api = 1;\n');
 	expect(await git(repo, 'branch', '--list', 'brigadir/*')).toBe('');
-	// The same host goes on in the project folder.
+	// The same host goes on in the project folder, and its captures with it.
 	expect((await journal(store, task)).some((record) => record.event.kind === 'host.stopped')).toBe(
 		false
 	);
-	await turn(client, 'hello');
+	await turn(client, "sh echo 'export const web = 1;' > web.ts");
+	expect((await readChanges(store, task)).files.map((file) => file.path).sort()).toEqual([
+		'api.ts',
+		'web.ts',
+	]);
 }, 240_000);
+
+it('leaves alone a worktree another task holds, and one made while the host was down after a cut turn', async () => {
+	const { root, repo, store, task } = await setup();
+	// Another task of the data folder holds a worktree of the same repo as a folder of its own.
+	const held = join(root, 'held-tree');
+	await git(repo, 'worktree', 'add', '-q', '-b', 'held', held);
+	const other = await store.createTask(task.projectId, 'Other', 'claude');
+	await store.updateTask(other, {
+		launch: {
+			isolation: 'in-place',
+			branch: '',
+			baseRef: 'main',
+			setupCommand: '',
+			scopes: [
+				{ id: 'abcdefabcdefabcd', name: 'held-tree', kind: 'external', path: held, selected: true },
+			],
+		},
+	});
+	const { client, child } = await launch(store, task);
+	// The agent's turn names `worktree` while another task's worktree is made: still not this task's.
+	await rm(held, { recursive: true, force: true });
+	await git(repo, 'worktree', 'prune');
+	await client.command({
+		kind: 'prompt',
+		text: `sh sleep 1 && git worktree list`,
+	});
+	await git(repo, 'worktree', 'add', '-q', '-b', 'held-again', held);
+	await until(async () =>
+		(await journal(store, task)).filter((record) => record.event.kind === 'turn.completed').length >
+		0
+			? true
+			: undefined
+	);
+	await turn(client, 'hello');
+	expect(kinds(await journal(store, task), 'worktree.joined')).toEqual([]);
+	// The host goes down in a turn that names `worktree`; while it is down the person makes a worktree; the next host does not take it for
+	// the agent's: the cut turn ended with its last record.
+	await client.command({ kind: 'prompt', text: 'sh sleep 20; echo worktree' });
+	await until(async () =>
+		(await journal(store, task)).findLast((record) => record.event.kind === 'tool.changed')?.event
+			.kind === 'tool.changed' &&
+		(await journal(store, task)).at(-1)?.event.kind !== 'turn.completed'
+			? true
+			: undefined
+	);
+	await delay(300);
+	child.kill('SIGKILL');
+	await until(async () =>
+		child.exitCode !== null || child.signalCode !== null ? true : undefined
+	);
+	await delay(50);
+	await git(repo, 'worktree', 'add', '-q', '-b', 'down', join(root, 'down-tree'));
+	const next = await launch(store, task);
+	await turn(next.client, 'hello');
+	const records = await journal(store, task);
+	expect(kinds(records, 'worktree.joined')).toEqual([]);
+	expect(
+		records.some(
+			(record) =>
+				record.event.kind === 'permission.requested' &&
+				!!record.event.request.tool.title?.includes('-tree')
+		)
+	).toBe(false);
+}, 120_000);

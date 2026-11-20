@@ -393,8 +393,12 @@ export async function prepareMove(deps: MoveDeps, doc: MoveDocument): Promise<Mo
 		if (!prior) continue;
 		const planned = plans.get(scope.id);
 		if (!planned) {
+			// spec/tasks#agent-worktrees: a repo that joined after the task's start (a worktree the agent made) keeps its own first tree.
 			const start =
-				snapshots.checkpoints[from]?.trees.find((item) => item.scopeId === scope.id) ?? prior;
+				snapshots.checkpoints
+					.slice(from)
+					.find((point) => point.trees.some((item) => item.scopeId === scope.id))
+					?.trees.find((item) => item.scopeId === scope.id) ?? prior;
 			trees.push(start);
 			continue;
 		}

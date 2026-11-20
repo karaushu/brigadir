@@ -17,6 +17,8 @@ export type AgentWorktreeDocument = {
 	/** Worktrees judged for good: joined, left alone or denied on the card. */
 	judged: string[];
 	joined: { scopeId: string; path: string; repo: string; branch?: string; gone?: true }[];
+	/** A join that started: a host that stopped in the middle finds the folder in the task and records it as joined. */
+	joining?: { path: string; repo: string; branch?: string }[];
 };
 export const agentWorktreeFile = 'agent-worktrees.json';
 export type FoundWorktree = WorktreeEntry & {
@@ -34,6 +36,8 @@ export type AgentWorktreeDeps = {
 	repos(): readonly string[];
 	/** True when the path is one of the task's repos now (selected and available). */
 	inTask(path: string): boolean;
+	/** The task's repo id at `path`. */
+	scopeIdOf(path: string): string | null;
 	/** The folder joins the task as `add_folder` does; the scope id, or null when it could not join now (no window, a lock). */
 	join(found: FoundWorktree, by: 'agent' | 'person'): Promise<string | null>;
 	/** A joined worktree whose folder is gone leaves the task. */
@@ -49,6 +53,12 @@ async function readState(store: SessionStore, key: TaskKey): Promise<AgentWorktr
 		if (Array.isArray(doc.judged) && Array.isArray(doc.joined))
 			return {
 				schemaVersion: 1,
+				joining: Array.isArray(doc.joining)
+					? doc.joining.filter(
+							(item): item is NonNullable<AgentWorktreeDocument['joining']>[number] =>
+								isRecord(item) && typeof item.path === 'string' && typeof item.repo === 'string'
+						)
+					: [],
 				judged: doc.judged.filter((item): item is string => typeof item === 'string'),
 				joined: doc.joined.filter(
 					(item): item is AgentWorktreeDocument['joined'][number] =>
@@ -72,8 +82,9 @@ export async function heldByOtherTask(store: SessionStore, key: TaskKey, path: s
 		)) {
 			if (projectId === key.projectId && id === key.id) continue;
 			try {
-				const task = await readDocument(join(projects, projectId, 'tasks', id, 'task.json'));
-				const launch = isRecord(task.launch) ? task.launch : null;
+				const doc = await readDocument(join(projects, projectId, 'tasks', id, 'task.json'));
+				const task = isRecord(doc.task) ? doc.task : null;
+				const launch = task && isRecord(task.launch) ? task.launch : null;
 				if (
 					Array.isArray(launch?.scopes) &&
 					launch.scopes.some((scope) => isRecord(scope) && scope.path === path)
@@ -140,6 +151,11 @@ export class AgentWorktrees {
 		for (const entry of found.values()) {
 			if (entry.missing || judged.has(entry.path) || this.asking.has(entry.path)) continue;
 			if (deps.inTask(entry.path)) {
+				// A join the host did not see finish is the agent's worktree all the same.
+				const started = doc.joining?.find((item) => item.path === entry.path),
+					scopeId = started ? deps.scopeIdOf(entry.path) : null;
+				if (started && scopeId) doc.joined.push(this.joinedItem(scopeId, entry));
+				doc.joining = (doc.joining ?? []).filter((item) => item.path !== entry.path);
 				judged.add(entry.path);
 				changed = true;
 				continue;
@@ -159,11 +175,19 @@ export class AgentWorktrees {
 				judged.add(entry.path);
 				changed = true;
 			} else if (verdict === 'join') {
+				const marker = {
+					path: entry.path,
+					repo: entry.repo,
+					...(entry.branch ? { branch: entry.branch } : {}),
+				};
+				doc.joining = [...(doc.joining ?? []).filter((item) => item.path !== entry.path), marker];
+				await this.save({ ...doc, judged: [...judged] });
 				const scopeId = await deps.join(entry, 'agent');
+				doc.joining = doc.joining.filter((item) => item.path !== entry.path);
+				changed = true;
 				if (!scopeId) continue;
 				judged.add(entry.path);
 				doc.joined.push(this.joinedItem(scopeId, entry));
-				changed = true;
 			} else this.ask(entry);
 		}
 		if (changed) await this.save({ ...doc, judged: [...judged] });

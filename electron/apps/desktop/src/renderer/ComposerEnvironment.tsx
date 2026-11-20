@@ -64,7 +64,7 @@ export function ComposerEnvironment({
 	// A task without a tree yet still shows its ongoing states (spec/notifications-slack-notes-and-schedules#notice-chips): the footer holds the chips alone.
 	const tree = task.taskTree;
 	// spec/tasks#move-to-worktree: the menus' rule; the footer stands only for a task with a git tree.
-	const moveRefused = moveRefusal(task, { moving, git: true });
+	const moveRefused = moveRefusal(task, { moving, git: !!tree });
 	if (!tree)
 		return notices || usage ? (
 			<div className={styles.root} data-composer-environment data-notices-only>
@@ -89,6 +89,7 @@ export function ComposerEnvironment({
 			data-isolation={tree.worktree ? 'worktree' : 'in-place'}
 			data-detached={tree.branch === null || undefined}
 			data-open={open}
+			data-move-under-way={moving || undefined}
 			data-composer-environment>
 			<button
 				ref={button}

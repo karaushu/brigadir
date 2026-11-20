@@ -89,7 +89,17 @@ export async function worktreeEntries(repo: string): Promise<WorktreeEntry[]> {
 		const admin = admins.get(listed) ?? (real ? admins.get(real) : undefined) ?? null;
 		const ref = lines.find((line) => line.startsWith('branch '))?.slice('branch '.length) ?? null;
 		const oid = lines.find((line) => line.startsWith('HEAD '))?.slice('HEAD '.length) ?? null;
-		const first = admin ? await firstReflog(join(admin, 'logs', 'HEAD')) : null;
+		const branchName = ref?.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : null;
+		// The start: the worktree's first HEAD entry, else its branch's first entry (`branch: Created from …`), else where it forks from
+		// the repo's HEAD — never the folder as it is now, so work made before the join stays the task's.
+		const headLog = admin ? await firstReflog(join(admin, 'logs', 'HEAD')) : null;
+		const first =
+			headLog ??
+			(branchName ? await firstReflog(join(common, 'logs', 'refs', 'heads', branchName)) : null);
+		const fork =
+			!first?.to && oid && sha.test(oid)
+				? await gitText(repo, ['merge-base', 'HEAD', oid]).catch(() => '')
+				: '';
 		const born = admin
 			? await stat(admin).then(
 					(info) => (info.birthtimeMs > 0 ? info.birthtimeMs : null),
@@ -99,11 +109,12 @@ export async function worktreeEntries(repo: string): Promise<WorktreeEntry[]> {
 		entries.push({
 			path: real ?? listed,
 			missing: !real || lines.some((line) => line.startsWith('prunable')),
-			branch: ref?.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : null,
+			branch: branchName,
 			head: oid && sha.test(oid) ? oid : null,
-			createdAt: born ?? first?.at ?? null,
+			// When it was made: the folder's birth, else its own HEAD's first entry (a branch may be older than the worktree).
+			createdAt: born ?? headLog?.at ?? null,
 			precision: born !== null ? 1 : 1000,
-			start: first?.to ?? null,
+			start: first?.to ?? (sha.test(fork) ? fork : null),
 		});
 	}
 	return entries;

@@ -6,26 +6,28 @@ import type { EventRecord } from './session';
 export type TurnWindow = { start: number; end: number | null; tools: string[] };
 export function turnWindows(records: readonly EventRecord[]): TurnWindow[] {
 	const windows: TurnWindow[] = [];
-	let open: TurnWindow | null = null;
+	let open: TurnWindow | null = null,
+		last = 0;
 	for (const { at, event } of records) {
 		const time = Date.parse(at);
 		if (!Number.isFinite(time)) continue;
 		if (event.kind === 'turn.started') {
-			if (open) open.end = time;
+			if (open) open.end = last;
 			open = { start: time, end: null, tools: [] };
 			windows.push(open);
-		} else if (
-			open &&
-			(event.kind === 'turn.completed' ||
-				event.kind === 'session.failed' ||
-				event.kind === 'host.stopped')
-		) {
+		} else if (open && (event.kind === 'turn.completed' || event.kind === 'session.failed')) {
 			open.end = time;
+			open = null;
+		} else if (open && event.kind === 'host.stopped') {
+			// A host that went down mid-turn journals its stop when it starts again: the turn ended with its last record, not with the
+			// downtime (a worktree made while Brigadir was down is nobody's turn).
+			open.end = last;
 			open = null;
 		} else if (open && event.kind === 'tool.changed') {
 			const { title, input } = event.patch;
 			for (const text of [title, input]) if (typeof text === 'string') open.tools.push(text);
 		}
+		last = time;
 	}
 	return windows;
 }
@@ -70,4 +72,18 @@ export function worktreeVerdict(input: {
 			(!!input.branch && text.includes(input.branch))
 	);
 	return named ? 'join' : 'ask';
+}
+/** spec/tasks#agent-worktrees: the host's own card for a worktree it cannot place; its title reads in the person's language. */
+export const worktreeCard = {
+	tool: 'worktree_join',
+	title: 'Add worktree {name} to the task',
+} as const;
+/** The card's English title (journal) for `name · branch`. */
+export function worktreeCardTitle(name: string, branch: string | null) {
+	return worktreeCard.title.replace('{name}', branch ? `${name} · ${branch}` : name);
+}
+/** What `{name}` held in a card's English title, so the window can say it in the person's language; null — not this card. */
+export function worktreeCardName(tool: { name?: string | undefined; title?: string | undefined }) {
+	if (tool.name !== worktreeCard.tool || !tool.title) return null;
+	return /^Add worktree (.+) to the task$/.exec(tool.title)?.[1] ?? null;
 }

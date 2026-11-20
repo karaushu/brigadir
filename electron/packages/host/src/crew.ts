@@ -66,6 +66,7 @@ import {
 	type TaskKey,
 	type ChangedFile,
 	type Scope,
+	type TaskLaunch,
 	type CrewAssignment,
 	isCrewAssignment,
 	autoSpec,
@@ -223,6 +224,37 @@ export function crewBrief(context: CrewContext, tools?: WorkspaceTools): string 
 /** spec/chat-turns-plans-and-questions#checklist-tools: English by rule 12; the adapter turns the checklist into ACP `plan`, the chat shows it as the plan row. */
 export const checklistBrief =
 	'For work with three or more steps, keep a step checklist with your todo, task or plan tool (`update_plan` in Codex) and mark each step as you finish it; the person sees that checklist in the chat, so do not repeat it as a list in your messages.';
+/**
+ * spec/reviews#reviewer-sessions: which repo of the reviewer's worktree takes which of the round's trees — matched by name; the newest joined
+ * checkout of the root's repo (spec/tasks#agent-worktrees) stands for the root, whose own tree then waits.
+ */
+export function reviewerTrees(
+	items: readonly { scopeId: string; result: string }[],
+	own: readonly Pick<Scope, 'id' | 'name' | 'kind'>[],
+	theirs: readonly Pick<Scope, 'name' | 'path' | 'available'>[],
+	launch: TaskLaunch | undefined
+): { path: string; tree: string }[] {
+	const root = own.find((entry) => entry.kind === 'root');
+	const standIn = launch?.scopes
+		.filter(
+			(choice) =>
+				choice.selected &&
+				!!root &&
+				choice.worktreeOf === root.id &&
+				items.some((item) => item.scopeId === choice.id)
+		)
+		.at(-1)?.id;
+	const targets: { path: string; tree: string }[] = [];
+	for (const item of items) {
+		if (standIn && item.scopeId === root?.id) continue;
+		const name =
+			item.scopeId === standIn ? root?.name : own.find((entry) => entry.id === item.scopeId)?.name;
+		const target = name !== undefined && theirs.find((entry) => entry.name === name);
+		if (target && target.available !== false)
+			targets.push({ path: target.path, tree: item.result });
+	}
+	return targets;
+}
 /** A changed file's path as the reviewer reads it: relative to the project for its repos; a repo from outside (an added folder, a joined
  *  worktree, spec/reviews#reviewer-sessions) under its own name. */
 export function scopePrefix(
@@ -2305,25 +2337,13 @@ export class CrewHost {
 			readSnapshots(this.deps.store, this.workerKey(reviewer)),
 			this.deps.store.task(this.deps.key),
 		]);
-		// spec/reviews#reviewer-sessions: the newest joined checkout of the root's repo stands for the root; the root's own tree then waits.
-		const root = own?.scopes.find((entry) => entry.kind === 'root');
-		const standIn = task.launch?.scopes
-			.filter(
-				(choice) =>
-					choice.selected &&
-					!!root &&
-					choice.worktreeOf === root.id &&
-					run.scopeSnapshots.some((item) => item.scopeId === choice.id)
-			)
-			.at(-1)?.id;
-		for (const item of run.scopeSnapshots) {
-			if (standIn && item.scopeId === root?.id) continue;
-			const scope = own?.scopes.find((entry) => entry.id === item.scopeId),
-				name = item.scopeId === standIn ? root?.name : scope?.name,
-				target = name !== undefined && theirs?.scopes.find((entry) => entry.name === name);
-			if (target && target.available !== false)
-				await gitText(target.path, ['read-tree', '-u', '--reset', item.result]);
-		}
+		for (const target of reviewerTrees(
+			run.scopeSnapshots,
+			own?.scopes ?? [],
+			theirs?.scopes ?? [],
+			task.launch
+		))
+			await gitText(target.path, ['read-tree', '-u', '--reset', target.tree]);
 	}
 	/** One reviewer serves one check at a time; the rest wait FIFO and survive a restart (spec/crew#reviewer). */
 	private async dispatchReviews() {

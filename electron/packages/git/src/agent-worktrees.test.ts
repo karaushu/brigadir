@@ -82,3 +82,17 @@ it('reads every repo of the reference monorepo: a worktree of a submodule or a n
 	expect(await worktreeOfRoot(join(dir, 'kit-feature'), root)).toBeUndefined();
 	expect(await worktreeOfRoot(join(dir, 'admin-feature'), root)).toBeUndefined();
 });
+it('a worktree without reflogs starts where it forks from the repo’s HEAD, never at its current state (spec/tasks#agent-worktrees)', async () => {
+	const { dir, repo } = await fixture();
+	const base = (await git(repo, ['rev-parse', 'HEAD'])).toString().trim();
+	const path = join(dir, 'no-logs');
+	await git(repo, ['worktree', 'add', '-q', '-b', 'no-logs', path]);
+	await writeFile(join(path, 'b.txt'), 'b\n');
+	await git(path, ['add', 'b.txt']);
+	await git(path, ['commit', '-qm', 'b']);
+	const common = join(repo, '.git');
+	await rm(join(common, 'worktrees', 'no-logs', 'logs'), { recursive: true, force: true });
+	await rm(join(common, 'logs', 'refs', 'heads', 'no-logs'), { force: true });
+	const entry = (await worktreeEntries(repo)).find((item) => item.path === path)!;
+	expect(entry.start).toBe(base);
+});

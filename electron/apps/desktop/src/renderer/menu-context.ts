@@ -73,7 +73,8 @@ export function useMenuContext(
 				needsYou,
 				relay,
 				archivable,
-				movable,
+				// spec/tasks#move-to-worktree: a move the chat shows waiting or running leaves nothing to start.
+				movable: movable && !document.querySelector('[data-move-under-way]'),
 				threeColumns: task && threeColumns,
 				// spec/task-window-workspace#layout-switch: View ▸ Layout ticks the task's switches.
 				layoutChat: task
@@ -220,6 +221,7 @@ export function useMenuContext(
 				'data-menu-diff-selection',
 				'data-menu-diff-source',
 				'data-menu-reopen',
+				'data-move-under-way',
 			],
 		});
 		document.addEventListener('focusin', publish);

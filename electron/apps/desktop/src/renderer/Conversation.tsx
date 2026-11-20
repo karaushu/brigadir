@@ -83,6 +83,8 @@ import {
 	type QuestionAnswer,
 	type SessionCommand,
 	type SessionEvent,
+	worktreeCard,
+	worktreeCardName,
 	type SessionSnapshot,
 	type UserQuestion,
 	changeCountsLabel,
@@ -1716,7 +1718,10 @@ export function Conversation({
 					/>
 				) : (
 					<div className={styles.resolved}>
-						{e.request.tool.title} · {t(locale, 'Resolved')}
+						{worktreeCardName(e.request.tool) !== null
+							? t(locale, worktreeCard.title).replace('{name}', worktreeCardName(e.request.tool)!)
+							: e.request.tool.title}{' '}
+						· {t(locale, 'Resolved')}
 					</div>
 				);
 			// spec/chat-turns-plans-and-questions#plan-row: the checklist opens the plan it follows, in place.

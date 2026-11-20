@@ -6,6 +6,8 @@ Ask `Бригадир` with ask_foreman when something is unclear; share facts w
 
 For work with three or more steps, keep a step checklist with your todo, task or plan tool (`update_plan` in Codex) and mark each step as you finish it; the person sees that checklist in the chat, so do not repeat it as a list in your messages.
 
+When a reviewer of this task asks you a question, answer it with prompt_task and the questionId from the question message; the reviewer waits for your answer.
+
 Work in the workspace repositories as they are. If you create a git worktree yourself (`git worktree add`), it joins this task when your turn ends: the person sees its branch and diff in Brigadir and the task's reviews read it, so you need not tell them where the work is.
 
 Before you start a dev server, a watcher or a script yourself, call commands_list: the person may have saved it as a project command. Start a dev server as a project command rather than in your shell: commands_run starts it in the console of this task, where the person sees it, and waits for its local address.

@@ -153,7 +153,7 @@ import {
 	isCrewToolCall,
 	crewHiddenTools,
 	partBrief,
-	soloAnswerOnly,
+	reviewerAnswerOnly,
 	type CrewContext,
 } from './crew';
 import {
@@ -534,10 +534,11 @@ export async function startHost(config: HostConfig) {
 				}),
 			// spec/crew#ask-foreman, spec/chat-turns-plans-and-questions#plan-chat: a reviewer's question to an agent held by its plan for
 			// approval answers that plan with its reject option and runs before what is queued. Only an agent that answers questions
-			// (`prompt_task`) gets it: the Auto agent and a solo task's agent (spec/reviews#reviewer-questions); a split waits in the crew host.
+			// (`prompt_task`) gets it: the Auto agent, a solo task's agent and a crew developer (spec/reviews#reviewer-questions); a split waits
+			// in the crew host.
 			answerPlan: (text: string, marker: Extract<SessionEvent, { kind: 'turn.started' }>['crew']) =>
 				serialPrompt(async () => {
-					if (!autoTask && crew) return false;
+					if (crew && !autoTask && crew.role !== 'developer') return false;
 					const plan = [...permissions.values()].find((item) => isPlanApproval(item.request)),
 						reject = plan ? planRejectOption(plan.request) : null;
 					if (!plan || !reject) return false;
@@ -3139,9 +3140,9 @@ export async function startHost(config: HostConfig) {
 		if (method === 'crew_tool') {
 			if (!isCrewToolCall(params)) throw new Error('Invalid crew tool call');
 			if (stopping) throw new Error('Host is stopping');
-			// spec/reviews#reviewer-questions: a solo task's agent answers its own reviewers' questions, and only those.
-			if (!crew && params.tool === 'prompt_task') {
-				if (!crewHost) throw new Error(soloAnswerOnly);
+			// spec/reviews#reviewer-questions: a solo task's agent and a crew developer answer their own reviewers' questions, and only those.
+			if ((!crew || crew.role === 'developer') && params.tool === 'prompt_task') {
+				if (!crewHost) throw new Error(reviewerAnswerOnly);
 				return crewHost.answerSelfQuestion(params.params);
 			}
 			// A solo task's crew host only runs its review: its own agent has no other crew tools. A developer's crew host runs only its own

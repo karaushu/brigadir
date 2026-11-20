@@ -91,7 +91,9 @@ it('puts the checklist and context sentences after the role brief of the foreman
 it('gives a crew worker neither the plan nor the context sentence (spec/chat-turns-plans-and-questions#plan-approval, spec/agents-and-providers#context-tools)', () => {
 	const brief = sessionBrief(worker, 'claude');
 	expect(brief.startsWith(crewBrief(worker))).toBe(true);
-	expect(brief.endsWith(`\n\n${checklistBrief}\n\n${worktreeBrief}`)).toBe(true);
+	expect(
+		brief.endsWith(`\n\n${checklistBrief}\n\n${reviewQuestionsBrief}\n\n${worktreeBrief}`)
+	).toBe(true);
 	expect(brief).not.toContain('EnterPlanMode');
 	expect(brief).not.toContain('editor_state');
 });
@@ -106,15 +108,15 @@ it('points every session at the saved project commands, a crew worker too (spec/
 		)
 	).toBe(true);
 	expect(sessionBrief(worker, 'claude', { commands: true })).toBe(
-		`${crewBrief(worker)}\n\n${checklistBrief}\n\n${worktreeBrief}\n\n${commandsBrief}`
+		`${crewBrief(worker)}\n\n${checklistBrief}\n\n${reviewQuestionsBrief}\n\n${worktreeBrief}\n\n${commandsBrief}`
 	);
 	expect(commandsBrief).toContain('Start a dev server as a project command');
 });
 
-it('tells a solo agent, and no crew member, that it answers its reviewers with prompt_task (spec/reviews#reviewer-questions)', () => {
+it('tells a solo agent and a crew developer, not a foreman, that they answer their reviewers with prompt_task (spec/reviews#reviewer-questions)', () => {
 	expect(sessionBrief(null, 'codex')).toContain(reviewQuestionsBrief);
 	expect(sessionBrief(foreman, 'claude')).not.toContain(reviewQuestionsBrief);
-	expect(sessionBrief(worker, 'codex')).not.toContain(reviewQuestionsBrief);
+	expect(sessionBrief(worker, 'codex')).toContain(reviewQuestionsBrief);
 	expect(reviewQuestionsBrief).toContain('prompt_task');
 });
 

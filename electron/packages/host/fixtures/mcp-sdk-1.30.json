@@ -5677,6 +5677,39 @@
      "execution": {
       "taskSupport": "forbidden"
      }
+    },
+    {
+     "name": "prompt_task",
+     "description": "Answer a question that a reviewer of this task's review asked you: taskId is the reviewer's task and questionId comes from the question message. The answer returns into the reviewer's waiting call. It answers nothing else and prompts no other task. Use it only when a reviewer of this task asked you a question.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "taskId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+       },
+       "questionId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+       }
+      },
+      "required": [
+       "taskId",
+       "text",
+       "questionId"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
     }
    ]
   },

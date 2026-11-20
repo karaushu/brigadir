@@ -1017,10 +1017,11 @@ const crewTool = (name: CrewToolName): Tool => ({
 		text(await call('crew_tool', { tool: name, params: { ...args, callId: String(id) } }, signal)),
 });
 /**
- * spec/reviews#reviewer-questions: a solo task's agent answers its own reviewers' `ask_foreman` questions. Listed from the first session (a review
- * starts mid-session and Codex does not read the list again); the host takes only an answer to an open question of the task's own reviewer.
+ * spec/reviews#reviewer-questions: a solo task's agent and a crew developer answer their own reviewers' `ask_foreman` questions. Listed from the
+ * first session (a review starts mid-session and Codex does not read the list again); the host takes only an answer to an open question of the
+ * task's own reviewer.
  */
-const soloAnswerTool: Tool = {
+const reviewerAnswerTool: Tool = {
 	name: 'prompt_task',
 	description:
 		"Answer a question that a reviewer of this task's review asked you: taskId is the reviewer's task and questionId comes from the question message. The answer returns into the reviewer's waiting call. It answers nothing else and prompts no other task.",
@@ -1096,7 +1097,8 @@ export function mcpTools(
 		...human,
 		// spec/pull-requests-and-ci#review-crew: a crew worker of a PR review never drafts comments — the foreman leaves the merged findings.
 		...(review && modules.pullRequests && humanToolsAllowed(role) ? reviewTools : []),
-		...(role ? crewTools(role).map(crewTool) : [soloAnswerTool]),
+		...(role ? crewTools(role).map(crewTool) : []),
+		...(role === null || role === 'developer' ? [reviewerAnswerTool] : []),
 	]
 		.filter((tool) => !hidden.has(tool.name))
 		.map((tool) => ({ ...tool, schema: z.object(tool.shape) }));

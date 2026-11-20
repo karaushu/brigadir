@@ -10,7 +10,6 @@ import {
 	taskClassOf,
 	taskClassReasonLimit,
 	tripwireArmed,
-	type AgentProvider,
 	type EventRecord,
 	type SessionEvent,
 	type SmallTaskLimit,
@@ -34,7 +33,8 @@ export type TaskClassDeps = {
 	/** The task writes no code: `set_task_class` says so. */
 	readOnly: boolean;
 	auto: boolean;
-	provider: AgentProvider;
+	/** spec/reviews#plan-mode: where the session stands with the plan mode of its catalog. */
+	planMode(): PlanModeState;
 	/** spec/reviews#tripwire: the limit as Settings has it now. */
 	limit(): Promise<SmallTaskLimit>;
 	/** spec/smoke-run#brief: the browser or the simulator is on, so the class's `next` names the smoke run. */
@@ -58,10 +58,12 @@ export async function readSmallTaskLimit(root: string): Promise<SmallTaskLimit> 
 export function classBrief(auto: boolean): string {
 	return `Before your first edit, after reading the task and the code it touches, state the task's class once with set_task_class: small — one chain of steps with no contract change; medium — the task comes from a ticket or a contract, or touches the data layer, an API or migrations; large — ${auto ? 'you are going to hire workers for independent parts, or ' : ''}the work comes in layers that other work builds on. Its answer says what the class needs next. Call it again only when the task turns out larger or smaller.`;
 }
+/** spec/reviews#plan-mode: the session is in its plan mode, has one in its catalog, or has none. */
+export type PlanModeState = 'on' | 'available' | 'none';
 /** spec/reviews#class-tool: what the class asks of the agent now (English, rule 12). */
 export function classNext(
 	value: TaskClass,
-	options: { provider: AgentProvider; auto: boolean; limit: SmallTaskLimit; smoke?: boolean }
+	options: { planMode: PlanModeState; auto: boolean; limit: SmallTaskLimit; smoke?: boolean }
 ): string {
 	// spec/smoke-run#brief: whatever the class, a change that shows in the app gets one smoke run before the review before the PR.
 	const smoke = options.smoke
@@ -71,14 +73,17 @@ export function classNext(
 }
 function classNextOf(
 	value: TaskClass,
-	options: { provider: AgentProvider; auto: boolean; limit: SmallTaskLimit }
+	options: { planMode: PlanModeState; auto: boolean; limit: SmallTaskLimit }
 ): string {
 	if (value === 'small')
 		return `Small: do the task from start to end without a plan card. A review runs before the pull request. If the change grows past ${options.limit.files} files or ${options.limit.lines} changed lines, Brigadir starts a mid-task review by itself.`;
+	// spec/reviews#plan-mode: by the catalog, never by the provider (rule 7).
 	const plan =
-		options.provider === 'claude'
-			? 'enter plan mode with EnterPlanMode and present the plan with ExitPlanMode; a reviewer checks the plan before the person approves it.'
-			: 'write the plan in your reply and end your turn without editing files; start the work when the person answers.';
+		options.planMode === 'on'
+			? 'you are in plan mode: research without editing files and present the plan for approval from there; a reviewer checks the plan before the person approves it.'
+			: options.planMode === 'available'
+				? 'if you can switch yourself into plan mode (EnterPlanMode, for example), do it now, research without editing files and present the plan for approval from there. Otherwise end this turn now without editing files: Brigadir switches the session into plan mode and asks you for the plan. A reviewer checks the plan before the person approves it.'
+				: 'write the plan in your reply and end your turn without editing files; start the work when the person answers.';
 	const head = `${value === 'medium' ? 'Medium' : 'Large'}: before you edit any file, save the ticket or the contract with save_source if there is one, then present a plan for approval: ${plan}`;
 	if (value === 'medium') return head;
 	return `${head} After a layer that other work builds on, call request_review.${options.auto ? ' Hire workers only for parts that are independent, with hire_workers; when the hired parts are back, Brigadir starts a mid-task review.' : ''}`;
@@ -127,7 +132,7 @@ export class TaskClassLife {
 				class: value,
 				...(previous && previous !== value ? { previous } : {}),
 				next: classNext(value, {
-					provider: this.deps.provider,
+					planMode: this.deps.planMode(),
 					auto: this.deps.auto,
 					limit: await this.deps.limit(),
 					smoke: this.deps.smoke?.() ?? false,

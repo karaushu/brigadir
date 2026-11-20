@@ -1,14 +1,20 @@
 import { expect, it } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SessionStore } from '@brigadir/persistence';
-import { planApproveChoice, planApprovedMode, sessionModes } from '@brigadir/core';
+import {
+	planApproveChoice,
+	planApproveOption,
+	planApprovedMode,
+	sessionModes,
+} from '@brigadir/core';
 import { startHost, connectHost } from './index';
 /** spec/chat-turns-plans-and-questions#checklist-tools: the plan row lives only when the agent keeps a checklist; each agent needs its tool from the transport (Claude's
  *  task tool, Codex's `update_plan`) and the sentence from the brief. spec/chat-turns-plans-and-questions#plan-approval: asked for a plan first, Claude enters plan mode
  *  and asks to approve it (`switch_mode`). `BRIGADIR_LIVE_PLAN=claude|codex|claude-approval`. */
-const live = ['claude', 'codex', 'claude-approval', 'claude-approve-mode'].includes(
+const live = ['claude', 'codex', 'claude-approval', 'claude-approve-mode', 'codex-class'].includes(
 	process.env.BRIGADIR_LIVE_PLAN ?? ''
 )
 	? process.env.BRIGADIR_LIVE_PLAN!
@@ -223,4 +229,123 @@ it.skipIf(live !== 'claude-approve-mode')(
 		}
 	},
 	300000
+);
+
+/** spec/reviews#plan-mode: a Codex task stated Medium — the host switches `Collaboration mode` to `Plan` between turns, asks for the plan, the plan
+ *  comes as a plan for approval, and `implement` brings Codex back to `Default` to write. `BRIGADIR_LIVE_ADAPTER_TEE` (a script that runs the adapter
+ *  given after it) and `BRIGADIR_ACP_LOG` record the wire; `BRIGADIR_LIVE_OUT` keeps the journal. */
+it.skipIf(live !== 'codex-class')(
+	'a Codex task stated Medium is switched into plan mode and writes after the approval',
+	async () => {
+		const root = await mkdtemp(
+				join(process.env.BRIGADIR_LIVE_OUT ?? tmpdir(), 'brigadir-live-class-')
+			),
+			repo = join(root, 'repo');
+		await mkdir(repo);
+		await writeFile(
+			join(repo, 'math.ts'),
+			'export function add(a: number, b: number) {\n\treturn a + b;\n}\n'
+		);
+		for (const args of [
+			['init', '-q', '-b', 'main'],
+			['add', '-A'],
+			['-c', 'user.name=T', '-c', 'user.email=t@x', 'commit', '-q', '-m', 'seed'],
+		])
+			execFileSync('git', args, { cwd: repo });
+		const store = await SessionStore.at(join(root, 'data')),
+			project = await store.addProject(repo),
+			task = await store.createTask(project.id, 'Live plan mode by the host', 'codex');
+		const tee = process.env.BRIGADIR_LIVE_ADAPTER_TEE,
+			real = process.env.BRIGADIR_LIVE_ADAPTER;
+		const host = await startHost({
+				dataDir: store.root,
+				key: task,
+				mcpEntry: resolve('apps/desktop/out/services/mcp-relay'),
+				...(tee && real ? { adapter: { command: process.execPath, args: [tee, real] } } : {}),
+			}),
+			client = await connectHost(host.identity);
+		const answered = new Set<string>();
+		const allowOthers = async () => {
+			for (const r of host.records)
+				if (
+					r.event.kind === 'permission.requested' &&
+					r.event.request.tool.category !== 'switch_mode' &&
+					!answered.has(r.event.request.id)
+				) {
+					answered.add(r.event.request.id);
+					const allow = r.event.request.options.find((o) => o.kind.startsWith('allow'));
+					if (allow)
+						await client.command({
+							kind: 'answerPermission',
+							id: r.event.request.id,
+							optionId: allow.id,
+						});
+				}
+		};
+		try {
+			await expect
+				.poll(() => host.records.some((r) => r.event.kind === 'session.started'), {
+					timeout: 90000,
+				})
+				.toBe(true);
+			await client.command({
+				kind: 'prompt',
+				text: 'Add a function `sub(a, b)` that subtracts b from a to math.ts. Before anything else, call the brigadir tool set_task_class with class "medium" and reason "adds a function to the module API", then do what its answer says.',
+			});
+			const plan = await (async () => {
+				const end = Date.now() + 420000;
+				while (Date.now() < end) {
+					await allowOthers();
+					const found = host.records.find(
+						(r) =>
+							r.event.kind === 'permission.requested' &&
+							r.event.request.tool.category === 'switch_mode'
+					);
+					if (found?.event.kind === 'permission.requested') return found;
+					await new Promise((r) => setTimeout(r, 1000));
+				}
+				throw new Error('No plan for approval');
+			})();
+			const switched = host.records.find((r) => r.event.kind === 'plan.mode');
+			expect(switched?.event).toMatchObject({
+				on: true,
+				by: 'host',
+				option: 'collaboration_mode',
+				value: 'plan',
+			});
+			expect(
+				host.records.some(
+					(r) => r.event.kind === 'turn.started' && r.event.crew?.kind === 'plan-ask'
+				)
+			).toBe(true);
+			expect(host.records.some((r) => r.event.kind === 'plan.document')).toBe(true);
+			if (plan.event.kind !== 'permission.requested') throw new Error('unreachable');
+			const option = planApproveOption(plan.event.request)!;
+			await client.command({
+				kind: 'answerPermission',
+				id: plan.event.request.id,
+				optionId: option.id,
+			});
+			const end = Date.now() + 300000;
+			while (Date.now() < end) {
+				await allowOthers();
+				if (host.records.some((r) => r.seq > plan.seq && r.event.kind === 'turn.completed')) break;
+				await new Promise((r) => setTimeout(r, 1000));
+			}
+			const after = host.records.filter((r) => r.seq > plan.seq);
+			const options = after.findLast((r) => r.event.kind === 'options.changed')?.event;
+			expect(
+				options?.kind === 'options.changed' &&
+					options.options.find((o) => o.id === 'collaboration_mode')?.value
+			).toBe('default');
+			expect(await readFile(join(repo, 'math.ts'), 'utf8')).toMatch(/sub/);
+		} finally {
+			if (process.env.BRIGADIR_LIVE_OUT)
+				await writeFile(join(root, 'journal.json'), JSON.stringify(host.records, null, 1));
+			client.close();
+			await host.stop();
+			if (!process.env.BRIGADIR_LIVE_OUT) await rm(root, { recursive: true, force: true });
+		}
+	},
+	900000
 );

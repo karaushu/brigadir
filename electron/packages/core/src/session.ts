@@ -196,6 +196,20 @@ export type SessionEvent =
 			files?: number;
 			lines?: number;
 	  }
+	/** spec/reviews#plan-mode: the host switched the session into its plan mode for the class's plan, or back after the approval; the person moved it off. */
+	| {
+			kind: 'plan.mode';
+			on: boolean;
+			by: 'host' | 'person';
+			class: 'medium' | 'large';
+			/** The option's id; absent for a legacy mode. */
+			option?: string;
+			name: string;
+			value: string;
+			valueName: string;
+			previous?: string;
+			previousName?: string;
+	  }
 	/** spec/smoke-run#data: the agent started a smoke run; `limitMs` is the setting's limit then. */
 	| { kind: 'smoke.started'; id: string; steps: string[]; limitMs: number }
 	/** spec/smoke-run#limit: the person's `+5 min`; `limitMs` is the new total. */

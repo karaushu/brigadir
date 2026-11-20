@@ -468,6 +468,7 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Auto (reviewer) | Авто | Who reviews by default: another signed-in agent, else a fresh session of the task's own. | |
 | Small · Medium · Large | Мала · Середня · Велика | The task's class, a pill in the chat row; `class` / `клас` before it. | «Маленька», «Невелика» |
 | review before PR · plan · plan review · reviews · workers | ревʼю перед PR · план · ревʼю плану · ревʼю · воркери | What a class adds, after its reason in the chat row. | |
+| plan mode · for a Medium task · after the approved plan | режим плану · для середньої задачі · після погодженого плану | The row of the host's switch into the agent's plan mode for a class, and back after the approval. | |
 | more than a small task | більше за малу задачу | The tripwire's review row: a small task grew past its limit. | |
 | Small task limit | Межа малої задачі | Settings ▸ Agents ▸ Reviews: files and changed lines past which a small task gets a mid-task review. | «поріг», «ліміт» |
 

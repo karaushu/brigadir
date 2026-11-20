@@ -1470,6 +1470,7 @@ export function Conversation({
 				e.kind === 'review.finished' ||
 				e.kind.startsWith('task-review.') ||
 				e.kind === 'task.class' ||
+				e.kind === 'plan.mode' ||
 				(e.kind === 'crew.review' && e.taskId === task.id)
 			)
 				return <ReviewEventRow task={task} record={row.record} locale={locale} />;

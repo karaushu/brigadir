@@ -311,6 +311,17 @@ const checks: Record<string, Check> = {
 			lines: number,
 		}
 	),
+	'plan.mode': object(
+		{
+			on: (v) => typeof v === 'boolean',
+			by: (v) => v === 'host' || v === 'person',
+			class: (v) => v === 'medium' || v === 'large',
+			name: text,
+			value: text,
+			valueName: text,
+		},
+		{ option: text, previous: text, previousName: text }
+	),
 	'task-review.findings': object(
 		{
 			id: isId,

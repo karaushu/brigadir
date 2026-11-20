@@ -159,6 +159,7 @@ Only differences from Claude are listed. `codex-acp` is a Node wrapper over `cod
 | System prompt | `sessionCapabilities.systemPrompt: {}`: `append` mode with text blocks only, on new, load and fork. It is joined to the configured `developer_instructions`; a changed one on a loaded, busy thread is refused. |
 | Compaction | Config key `model_auto_compact_token_limit` (also `model_auto_compact_token_limit_scope` and `model_post_turn_compact_threshold_percent`, unused). With `session.compaction` declared, `compaction_update` without sizes; the sizes come from `usage_update`, sent after each request. A compaction under a configured limit was not observed in a run. |
 | Permissions | None requested in `agent` mode for reads, commands or edits in the work tree. |
+| Plan collaboration | `session/set_config_option` `collaboration_mode` is accepted between turns and during one; it applies from the next turn (`thread/settings/update`). In `plan` a turn that ends with a plan asks `Implement this plan?` (`switch_mode`); `implement` switches back to `default` and continues the same prompt. |
 
 <a id="mapper-rules"></a>
 ### Mapper rules for both adapters

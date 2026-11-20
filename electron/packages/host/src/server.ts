@@ -163,6 +163,7 @@ import {
 	type PresentedPlan,
 } from './task-review';
 import { TaskClassLife, readSmallTaskLimit } from './task-class';
+import { PlanModeLife } from './plan-mode';
 import { SmokeLife, readSmokeMinutes } from './smoke';
 /** spec/smoke-run#start: the smoke run's tools and `ready_to_look`, also of a crew developer. */
 const smokeTools: ReadonlySet<string> = new Set(['smoke_start', 'smoke_report', 'ready_to_look']);
@@ -459,13 +460,25 @@ export async function startHost(config: HostConfig) {
 	/** spec/reviews#classes: a solo task or an Auto agent that writes code has a class; a foreman, a worker and a reviewer have none. */
 	const classTask =
 		(!crew || crew.role === 'auto') && task.readOnlyAgent !== true && !isMainTree(config.key);
+	/** spec/reviews#plan-mode: the host switches the session into its plan mode between turns while the class owes a plan. */
+	const planMode = new PlanModeLife({
+		records: () => records,
+		emit: (event) => emit(event),
+		eligible: classTask && task.transport !== 'terminal',
+		send: async (change) => {
+			if (!transport) throw new Error('Agent is not available');
+			await transport.send(change);
+		},
+		ask: (text) => command({ kind: 'prompt', text, crew: { kind: 'plan-ask' } }),
+		stopping: () => stopping,
+	});
 	const taskClass = new TaskClassLife({
 		records: () => records,
 		emit: (event) => emit(event),
 		eligible: classTask,
 		readOnly: task.readOnlyAgent === true,
 		auto: autoTask,
-		provider: task.provider ?? 'claude',
+		planMode: () => planMode.state(),
 		limit: () => readSmallTaskLimit(store.root),
 		// spec/smoke-run#brief
 		smoke: () => modules.current().browser || modules.current().simulator,
@@ -964,6 +977,8 @@ export async function startHost(config: HostConfig) {
 			]);
 			transport.validateAttachments(attachments.map((value) => value.input));
 			pieces = await dueAssignment(c.kind === 'prompt' ? (c.assignment ?? null) : null);
+			// spec/reviews#plan-mode: between turns only — the session goes into its plan mode before a turn while the class owes a plan.
+			await planMode.beforeTurn();
 			await checkpoint('turn');
 			await emit({
 				kind: 'turn.started',
@@ -1990,6 +2005,9 @@ export async function startHost(config: HostConfig) {
 		if (event.kind === 'crew.hire.resolved' && event.approved && event.hired.length)
 			void taskClass.hired().catch(() => {});
 		if (event.kind === 'crew.worker.dismissed') void taskClass.dismissed().catch(() => {});
+		// spec/reviews#plan-mode: back from the plan mode after an approval, and the ask for a plan still owed.
+		if (event.kind === 'turn.completed')
+			void planMode.turnEnded(event.reason === 'cancelled').catch(() => {});
 	}
 	/** The plan requests the review has heard of: the journal row and the waiting request come in either order (the transport writes the row first). */
 	const presentedPlans = new Set<string>();
@@ -2981,7 +2999,10 @@ export async function startHost(config: HostConfig) {
 						? (({ answersPlan: _answersPlan, ...rest }) => rest)(c)
 						: c;
 				// spec/reviews#plan-loop: the findings of a plan review answered the waiting plan, so they run before what is queued.
-				const front = c.kind === 'submitReview' && planAnswered.delete(c.review.id);
+				// spec/reviews#plan-mode: so does the host's ask for the plan a class owes.
+				const front =
+					(c.kind === 'submitReview' && planAnswered.delete(c.review.id)) ||
+					(c.kind === 'prompt' && c.crew?.kind === 'plan-ask');
 				// spec/crew#auto-budget: the person's message continues a worker stopped at its part budget, before what waited meanwhile; the
 				// stop is lifted once the message is taken.
 				const resumes = overBudget && c.kind === 'prompt' && !c.crew;
@@ -3048,6 +3069,8 @@ export async function startHost(config: HostConfig) {
 		if (busy) throw new Error('Wait for the active turn before changing options');
 		if (c.kind === 'setMode' || c.kind === 'setOption') modeReturn = null;
 		await transport.send(c);
+		// spec/reviews#plan-mode: the person's own move off the plan mode the host set is kept.
+		if (c.kind === 'setMode' || c.kind === 'setOption') await planMode.person(c).catch(() => {});
 	}
 	/** spec/agents-and-providers#sign-in-recovery: the failed turn again, on a fresh adapter process (a process whose token refresh failed need not reread the
 	 *  Keychain). `auth`: sent to every host after a sign-in; a host whose last failure was something else ignores it. */

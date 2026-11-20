@@ -206,7 +206,7 @@ Why one switch per module: every MCP tool goes into the context of every session
 <a id="intro-steps"></a>
 ### Steps
 
-The order is Welcome, Appearance, Agents, Crew, Git and GitHub, Editor, Tasks, Modules, Notifications, Keyboard shortcuts, Remote access, First project, All set.
+The order is Welcome, Appearance, Agents, Crew, Git and GitHub, Editor, Tasks, Modules, Notifications, Keyboard shortcuts, Remote access, Brigadir, First project, All set.
 
 | Step | Card contents | Spotlight / window |
 | --- | --- | --- |
@@ -221,6 +221,7 @@ The order is Welcome, Appearance, Agents, Crew, Git and GitHub, Editor, Tasks, M
 | `Notifications` | `When` options with descriptions; when not `Never`: `Sound` row and `macOS permission` row (macOS only) with `Allow` | demo banner |
 | `Keyboard shortcuts` | `KeymapEditor`: preset `Brigadir` / `VS Code` / `IntelliJ`, every menu shortcut in sections (General, Chat, Editor, Changes, Console, Browser, View …), search by action or keys; click a shortcut to record, Esc cancels; conflicts show in the row, with `Replace` for a command conflict and only `Cancel` for a reserved key | card centred |
 | `Remote access` | see [Remote access step](#intro-remote) | `Remote` tile while access is on |
+| `Brigadir` | title `Brigadir`, `Ask about tasks and code, change settings or set things up — in a chat.`; three rows with a glyph: `Tasks and code` (`What is up with my tasks in {project}? How does {project} work out …?`), `Settings` (`Make the code font one size bigger. Three columns instead of two.`), `Setups` (`Set up a Slack bot for me. Turn on access from my laptop.`); fact `The helmet in the rail opens it, or ⌃⌘5. In Search Everywhere, the last row asks Brigadir.` Next turns nothing on | the `Brigadir` rail tile; the window shows the Brigadir section with its `Setups` list and the example tiles ([Brigadir chat](#brigadir-chat-entry)) |
 | `First project` | "Drag a folder here, or" `Choose a folder…`; then the folder name and path, `Another folder…`, found repos appearing one by one (260 ms apart) with their kind (`Root`, `Submodule`, `Separate repo`, `Worktree`, `Folder`) | project list |
 | `All set` | "Settings are always in ⌘,", `Go through again`, `Restart` (if needed), `New task ⌘N` (closes the intro and opens New task for the added project) | — |
 

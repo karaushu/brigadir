@@ -20,6 +20,16 @@ it('names the project, the task and what could not be read; the path stays for a
 		what: 'Task',
 	});
 	expect(line('projects/p1/tasks/t1/host.json')).toMatchObject({ what: 'Agent' });
+	// spec/pull-requests-and-ci#github-status: git could not read the task's repository state.
+	expect(
+		readIssueLine({ path: 'projects/p1/tasks/t1/git', code: 'git_failed' }, projects, tasks)
+	).toEqual({
+		project: 'business',
+		task: 'Client details',
+		what: 'Git',
+		reason: 'Git could not read the repository.',
+		path: 'projects/p1/tasks/t1/git',
+	});
 	// A task.json that does not read has no title: the project names it.
 	expect(line('projects/p1/tasks/t9/task.json')).toMatchObject({
 		project: 'business',

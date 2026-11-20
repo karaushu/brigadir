@@ -22,6 +22,7 @@ import {
 	type GitPublishState,
 	type ForgePush,
 	type HelperRun,
+	type WorkspaceSnapshot,
 } from '@brigadir/core';
 import {
 	SessionStore,
@@ -125,6 +126,11 @@ export class ForgeActions {
 	cancelAll() {
 		for (const controller of this.generators.values()) controller.abort();
 	}
+	/**
+	 * spec/pull-requests-and-ci#github-status, spec/architecture-and-platform#read-issues: GitHub's own failures (gh, network, auth) stay in the snapshot
+	 * and its toast; a read that throws failed locally (git, the task's snapshots) and is a read issue of the task until a read succeeds.
+	 */
+	private localFailures = new Map<string, TaskKey>();
 	/** `fresh` — window focus, an explicit refresh or our own operation: auth, PR and checks skip the cache. */
 	read(key: TaskKey, remote: boolean, fresh = false): Promise<ForgeSnapshot> {
 		const id = keyName(key),
@@ -133,11 +139,25 @@ export class ForgeActions {
 		const work = this.readNow(key, remote, fresh);
 		this.reads.set(id, work);
 		void work
+			.then(
+				() => this.localFailures.delete(id),
+				() => this.localFailures.set(id, { projectId: key.projectId, id: key.id })
+			)
 			.finally(() => {
 				if (this.reads.get(id) === work) this.reads.delete(id);
 			})
 			.catch(() => {});
 		return work;
+	}
+	/** spec/architecture-and-platform#read-issues: the tasks whose repository state git could not read, while the task still exists. */
+	decorate(workspace: WorkspaceSnapshot): WorkspaceSnapshot {
+		for (const key of this.localFailures.values())
+			if (workspace.tasks.some((task) => task.projectId === key.projectId && task.id === key.id))
+				workspace.issues.push({
+					path: `projects/${key.projectId}/tasks/${key.id}/git`,
+					code: 'git_failed',
+				});
+		return workspace;
 	}
 	// GitHub answers are cached per repo, shared by tasks: repo metadata 10 min; auth `ready` 5 min, PR and checks 20 s —
 	// for task switches (`fresh` skips them). One identical request in flight; the gh process limit is in Forge. Errors are not cached.

@@ -14,12 +14,15 @@ const reasons: Record<ReadIssueCode, MessageKey> = {
 	unsupported_schema: 'The file uses a newer schema.',
 	unreadable: 'The file could not be read.',
 	unsafe_path: 'The data location is not allowed.',
+	git_failed: 'Git could not read the repository.',
 };
 const taskFiles: Record<string, MessageKey> = {
 	'task.json': 'Task',
 	'events.jsonl': 'Chat',
 	'snapshots.json': 'Changes',
 	'host.json': 'Agent',
+	// spec/architecture-and-platform#read-issues: the repository state of the task (branch, base, remote), read with git.
+	git: 'Git',
 };
 const rootFiles: Record<string, MessageKey> = {
 	projects: 'Projects',

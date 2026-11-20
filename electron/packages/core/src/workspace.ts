@@ -189,7 +189,12 @@ export type AgentTask = {
 		import('./task-tokens').TokenHold | null;
 };
 export type ReadIssueCode =
-	'invalid_document' | 'unsupported_schema' | 'unreadable' | 'unsafe_path';
+	| 'invalid_document'
+	| 'unsupported_schema'
+	| 'unreadable'
+	| 'unsafe_path'
+	/** spec/architecture-and-platform#read-issues: a task's repository state (branch, base, remote) could not be read with git. */
+	| 'git_failed';
 export type ReadIssue = { path: string; code: ReadIssueCode };
 /** Desktop may include its home directory for display-only path abbreviation. */
 export type WorkspaceSnapshot = {

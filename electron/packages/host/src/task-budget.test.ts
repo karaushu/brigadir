@@ -308,6 +308,45 @@ it("a crew member holds its queue while the root is held, and resumes when the r
 	expect((doc.task as AgentTask).tokenBudget).toBeUndefined();
 }, 45_000);
 
+it("a reviewer of a worker's own review counts toward the root and holds with it", async () => {
+	const { store, task: root } = await setup({ claude: 1000 });
+	const base = taskReviewSpec('claude', []),
+		node: CrewSpecAgent = {
+			...base.root,
+			id: 'review-r1',
+			name: 'Reviewer',
+			role: 'reviewer',
+			checkedBy: [],
+			agents: [],
+		};
+	const worker = await store.createTask(root.projectId, 'Worker', 'claude');
+	await store.updateTask(worker, {
+		crewTaskId: root.id,
+		crewNodeId: 'w-1',
+		parentTaskId: root.id,
+		reviewCrew: taskReviewSpec('claude', [node]),
+	});
+	// The worker's own review: its reviewer carries the worker as `crewTaskId` (spec/reviews#reviewer-sessions).
+	const reviewer = await store.createTask(root.projectId, 'Reviewer', 'claude');
+	await store.updateTask(reviewer, {
+		crewTaskId: worker.id,
+		crewNodeId: 'review-r1',
+		parentTaskId: worker.id,
+		tokens: { input: 900, cacheWrite: 200, output: 0, cacheRead: 0, estimate: 0, running: false },
+	});
+	const rootHost = await launch(store, root);
+	const reached = await find(rootHost.client, kind('budget.reached'), 8000);
+	expect(reached.event).toMatchObject({ tokens: 1100, budget: 1000 });
+	await until(async () =>
+		(await store.task(root)).tokenHold?.state === 'asked' ? true : undefined
+	);
+	const { client } = await launch(store, reviewer);
+	await client.command({ kind: 'prompt', text: 'spend 1' });
+	await find(client, kind('prompt.queued'));
+	await delay(400);
+	expect((await records(client)).some(kind('turn.started'))).toBe(false);
+}, 45_000);
+
 it('a new task takes the default budget from the settings', async () => {
 	const { store, task } = await setup();
 	await atomicJson(join(store.root, 'settings.json'), {

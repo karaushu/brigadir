@@ -12,6 +12,7 @@ import {
 	taskTokenSum,
 	tokenCount,
 	tokenMembers,
+	budgetRoot,
 	type AgentProvider,
 	type AgentTask,
 	type BudgetDecision,
@@ -52,10 +53,7 @@ export function tokensView(
 	locale: Locale
 ): TaskTokensView {
 	const member = Boolean(task.crewTaskId && task.crewTaskId !== task.id),
-		root = member
-			? (tasks.find((item) => item.id === task.crewTaskId && item.projectId === task.projectId) ??
-				task)
-			: task,
+		root = member ? budgetRoot(task, tasks) : task,
 		own = member ? [task] : tokenMembers(root, tasks),
 		sum = member ? taskTokenSum(task, [task]) : taskTokenSum(root, tasks),
 		budget = member ? undefined : root.tokenBudget;

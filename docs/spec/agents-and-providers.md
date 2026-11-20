@@ -176,7 +176,7 @@ Only differences from Claude are listed. `codex-acp` is a Node wrapper over `cod
 | Usage | `usage_update {used, size}` only; no quota over ACP (codex-acp swallows `account/rateLimits/updated`). `PromptResponse.usage` and `_meta.quota` count only the last request of a turn. |
 | Session info | `session_info_update.title` (auto thread name) maps to `session.info`. |
 | System prompt | `sessionCapabilities.systemPrompt: {}`: `append` mode with text blocks only, on new, load and fork. It is joined to the configured `developer_instructions`; a changed one on a loaded, busy thread is refused. |
-| Compaction | Config key `model_auto_compact_token_limit` (also `model_auto_compact_token_limit_scope` and `model_post_turn_compact_threshold_percent`, unused). With `session.compaction` declared, `compaction_update` without sizes; the sizes come from `usage_update`, sent after each request. A compaction under a configured limit was not observed in a run. |
+| Compaction | Config key `model_auto_compact_token_limit` (also `model_auto_compact_token_limit_scope` and `model_post_turn_compact_threshold_percent`, unused: [compaction is the agent's](#compaction-cost)). With `session.compaction` declared, `compaction_update` without sizes; the sizes come from `usage_update`, sent after each request. A compaction under a configured limit was not observed in a run. |
 | Permissions | None requested in `agent` mode for reads, commands or edits in the work tree. |
 
 <a id="mapper-rules"></a>

@@ -100,6 +100,17 @@ const verbs = {
 	request_review: ['Asking for a review', 'Asked for a review', 'Could not ask for a review'],
 	save_source: ['Saving a source', 'Saved a source', 'Could not save the source'],
 	set_task_class: ['Setting the task class', 'Set the task class', 'Could not set the task class'],
+	smoke_start: ['Starting the smoke run', 'Started the smoke run', 'Could not start the smoke run'],
+	smoke_report: [
+		'Filing the smoke report',
+		'Filed the smoke report',
+		'Could not file the smoke report',
+	],
+	ready_to_look: [
+		'Telling you a screen is ready',
+		'Told you a screen is ready',
+		'Could not tell you about the screen',
+	],
 	submit_design_review: [
 		'Filing the design review',
 		'Filed the design review',
@@ -239,7 +250,10 @@ export function mcpModule(tool: string): McpModule {
 		tool === 'propose_review' ||
 		tool === 'request_review' ||
 		tool === 'review_reply' ||
-		tool === 'set_task_class'
+		tool === 'set_task_class' ||
+		tool === 'smoke_start' ||
+		tool === 'smoke_report' ||
+		tool === 'ready_to_look'
 	)
 		return 'human';
 	if (tool === 'editor_state' || tool === 'editor_restart_language_servers') return 'editor';
@@ -747,6 +761,19 @@ export function mcpRow(
 		case 'set_task_class': {
 			detail = plain(isTaskClass(a.class) ? t(locale, taskClassLabel[a.class]) : null);
 			text = str(a.reason);
+			break;
+		}
+		// spec/smoke-run#start: the flows of the run; the report's summary; the screen that can be looked at.
+		case 'smoke_start': {
+			text = Array.isArray(a.steps) ? a.steps.map(String).join('\n') : null;
+			break;
+		}
+		case 'smoke_report': {
+			text = str(a.summary);
+			break;
+		}
+		case 'ready_to_look': {
+			detail = plain(str(a.screen));
 			break;
 		}
 		// spec/reviews#request-tool: what the agent finished, and the host's answer.

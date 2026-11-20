@@ -454,6 +454,9 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Design review | Ревʼю дизайну | A screen checked against its Figma design node by node on the device, as a table per node (spec/design-review). `Design review passed` / `Ревʼю дизайну пройдено`. | «Контракт дизайну», «Перевірка дизайну» |
 | Property · Expected · On device | Властивість · Очікується · На пристрої | The columns of a design review's table. | |
 | mismatch · old screenshot · no screenshot · no design image | розбіжність · старий знімок · без знімка · без зображення дизайну | The tags of a design review's rows; `before the last change` / `до останньої зміни` under an old screenshot. | |
+| Smoke run | Smoke-прогін | One pass of an agent through the flows a change touches in the running app, under a time limit the host enforces (spec/smoke-run). In a service row `smoke`. | «тест», «перевірка» |
+| Smoke run limit | Межа smoke-прогону | The minutes after which the host stops a smoke run and asks for the report. | «ліміт», «стеля» |
+| Ready to look | Можна дивитись | The agent's notice that a screen is assembled and can be looked at; in a service row `ready` / `готово`. Not a question: the agent works on. | «Готово до перегляду» |
 | Plan vs ticket · Plan vs code · Gaps in the ticket | План і тикет · План і код · Прогалини в тикеті | The three lists of a plan review: what the author fixes (the first two) and the ticket's own gaps, which are questions for the person. | |
 | missed · contradicts · out of scope · wrong assumption · left open · cannot verify · split | пропущено · суперечить · поза задачею · хибне припущення · не вирішено · не перевірити · поділ | The kinds of a plan finding. | |
 | Gap | Прогалина | What the ticket itself leaves open; goes to the person, not to the author. Plural `1 прогалина · 2 прогалини · 5 прогалин`. | «питання» |

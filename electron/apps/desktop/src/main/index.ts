@@ -1398,7 +1398,11 @@ const notifications = new Notifications({
 	answerPermission: (key, id, optionId) =>
 		sessions.command(key, { kind: 'answerPermission', id, optionId }),
 	openTask,
-	// spec/remote-access-and-mobile#phone: the same notice reaches the paired phones as a Web Push.
+	// spec/smoke-run#ready-surfaces: a click on `Ready to look` opens the screen as the chat row's `Show` does.
+	showScreen: (key, ready) =>
+		ready.where === 'browser' && ready.tab
+			? clients.broadcast('browser:show', { key, tab: ready.tab, front: true })
+			: clients.broadcast('simulator:event', { show: key }),
 	push: (type, task, key) => remoteAccess.pushPhones(type, task, key),
 	badge: (count) => {
 		routedNotices.badge(count);

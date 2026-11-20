@@ -146,6 +146,7 @@ import {
 	useTaskTokens,
 } from './TaskUsage';
 import { ReviewEventRow, ReviewProposalRow, ReviewStrip, useReviewStripShown } from './TaskReview';
+import { ReadyRow, SmokeEventRow, SmokeStrip, useSmokeRun } from './SmokeRun';
 import { DesignReviewRow } from './DesignReview';
 import styles from './Conversation.module.css';
 const ToolTerminal = lazy(() => import('./ToolTerminal'));
@@ -186,6 +187,9 @@ const sendFailures: Partial<Record<SessionCommand['kind'], MessageKey>> = {
 	stopSubagent: 'Could not stop the subagent.',
 	setTokenBudget: 'Could not change the budget.',
 	decideBudget: 'Could not send the answer to the agent.',
+	// spec/smoke-run#deck: `+5 min` and `Stop` on the smoke run's row.
+	extendSmoke: 'Could not change the smoke run.',
+	stopSmoke: 'Could not change the smoke run.',
 };
 /** Texts the composer editor reports as they are; anything else it reports is the raw failure of the `@` file search. */
 const editorFailures: readonly MessageKey[] = [
@@ -443,6 +447,8 @@ export function Conversation({
 	const usage = records.findLast((r) => r.event.kind === 'usage.changed')?.event;
 	const hostConnected = Boolean(snapshot?.connected);
 	const reviewStrip = useReviewStripShown(task);
+	// spec/smoke-run#deck: the smoke run's row stands in the deck while a run is open.
+	const smokeRun = useSmokeRun(records);
 	// spec/architecture-and-platform#host-lifecycle: a host stopped for idleness is not a stopped agent: no banner, and the next message starts it again.
 	const idle = task.transport !== 'terminal' && !snapshot?.issue && idleStopped(records);
 	// A host up only for the task's consoles (spec/task-window-workspace#restore-window) is connected without an agent: the Resume banner, not a prompt it refuses.
@@ -1456,6 +1462,10 @@ export function Conversation({
 					/>
 				);
 			}
+			// spec/smoke-run#chat, spec/smoke-run#ready-surfaces
+			if (e.kind === 'smoke.reported' || e.kind === 'smoke.dropped')
+				return <SmokeEventRow event={e} locale={locale} />;
+			if (e.kind === 'task.ready') return <ReadyRow task={task} event={e} locale={locale} />;
 			// spec/chat#context-compacted
 			if (e.kind === 'context.compacted') return <ContextCompactedRow event={e} locale={locale} />;
 			// spec/browser-and-simulator#sim-chat-row
@@ -2016,7 +2026,7 @@ export function Conversation({
 					locale={locale}
 					send={send}
 					review={
-						reviewStrip || pending.budget ? (
+						reviewStrip || pending.budget || smokeRun ? (
 							<>
 								{/* spec/chat-turns-plans-and-questions#budget-strip: the budget question over the composer while it waits. */}
 								{pending.budget && (
@@ -2025,6 +2035,18 @@ export function Conversation({
 										view={tokens}
 										locale={locale}
 										disabled={!hostConnected || sending}
+										send={(c) => {
+											void send(c);
+										}}
+									/>
+								)}
+								{/* spec/smoke-run#deck: the smoke run's own row, above the Review strip. */}
+								{smokeRun && (
+									<SmokeStrip
+										task={task}
+										records={records}
+										locale={locale}
+										disabled={!hostConnected}
 										send={(c) => {
 											void send(c);
 										}}

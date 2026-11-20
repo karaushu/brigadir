@@ -37,6 +37,7 @@ The Settings tab **Notifications** sits between Language and Agents. `settings.j
 | `rate-limited` | `rate-limit.changed` with `rejected`, on the transition into a block | `mode` ≠ `off` |
 | `scope-violation` | `scope.violation` (a read-only repo changed) | `mode` ≠ `off` |
 | `page` | a page notification from the task's browser ([Browser](browser-and-simulator.md#notifications)) | `mode` ≠ `off` |
+| `ready` | `task.ready` — the agent's [Ready to look](smoke-run.md#ready-surfaces); not `needs-you`: no badge and no `Needs you` entry | `mode` ≠ `off`; its sound is the `Turn ended` slot, only when the sound's `When` is `When a turn ends` |
 
 - While a task is rate-limited, `failed` and `turn-ended` notices are suppressed.
 - Never notified: progress, individual tool calls.

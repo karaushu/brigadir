@@ -241,7 +241,7 @@ The **roster** (`roster`) lists each child with summary, provider · model · ef
 One paragraph of the core (`verification` in `brief.ts`), so it reaches every foreman and lead, composing or not:
 
 1. **A worker proves its part with the command its prompt names** (a test, a typecheck, a build). The foreman does not ask every worker to drive the simulator or the browser.
-2. **A check in the running app is a smoke:** the flows the change touches, run **once, on the integrated work** (a part given after the parts it covers were accepted), **by one agent**, within a time box the part prompt states, 10 minutes unless the task needs another.
+2. **A check in the running app is a smoke:** the flows the change touches, run **once, on the integrated work** (a part given after the parts it covers were accepted), **by one agent**, with `smoke_start` and `smoke_report` under the limit the host enforces ([Smoke run](smoke-run.md)).
 3. **Not a test matrix:** no list of checks with a screenshot each, no repeats to be sure, and no run per device or configuration unless the task is about that device.
 4. **Nobody reviews the smoke report.** The foreman reads it and decides; a defect it finds is a part to fix, not a reason for another round of checks. The agent that runs the smoke gets no reviewer.
 5. **Design fidelity is the designer's check**, not the smoke's. A part a designer checks names its design source in its prompt: a Figma node or frame, a mock-up file or a reference screen.
@@ -307,7 +307,7 @@ Workers never start before the person approves the root foreman's plan.
 | `parts[]` | 1–64; each `title` (≤ 80), `agent` (a child name), `prompt` (≤ 100 000), `files` (≤ 1024 project-relative paths or globs; empty = the agent's whole zone/scope), `scopes` |
 | `crew[]` | only when composing; see [Composing the crew](#compose) |
 
-- **Prompts of check parts** (the brief asks for them; the host does not check them): a smoke part names the flows, its time box (10 minutes by default) and that it reports and stops; a part a designer checks names its design source ([Checks in the running app](#smoke)).
+- **Prompts of check parts** (the brief asks for them; the host does not check them): a smoke part names the flows and that it runs them as a smoke run (`smoke_start`, `smoke_report`); a part a designer checks names its design source ([Checks in the running app](#smoke)).
 - The host validates parts against the crew (`planDifferences`): `unknown_agent`, `reviewer_part`, `duplicate_agent` (one part per agent at a time), `outside_zone`, `empty`, and the non-blocking `idle_agent`. Any blocking difference is a tool error listing the messages (`The plan does not match the crew: …`), not a card. `crew` without composing → `Your crew is already set; call propose_plan without crew.` Only one plan may wait at a time.
 - The card lets the person edit part titles, prompts, agents and files; differences introduced by edits are shown on the card and block `Start workers` (`planBlocked`; idle agents only show). Agent names arrive pre-filled in editable fields.
 - `Start workers` approves; `Reject` rejects (the foreman revises or asks). The tool result returns `approved`, the possibly edited parts and the difference messages.
@@ -600,7 +600,6 @@ The crew is one task for the [token budget](agents-and-providers.md#task-budget)
 - Foreman indicators (worst context) aggregated over its workers; tokens per accepted part on the plan card.
 - Raising a worker's effort automatically after a disputed check.
 - The design check as a host step: the contract table per design node, with the host verifying that each row's screenshot exists.
-- The smoke as a host step with a time box the host enforces: at the limit it stops the run and asks for the report.
 
 <a id="non-goals"></a>
 ## Non-goals

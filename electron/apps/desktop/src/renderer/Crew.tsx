@@ -725,6 +725,8 @@ export function CrewEventRow({
 			marker.kind === 'part-dropped' ||
 			marker.kind === 'review-comments' ||
 			marker.kind === 'review-continue' ||
+			// spec/smoke-run#limit: the host's ask for the smoke report is not the person's message.
+			marker.kind === 'smoke-report' ||
 			marker.kind === 'hire-decision' ||
 			marker.kind === 'zone-touched'
 		)

@@ -372,6 +372,8 @@ export type SelfReviewHooks = {
 		reviewId: string,
 		round: readonly { tree: string }[]
 	): Promise<DesignGateInput | null>;
+	/** spec/reviews#smoke: the task's newest smoke report for the reviewer; empty without the browser and the simulator. */
+	smoke?(): string;
 };
 /** spec/reviews#loop: a file of one repo — the same path in two repos of a project is two files. */
 export const scopedPath = (scopeId: string, path: string) => `${scopeId}\0${path}`;
@@ -3332,7 +3334,7 @@ export class CrewHost {
 			guidance = this.deps.self?.guidance() ?? '';
 		if (this.deps.self?.point() === 'plan')
 			return this.deps.self.planPrompt(run.taskId, run.reviewId, run.round, reviewer.name);
-		const design = await this.designParagraph(run, reviewer);
+		const design = `${await this.designParagraph(run, reviewer)}${this.deps.self?.smoke?.() ?? ''}`;
 		if (run.round <= 1)
 			return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, first read).\n${report}${brief}\nThis is the ${point} of the task's changes. The files of your tree are the task's state now. Read with read_report and read_diff passing this reviewId, once and in full: this is the only read, and nothing new can be raised later. Check the change against the task above. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). ${findingRule(true)} Do not change files.${design}${guidance}`;
 		const path = await safePath(await this.deps.store.taskDir(this.deps.key), 'review.json');

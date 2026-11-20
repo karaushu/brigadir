@@ -240,6 +240,7 @@ The «what is it doing now» line, derived in main and never written to `task.js
 | `question` | `question.requested` | `Question · {text}` |
 | `proposal` | `task.proposal.requested` | `New task · {title}` |
 | `review` | `task-review.verified` with open or new findings | `Review · {N findings} open` ([Reviews](reviews.md#surfaces)) |
+| `ready` | `task.ready` | `Ready to look` in `--accent`; a tool activity after it does not replace it, a request does ([Ready to look](smoke-run.md#ready-surfaces)) |
 | — | `tokenHold` in `task.json` while the [budget question](agents-and-providers.md#budget-reached) waits | `{Provider} budget reached` (amber, like a question) |
 | none | — | `Waiting for the repo` when blocked by a lock, else the state label |
 

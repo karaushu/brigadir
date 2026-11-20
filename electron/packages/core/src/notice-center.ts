@@ -26,6 +26,8 @@ export type NoticeEntryKind =
 	| 'review'
 	/** A page's notification in the task's browser (spec/browser-and-simulator#notifications). */
 	| 'page'
+	/** spec/smoke-run#ready-surfaces: the agent's Ready to look. */
+	| 'ready'
 	| 'error'
 	| 'warning'
 	| 'info'
@@ -46,6 +48,7 @@ export const noticeEntryKinds: readonly NoticeEntryKind[] = [
 	'worker',
 	'review',
 	'page',
+	'ready',
 	'error',
 	'warning',
 	'info',

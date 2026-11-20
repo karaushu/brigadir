@@ -90,3 +90,26 @@ export function DeckRowButton({
 		</button>
 	);
 }
+/** spec/smoke-run#deck: a deck row's state glyph in its tone (rule 17: one look for every deck row's glyph). */
+export function DeckRowGlyph({
+	tone,
+	children,
+}: {
+	tone?: 'green' | 'amber' | 'red' | undefined;
+	children: ReactNode;
+}) {
+	return (
+		<span className={s.glyph} data-tone={tone}>
+			{children}
+		</span>
+	);
+}
+/** spec/smoke-run#deck: a deck row's text — the title in bold, then its state in muted text. */
+export function DeckRowText({ title, line }: { title: ReactNode; line?: ReactNode }) {
+	return (
+		<p>
+			<b className={s.title}>{title}</b>
+			{line ? <span className={s.muted}> {line}</span> : null}
+		</p>
+	);
+}

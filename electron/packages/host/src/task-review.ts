@@ -128,6 +128,8 @@ export type TaskReviewDeps = {
 	foreman: boolean;
 	/** spec/design-review#design-source: the Figma links of the task's prompt, saved sources and plans. */
 	designLinks?(): Promise<string[]>;
+	/** spec/reviews#smoke: the reviewer's smoke paragraph. */
+	smoke?(): string;
 };
 /**
  * spec/reviews#loop: the task side of its reviews — the agent's proposal, the review the person, the agent or the host started, and where it is
@@ -910,6 +912,8 @@ export class TaskReviewLife {
 			sources: (sourceId) => readSourcesForReview(this.deps.store, this.deps.key, sourceId),
 			design: (reviewerTaskId, reviewId, round) =>
 				this.designInput(reviewerTaskId, reviewId, round),
+			// spec/reviews#smoke: a plan review has no smoke paragraph (its prompt is its own).
+			smoke: () => this.deps.smoke?.() ?? '',
 			submitReview: async (text, batch) => {
 				await this.update({ batch: batch.id, passes: (this.doc.review?.passes ?? 0) + 1 });
 				await this.deps.submitReview(text, batch, Math.max(1, this.doc.review?.round ?? 1));

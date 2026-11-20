@@ -153,6 +153,8 @@ export type CrewTurnMarker =
 	| { kind: 'review-comments'; round: number; comments: number }
 	/** spec/reviews#loop: a mid-task review ended while the agent waited; it goes on with the task. */
 	| { kind: 'review-continue' }
+	/** spec/smoke-run#limit: the host asks for the report of a smoke run that is still open. */
+	| { kind: 'smoke-report' }
 	/** spec/crew#auto-hire: the person decided a hire after the agent's call was gone (its turn ended, or the host restarted). */
 	| { kind: 'hire-decision'; hireId: string; approved: boolean }
 	/** spec/crew#auto-guard: the Auto agent changed files of a zone it hired out. */
@@ -350,6 +352,7 @@ export function isCrewTurnMarker(value: unknown): value is CrewTurnMarker {
 				Number(value.comments) >= 0
 			);
 		case 'review-continue':
+		case 'smoke-report':
 			return Object.keys(value).length === 1;
 		case 'hire-decision':
 			return isId(value.hireId) && typeof value.approved === 'boolean';

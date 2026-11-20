@@ -1,6 +1,7 @@
 import type { ChangedFile } from './changes';
 import type { EventRecord, SessionEvent } from './session';
 import { isRecord } from './workspace';
+import { defaultSmokeMinutes, isSmokeMinutes } from './smoke';
 /**
  * spec/reviews#classes: the task's class — what the agent states before its first edit, what the host raises, and the tripwire's size of a
  * small task. Pure: the host decides with these, the chat draws them.
@@ -46,15 +47,34 @@ export function isSmallTaskLimit(value: unknown): value is SmallTaskLimit {
 		within(value.lines, smallTaskLimits.lines)
 	);
 }
-/** spec/settings-modules-and-onboarding#settings-keys: Settings ▸ Agents ▸ Reviews. */
-export type ReviewSettings = { smallTask: SmallTaskLimit };
-export const defaultReviewSettings: ReviewSettings = { smallTask: { ...defaultSmallTaskLimit } };
+/** spec/settings-modules-and-onboarding#settings-keys: Settings ▸ Agents ▸ Reviews; `smokeMinutes` — spec/smoke-run#limit. */
+export type ReviewSettings = { smallTask: SmallTaskLimit; smokeMinutes: number };
+export const defaultReviewSettings: ReviewSettings = {
+	smallTask: { ...defaultSmallTaskLimit },
+	smokeMinutes: defaultSmokeMinutes,
+};
 export function isReviewSettings(value: unknown): value is ReviewSettings {
-	return isRecord(value) && Object.keys(value).length === 1 && isSmallTaskLimit(value.smallTask);
+	return (
+		isRecord(value) &&
+		Object.keys(value).length === 2 &&
+		isSmallTaskLimit(value.smallTask) &&
+		isSmokeMinutes(value.smokeMinutes)
+	);
+}
+/** spec/settings-modules-and-onboarding#settings-keys: a `reviews` object written before `smokeMinutes` reads it as the default. */
+export function withReviewDefaults(value: unknown): unknown {
+	return isRecord(value) && !('smokeMinutes' in value)
+		? { ...value, smokeMinutes: defaultSmokeMinutes }
+		: value;
+}
+/** spec/smoke-run#limit: the limit a task's host reads from `settings.json`'s `settings` object at `smoke_start`. */
+export function smokeMinutesOf(settings: unknown): number {
+	const reviews = isRecord(settings) ? withReviewDefaults(settings.reviews) : null;
+	return isReviewSettings(reviews) ? reviews.smokeMinutes : defaultSmokeMinutes;
 }
 /** The limit a task's host reads from `settings.json`'s `settings` object; a missing or broken one reads as the default. */
 export function smallTaskLimitOf(settings: unknown): SmallTaskLimit {
-	const reviews = isRecord(settings) ? settings.reviews : null;
+	const reviews = isRecord(settings) ? withReviewDefaults(settings.reviews) : null;
 	return isReviewSettings(reviews) ? { ...reviews.smallTask } : { ...defaultSmallTaskLimit };
 }
 

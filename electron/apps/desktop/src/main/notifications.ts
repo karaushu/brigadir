@@ -18,6 +18,7 @@ import {
 	type PendingNotice,
 	type PendingNoticeKind,
 	type PermissionRequest,
+	type SessionEvent,
 	type SessionSnapshot,
 	type TaskKey,
 } from '@brigadir/core';
@@ -54,6 +55,8 @@ type Deps = {
 	taskTitle(key: TaskKey): Promise<string | null>;
 	answerPermission(key: TaskKey, id: string, optionId: string): Promise<unknown>;
 	openTask(key: TaskKey): void;
+	/** spec/smoke-run#ready-surfaces: show the screen of a `Ready to look` in its task — the simulator tab or the browser tab. */
+	showScreen?(key: TaskKey, ready: Extract<SessionEvent, { kind: 'task.ready' }>): void;
 	badge(count: number): void;
 	/** spec/notifications-slack-notes-and-schedules#notification-center: the notification center's history — what a notice says, whatever «When» and the OS permission are. */
 	log?(input: {
@@ -111,6 +114,8 @@ type TaskState = {
 	handles: Map<string, NoticeHandle>;
 	/** spec/notifications-slack-notes-and-schedules#notification-center: when each request now waiting for the person was made, for the center's «Needs you». */
 	since: Map<string, number>;
+	/** spec/smoke-run#ready-surfaces: what each `Ready to look` names, for its banner and its click. */
+	ready: Map<string, Extract<SessionEvent, { kind: 'task.ready' }>>;
 };
 const requested = new Set([
 	'permission.requested',
@@ -181,6 +186,7 @@ export class Notifications {
 				crewWaiting: false,
 				handles: new Map(),
 				since: new Map(),
+				ready: new Map(),
 			};
 			this.tasks.set(name(key), state);
 		}
@@ -337,6 +343,11 @@ export class Notifications {
 				state.proposals.clear();
 				for (const id of [...state.handles.keys()])
 					if (id.includes('/needs-you/')) this.close(state, id);
+				break;
+			// spec/smoke-run#ready-surfaces: the screen and where it is, for the banner's text and its click.
+			case 'task.ready':
+				state.ready.set(event.id, event);
+				requestId = event.id;
 				break;
 			case 'turn.started':
 				state.turnSeq = record.seq;
@@ -520,6 +531,9 @@ export class Notifications {
 					this.deps.gateway.removeGroup(name(key));
 					for (const handleId of [...state.handles.keys()]) this.close(state, handleId);
 					this.deps.openTask(key);
+					// spec/smoke-run#ready-surfaces: a click on `Ready to look` shows the screen as the row's `Show` does.
+					const ready = kind === 'ready' && requestId ? state.ready.get(requestId) : undefined;
+					if (ready) this.deps.showScreen?.(key, ready);
 				},
 				allow: () => answer(choices.allow),
 				deny: () => answer(choices.deny),
@@ -536,6 +550,13 @@ export class Notifications {
 		requestId: string | null,
 		locale: Locale
 	) {
+		const ready = kind === 'ready' && requestId ? state.ready.get(requestId) : undefined;
+		if (ready)
+			return ready.where === 'simulator' && ready.device
+				? t(locale, 'Ready to look: {screen} on {device}.')
+						.replace('{screen}', ready.screen)
+						.replace('{device}', ready.device)
+				: t(locale, 'Ready to look: {screen}.').replace('{screen}', ready.screen);
 		return eventKind === 'background.changed' || eventKind === 'subagent.changed'
 			? [
 					t(

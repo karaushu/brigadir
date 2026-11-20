@@ -44,17 +44,7 @@
 	border: 1.6px solid var(--accent-soft);
 	border-top-color: var(--accent);
 	border-radius: 50%;
-	animation: spin 0.9s linear infinite;
-}
-@keyframes spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.spinner {
-		animation: none;
-	}
+	animation: var(--motion-spinner);
 }
 .hint {
 	flex: 0 1 auto;
@@ -194,7 +184,7 @@
 	flex: none;
 	color: var(--fg2);
 	transform: rotate(-90deg);
-	transition: transform var(--motion-fast);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .summary[open] > summary > svg:last-child {
 	transform: none;

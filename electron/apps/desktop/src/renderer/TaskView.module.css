@@ -301,10 +301,6 @@
 	color: var(--fg3);
 }
 
-.changes,
-.files {
-	animation: var(--motion-fade);
-}
 .reviewDialog {
 	width: min(620px, calc(100vw - 48px));
 	height: auto;

@@ -463,7 +463,8 @@ export function App() {
 			filterInput.current?.select();
 		}
 	}, [filterFocus]);
-	const sidebarPresent = usePresence(!sidebarHidden);
+	// spec/appearance#motion-frequency: hiding the sidebar is a shortcut, so the room comes back at once.
+	const sidebarPresent = !sidebarHidden;
 	const sidebarWidth = useSurfaceLayout((state) => state.layout.sidebarWidth);
 	// spec/sidebar#section-rail: the rail's section — what the sidebar lists and which board the main area shows.
 	const savedSection = useSurfaceLayout((state) => state.layout.sidebarSection);

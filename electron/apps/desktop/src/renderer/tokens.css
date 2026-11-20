@@ -753,12 +753,20 @@ button:disabled {
 /* Shared motion: spec/appearance#motion. Animate controls, never native selection geometry. */
 :root {
 	--motion-fast: 120ms;
+	--motion-nudge: 120ms;
 	--motion-enter-time: 180ms;
 	--motion-travel: 240ms;
-	--motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--motion-flash: 900ms;
+	--motion-hold: 2s;
+	--motion-spin: 0.9s;
+	--motion-ease: cubic-bezier(0.23, 1, 0.32, 1);
+	--motion-ease-move: cubic-bezier(0.77, 0, 0.175, 1);
 	--motion-enter: brigadir-rise var(--motion-enter-time) var(--motion-ease) both;
 	--motion-reveal: brigadir-reveal var(--motion-enter-time) var(--motion-ease) both;
 	--motion-fade: brigadir-fade var(--motion-enter-time) var(--motion-ease) both;
+	/* A module cannot name the global keyframe (CSS modules scope it), so spinners take the whole shorthand. */
+	--motion-spinner: brigadir-spin var(--motion-spin) linear infinite;
+	--motion-spinner-ticks: brigadir-spin var(--motion-spin) steps(8) infinite;
 }
 @keyframes brigadir-rise {
 	from {
@@ -793,7 +801,31 @@ button {
 		background-color var(--motion-fast) ease,
 		color var(--motion-fast) ease,
 		border-color var(--motion-fast) ease,
-		box-shadow var(--motion-fast) ease;
+		box-shadow var(--motion-fast) ease,
+		scale var(--motion-nudge) var(--motion-ease);
+}
+/* spec/appearance#motion-frequency: a selection follows the keyboard and task switching, so its fill snaps. A module's own
+   transition (one class) still wins. */
+button:where([aria-pressed], [aria-selected]) {
+	transition: none;
+}
+/* spec/appearance#motion: one disclosure motion for every <details>, height and opacity. A row that mounts open (a virtualised
+   row) does not replay it: there is no @starting-style. */
+@supports (interpolate-size: allow-keywords) {
+	:where(details)::details-content {
+		interpolate-size: allow-keywords;
+		block-size: 0;
+		opacity: 0;
+		overflow: clip;
+		transition:
+			block-size var(--motion-travel) var(--motion-ease),
+			opacity var(--motion-enter-time) ease,
+			content-visibility var(--motion-travel) allow-discrete;
+	}
+	:where(details[open])::details-content {
+		block-size: auto;
+		opacity: 1;
+	}
 }
 dialog {
 	opacity: 0;
@@ -827,18 +859,25 @@ dialog[open]::backdrop {
 		opacity: 0;
 	}
 }
+/* spec/appearance#motion: reduced motion drops movement (travel, nudge, rises) and keeps fades and colour. Spinners slow down;
+   a hold keeps its time. */
 @media (prefers-reduced-motion: reduce) {
 	:root {
-		--motion-fast: 0ms;
-		--motion-enter-time: 0ms;
+		--motion-nudge: 0ms;
 		--motion-travel: 0ms;
-		--motion-enter: none;
-		--motion-fade: none;
-		--motion-reveal: none;
+		--motion-spin: 2.4s;
+		--motion-enter: brigadir-fade var(--motion-enter-time) ease both;
+		--motion-fade: brigadir-fade var(--motion-enter-time) ease both;
+		--motion-reveal: brigadir-fade var(--motion-enter-time) ease both;
 	}
 	dialog,
 	dialog[open] {
 		translate: none;
+	}
+	@starting-style {
+		dialog[open] {
+			translate: none;
+		}
 	}
 }
 
@@ -970,15 +1009,11 @@ svg[data-column='true'] {
 /* spec/task-window-workspace#work-area: the spinner of a tab the agent acts on. */
 svg[data-spin='true'] {
 	color: var(--accent);
-	animation: brigadir-spin 0.9s linear infinite;
+	animation: brigadir-spin var(--motion-spin) linear infinite;
 }
+/* spec/appearance#motion: the one spinner keyframe; every spinner turns at --motion-spin (2.4 s under reduced motion). */
 @keyframes brigadir-spin {
 	to {
 		transform: rotate(360deg);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	svg[data-spin='true'] {
-		animation-duration: 2.4s;
 	}
 }

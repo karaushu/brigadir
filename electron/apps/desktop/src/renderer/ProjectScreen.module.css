@@ -86,7 +86,6 @@
 	min-height: 0;
 	overflow: auto;
 	padding: 0 24px 20px;
-	animation: var(--motion-fade);
 }
 .column {
 	flex: 1;

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
-import { motionTime } from './ui/motion';
+import { motionEase, motionTime } from './ui/motion';
 /** Animate retained sidebar rows only. New tasks and filtered/disclosed rows never replay entrances. */
 export function useSidebarOrder(order: string, layout: string) {
 	const previous = useRef(new Map<string, number>()),
@@ -40,7 +40,7 @@ export function useSidebarOrder(order: string, layout: string) {
 			if (!reduced && before !== undefined && Math.abs(before + shift - top) > 0.5) {
 				const animation = node.animate(
 					[{ transform: `translateY(${before + shift - top}px)` }, { transform: 'translateY(0)' }],
-					{ duration, easing: 'cubic-bezier(.2,.8,.2,1)' }
+					{ duration, easing: motionEase('--motion-ease-move') }
 				);
 				animation.id = 'sidebar-order';
 			}

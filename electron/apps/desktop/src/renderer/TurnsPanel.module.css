@@ -4,7 +4,6 @@
 	flex: 1;
 	flex-direction: column;
 	min-height: 0;
-	animation: var(--motion-fade);
 }
 /* spec/task-window#panel, a turn selected: the chosen turn's changes follow the list. Rows' viewport is
    size-contained (no height of its own), so the list asks for its rows' height (45 px each) and gives way down to two

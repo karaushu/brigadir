@@ -72,7 +72,7 @@
 }
 .disc > svg {
 	transform: rotate(-90deg);
-	transition: transform var(--motion-travel) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .root[data-expanded='true'] .disc {
 	background: var(--accent-fill);

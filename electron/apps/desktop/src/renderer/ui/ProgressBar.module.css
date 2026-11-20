@@ -13,7 +13,8 @@
 	height: 100%;
 	border-radius: 2px;
 	background: var(--accent);
-	transition: width var(--motion-fast, 120ms) ease-out;
+	/* spec/appearance#motion: the fill grows by its clip, not its width. */
+	transition: clip-path var(--motion-fast) var(--motion-ease);
 }
 .bar[data-done] > i {
 	background: var(--green);

@@ -84,8 +84,8 @@ Independent of «When»: it is sidebar state, not a notification. Runs only on a
 
 | Transition | Animation |
 | --- | --- |
-| to `done` (turn ended) | one `--accent-soft` wave with an `--accent` ring over the card, 1100 ms to transparent; the state glyph pops 0.4 → 1 (420 ms, overshoot); the unread dot pops 260 ms later |
-| to `needs-you` | fill `--tint` → `--amber-soft` in 500 ms; an amber ring expands from the glyph twice (900 ms ×2, 150 ms delay) |
+| to `done` (turn ended) | one `--accent-soft` wave with an `--accent` ring over the card, 400 ms `ease` to transparent; the state glyph scales 0.95 → 1 with a fade (`--motion-enter-time`, `--motion-ease`); the unread dot follows 260 ms later |
+| to `needs-you` | fill `--tint` → `--amber-soft` in 400 ms; an amber ring expands from the glyph twice (900 ms ×2, 150 ms delay) |
 | collapsed project | its `needs-you` counter pops when it grows |
 | worker rows in a foreman card | glyph and dot only, no wave |
 
@@ -120,7 +120,7 @@ Classified as B, not S: the sign-in card in the chat log, browser page errors, `
 | Action | At most one (`Retry`, `Open`, …), shared `Button` size S, text `--accent-text` (lighter accent for contrast on dark). The toast leaves after its action runs. |
 | Stack | Store keeps the last 20; region shows the newest 3 (newest at the bottom); older ones under a pill `{n} more`, which expands to 5 and then reads `Show less` and folds back. Same `key` (default kind + text) → one toast with `×N` (accessible name via `timesCount`, four Ukrainian forms), timer restarted. |
 | Time | success 4 s, info 6 s, warning 8 s, error 10 s. Paused while hovered or focused, while the window is unfocused or hidden, and under a modal (`dialog:modal`). No visible timer. |
-| Motion | Enters with `--motion-enter`; none under `prefers-reduced-motion`. |
+| Motion | Enters from 6 px below with a fade and leaves the same way (`--motion-enter-time`, `--motion-ease`); the toasts above close the gap over `--motion-travel`. Transitions, not keyframes, so a toast that comes back while leaving continues from where it is. A leaving toast is inert at once. Reduced motion: a fade only. |
 
 Rules:
 

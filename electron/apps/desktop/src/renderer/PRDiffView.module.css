@@ -55,8 +55,3 @@
 	flex: 1;
 	min-width: 0;
 }
-@media (prefers-reduced-motion: reduce) {
-	.opening > svg {
-		animation: none;
-	}
-}

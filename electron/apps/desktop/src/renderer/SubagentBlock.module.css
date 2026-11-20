@@ -47,7 +47,7 @@
 	opacity: 0;
 	transform: rotate(-90deg);
 	transition:
-		transform var(--motion-fast),
+		transform var(--motion-nudge) var(--motion-ease),
 		opacity var(--motion-fast);
 }
 .block > details > summary:is(:hover, :focus-visible) > svg:first-child,
@@ -225,20 +225,4 @@
 .line:hover {
 	background: var(--tint);
 	color: var(--fg);
-}
-@media (prefers-reduced-motion: no-preference) {
-	.block > details::details-content {
-		interpolate-size: allow-keywords;
-		block-size: 0;
-		opacity: 0;
-		overflow: clip;
-		transition:
-			block-size var(--motion-travel) var(--motion-ease),
-			opacity var(--motion-enter-time) ease,
-			content-visibility var(--motion-travel) allow-discrete;
-	}
-	.block > details[open]::details-content {
-		block-size: auto;
-		opacity: 1;
-	}
 }

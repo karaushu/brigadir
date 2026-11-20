@@ -109,7 +109,7 @@ function ContextIndicator({
 						aria-valuemax={capacity}
 						aria-valuenow={Math.min(used, capacity)}
 						aria-valuetext={percent}>
-						<div style={{ width: `${fill * 100}%` }} />
+						<div style={{ clipPath: `inset(0 ${100 - fill * 100}% 0 0 round 2px)` }} />
 					</div>
 					{(onCompact || onRelay) && (
 						<div className={styles.actions} data-size="s">

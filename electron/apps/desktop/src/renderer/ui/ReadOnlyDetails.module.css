@@ -16,7 +16,7 @@
 	display: none;
 }
 .details summary > svg {
-	transition: transform var(--motion-fast);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .details[open] summary > svg {
 	transform: rotate(90deg);

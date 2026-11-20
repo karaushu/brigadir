@@ -172,7 +172,7 @@
 	width: 12px;
 	color: var(--fg3);
 	transform: rotate(-90deg);
-	transition: transform var(--motion-fast) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .job[data-open] .chevron {
 	transform: none;

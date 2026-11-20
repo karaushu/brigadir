@@ -287,7 +287,10 @@ export function TurnRail({
 				}}
 			/>
 			{card && (
-				<div className={styles.card} style={{ top: cardTop }} aria-hidden="true">
+				<div
+					className={styles.card}
+					style={{ transform: `translateY(${cardTop}px)` }}
+					aria-hidden="true">
 					<p>{card.text}</p>
 					<footer>
 						<span>

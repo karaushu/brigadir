@@ -101,25 +101,6 @@
 	flex: none;
 	display: block;
 }
-/* A mode the person just changed flashes the accent once. */
-.entry[data-flash] > button {
-	animation: capsuleFlash 1.2s var(--motion-ease, ease) both;
-}
-@keyframes capsuleFlash {
-	0%,
-	45% {
-		background-color: var(--accent-soft);
-		color: var(--accent);
-	}
-	100% {
-		background-color: transparent;
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.entry[data-flash] > button {
-		animation: none;
-	}
-}
 .label {
 	min-width: 0;
 	overflow: hidden;

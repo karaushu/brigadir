@@ -577,7 +577,10 @@ del {
 	box-shadow:
 		0 0 0 0 transparent,
 		0 0 0 9999px transparent;
-	transition: all 0.75s var(--motion-ease);
+	/* The spotlight glides between targets (first run only, spec/appearance#motion: the intro may take longer beats). */
+	transition-property: left, top, width, height, box-shadow;
+	transition-duration: 0.75s;
+	transition-timing-function: var(--motion-ease);
 }
 .spot[data-on='true'] {
 	box-shadow:
@@ -800,7 +803,9 @@ del {
 	width: 5px;
 	border-radius: 3px;
 	background: var(--fg3);
-	transition: all 0.4s var(--motion-ease);
+	transition:
+		width 0.4s var(--motion-ease),
+		background-color 0.4s ease;
 }
 .dots i[data-done='true'] {
 	background: var(--fg2);

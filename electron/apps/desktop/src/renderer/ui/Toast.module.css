@@ -11,13 +11,49 @@
 	gap: 6px;
 	pointer-events: none;
 }
+/* The 6 px between toasts belongs to each slot, so a leaving slot closes its own gap with it. */
 .stack {
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
-	gap: 6px;
+	margin-top: -6px;
 	max-width: min(540px, 100%);
 	pointer-events: auto;
+}
+/* spec/notifications-slack-notes-and-schedules#toasts: a slot opens and closes its row, the toast inside rises in and sinks out.
+   Transitions, not keyframes, so a change mid-way continues from where it is. */
+.slot {
+	display: grid;
+	grid-template-rows: 1fr;
+	transition: grid-template-rows var(--motion-travel) var(--motion-ease);
+}
+.cell {
+	min-height: 0;
+	margin-top: 6px;
+	transition: margin-top var(--motion-travel) var(--motion-ease);
+}
+.slot[data-leaving] {
+	grid-template-rows: 0fr;
+}
+.slot[data-leaving] > .cell {
+	margin-top: 0;
+	overflow: hidden;
+}
+.slot[data-leaving] .toast {
+	opacity: 0;
+	translate: 0 6px;
+}
+@starting-style {
+	.slot {
+		grid-template-rows: 0fr;
+	}
+	.cell {
+		margin-top: 0;
+	}
+	.toast {
+		opacity: 0;
+		translate: 0 6px;
+	}
 }
 .toast {
 	display: flex;
@@ -34,7 +70,19 @@
 	box-shadow:
 		0 0 0 1px var(--sep),
 		var(--shadow-float);
-	animation: var(--motion-enter);
+	transition:
+		opacity var(--motion-enter-time) var(--motion-ease),
+		translate var(--motion-travel) var(--motion-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+	.slot[data-leaving] .toast {
+		translate: none;
+	}
+	@starting-style {
+		.toast {
+			translate: none;
+		}
+	}
 }
 .toast > svg {
 	flex: none;

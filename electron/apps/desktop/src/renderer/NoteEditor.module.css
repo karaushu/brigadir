@@ -137,7 +137,7 @@
 }
 /* spec/notifications-slack-notes-and-schedules#notes: the lines an answer names, flashed once (as the editor's spec/editor#markdown-views flash). */
 .flash {
-	animation: note-flash-line 1100ms var(--motion-ease) both;
+	animation: note-flash-line var(--motion-flash) ease both;
 }
 @keyframes note-flash-line {
 	0%,

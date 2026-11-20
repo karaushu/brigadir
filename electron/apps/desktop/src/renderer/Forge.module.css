@@ -237,7 +237,7 @@
 .disclosure > span {
 	display: flex;
 	transform: rotate(-90deg);
-	transition: transform var(--motion-travel) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .disclosure > span[data-open='true'] {
 	transform: rotate(0);

@@ -293,12 +293,14 @@
 	opacity: 0;
 	transition:
 		grid-template-rows var(--motion-travel) var(--motion-ease),
-		opacity var(--motion-enter-time) var(--motion-ease),
-		margin-top var(--motion-travel) var(--motion-ease);
+		opacity var(--motion-enter-time) var(--motion-ease);
 }
 .worktree[data-open='true'] {
 	grid-template-rows: 1fr;
 	opacity: 1;
+}
+/* The 6 px above the rows sit inside the clip, so they close with the row instead of animating a margin. */
+.worktreeBody > :first-child {
 	margin-top: 6px;
 }
 /* Collapsed clips; expanded releases overflow after the animation — otherwise the `від` list would be clipped. */

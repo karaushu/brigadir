@@ -81,7 +81,7 @@ What is shown as a segment (`capsuleShows`); every option always stays in the me
 | Other select | always |
 
 - Labels that come from the agent (option values, mode names, model names) are printed as received, without case normalisation. Labels we synthesise from booleans are lowercase `on`/`off`.
-- When the mode changes while its segment is visible (⇧⇥ or the menu), the segment flashes the accent once (1.2 s).
+- When the mode changes while its segment is visible (⇧⇥ or the menu), the segment turns accent at once and fades back over `--motion-flash`; a repeat starts the fade again.
 - While the agent works or the session is gone, the capsule is disabled (shared disabled opacity) and the menu cannot open; an open menu closes. A task without a session shows neither capsule nor context ring.
 
 <a id="capsule-squeeze"></a>

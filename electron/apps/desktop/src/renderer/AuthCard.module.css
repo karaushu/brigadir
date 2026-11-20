@@ -68,7 +68,7 @@
 	margin-right: calc(var(--c-px) * -1);
 }
 .link[aria-expanded] svg {
-	transition: transform var(--motion-fast) ease;
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .link[aria-expanded='false'] svg {
 	transform: rotate(-90deg);
@@ -99,18 +99,8 @@
 	font-family: var(--mono-family);
 }
 .spin {
-	animation: auth-spin 1s linear infinite;
+	animation: var(--motion-spinner);
 	transform-origin: 50% 50%;
-}
-@keyframes auth-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.spin {
-		animation: none;
-	}
 }
 .row {
 	margin: 0 16px 12px;

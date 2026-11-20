@@ -162,7 +162,7 @@
 	border-radius: 6px;
 	pointer-events: none;
 	z-index: -1;
-	animation: md-flash 900ms var(--motion-ease) both;
+	animation: md-flash var(--motion-flash) ease both;
 }
 @keyframes md-flash {
 	0%,

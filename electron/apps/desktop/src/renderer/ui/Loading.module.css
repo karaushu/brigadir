@@ -5,12 +5,7 @@
 	color: var(--accent);
 }
 .spin > svg {
-	animation: loading-spin 900ms linear infinite;
-}
-@keyframes loading-spin {
-	to {
-		transform: rotate(360deg);
-	}
+	animation: var(--motion-spinner);
 }
 .skeleton {
 	display: flex;
@@ -136,8 +131,7 @@
 	background: transparent;
 }
 @media (prefers-reduced-motion: reduce) {
-	.skeleton > i,
-	.spin > svg {
+	.skeleton > i {
 		animation: none;
 	}
 }

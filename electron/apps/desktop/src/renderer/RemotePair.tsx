@@ -140,7 +140,9 @@ export function RemotePair({
 						})}
 					</span>
 					<span className={styles.bar}>
-						<i style={{ width: `${Math.min(100, (left / 300000) * 100)}%` }} />
+						<i
+							style={{ clipPath: `inset(0 ${100 - Math.min(100, (left / 300000) * 100)}% 0 0)` }}
+						/>
 					</span>
 				</div>
 				<div className={styles.wait} role="status">

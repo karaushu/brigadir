@@ -12,7 +12,6 @@
 	background: var(--card);
 	color: var(--fg);
 	box-shadow: var(--shadow-modal);
-	animation: var(--motion-enter);
 	outline: none;
 }
 .dialog[open] {

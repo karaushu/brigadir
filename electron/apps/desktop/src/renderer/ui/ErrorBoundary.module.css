@@ -79,20 +79,10 @@
 }
 .details summary svg {
 	transform: rotate(-90deg);
-	transition: transform var(--motion-travel) var(--motion-ease);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .details[open] summary svg {
 	transform: none;
-}
-.details::details-content {
-	height: 0;
-	overflow: clip;
-	transition:
-		height var(--motion-travel) var(--motion-ease),
-		content-visibility var(--motion-travel) allow-discrete;
-}
-.details[open]::details-content {
-	height: auto;
 }
 .details pre {
 	margin: 8px 0 0;

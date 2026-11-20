@@ -203,12 +203,4 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.tree {
-	animation: var(--motion-fade);
-}
-.item {
-	transition: background-color var(--motion-fast) ease;
-}
-.item button svg {
-	transition: rotate var(--motion-travel) var(--motion-ease);
-}
+/* spec/appearance#motion-frequency: the tree follows arrow keys, so selection and folder chevrons snap. */

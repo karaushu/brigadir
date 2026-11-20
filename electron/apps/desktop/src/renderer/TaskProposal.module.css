@@ -89,7 +89,7 @@
 	flex: none;
 	color: var(--fg2);
 	transform: rotate(-90deg);
-	transition: transform var(--motion-fast);
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .summary[open] > summary > svg:last-child {
 	transform: none;

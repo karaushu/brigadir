@@ -62,7 +62,7 @@ While a turn runs, the last row of the log is a status line, for example `⟳ Wo
   - `Thinking`: anything else (thought stream, waiting for the model after a send or after a tool).
 - **Elapsed time** counts from the `at` of `turn.started`, or from the click before the echo. It uses whole seconds in the footer's format (`34 s`, `1 min 4 s`) and is not shown during the first second. When the turn ends, the footer takes the same place with the same duration.
 - **One timer.** The status row seconds and the tool-row timers all tick from one shared second timer (`useSecondTick`, `ui/second-tick.ts`), never a `setInterval` per row. The timer stops when no row is subscribed and while the window is hidden.
-- **Motion.** Only the icon spins; text never animates. Under `prefers-reduced-motion` the icon is still.
+- **Motion.** Only the icon spins; text never animates. Under `prefers-reduced-motion` it turns at 2.4 s.
 - **Accessibility.** The row has `role="status"`. The state word and the target are announced; the seconds are `aria-hidden`.
 
 <a id="turn-footer"></a>

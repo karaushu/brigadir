@@ -32,13 +32,24 @@
 	cursor: default;
 	opacity: 1;
 	translate: 0 0;
+	scale: 1;
+	/* spec/appearance#motion: it grows from the anchor's middle (`--arrow-*` points there), on the side it opens from. */
+	transform-origin: calc(var(--arrow-left) + 5px) top;
 	transition:
 		opacity var(--motion-enter-time) var(--motion-ease),
-		translate var(--motion-enter-time) var(--motion-ease);
+		translate var(--motion-enter-time) var(--motion-ease),
+		scale var(--motion-enter-time) var(--motion-ease);
+}
+.popover[data-side='top'] {
+	transform-origin: calc(var(--arrow-left) + 5px) bottom;
+}
+.popover[data-side='right'] {
+	transform-origin: left calc(var(--arrow-top) + 5px);
 }
 .popover[data-open='false'] {
 	opacity: 0;
 	translate: 0 4px;
+	scale: 0.97;
 	pointer-events: none;
 }
 .popover[data-side='top'][data-open='false'] {
@@ -51,6 +62,7 @@
 	.popover[data-open='true'] {
 		opacity: 0;
 		translate: 0 6px;
+		scale: 0.97;
 	}
 	.popover[data-side='top'][data-open='true'] {
 		translate: 0 -6px;
@@ -63,6 +75,14 @@
 	.popover,
 	.popover[data-open='false'] {
 		translate: none;
+		scale: none;
+	}
+	@starting-style {
+		.popover[data-open='true'],
+		.popover[data-side][data-open='true'] {
+			translate: none;
+			scale: none;
+		}
 	}
 }
 

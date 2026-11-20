@@ -207,7 +207,7 @@
 	display: none;
 }
 .editor :global(.cm-md-flash) {
-	animation: md-flash-line 900ms var(--motion-ease) both;
+	animation: md-flash-line var(--motion-flash) ease both;
 }
 @keyframes md-flash-line {
 	0%,

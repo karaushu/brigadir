@@ -196,7 +196,7 @@
 	border-radius: 2px;
 	background: var(--tone);
 	transition:
-		width var(--motion-travel) var(--motion-ease),
+		clip-path var(--motion-travel) var(--motion-ease),
 		background-color var(--motion-fast) ease;
 }
 .sub > .caption {

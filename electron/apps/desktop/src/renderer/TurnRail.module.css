@@ -54,7 +54,9 @@
 	box-shadow: var(--lift);
 	pointer-events: none;
 	animation: var(--motion-fade);
-	transition: top var(--motion-fast) var(--motion-ease);
+	/* It follows the pointed turn by transform; `top` stays 0 (spec/appearance#motion). */
+	top: 0;
+	transition: transform var(--motion-nudge) var(--motion-ease);
 }
 .card > p {
 	margin: 0;
@@ -132,22 +134,21 @@
 }
 .thumb {
 	position: absolute;
-	right: 3px;
-	width: 4px;
-	border-radius: 2px;
+	right: 2px;
+	width: 8px;
 	background: var(--fg3);
 	opacity: 0;
+	/* spec/appearance#motion: 4 px at rest, 8 px when active, by the clip and not the box. */
+	clip-path: inset(0 1px 0 3px round 2px);
 	transition:
 		opacity var(--motion-fast) var(--motion-ease),
-		width var(--motion-fast) var(--motion-ease),
-		right var(--motion-fast) var(--motion-ease);
+		clip-path var(--motion-nudge) var(--motion-ease),
+		background-color var(--motion-fast) ease;
 }
 .thumbZone[data-shown] .thumb {
 	opacity: 1;
 }
 .thumbZone[data-active] .thumb {
-	right: 2px;
-	width: 8px;
-	border-radius: 4px;
+	clip-path: inset(0 round 4px);
 	background: var(--fg2);
 }

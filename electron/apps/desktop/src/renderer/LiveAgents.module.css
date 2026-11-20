@@ -127,7 +127,7 @@
 	color: var(--fg3);
 } /* spec/sidebar#done-rows: the quiet tick */
 .row[data-state='working'] .status svg {
-	animation: agent-spin 1s steps(8) infinite;
+	animation: var(--motion-spinner-ticks);
 }
 .task {
 	flex: 1;
@@ -235,14 +235,4 @@
 }
 .popup > footer > span {
 	flex: 1;
-}
-@keyframes agent-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.row[data-state='working'] .status svg {
-		animation: none;
-	}
 }

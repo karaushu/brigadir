@@ -769,7 +769,13 @@ function Change({
 				<Button size="s" onClick={onView}>
 					{t(locale, 'View diff')}
 				</Button>
-				<Button size="s" variant="ghost" onClick={onRevert}>
+				{/* spec/composer-steering-queue-and-ghost#quick-ask: the revert overwrites the file, so it runs only after a hold. */}
+				<Button
+					size="s"
+					variant="ghost"
+					onHold={onRevert}
+					aria-label={t(locale, 'Hold to revert {file}').replace('{file}', fileName(file.path))}
+					title={t(locale, 'Hold to revert {file}').replace('{file}', fileName(file.path))}>
 					<Glyph name="undo" size={12} />
 					{t(locale, 'Revert')}
 				</Button>

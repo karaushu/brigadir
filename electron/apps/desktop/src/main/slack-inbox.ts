@@ -954,8 +954,10 @@ export class SlackInbox {
 			source: {
 				kind: 'slack',
 				permalink: mention.permalink ?? '',
-				// spec/todo-and-slack-inbox#todo-file: the channel's name, or the DM's person.
-				channel: mention.dm ? this.name(mention.author) : (mention.channelName ?? mention.channel),
+				// spec/todo-and-slack-inbox#todo-file: `#channel`, or the DM's person — shown as is on the to-do.
+				channel: mention.dm
+					? this.name(mention.author)
+					: `#${(mention.channelName ?? mention.channel).replace(/^#/, '')}`,
 				author: this.name(mention.author),
 				ts: mention.ts,
 				mention: mention.id,

@@ -423,7 +423,7 @@ describe('SlackInbox (spec/todo-and-slack-inbox#slack-inbox)', () => {
 			source: {
 				kind: 'slack',
 				permalink: mention.permalink,
-				channel: 'b2c',
+				channel: '#b2c',
 				author: 'Olena Kovalenko',
 				ts: olenaTs,
 				mention: mention.id,

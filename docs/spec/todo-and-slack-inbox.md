@@ -33,7 +33,7 @@ return when it is switched on.
   with a description starts unfolded; the fold state is kept per item.
 - **Description**: optional Markdown under the title, indented to the title. Click (or `↩` on a selected item) edits the
   title and description in place; `Esc` or a click elsewhere saves; an empty title deletes a new item.
-- **Source chip** for an item that came from Slack: the Slack glyph, `#channel · <person>` and the time of the message;
+- **Source chip** for an item that came from Slack: the Slack glyph, `#channel · <person>` (a direct message: the person's name alone in place of `#channel`) and the time of the message;
   a click opens the message in Slack (its permalink).
 - **Done**: the checkbox strikes the title, the row moves to `Done · N` after 1 s (unchecking within that second keeps
   it in place). Done items keep their descriptions.
@@ -49,7 +49,7 @@ return when it is switched on.
 
 `~/.brigadir/todo/<id>.json`, one per list ([rule 10](../../AGENTS.md)): `{schemaVersion: 1, list: {id, name, project:
 <id>|null, createdAt, updatedAt, items: [{id, title, description, done, doneAt, open, createdAt, source}]}}`, `source`
-being `null` or `{kind: "slack", permalink, channel, author, ts, mention}`. Id `todo-<base36>`. Writes are serialized
+being `null` or `{kind: "slack", permalink, channel, author, ts, mention}`, `channel` as shown (`#b2c`, or the person of a direct message). Id `todo-<base36>`. Writes are serialized
 per list; a change from the Slack section or the chat while the list is open shows at once (`todo:changed`).
 
 <a id="todo-chat-tools"></a>

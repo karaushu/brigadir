@@ -633,7 +633,7 @@ function TodoRow({
 				title={t(locale, 'Open in Slack')}
 				onClick={() => void window.brigadir.openWebLink(source.permalink)}>
 				<Glyph name="slack" size={11} />
-				<b>{source.channel.startsWith('#') ? source.channel : `#${source.channel}`}</b>
+				<b>{source.channel}</b>
 				{` · ${source.author}`}
 				{sourceTime(source.ts) ? ` · ${sourceTime(source.ts)}` : ''}
 			</ChatCardChip>

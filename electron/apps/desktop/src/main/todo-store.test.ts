@@ -101,7 +101,7 @@ it('adds from Slack or the chat: a list by name in any case, else the latest, el
 	const source = {
 		kind: 'slack' as const,
 		permalink: 'https://acme.slack.com/archives/C1/p1700000000000100',
-		channel: 'b2c',
+		channel: '#b2c',
 		author: 'Olena',
 		ts: '1700000000.000100',
 		mention: 'm-1',

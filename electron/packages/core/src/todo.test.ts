@@ -56,7 +56,7 @@ describe('to-do lists (spec/todo-and-slack-inbox#todo)', () => {
 							source: {
 								kind: 'slack',
 								permalink: 'https://acme.slack.com/archives/C1/p1',
-								channel: 'b2c',
+								channel: '#b2c',
 								author: 'Olena',
 								ts: '1.2',
 								mention: 'm1',
@@ -74,7 +74,7 @@ describe('to-do lists (spec/todo-and-slack-inbox#todo)', () => {
 							source: {
 								kind: 'slack',
 								permalink: 'javascript:alert(1)',
-								channel: 'b2c',
+								channel: '#b2c',
 								author: 'Olena',
 								ts: '1.2',
 								mention: 'm1',

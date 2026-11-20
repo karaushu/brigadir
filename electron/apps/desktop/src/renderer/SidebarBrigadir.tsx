@@ -51,15 +51,21 @@ export function SidebarBrigadir({
 	const list = useBrigadirList(),
 		[query, setQuery] = useState(''),
 		[renaming, setRenaming] = useState<BrigadirChatMeta | null>(null),
-		[deleting, setDeleting] = useState<BrigadirChatMeta | null>(null);
+		[deleting, setDeleting] = useState<BrigadirChatMeta | null>(null),
+		// The archive starts folded.
+		[collapsed, setCollapsed] = useState<string[]>(['In the archive']);
 	const needle = query.trim().toLowerCase();
-	const chats = (list?.chats ?? []).filter(
-		(chat) => !needle || chat.title.toLowerCase().includes(needle)
-	);
+	const matches = (chat: BrigadirChatMeta) => !needle || chat.title.toLowerCase().includes(needle);
+	const chats = (list?.chats ?? []).filter(matches),
+		archived = (list?.archived ?? []).filter(matches);
 	const menu = async (chat: BrigadirChatMeta) => {
 		const action = await window.brigadir.brigadirChatMenu(chat.id);
 		if (action === 'rename') setRenaming(chat);
 		else if (action === 'delete') setDeleting(chat);
+		else if (action === 'restore')
+			await window.brigadir
+				.unarchiveBrigadirChat(chat.id)
+				.catch(() => toastError(t(locale, 'Could not archive the chat.')));
 		else if (action === 'archive') {
 			await window.brigadir
 				.archiveBrigadirChat(chat.id)
@@ -67,21 +73,62 @@ export function SidebarBrigadir({
 			if (chat.id === selected) onOpen(null);
 		}
 	};
-	const group = (title: MessageKey, glyph: GlyphName, count: number, rows: React.ReactNode) => (
-		<section className={styles.project} data-open>
-			<div className={styles.projectHeader}>
-				<span className={styles.projectIconButton} aria-hidden="true">
-					<Glyph name={glyph} size={14} />
+	/** A group of the list in the project group's look; its name folds it (rule 15: the whole header). */
+	const group = (title: MessageKey, glyph: GlyphName, count: number, rows: React.ReactNode) => {
+		const shut = collapsed.includes(title),
+			name = t(locale, title),
+			fold = () =>
+				setCollapsed((list) => (shut ? list.filter((item) => item !== title) : [...list, title]));
+		return (
+			<section className={styles.project} data-open={!shut} data-brigadir-group={title}>
+				<div className={styles.projectHeader}>
+					<button
+						className={styles.projectCollapse}
+						aria-label={`${t(locale, shut ? 'Expand project' : 'Collapse project')} · ${name}`}
+						aria-expanded={!shut}
+						onClick={fold}>
+						<Glyph name="sidebar-chevron" size={10} />
+					</button>
+					<span className={styles.projectIconButton} aria-hidden="true">
+						<Glyph name={glyph} size={14} />
+					</span>
+					<h3>
+						<button className={styles.projectSelect} aria-expanded={!shut} onClick={fold}>
+							{name}
+						</button>
+					</h3>
+					<span className={styles.sectionGroupCount}>{count}</span>
+				</div>
+				<div className={styles.projectDisclosure} data-open={!shut} inert={shut} aria-hidden={shut}>
+					<div>{rows}</div>
+				</div>
+			</section>
+		);
+	};
+	const chatRow = (chat: BrigadirChatMeta) => (
+		<button
+			key={chat.id}
+			className={styles.task}
+			data-brigadir-row={chat.id}
+			aria-pressed={chat.id === selected}
+			title={chat.title || t(locale, 'New chat')}
+			onClick={() => onOpen(chat.id)}
+			onContextMenu={(event) => {
+				event.preventDefault();
+				void menu(chat);
+			}}>
+			<span className={styles.noteGlyph}>
+				<Glyph name="bubble" size={14} />
+			</span>
+			<span className={styles.taskCopy}>
+				<span className={styles.taskHead}>
+					<span className={styles.taskTitle}>{chat.title || t(locale, 'New chat')}</span>
 				</span>
-				<h3>
-					<span className={styles.projectSelect}>{t(locale, title)}</span>
-				</h3>
-				<span className={styles.sectionGroupCount}>{count}</span>
-			</div>
-			<div className={styles.projectDisclosure} data-open>
-				<div>{rows}</div>
-			</div>
-		</section>
+				<small className={styles.prLine}>
+					<time dateTime={chat.updatedAt}>{relativeAge(locale, chat.updatedAt)}</time>
+				</small>
+			</span>
+		</button>
 	);
 	return (
 		<>
@@ -136,39 +183,9 @@ export function SidebarBrigadir({
 								);
 							})
 						)}
-						{chats.length > 0 &&
-							group(
-								'Chats',
-								'chat',
-								chats.length,
-								chats.map((chat) => (
-									<button
-										key={chat.id}
-										className={styles.task}
-										data-brigadir-row={chat.id}
-										aria-pressed={chat.id === selected}
-										title={chat.title || t(locale, 'New chat')}
-										onClick={() => onOpen(chat.id)}
-										onContextMenu={(event) => {
-											event.preventDefault();
-											void menu(chat);
-										}}>
-										<span className={styles.noteGlyph}>
-											<Glyph name="bubble" size={14} />
-										</span>
-										<span className={styles.taskCopy}>
-											<span className={styles.taskHead}>
-												<span className={styles.taskTitle}>
-													{chat.title || t(locale, 'New chat')}
-												</span>
-											</span>
-											<small className={styles.prLine}>
-												<time dateTime={chat.updatedAt}>{relativeAge(locale, chat.updatedAt)}</time>
-											</small>
-										</span>
-									</button>
-								))
-							)}
+						{chats.length > 0 && group('Chats', 'chat', chats.length, chats.map(chatRow))}
+						{archived.length > 0 &&
+							group('In the archive', 'archive-box', archived.length, archived.map(chatRow))}
 						{needle && !chats.length && <p className={styles.muted}>{t(locale, 'No matches')}</p>}
 					</>
 				)}

@@ -80,6 +80,8 @@ import {
 import { useAgentLogin } from './AuthCard';
 import { startAgentSignIn } from './agent-sign-in';
 import { geistMono, systemMono } from './typography';
+import { SidebarBrigadir } from './SidebarBrigadir';
+import { BrigadirChat } from './BrigadirChat';
 /** spec/settings-modules-and-onboarding#intro: the first-run intro as a live build. The window assembles itself: every choice is
  *  saved to the real settings at once, so theme, accent, sizes, code theme and layout change through the app's own tokens. */
 const steps = [
@@ -507,7 +509,7 @@ export function Intro({
 						notes: draft.modules.notes,
 						schedules: draft.modules.schedules,
 					}}
-					selected="tasks"
+					selected={step === 'brigadir' ? 'brigadir' : 'tasks'}
 					tileRefs={{
 						prs: refs.railPRs,
 						notes: refs.railNotes,
@@ -545,118 +547,142 @@ export function Intro({
 							<Glyph name="sidebar-toggle" size={16} />
 						</IconButton>
 					</div>
-					<div ref={refs.projects} className={s.projectsArea}>
-						<div ref={refs.allProjects} className={s.allProjects} data-active={step === 'tasks'}>
-							<Glyph name="board" size={14} />
-							<span>{tr('All projects')}</span>
-							<Glyph name="folder" size={15} />
-						</div>
-						<div className={s.projects}>
-							{project ? (
-								<>
-									<div className={s.projectName}>
-										{project.name}
-										<small>{project.scopes.length} repo</small>
-									</div>
-									{project.scopes.slice(0, shown).map((scope) => (
-										<div key={scope.id} className={s.repo}>
-											<Glyph name="git" size={12} />
-											<span>{repoName(scope, project.name)}</span>
-										</div>
-									))}
-								</>
-							) : (
-								<div className={s.addProject}>
-									<Glyph name="plus" size={12} />
-									{tr('Add a project…')}
+					{/* spec/settings-modules-and-onboarding#intro-steps: the Brigadir step shows the section — its list and the example tiles. */}
+					{step === 'brigadir' ? (
+						<SidebarBrigadir locale={lang} selected={null} onOpen={() => {}} />
+					) : (
+						<>
+							<div ref={refs.projects} className={s.projectsArea}>
+								<div
+									ref={refs.allProjects}
+									className={s.allProjects}
+									data-active={step === 'tasks'}>
+									<Glyph name="board" size={14} />
+									<span>{tr('All projects')}</span>
+									<Glyph name="folder" size={15} />
 								</div>
-							)}
-						</div>
-					</div>
-					<SampleCrewCard
-						ref={refs.crew}
-						open={step === 'crew'}
-						providers={crewProviders}
-						tr={tr}
-					/>
+								<div className={s.projects}>
+									{project ? (
+										<>
+											<div className={s.projectName}>
+												{project.name}
+												<small>{project.scopes.length} repo</small>
+											</div>
+											{project.scopes.slice(0, shown).map((scope) => (
+												<div key={scope.id} className={s.repo}>
+													<Glyph name="git" size={12} />
+													<span>{repoName(scope, project.name)}</span>
+												</div>
+											))}
+										</>
+									) : (
+										<div className={s.addProject}>
+											<Glyph name="plus" size={12} />
+											{tr('Add a project…')}
+										</div>
+									)}
+								</div>
+							</div>
+							<SampleCrewCard
+								ref={refs.crew}
+								open={step === 'crew'}
+								providers={crewProviders}
+								tr={tr}
+							/>
+						</>
+					)}
 				</div>
 				<div className={s.content}>
-					<div className={s.toolbar}>
-						<strong>{project ? tr('Orders export') : tr('Brigadir')}</strong>
-						<span>{project ? project.name : tr('this is how a task looks')}</span>
-						{showModules && (
-							<span className={s.toolbarTools}>
-								{draft.modules.commands && (
-									<span ref={refs.commands} className={s.command}>
-										<b>
-											<Glyph name="command-idle" size={14} />
-											dev
+					{step === 'brigadir' ? (
+						<BrigadirChat
+							locale={lang}
+							chat={null}
+							ask={null}
+							project={project?.name ?? null}
+							onOpenChat={() => {}}
+							onOpenSettings={() => {}}
+							onOpenTask={() => {}}
+						/>
+					) : (
+						<>
+							<div className={s.toolbar}>
+								<strong>{project ? tr('Orders export') : tr('Brigadir')}</strong>
+								<span>{project ? project.name : tr('this is how a task looks')}</span>
+								{showModules && (
+									<span className={s.toolbarTools}>
+										{draft.modules.commands && (
+											<span ref={refs.commands} className={s.command}>
+												<b>
+													<Glyph name="command-idle" size={14} />
+													dev
+													<Glyph name="chevron-down" size={10} />
+												</b>
+												<i>
+													<Glyph name="command-play" size={14} />
+												</i>
+											</span>
+										)}
+										<span className={s.toolMenu}>
+											<Glyph name="tools" size={16} />
 											<Glyph name="chevron-down" size={10} />
-										</b>
-										<i>
-											<Glyph name="command-play" size={14} />
-										</i>
+										</span>
 									</span>
 								)}
-								<span className={s.toolMenu}>
-									<Glyph name="tools" size={16} />
-									<Glyph name="chevron-down" size={10} />
-								</span>
-							</span>
-						)}
-					</div>
-					<div className={s.grid} data-columns={columns}>
-						<div ref={refs.chat} className={s.column}>
-							<Chat
-								terminal={draft.agents.transport === 'terminal'}
-								provider={provider}
-								crew={step === 'crew' ? crewFocus : null}
-								providers={crewProviders}
+							</div>
+							<div className={s.grid} data-columns={columns}>
+								<div ref={refs.chat} className={s.column}>
+									<Chat
+										terminal={draft.agents.transport === 'terminal'}
+										provider={provider}
+										crew={step === 'crew' ? crewFocus : null}
+										providers={crewProviders}
+										locale={lang}
+										tr={tr}
+										tabbed={columns === 'two'}
+									/>
+								</div>
+								<div ref={refs.editor} className={s.column} data-editor>
+									<h4>
+										{tr('Editor')}
+										<code>date-time.ts</code>
+										{/* spec/settings-modules-and-onboarding#intro-remote: the browser and the simulator open as tabs of the work area. */}
+										{showModules && draft.modules.browser && (
+											<code ref={refs.browser} className={s.tab}>
+												<Glyph name="browser" size={11} />
+												localhost:5173
+											</code>
+										)}
+										{showModules && draft.modules.simulator && (
+											<code ref={refs.simulator} className={s.tab}>
+												<Glyph name="simulator" size={11} />
+												iPhone 17
+											</code>
+										)}
+									</h4>
+									<Code ligatures={draft.typography.editor.ligatures} />
+								</div>
+								<div ref={refs.changes} className={s.column}>
+									<Changes
+										base={draft.editor.diffBase}
+										crew={step === 'crew'}
+										panel={
+											showModules
+												? { pr: draft.modules.pullRequests, ref: refs.pullRequests }
+												: undefined
+										}
+										tr={tr}
+									/>
+								</div>
+							</div>
+							<Board
+								list={draft.projects.defaultView === 'list'}
+								open={step === 'tasks'}
+								prs={draft.modules.pullRequests}
 								locale={lang}
 								tr={tr}
-								tabbed={columns === 'two'}
 							/>
-						</div>
-						<div ref={refs.editor} className={s.column} data-editor>
-							<h4>
-								{tr('Editor')}
-								<code>date-time.ts</code>
-								{/* spec/settings-modules-and-onboarding#intro-remote: the browser and the simulator open as tabs of the work area. */}
-								{showModules && draft.modules.browser && (
-									<code ref={refs.browser} className={s.tab}>
-										<Glyph name="browser" size={11} />
-										localhost:5173
-									</code>
-								)}
-								{showModules && draft.modules.simulator && (
-									<code ref={refs.simulator} className={s.tab}>
-										<Glyph name="simulator" size={11} />
-										iPhone 17
-									</code>
-								)}
-							</h4>
-							<Code ligatures={draft.typography.editor.ligatures} />
-						</div>
-						<div ref={refs.changes} className={s.column}>
-							<Changes
-								base={draft.editor.diffBase}
-								crew={step === 'crew'}
-								panel={
-									showModules
-										? { pr: draft.modules.pullRequests, ref: refs.pullRequests }
-										: undefined
-								}
-								tr={tr}
-							/>
-						</div>
-					</div>
-					<Board
-						list={draft.projects.defaultView === 'list'}
-						open={step === 'tasks'}
-						prs={draft.modules.pullRequests}
-						locale={lang}
-						tr={tr}
-					/>
+						</>
+					)}
 				</div>
 				<div
 					ref={refs.banner}

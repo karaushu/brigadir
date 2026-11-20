@@ -83,6 +83,7 @@ export const webChannels: Readonly<Record<IpcMethod, WebAccess>> = {
 	renameBrigadirChat: 'deny',
 	archiveBrigadirChat: 'deny',
 	deleteBrigadirChat: 'deny',
+	unarchiveBrigadirChat: 'deny',
 	answerBrigadirCard: 'deny',
 	undoBrigadirCard: 'deny',
 	openBrigadirLink: 'deny',

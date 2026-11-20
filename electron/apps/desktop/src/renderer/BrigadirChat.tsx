@@ -21,6 +21,7 @@ import { ChatCard } from './ui/ChatCard';
 import { MarkdownStill, markdown } from './MarkdownBlock';
 import { toastError } from './ui/Toast';
 import { useBrigadirChat } from './brigadir-data';
+import { useWorkspace } from './store';
 import n from './NoteChat.module.css';
 import s from './BrigadirChat.module.css';
 
@@ -470,6 +471,37 @@ function BrigadirCardView({
 		);
 	}
 	if (card.type === 'secret') return <SecretCard card={card} locale={locale} onAnswer={onAnswer} />;
+	if (card.type === 'note')
+		return (
+			<div className={s.link} data-brigadir-card="note" data-size="s">
+				<Glyph name="note" size={14} />
+				<span>
+					<b>{t(locale, 'Note saved')}</b>
+					<small>{card.title}</small>
+				</span>
+				<Button size="s" onClick={() => useWorkspace.getState().openNotes(card.note)}>
+					{t(locale, 'Open note')}
+				</Button>
+			</div>
+		);
+	if (card.type === 'event')
+		return (
+			<div className={s.setting} data-brigadir-card="event" data-tone={card.tone} data-size="s">
+				<span className={s.eventDot} data-tone={card.tone} aria-hidden="true" />
+				<span className={s.settingName}>{card.text}</span>
+				<span className={n.gap} />
+				{card.link && (
+					<a className={s.fix} href={card.link} target="_blank" rel="noreferrer">
+						GitHub
+					</a>
+				)}
+				{card.task && (
+					<Button size="s" onClick={() => onOpenTask(card.task!)}>
+						{t(locale, 'Open task')}
+					</Button>
+				)}
+			</div>
+		);
 	if (card.type === 'link')
 		return (
 			<div className={s.link} data-brigadir-card="link" data-size="s">

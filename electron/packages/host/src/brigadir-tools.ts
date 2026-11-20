@@ -88,6 +88,31 @@ export const brigadirChatTools: readonly Tool[] = [
 		{ task },
 		'Use it when the person wants to look at a task.'
 	),
+	tool(
+		'note',
+		"Save a note in Brigadir's Notes: the person's own words, or a summary of this chat they asked for. project: a project's name, or none.",
+		{
+			text: z.string().trim().min(1).max(20000),
+			title: z.string().trim().min(1).max(200).optional(),
+			project: z.string().trim().min(1).max(200).optional(),
+		},
+		'Use it when the person asks to save, note or remember something. Keep their words as they wrote them.'
+	),
+	tool(
+		'watch',
+		'Tell the person in this chat when something happens to a task: kinds "ci" (a CI run of its PR ends), "merged" (its PR is merged), "done" (a turn ends or the task is completed). Each kind tells once.',
+		{
+			task,
+			kinds: z
+				.array(z.enum(['ci', 'merged', 'done']))
+				.min(1)
+				.max(3),
+		},
+		'Use it when the person asks to let them know, ping or tell them about a task later.'
+	),
+	tool('unwatch', 'Stop telling about a task in this chat; without task, about every task.', {
+		task: task.optional(),
+	}),
 ];
 let served: Served | null = null;
 export function brigadirChatServed(): Served {

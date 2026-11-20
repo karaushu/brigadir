@@ -75,6 +75,8 @@ export type BrigadirChatDeps = {
 	sendToTask(task: TaskKey, text: string): Promise<string>;
 	askTask(task: TaskKey, question: string, chat: string): Promise<string | null>;
 	openTask(task: TaskKey): void;
+	/** Saves a note in Notes; its id. */
+	createNote(project: string | null, text: string): Promise<string>;
 	openExternal(url: string): void;
 	slack: {
 		/** Seals a bot token after `auth.test`; the bot, team, granted scopes and app id when Slack gives them. */
@@ -101,6 +103,16 @@ type Live = {
 	timer?: ReturnType<typeof setTimeout>;
 };
 type Waiting = { chat: string; resolve(value: { action: string; value?: string }): void };
+type WatchKind = 'ci' | 'merged' | 'done';
+type Watch = { chat: string; task: TaskKey; kinds: WatchKind[] };
+/** A task's event as the chat tells it. */
+export type BrigadirNotice = {
+	kind: 'ci' | 'prMerged' | 'taskDone' | 'taskCompleted';
+	task: TaskKey;
+	text: string;
+	tone: 'green' | 'red' | 'amber' | 'accent';
+	link: string | null;
+};
 type Setups = Partial<
 	Record<BrigadirSetupKind, { chat: string | null; name?: string; appId?: string | null }>
 >;
@@ -122,15 +134,27 @@ export class BrigadirChats {
 		return safePath(this.deps.root, 'chats', id);
 	}
 	// ---------- list and storage ----------
-	async list(): Promise<{ chats: BrigadirChatMeta[]; setups: BrigadirSetupState[] }> {
+	async list(): Promise<{
+		chats: BrigadirChatMeta[];
+		archived: BrigadirChatMeta[];
+		setups: BrigadirSetupState[];
+	}> {
 		const names = await readdir(join(this.deps.root, 'chats')).catch(() => [] as string[]);
-		const chats: BrigadirChatMeta[] = [];
+		const all: BrigadirChatMeta[] = [];
 		for (const name of names) {
 			const meta = await this.meta(name).catch(() => null);
-			if (meta && !meta.archived) chats.push(meta);
+			if (meta) all.push(meta);
 		}
-		chats.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-		return { chats, setups: await this.setupStates() };
+		all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+		return {
+			chats: all.filter((chat) => !chat.archived),
+			archived: all.filter((chat) => chat.archived),
+			setups: await this.setupStates(),
+		};
+	}
+	/** Whether a chat is in the archive, for its row menu. */
+	async archivedChat(id: string) {
+		return (await this.meta(id))?.archived ?? false;
 	}
 	private async meta(id: string): Promise<BrigadirChatMeta | null> {
 		const doc = await readDocument(await safePath(this.deps.root, 'chats', id, 'chat.json'));
@@ -144,8 +168,7 @@ export class BrigadirChats {
 		});
 	}
 	private async broadcastList() {
-		const { chats, setups } = await this.list();
-		this.deps.send({ kind: 'list', chats, setups });
+		this.deps.send({ kind: 'list', ...(await this.list()) });
 	}
 	private async rows(id: string): Promise<BrigadirChatRow[]> {
 		const text = await readFile(
@@ -199,6 +222,13 @@ export class BrigadirChats {
 		if (!meta) return;
 		this.close(id);
 		await this.writeMeta({ ...meta, archived: true });
+		await this.broadcastList();
+	}
+	/** `Restore` of an archived chat: back in the list. */
+	async unarchive(id: string) {
+		const meta = await this.meta(id);
+		if (!meta) return;
+		await this.writeMeta({ ...meta, archived: false });
 		await this.broadcastList();
 	}
 	async remove(id: string) {
@@ -489,8 +519,111 @@ export class BrigadirChats {
 			case 'open_task':
 				this.deps.openTask(await this.taskOf(str('task')));
 				return 'opened';
+			case 'note':
+				return this.note(chat, str('text'), str('title') || null, str('project') || null);
+			case 'watch':
+				return this.watch(
+					chat,
+					await this.taskOf(str('task')),
+					Array.isArray(args.kinds)
+						? args.kinds.filter(
+								(kind): kind is WatchKind => kind === 'ci' || kind === 'merged' || kind === 'done'
+							)
+						: []
+				);
+			case 'unwatch':
+				return this.unwatch(chat, str('task') ? await this.taskOf(str('task')) : null);
 			default:
 				throw new Error(`Unknown tool ${method}`);
+		}
+	}
+	// ---------- notes and watches ----------
+	private async note(chat: string, text: string, title: string | null, project: string | null) {
+		let projectId: string | null = null;
+		if (project) {
+			const found = (await this.deps.projects()).find(
+				(item) => item.id === project || item.name.toLowerCase() === project.trim().toLowerCase()
+			);
+			if (!found) throw new Error(`No project ${project}.`);
+			projectId = found.id;
+		}
+		const body = title && !text.trimStart().startsWith('#') ? `# ${title}\n\n${text}` : text;
+		const note = await this.deps.createNote(projectId, body);
+		await this.card(chat, {
+			type: 'note',
+			id: randomUUID(),
+			note,
+			title: title ?? brigadirChatTitle(text),
+			project,
+		});
+		return { note, saved: true };
+	}
+	private async readWatches(): Promise<Watch[]> {
+		const doc = await readDocument(await safePath(this.deps.root, 'watches.json')).catch(
+			() => null
+		);
+		return isRecord(doc) && Array.isArray(doc.watches) ? (doc.watches as Watch[]) : [];
+	}
+	private async writeWatches(watches: Watch[]) {
+		await mkdir(this.deps.root, { recursive: true, mode: 0o700 });
+		await atomicJson(await safePath(this.deps.root, 'watches.json'), { schemaVersion: 1, watches });
+	}
+	private async watch(chat: string, task: TaskKey, kinds: WatchKind[]) {
+		if (!kinds.length) throw new Error('kinds takes ci, merged or done.');
+		const watches = (await this.readWatches()).filter(
+			(item) =>
+				!(item.chat === chat && item.task.projectId === task.projectId && item.task.id === task.id)
+		);
+		const before = (await this.readWatches()).find(
+			(item) =>
+				item.chat === chat && item.task.projectId === task.projectId && item.task.id === task.id
+		);
+		await this.writeWatches([
+			...watches,
+			{ chat, task, kinds: [...new Set([...(before?.kinds ?? []), ...kinds])] },
+		]);
+		return `Watching: this chat hears when ${kinds.join(', ')} happens to the task; each kind once.`;
+	}
+	private async unwatch(chat: string, task: TaskKey | null) {
+		const watches = await this.readWatches(),
+			kept = watches.filter(
+				(item) =>
+					item.chat !== chat ||
+					(task !== null && (item.task.projectId !== task.projectId || item.task.id !== task.id))
+			);
+		await this.writeWatches(kept);
+		return watches.length === kept.length ? 'Nothing was watched.' : 'Stopped watching.';
+	}
+	/** spec/settings-modules-and-onboarding#brigadir-chat-tools: an event of a task — CI, a merge, a turn's end, completion — reaches the chats that watch it. */
+	async notice(event: BrigadirNotice) {
+		const kind: WatchKind =
+			event.kind === 'ci' ? 'ci' : event.kind === 'prMerged' ? 'merged' : 'done';
+		const watches = await this.readWatches();
+		let changed = false;
+		for (const watch of watches) {
+			if (
+				watch.task.projectId !== event.task.projectId ||
+				watch.task.id !== event.task.id ||
+				!watch.kinds.includes(kind)
+			)
+				continue;
+			watch.kinds = watch.kinds.filter((item) => item !== kind);
+			changed = true;
+			if (!(await this.meta(watch.chat).catch(() => null))) continue;
+			await this.card(watch.chat, {
+				type: 'event',
+				id: randomUUID(),
+				text: event.text,
+				tone: event.tone,
+				link: event.link,
+				task: event.task,
+			});
+			const meta = await this.meta(watch.chat);
+			if (meta) await this.writeMeta({ ...meta, updatedAt: new Date().toISOString() });
+		}
+		if (changed) {
+			await this.writeWatches(watches.filter((watch) => watch.kinds.length));
+			await this.broadcastList();
 		}
 	}
 	private async taskOf(ref: string): Promise<TaskKey> {

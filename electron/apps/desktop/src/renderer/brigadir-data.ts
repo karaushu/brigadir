@@ -5,16 +5,18 @@ import type { BrigadirChatMeta, BrigadirChatRow, BrigadirSetupState } from '@bri
 export function useBrigadirList() {
 	const [list, setList] = useState<{
 		chats: BrigadirChatMeta[];
+		archived: BrigadirChatMeta[];
 		setups: BrigadirSetupState[];
 	} | null>(null);
 	useEffect(() => {
 		let active = true;
 		const off = window.brigadir.onBrigadirEvent((event) => {
-			if (event.kind === 'list') setList({ chats: event.chats, setups: event.setups });
+			if (event.kind === 'list')
+				setList({ chats: event.chats, archived: event.archived, setups: event.setups });
 		});
 		void window.brigadir.readBrigadirChats().then(
 			(value) => active && setList(value),
-			() => active && setList({ chats: [], setups: [] })
+			() => active && setList({ chats: [], archived: [], setups: [] })
 		);
 		return () => {
 			active = false;

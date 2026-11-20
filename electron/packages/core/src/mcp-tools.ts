@@ -101,6 +101,9 @@ const verbs = {
 	send_to_task: ['Writing to a task', 'Wrote to a task', 'Could not write to the task'],
 	ask_task: ['Asking a task', 'Asked a task', 'Could not ask the task'],
 	open_task: ['Opening a task', 'Opened a task', 'Could not open the task'],
+	note: ['Saving a note', 'Saved a note', 'Could not save the note'],
+	watch: ['Watching a task', 'Watching a task', 'Could not watch the task'],
+	unwatch: ['Stopping a watch', 'Stopped watching', 'Could not stop watching'],
 	add_folder: ['Adding a folder', 'Added a folder', 'Could not add the folder'],
 	slack_post: ['Posting to Slack', 'Posted to Slack', 'Could not post to Slack'],
 	tasks_list: ['Looking up tasks', 'Looked up tasks', 'Could not look up tasks'],
@@ -259,6 +262,9 @@ const brigadirChatToolNames = new Set([
 	'send_to_task',
 	'ask_task',
 	'open_task',
+	'note',
+	'watch',
+	'unwatch',
 ]);
 export function mcpModule(tool: string): McpModule {
 	if (

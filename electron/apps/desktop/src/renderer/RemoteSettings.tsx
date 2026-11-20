@@ -41,6 +41,7 @@ import {
 import { MachineGlyph } from './ui/MachineGlyph';
 import { RemoteConnect } from './RemoteConnect';
 import { characterCount, remoteClock, remoteMoment } from '@brigadir/core';
+import { useWorkspace } from './store';
 import styles from './RemoteSettings.module.css';
 
 export type RemoteDialog = 'pair' | 'journal' | 'password';
@@ -300,6 +301,20 @@ function ThisMachine({
 							/>
 							<span>{t(locale, 'Allow control from other devices')}</span>
 						</label>
+					</SettingsRow>
+					{/* spec/settings-modules-and-onboarding#brigadir-chat-entry: Brigadir walks through turning it on in its chat; Settings closes. */}
+					<SettingsRow label={t(locale, 'Set up with Brigadir')}>
+						<Button
+							size="m"
+							onClick={() =>
+								useWorkspace
+									.getState()
+									.openBrigadir(null, t(locale, 'Turn on access from my laptop'))
+							}
+							data-remote-brigadir>
+							<Glyph name="helmet-chat" size={13} />
+							{t(locale, 'Set up with Brigadir')}
+						</Button>
 					</SettingsRow>
 				</SettingsSection>
 				{error && <p className={styles.error}>{error}</p>}

@@ -13,6 +13,7 @@ import {
 	modelDisplayName,
 	selectOption,
 	slackAgentActions,
+	brigadirActions,
 	t,
 	taskActions,
 	withActionAgent,
@@ -190,6 +191,9 @@ export function ActionAgentsRows({
 					{/* spec/notifications-slack-notes-and-schedules#slack: the @ mentions' answers and the agent of code questions. */}
 					<div className={styles.heading}>{t(locale, 'Slack')}</div>
 					{slackAgentActions.map(row)}
+					{/* spec/settings-modules-and-onboarding#brigadir-chat-session: the agent of the Brigadir section's chats. */}
+					<div className={styles.heading}>{t(locale, 'Brigadir (section)')}</div>
+					{brigadirActions.map(row)}
 				</>
 			)}
 		</>

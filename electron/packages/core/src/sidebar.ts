@@ -119,6 +119,8 @@ export type CrewWorkerRow = {
 	role: CrewSpecAgent['role'];
 	/** spec/sidebar#crew-card: an Auto worker that was dismissed stays as a quiet row with its `+N −M`. */
 	dismissed: boolean;
+	/** spec/reviews#surfaces: a reviewer of the task's own review (not a crew's reviewer). */
+	reviewer?: true;
 };
 /** Worker rows of a foreman card in tree order with the agent name as prefix and lead depth (spec/crew-templates-and-editor#after-launch, spec/crew#subordinates). */
 export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]): CrewWorkerRow[] {
@@ -157,6 +159,7 @@ export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]):
 					provider: task.provider ?? child.provider,
 					role: child.role,
 					dismissed: !!foreman.auto && task.status === 'completed',
+					...(isTaskReviewAgent(child) ? { reviewer: true as const } : {}),
 				});
 			visit(child, depth + 1);
 		}

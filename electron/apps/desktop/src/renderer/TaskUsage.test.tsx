@@ -5,6 +5,8 @@ import {
 	BudgetCard,
 	BudgetHeldStrip,
 	BudgetStrip,
+	heldRow,
+	raiseHeld,
 	MemberTokens,
 	TaskUsageCounterView,
 	UsageBreakdown,
@@ -262,6 +264,33 @@ it('held at the budget after Finish turns: the deck row says so and keeps only t
 		/>
 	);
 	expect(uk).toContain('Пауза через бюджет');
+	// `Stop now` holds the same way; the row is the hold's after `finish` or `stop` only, and leaves with it.
+	expect(heldRow({ ...hold, state: 'stop' })).toMatchObject({ state: 'stop' });
+	expect(heldRow(hold)).toBe(hold);
+	expect(heldRow({ ...hold, state: 'asked' })).toBeNull();
+	expect(heldRow(null)).toBeNull();
+});
+
+it('a raise from the held row changes the budget and reads the workspace again; No limit removes it', async () => {
+	const sent: unknown[] = [];
+	let reloads = 0;
+	const send = (command: unknown) => {
+		sent.push(command);
+		return true;
+	};
+	const reload = async () => {
+		reloads++;
+	};
+	await raiseHeld(send, { provider: 'claude' }, 'raise', 1_000_000, reload);
+	await raiseHeld(send, { provider: 'claude' }, 'unlimited', undefined, reload);
+	expect(sent).toEqual([
+		{ kind: 'setTokenBudget', provider: 'claude', budget: 1_000_000 },
+		{ kind: 'setTokenBudget', provider: 'claude', budget: null },
+	]);
+	expect(reloads).toBe(2);
+	// A command that did not go through reads nothing again.
+	await raiseHeld(() => false, { provider: 'claude' }, 'raise', 1_000_000, reload);
+	expect(reloads).toBe(2);
 });
 
 it("a worker row shows the member's own count, ≈ while its turn runs", () => {

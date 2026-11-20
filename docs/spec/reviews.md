@@ -285,7 +285,7 @@ you`; `review · <point> · did not start`; `review · <point> · changed after 
   it: the agent's reply, the reviewer's reason for `open`, and a footer — `Sent to <agent> · fixing` with `Log`,
   `<reviewer> closed it`, or `Your call` with `Open the review` (expands the strip).
 - **Sidebar.** The current review's reviewers are rows under the task's card, like crew workers, under a solo task's,
-  an Auto task's or a crew's card alike; an earlier review's reviewers have no row. A row is named by the reviewer
+  an Auto task's or a crew's card alike; an earlier review's reviewers have no row, and a review that did not start has none. A row is named by the reviewer
   (`Codex`, `Codex 2`), never by its role, and says the review's state, never the reviewer task's title: `<reviewer> ·
   Review` while it reads or checks, `· N findings · waits` while the agent fixes (N = what it filed), `· Approved`,
   `· N open` in amber with the amber `needs-you` glyph while the person decides (N = its findings still open, so it

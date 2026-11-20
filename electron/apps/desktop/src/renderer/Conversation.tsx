@@ -141,6 +141,7 @@ import {
 	BudgetCard,
 	BudgetHeldStrip,
 	BudgetStrip,
+	heldRow,
 	TaskUsageCounterView,
 	budgetAnswerText,
 	budgetTitle,
@@ -367,7 +368,7 @@ export function Conversation({
 	// spec/agents-and-providers#task-tokens: the counter, the budget card and strip read one view of the task's tokens.
 	const tokens = useTaskTokens(task, locale);
 	// spec/chat-turns-plans-and-questions#budget-held: held at the budget after the question was answered with `finish` or `stop`.
-	const heldAtBudget = tokens.hold && tokens.hold.state !== 'asked' ? tokens.hold : null;
+	const heldAtBudget = heldRow(tokens.hold);
 	// spec/chat-turns-plans-and-questions#turn-rail: one rail mark per prompt; the text is the prompt's own row (a human message or a crew event).
 	const railTurns = useMemo((): RailTurn[] => {
 		const texts = new Map<string, string>();
@@ -435,7 +436,8 @@ export function Conversation({
 		steering: session?.kind === 'session.started' && session.steering === true,
 		paused: queue.paused,
 		rateLimited: Boolean(rateLimit),
-		budgetHeld: Boolean(tokens.hold),
+		// spec/agents-and-providers#budget-reached: the hold is the root's and covers every member.
+		budgetHeld: Boolean(tokens.root.tokenHold),
 		planWaiting: pending.permissions.some((request) => isPlanApproval(request)),
 	});
 	const steers = steering && !queue.prompts.length;

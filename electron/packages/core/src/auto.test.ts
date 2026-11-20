@@ -373,9 +373,11 @@ describe('spec/sidebar#crew-card: Auto worker rows', () => {
 			parentTaskId: 'lead',
 		});
 		const tasks = [lead, member('w', 'w1'), member('r1', 'review-a-1'), member('r2', 'review-b-1')];
-		expect(crewWorkerRows(lead, tasks).map((row) => [row.task.id, row.name])).toEqual([
-			['w', 'Developer'],
-			['r2', 'Codex 2'],
+		expect(
+			crewWorkerRows(lead, tasks).map((row) => [row.task.id, row.name, row.reviewer ?? false])
+		).toEqual([
+			['w', 'Developer', false],
+			['r2', 'Codex 2', true],
 		]);
 		expect(crewTaskLabel(tasks[3]!, tasks)).toBe('Codex 2 · reviews the changes');
 	});

@@ -3,6 +3,7 @@ import {
 	t,
 	type CrewWorkerRow,
 	type Locale,
+	type TaskReviewMember,
 	type TaskReviewView,
 } from '@brigadir/core';
 /**
@@ -59,4 +60,16 @@ export function reviewerState(
 		default:
 			return {};
 	}
+}
+/**
+ * spec/reviews#surfaces: a reviewer of the task's own review keeps its row only while the current review counts it — a review that did not
+ * start has none, and an earlier review's reviewers have none. Workers and a crew's own reviewers stay.
+ */
+export function currentReviewerRows<Row extends Pick<CrewWorkerRow, 'task' | 'reviewer'>>(
+	rows: readonly Row[],
+	members: readonly Pick<TaskReviewMember, 'taskId'>[]
+): Row[] {
+	return rows.filter(
+		(row) => !row.reviewer || members.some((member) => member.taskId === row.task.id)
+	);
 }

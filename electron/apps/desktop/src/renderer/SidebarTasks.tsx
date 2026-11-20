@@ -28,7 +28,7 @@ import { Popover, useHoverPopover } from './ui/Popover';
 import { TaskPreviewContent } from './ui/TaskPreviewContent';
 import { collapseCrew, loadCollapsedCrews, useCrewCollapse } from './crew-collapse';
 import { useWaitsForSimulator } from './simulator-waiting';
-import { reviewerState, workerRowState } from './worker-row';
+import { currentReviewerRows, reviewerState, workerRowState } from './worker-row';
 import styles from './App.module.css';
 /* The sidebar's task row and crew card (spec/sidebar#layout, spec/crew#task-type, spec/appearance#evolution-redesign). The intro's sample window shows the same card at rest
    (`preview`, spec/settings-modules-and-onboarding#intro-steps, rule 17): nothing read through main, the crew expanded. */
@@ -52,12 +52,13 @@ export function CrewCard({
 	useEffect(() => {
 		if (!preview) void loadCollapsedCrews();
 	}, [preview]);
-	const rows = crewWorkerRows(task, tasks),
+	const review = useTaskReview(!preview ? task : null);
+	// spec/reviews#surfaces: a reviewer of the task's own review has a row only while the current review counts it (a review that did not
+	// start has none, and earlier reviews' reviewers have none).
+	const rows = currentReviewerRows(crewWorkerRows(task, tasks), review.members),
 		providers = task.crew ? specProviders(task.crew.root) : [],
 		// spec/reviews#surfaces: a solo task's reviewers — the card has no helmet and counts reviewers.
-		reviewOnly = !task.crew,
-		// spec/reviews#surfaces: a reviewer row says its state under any card — a solo task's, an Auto task's or a crew's.
-		review = useTaskReview(!preview ? task : null);
+		reviewOnly = !task.crew;
 	// spec/appearance#evolution-redesign: a collapsed crew says what its workers do when the foreman has no activity line.
 	const working = rows.filter(
 			(row) => !['done', 'completed', 'backlog'].includes(row.task.status)

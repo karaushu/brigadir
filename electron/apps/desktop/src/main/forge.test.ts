@@ -629,12 +629,20 @@ it('spec/architecture-and-platform#read-issues: a read that fails locally is a r
 				tasks: [{ ...task, title: 'x', status: 'done' }],
 				issues: [],
 			});
-		expect(workspace().issues).toEqual([
-			{ path: `projects/${project.id}/tasks/${task.id}/git`, code: 'git_failed' },
-		]);
+		await vi.waitFor(() =>
+			expect(workspace().issues).toEqual([
+				{ path: `projects/${project.id}/tasks/${task.id}/git`, code: 'git_failed' },
+			])
+		);
 		expect(runner).not.toHaveBeenCalled();
 		await rm(snapshots);
 		await actions.read(task, false);
+		await vi.waitFor(() => expect(workspace().issues).toEqual([]));
+		// A project whose folder is gone has nothing to read: no read issue.
+		await writeFile(snapshots, '{ not json');
+		await rm(repo, { recursive: true, force: true });
+		await expect(actions.read(task, false)).rejects.toThrow();
+		await new Promise((resolve) => setTimeout(resolve, 200));
 		expect(workspace().issues).toEqual([]);
 	} finally {
 		await rm(dir, { recursive: true, force: true });

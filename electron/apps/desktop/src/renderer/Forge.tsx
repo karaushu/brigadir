@@ -59,6 +59,17 @@ export function requestForgeAction(
 ) {
 	pendingAction = { projectId: task.projectId, id: task.id, action, scopeId };
 }
+/** spec/architecture-and-platform#read-issues: the workspace shows a `Git` read issue of this task. */
+const hasGitIssue = (task: AgentTask) =>
+	Boolean(
+		useWorkspace
+			.getState()
+			.workspace?.issues.some(
+				(issue) =>
+					issue.code === 'git_failed' &&
+					issue.path.split(/[\\/]/).join('/') === `projects/${task.projectId}/tasks/${task.id}/git`
+			)
+	);
 export function ForgeProvider({
 	task,
 	locale,
@@ -88,7 +99,8 @@ export function ForgeProvider({
 		const id = ++revision.current;
 		try {
 			const value = await window.brigadir.readForge(task, remote, fresh);
-			if (failedLocally.current) {
+			// The issue may stand from an earlier read (another visit of the task): a good read clears it in main, so read the workspace again.
+			if (failedLocally.current || hasGitIssue(task)) {
 				failedLocally.current = false;
 				void useWorkspace.getState().load();
 			}

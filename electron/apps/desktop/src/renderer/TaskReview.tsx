@@ -711,7 +711,11 @@ function useTrackYields() {
 		if (!node) return;
 		const group = node.closest('li')?.querySelector<HTMLElement>('[role="group"]');
 		if (group) track.current = group.offsetWidth + 2;
-		setHidden((now) => trackYields(now, node.scrollWidth, node.clientWidth, track.current));
+		// The text's own width, cut or not (scrollWidth never reads less than the column).
+		const range = document.createRange();
+		range.selectNodeContents(node);
+		const need = Math.ceil(range.getBoundingClientRect().width);
+		setHidden((now) => trackYields(now, need, node.clientWidth, track.current));
 	};
 	// The text changes with the state: measure after every render, and when the column resizes.
 	useLayoutEffect(check);

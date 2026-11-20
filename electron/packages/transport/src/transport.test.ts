@@ -776,7 +776,14 @@ it('counts a compaction from the per-model rows of the prompt result, not its ze
 	const transport = await start('compaction');
 	await transport.send({ kind: 'prompt', text: '/compact' });
 	expect(events.filter((event) => event.kind === 'turn.usage')).toEqual([
-		{ kind: 'turn.usage', input: 10800, output: 3120, cacheRead: 145000, cacheWrite: 200 },
+		{
+			kind: 'turn.usage',
+			input: 10800,
+			output: 3120,
+			cacheRead: 145000,
+			cacheWrite: 200,
+			main: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		},
 	]);
 	expect(events.filter((event) => event.kind === 'context.compacted')).toEqual([
 		{ kind: 'context.compacted', before: 153000, after: 14500 },

@@ -224,7 +224,10 @@ const checks: Record<string, Check> = {
 		cost: nil(object({ amount: number, currency: text })),
 	}),
 	'context.compacted': object({ before: nil(tokens), after: nil(tokens) }),
-	'turn.usage': object({ input: tokens, output: tokens, cacheRead: tokens, cacheWrite: tokens }),
+	'turn.usage': object(
+		{ input: tokens, output: tokens, cacheRead: tokens, cacheWrite: tokens },
+		{ main: object({ input: tokens, output: tokens, cacheRead: tokens, cacheWrite: tokens }) }
+	),
 	'session.info': object({}, { title: text, updatedAt: text }),
 	'permission.requested': object({ request: permission }),
 	'permission.resolved': object({ id: text, optionId: nil(text) }, { returnMode: text }),

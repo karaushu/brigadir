@@ -35,7 +35,35 @@ it('takes the per-model rows of the quota meta over the usage when there are any
 				],
 			},
 		})
-	).toEqual({ kind: 'turn.usage', input: 11, output: 10, cacheRead: 200, cacheWrite: 9 });
+	).toEqual({
+		kind: 'turn.usage',
+		input: 11,
+		output: 10,
+		cacheRead: 200,
+		cacheWrite: 9,
+		main: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+	});
+	// One row equal to the usage (codex-acp): no `main`.
+	expect(
+		turnUsage(
+			{ inputTokens: 4, outputTokens: 2, cachedReadTokens: 9, cachedWriteTokens: 0 },
+			{
+				quota: {
+					model_usage: [
+						{
+							model: 'gpt',
+							token_count: {
+								inputTokens: 4,
+								outputTokens: 2,
+								cachedInputTokens: 9,
+								cacheWriteInputTokens: 0,
+							},
+						},
+					],
+				},
+			}
+		)
+	).toEqual({ kind: 'turn.usage', input: 4, output: 2, cacheRead: 9, cacheWrite: 0 });
 	// No rows: the usage, as before.
 	expect(turnUsage({ ...usage, inputTokens: 3 }, { quota: { model_usage: [] } })).toEqual({
 		kind: 'turn.usage',

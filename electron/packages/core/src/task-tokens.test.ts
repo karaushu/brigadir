@@ -155,6 +155,37 @@ describe('tokens of a task (spec/agents-and-providers#task-tokens)', () => {
 			expect(countedTokens(done)).toBe(6 + 348 + 25_327 + 4 + 569 + 1163);
 		});
 	});
+	it("learns the opening's share from the turn's own loop, and counts its other calls (spec/agents-and-providers#turn-usage)", () => {
+		let tally = reduceTokenTally(emptyTokenTally(), { kind: 'turn.started', text: '' });
+		for (const used of [50_000, 51_000])
+			tally = reduceTokenTally(tally, {
+				kind: 'usage.changed',
+				used,
+				capacity: 200_000,
+				cost: null,
+			});
+		tally = reduceTokenTally(tally, {
+			kind: 'turn.usage',
+			input: 1_000,
+			output: 52_000,
+			cacheRead: 100_000,
+			cacheWrite: 2_000,
+			main: { input: 1_000, output: 2_000, cacheRead: 50_000, cacheWrite: 1_000 },
+		});
+		// A subagent's 50k output counts, but does not teach that the opening cost all of itself.
+		expect(tally.learnedShare).toBe(0.06);
+		expect(countedTokens(tally)).toBe(55_000);
+		expect(
+			isSessionEvent({
+				kind: 'turn.usage',
+				input: 1,
+				output: 1,
+				cacheRead: 1,
+				cacheWrite: 1,
+				main: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1 },
+			})
+		).toBe(true);
+	});
 	it('a fall of the context (a compaction) adds nothing, and a stop drops the estimate', () => {
 		let tally = reduceTokenTally(emptyTokenTally(), { kind: 'turn.started', text: '' });
 		for (const used of [10_000, 30_000, 12_000, 20_000])

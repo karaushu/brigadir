@@ -24,7 +24,7 @@ const crewCompaction=scenario==='crew-compaction';let crewSteer;
 // spec/crew#auto-hire `crew-steering`: the scripted crew agent with steering; a steer is heard at once (`injected`).
 const crewSteering=scenario==='crew-steering';
 // spec/reviews#plan-mode `crew-codex-plan`: the scripted crew agent with codex-acp's `Collaboration mode` (default/plan). In `plan` a turn presents
-// its plan as codex-acp does — `plan_update`, then `Implement this plan?` without text; `implement` switches back to `default` and runs the script.
+// its plan as codex-acp does — `plan_update`, then `Implement this plan?` without text; `implement_plan` switches back to `default` and runs the script.
 const codexPlan=scenario==='crew-codex-plan';
 const steering=scenario==='steering'||scenario==='steering-late'||scenario==='steering-codex'||crewCompaction||crewSteering;let steerWaiter;
 const threadStatus=(client,type)=>update(client,{sessionUpdate:'session_info_update',_meta:{codex:{threadStatus:{type,...(type==='active'?{activeFlags:[]}:{})}}}});
@@ -213,9 +213,9 @@ connection = agent({name:'fixture'})
     const plan=`# Plan\n\n1. ${script.split('\n').find(line=>line.startsWith('@write '))?.slice(7)??'Nothing to write'}`;
     await update(client,{sessionUpdate:'plan_update',plan:{type:'markdown',planId:'plan-1',content:plan}});
     const result=await client.request(methods.client.session.requestPermission,{sessionId:'fixture-session',toolCall:{toolCallId:'plan-review:plan-1',title:'Implement this plan?',kind:'switch_mode',status:'pending'},
-     options:[{optionId:'implement',kind:'allow_once',name:'Yes, implement this plan'},{optionId:'revise',kind:'reject_once',name:'No, and tell Codex what to do differently'}]});
+     options:[{optionId:'implement_plan',kind:'allow_once',name:'Yes, implement this plan'},{optionId:'revise_plan',kind:'reject_once',name:'No, and tell Codex what to do differently'}]});
     record('plan-result',result);
-    if(result.outcome.outcome!=='selected'||result.outcome.optionId!=='implement'){await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'kept planning'}});return {stopReason:'end_turn'};}
+    if(result.outcome.outcome!=='selected'||result.outcome.optionId!=='implement_plan'){await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'kept planning'}});return {stopReason:'end_turn'};}
     options=options.map(option=>option.id==='collaboration_mode'?{...option,currentValue:'default'}:option);
     await update(client,{sessionUpdate:'config_option_update',configOptions:options});
    }

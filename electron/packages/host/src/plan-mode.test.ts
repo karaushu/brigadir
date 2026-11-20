@@ -207,7 +207,7 @@ it('Medium on a Codex-shaped session: switched into plan mode between turns, ask
 	await client.command({
 		kind: 'answerPermission',
 		id: second.event.request.id,
-		optionId: 'implement',
+		optionId: 'implement_plan',
 	});
 	const done = await next(client, second.seq, 'turn.completed');
 	expect(await readFile(join(repo, 'a.txt'), 'utf8')).toBe('one\n');

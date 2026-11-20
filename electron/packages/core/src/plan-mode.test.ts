@@ -71,13 +71,17 @@ const plan: PermissionRequest = {
 		status: 'pending',
 	} as PermissionRequest['tool'],
 	options: [
-		{ id: 'implement', name: 'Yes, implement this plan', kind: 'allow_once' },
-		{ id: 'revise', name: 'No', kind: 'reject_once' },
+		{ id: 'implement_plan', name: 'Yes, implement this plan', kind: 'allow_once' },
+		{ id: 'revise_plan', name: 'No', kind: 'reject_once' },
 	],
 };
 const presented: SessionEvent = { kind: 'permission.requested', request: plan };
-const approved: SessionEvent = { kind: 'permission.resolved', id: 'p1', optionId: 'implement' };
-const revised: SessionEvent = { kind: 'permission.resolved', id: 'p1', optionId: 'revise' };
+const approved: SessionEvent = {
+	kind: 'permission.resolved',
+	id: 'p1',
+	optionId: 'implement_plan',
+};
+const revised: SessionEvent = { kind: 'permission.resolved', id: 'p1', optionId: 'revise_plan' };
 const hostOn = (previous = 'default'): SessionEvent => ({
 	kind: 'plan.mode',
 	on: true,
@@ -269,7 +273,7 @@ describe('plan mode by the host (spec/reviews#plan-mode)', () => {
 			previousName: 'Default',
 			class: 'medium',
 		});
-		// codex-acp leaves the plan itself on `implement`.
+		// codex-acp leaves the plan itself on `implement_plan`.
 		expect(
 			planModeReturn(journal([...base, approved, { kind: 'options.changed', options: codex() }]))
 		).toBeNull();

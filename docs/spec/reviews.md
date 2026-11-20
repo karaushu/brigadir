@@ -562,7 +562,7 @@ approval: the host switches the session into its plan mode between turns.
   <Medium|Large>: present a plan for approval before you change anything more. Brigadir switched this session into plan
   mode: research without editing files, then present the plan. If files were already changed, the plan covers what is
   done and what is left.` (rule 12). Its turn starts in plan mode, as above.
-- **The plan** arrives as any plan for approval (Codex: `plan_update`, then `Implement this plan?` with `implement`), so
+- **The plan** arrives as any plan for approval (Codex: `plan_update`, then `Implement this plan?` with `implement_plan`), so
   the [plan review](#plan-start) and [the approval](chat-turns-plans-and-questions.md#plan-approval) run unchanged.
 - **Back to writing.** The agent leaves its plan mode on approval: Codex sets `Collaboration mode` to `Default` and goes
   on in the same turn with `Implement the approved plan.`; Claude through the approval's option. A turn with an approval

@@ -51,6 +51,7 @@ import {
 	type HelperAgent,
 	type HelperAction,
 	type SlackAgentAction,
+	type SlackInboxTarget,
 	type TaskAction,
 	type HelperRun,
 	quotaExhausted,
@@ -1573,6 +1574,29 @@ const slack: Slack = new Slack({
 		},
 	},
 	// spec/notifications-slack-notes-and-schedules#slack «watch and tell me here»: a PR read fresh, its runs and bells (spec/pull-requests-and-ci#ci-bell), a task's state.
+	// spec/todo-and-slack-inbox#slack-inbox: the Slack section — `Slack: summaries` of Customize per action (else the Helper agent) makes its
+	// summaries; Todo comes in through `todo` once that module is wired (null: `Add to Todo` is not shown).
+	inbox: {
+		locale: () => (currentLocale() === 'uk' ? 'uk' : 'en'),
+		agent: async (prompt, characterLimit) => {
+			const signal = AbortSignal.timeout(120_000),
+				target = await ghostTarget(signal, null, 'slackSummaries');
+			if (!target) return { kind: 'none' };
+			if (quotaExhausted(quota.read(), target.provider)) return { kind: 'quota' };
+			const said = await writeHintOneShot(prompt, signal, target, characterLimit, 110_000).catch(
+				() => null
+			);
+			return said ? { kind: 'text', text: said } : { kind: 'failed' };
+		},
+		projects: async () =>
+			(
+				await readWorkspace(
+					process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
+				)
+			).projects.map(({ id, name }) => ({ id, name })),
+		todo: null,
+		changed: (view) => clients.broadcast('slack-inbox:changed', view),
+	},
 	watching: {
 		pr: async (pr) => {
 			const detail = await pullRequests.detail(
@@ -3348,7 +3372,10 @@ void app.whenReady().then(async () => {
 							? 'todo'
 							: channel.startsWith('schedules:')
 								? 'schedules'
-								: null;
+								: // spec/todo-and-slack-inbox#slack-inbox-entry: the Slack section is the Slack module's.
+									channel.startsWith('slack-inbox:') && channel !== 'slack-inbox:opened'
+									? 'slack'
+									: null;
 	// spec/architecture-and-platform#ipc-boundary: the arguments are checked by the channel table's validator (core/ipc-channels) in `dispatch`, the same
 	// for a remote call (spec/remote-access-and-mobile#architecture).
 	function handle(channel: IpcInvokeChannel, action: (...args: any[]) => unknown) {
@@ -3378,6 +3405,22 @@ void app.whenReady().then(async () => {
 	handle('slack:disconnect', () => slack.disconnect());
 	handle('slack:app-connect', (token: string) => slack.setAppToken(token));
 	handle('slack:app-disconnect', () => slack.disconnectApp());
+	// spec/todo-and-slack-inbox#slack-inbox: the person's own token, and the Slack section.
+	handle('slack:user-connect', (token: string) => slack.connectUser(token));
+	handle('slack:user-disconnect', () => slack.disconnectUser());
+	const inbox = () => {
+		if (!slack.inbox) throw new Error('The Slack section is not available.');
+		return slack.inbox;
+	};
+	handle('slack-inbox:read', () => inbox().view());
+	handle('slack-inbox:opened', (open: boolean) => inbox().opened(open));
+	handle('slack-inbox:refresh', (target: SlackInboxTarget | null) => inbox().refresh(target));
+	handle('slack-inbox:thread', (id: string) => inbox().thread(id));
+	handle('slack-inbox:month', (month: string) => inbox().month(month));
+	handle('slack-inbox:done', (id: string) => inbox().done(id));
+	handle('slack-inbox:dismiss', (id: string) => inbox().dismiss(id));
+	handle('slack-inbox:todo', (id: string) => inbox().addTodo(id));
+	handle('slack-inbox:untodo', (id: string) => inbox().undoTodo(id));
 	const saveAppSettings = async (value: AppSettings) => {
 		const keepAwakeChanged =
 				value.agents.keepAwake !== appliedSettings.agents.keepAwake ||
@@ -4093,6 +4136,11 @@ void app.whenReady().then(async () => {
 			connectBot: (token) => slack.connectBot(token),
 			connectApp: async (token) => {
 				await slack.setAppToken(token);
+			},
+			connectUser: async (token) => {
+				const account = (await slack.connectUser(token)).account;
+				if (account.state !== 'on') throw new Error('Slack did not accept the token.');
+				return { user: account.user, team: account.team, missing: account.missing };
 			},
 			state: () => slack.setupState(),
 		},

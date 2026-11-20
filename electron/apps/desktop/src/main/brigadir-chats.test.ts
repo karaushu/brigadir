@@ -28,7 +28,7 @@ async function setup(over: Partial<BrigadirChatDeps> = {}) {
 		created: unknown[] = [],
 		opened: string[] = [],
 		notes: string[] = [];
-	const slackState = { bot: false, app: false, memberId: false, listening: false };
+	const slackState = { bot: false, app: false, memberId: false, listening: false, user: false };
 	const deps: BrigadirChatDeps = {
 		root,
 		mcp: {
@@ -76,6 +76,11 @@ async function setup(over: Partial<BrigadirChatDeps> = {}) {
 			},
 			connectApp: async () => {
 				slackState.app = true;
+			},
+			connectUser: async (token) => {
+				if (token === 'bad') throw new Error('invalid_auth');
+				slackState.user = true;
+				return { user: 'andy', team: 'acme', missing: token === 'few' ? ['search:read'] : [] };
 			},
 			state: () => slackState,
 		},

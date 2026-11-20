@@ -55,6 +55,9 @@ import { SidebarTodo } from './SidebarTodo';
 import { TodoScreen, type TodoTaskSeed } from './TodoScreen';
 import { BrigadirChat } from './BrigadirChat';
 import { useBrigadirList } from './brigadir-data';
+import { SidebarSlack } from './SidebarSlack';
+import { SlackInboxScreen } from './SlackInbox';
+import { useSlackInbox } from './slack-inbox-data';
 import { SidebarSchedules } from './SidebarSchedules';
 import { SchedulesScreen, useSchedules } from './SchedulesScreen';
 import { requestPRReview } from './pr-section';
@@ -363,7 +366,18 @@ export function App() {
 		todo: todoRoute,
 		openTodo,
 		closeTodo,
+		slack: slackRoute,
+		openSlack,
+		closeSlack,
 	} = useWorkspace();
+	// spec/todo-and-slack-inbox#slack-inbox-entry: the Slack section, while the Slack module is on; its view also feeds the rail's amber count.
+	const slackOpen = !!slackRoute && appearance.modules.slack;
+	const slackInbox = useSlackInbox(appearance.modules.slack);
+	useEffect(() => {
+		if (!slackOpen) return;
+		void window.brigadir.slackInboxOpened(true).catch(() => {});
+		return () => void window.brigadir.slackInboxOpened(false).catch(() => {});
+	}, [slackOpen]);
 	// spec/settings-modules-and-onboarding#brigadir-chat-entry: the Brigadir section — its chat in the main area, its list in the sidebar.
 	const brigadirOpen = !!brigadirRoute;
 	const brigadirList = useBrigadirList();
@@ -500,6 +514,7 @@ export function App() {
 			keymap?: string;
 			remote?: RemoteDialog;
 			remotePart?: RemotePart;
+			module?: 'slack';
 		}>({});
 	// spec/remote-access-and-mobile#module-and-settings: remote access — its settings (spec/settings-modules-and-onboarding#module-settings-popup: the Remote access popup of Settings ▸ Modules) with a dialog, File ▸ Connect…, the chip, the cover and the notices.
 	const [connect, setConnect] = useState<{ machine?: string; pair?: boolean } | null>(null),
@@ -862,11 +877,12 @@ export function App() {
 	/** spec/sidebar#section-rail: a section's tile or key opens it with the sidebar; the open section's own hides and shows the sidebar. */
 	const openSection = (next: typeof section) => {
 		// spec/notifications-slack-notes-and-schedules#notes + spec/sidebar#section-rail: from the Notes screen a section's tile goes back to that section's board, the sidebar shown.
-		if (notesOpen || schedulesOpen || brigadirOpen || todoOpen) {
+		if (notesOpen || schedulesOpen || brigadirOpen || todoOpen || slackOpen) {
 			useWorkspace.getState().closeNotes();
 			useWorkspace.getState().closeSchedules();
 			closeBrigadir();
 			closeTodo();
+			closeSlack();
 			setSidebarHidden(false);
 			if (next === section) return;
 		}
@@ -1142,6 +1158,14 @@ export function App() {
 						useWorkspace.getState().openBrigadir();
 					}
 				}
+				// spec/todo-and-slack-inbox#slack-inbox-entry: ⌃⌘7 opens Slack; there it hides and shows the sidebar.
+				if (action === 'section-slack' && useWorkspace.getState().appearance.modules.slack) {
+					if (useWorkspace.getState().slack) setSidebarHidden((value) => !value);
+					else {
+						setSidebarHidden(false);
+						useWorkspace.getState().openSlack(null);
+					}
+				}
 				if (action === 'sidebar-toggle') {
 					setSidebarHidden((value) => !value);
 					if (document.activeElement?.closest('aside'))
@@ -1226,6 +1250,7 @@ export function App() {
 								keymapQuery={settingsTarget.keymap}
 								remoteDialog={settingsTarget.remote}
 								remotePart={settingsTarget.remotePart}
+								module={settingsTarget.module}
 								close={() => {
 									setSettings(false);
 									setSettingsTarget({});
@@ -1305,21 +1330,25 @@ export function App() {
 										notes: appearance.modules.notes,
 										schedules: appearance.modules.schedules,
 										todo: appearance.modules.todo,
+										slack: appearance.modules.slack,
 									}}
 									selected={
 										todoOpen
 											? 'todo'
-											: brigadirOpen
-												? 'brigadir'
-												: notesOpen
-													? 'notes'
-													: schedulesOpen
-														? 'schedules'
-														: section
+											: slackOpen
+												? 'slack'
+												: brigadirOpen
+													? 'brigadir'
+													: notesOpen
+														? 'notes'
+														: schedulesOpen
+															? 'schedules'
+															: section
 									}
 									counts={{
 										tasks: needsYou.length,
 										prs: railPRs.loaded ? waitingCount(railPRs.items.map((item) => item.pr)) : 0,
+										slack: slackInbox.view?.waiting ?? 0,
 									}}
 									scheduleDot={scheduleDot}
 									brigadirDot={brigadirDot}
@@ -1344,6 +1373,12 @@ export function App() {
 											else {
 												setSidebarHidden(false);
 												openBrigadir();
+											}
+										} else if (id === 'slack') {
+											if (slackOpen) setSidebarHidden((value) => !value);
+											else {
+												setSidebarHidden(false);
+												openSlack(null);
 											}
 										} else openSection(id);
 									}}
@@ -1379,6 +1414,13 @@ export function App() {
 											colors={colors}
 											selected={todoRoute.list}
 											onOpen={(id) => openTodo(id)}
+										/>
+									) : slackOpen ? (
+										<SidebarSlack
+											locale={locale}
+											view={slackInbox.view}
+											selected={slackRoute.target}
+											onOpen={(target) => openSlack(target)}
 										/>
 									) : brigadirOpen ? (
 										<SidebarBrigadir
@@ -1735,7 +1777,8 @@ export function App() {
 										!notesOpen &&
 										!schedulesOpen &&
 										!brigadirOpen &&
-										!todoOpen && (
+										!todoOpen &&
+										!slackOpen && (
 											<header className={styles.titlebar}>
 												<span>{activeProject?.name ?? t(locale, 'Brigadir')}</span>
 												<AgentsButton />
@@ -1759,6 +1802,20 @@ export function App() {
 												selected={todoRoute.list}
 												onSelect={(id) => openTodo(id)}
 												onMakeTask={(seed) => void todoTask(seed)}
+											/>
+										</SurfaceBoundary>
+									) : slackOpen ? (
+										<SurfaceBoundary surface="project" locale={locale} resetKey="slack">
+											<SlackInboxScreen
+												locale={locale}
+												view={slackInbox.view}
+												error={slackInbox.error}
+												target={slackRoute.target}
+												onOpen={(target) => openSlack(target)}
+												onOpenSettings={() => {
+													setSettingsTarget({ module: 'slack' });
+													setSettings('modules');
+												}}
 											/>
 										</SurfaceBoundary>
 									) : brigadirOpen ? (

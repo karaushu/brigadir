@@ -36,9 +36,10 @@ export const helperActions = [
 /**
  * spec/notifications-slack-notes-and-schedules#slack: Slack's own two. `slackAnswers` — the helper's one-shots of a mention (its kind, the answer
  * from the facts, a note's summary), inherits the Helper agent; `slackCode` — the read-only side session that answers a
- * question about the code or a task, inherits the Default agent (a task's question — the task's own provider).
+ * question about the code or a task, inherits the Default agent (a task's question — the task's own provider); `slackSummaries` — the Slack
+ * section's one-shots (spec/todo-and-slack-inbox#slack-inbox-agent: a mention, a day, a week), inherits the Helper agent.
  */
-export const slackAgentActions = ['slackAnswers', 'slackCode'] as const;
+export const slackAgentActions = ['slackAnswers', 'slackCode', 'slackSummaries'] as const;
 /** spec/settings-modules-and-onboarding#brigadir-chat-session: the agent of the Brigadir chats; inherits the Default agent. */
 export const brigadirActions = ['brigadirChat'] as const;
 export const agentActions = [

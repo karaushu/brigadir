@@ -38,6 +38,8 @@ export type SlackSettings = {
 	/** Project id → its route; a project without one sends DMs. */
 	projects: Record<string, SlackRoute>;
 	mentions: SlackMentions;
+	/** spec/todo-and-slack-inbox#slack-inbox-source: `Count @here and @channel` in the Slack section; off by default. */
+	countHere: boolean;
 };
 export const defaultSlackMentions: SlackMentions = {
 	on: false,
@@ -58,6 +60,7 @@ export const defaultSlackSettings: SlackSettings = {
 	},
 	projects: {},
 	mentions: defaultSlackMentions,
+	countHere: false,
 };
 const peopleLimit = 200;
 const memberIdPattern = /^[UW][A-Z0-9]{2,}$/;
@@ -102,8 +105,9 @@ function isMentions(value: unknown): value is SlackMentions {
 export function isSlackSettings(value: unknown): value is SlackSettings {
 	return (
 		isRecord(value) &&
-		Object.keys(value).length === 4 &&
+		Object.keys(value).length === 5 &&
 		isMentions(value.mentions) &&
+		typeof value.countHere === 'boolean' &&
 		typeof value.memberId === 'string' &&
 		(value.memberId === '' || isSlackMemberId(value.memberId)) &&
 		isRecord(value.events) &&
@@ -167,7 +171,20 @@ export type SlackListen =
  * the token is no longer valid; `down` — Slack could not be reached, messages wait (`waiting`). `listen` — the mentions;
  * `appToken` — an App-Level Token is sealed (never the token itself).
  */
-export type SlackState = SlackBotState & { listen: SlackListen; appToken: boolean };
+export type SlackState = SlackBotState & {
+	listen: SlackListen;
+	appToken: boolean;
+	account: SlackAccount;
+};
+/**
+ * spec/todo-and-slack-inbox#slack-inbox-source: the person's own token (`xoxp-…`) of the Slack section — `off` (none sealed), `checking`, `on`
+ * (`auth.test` passed: the person's name, team and the user scopes it lacks), `token` (Slack refused it).
+ */
+export type SlackAccount =
+	| { state: 'off' }
+	| { state: 'checking' }
+	| { state: 'on'; user: string; team: string; missing: string[] }
+	| { state: 'token'; error: string };
 export type SlackBotState =
 	| { state: 'off' }
 	| { state: 'checking'; source: SlackTokenSource; file: string | null }

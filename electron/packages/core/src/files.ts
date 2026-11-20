@@ -166,6 +166,7 @@ export type WorkspaceAction =
 	| 'todo-move-up'
 	| 'todo-move-down'
 	| 'todo-undo'
+	| 'section-slack'
 	| 'layout-chat'
 	| 'layout-work'
 	| 'layout-panel'

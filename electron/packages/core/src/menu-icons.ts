@@ -94,6 +94,7 @@ export const menuIconNames = [
 	'note',
 	'pause',
 	'schedule',
+	'slack',
 	'pin',
 	'plan-document',
 	'plus',

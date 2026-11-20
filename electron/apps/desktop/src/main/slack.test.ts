@@ -87,6 +87,7 @@ it('finds the token in a project’s .env.local, posts the first event and repli
 		team: 'acme-team',
 		listen: { state: 'off' },
 		appToken: false,
+		account: { state: 'off' },
 	});
 	slack.post(done(), 'p');
 	slack.post({ ...done(), kind: 'needsYou', reason: 'A question to answer' } as SlackNotice, 'p');

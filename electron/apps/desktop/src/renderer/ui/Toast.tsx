@@ -21,6 +21,8 @@ export type ToastKind = 'success' | 'info' | 'warning' | 'error';
 export type ToastAction = { label: string; run(): void };
 export type ToastOptions = {
 	action?: ToastAction | undefined;
+	/** A second, quieter action after the first (spec/todo-and-slack-inbox#slack-inbox-to-todo: `Open` · `Undo`). */ secondary?:
+		ToastAction | undefined;
 	/** Part of the text set in bold, e.g. the file name. */ bold?: string | undefined;
 	/** Same key — one toast with ×N. Defaults to kind + text. */ key?: string | undefined;
 	/** False: the notification center hears about it elsewhere (a CI run main writes itself, spec/notifications-slack-notes-and-schedules#notification-center). */ log?: false;
@@ -42,6 +44,7 @@ export type Toast = {
 	text: string;
 	bold?: string | undefined;
 	action?: ToastAction | undefined;
+	secondary?: ToastAction | undefined;
 	key: string;
 	count: number;
 	remaining: number;
@@ -83,6 +86,7 @@ export function notify(kind: ToastKind, text: string, options: ToastOptions = {}
 								text,
 								bold: options.bold,
 								action: options.action,
+								secondary: options.secondary,
 								count: toast.count + 1,
 								remaining: TOAST_DURATION[kind],
 							}
@@ -98,6 +102,7 @@ export function notify(kind: ToastKind, text: string, options: ToastOptions = {}
 					text,
 					bold: options.bold,
 					action: options.action,
+					secondary: options.secondary,
 					key,
 					count: 1,
 					remaining: TOAST_DURATION[kind],
@@ -366,6 +371,19 @@ function ToastStack({
 										action.run();
 									}}>
 									{toast.action.label}
+								</Button>
+							)}
+							{toast.secondary && (
+								<Button
+									size="s"
+									variant="ghost"
+									className={s.action}
+									onClick={() => {
+										const action = toast.secondary!;
+										close(toast, false);
+										action.run();
+									}}>
+									{toast.secondary.label}
 								</Button>
 							)}
 							<PopupClose locale={locale} close={() => close(toast, false)} />

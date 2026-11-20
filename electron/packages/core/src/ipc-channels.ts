@@ -41,6 +41,7 @@ import { isReviewPoint, isTaskReviewChoice } from './task-review';
 import { isScheduleDraft, isScheduleId } from './schedules';
 import { noteChatLimits } from './note-chat';
 import { brigadirChatLimits } from './brigadir-chat';
+import { isSlackInboxTarget, isSlackMentionId } from './slack-inbox';
 import type { TaskSheet } from './bridge';
 import { isLaunchInput } from './launch';
 import { isTaskSurface, isSurfaceDraft } from './surface';
@@ -3723,6 +3724,88 @@ export const ipcTable = {
 		validate: noArgs,
 	},
 	onSlack: { kind: 'subscribe', channel: 'slack:changed', class: 'remote' },
+	// spec/todo-and-slack-inbox#slack-inbox-source: the person's own token of the Slack section; goes one way, into main.
+	connectSlackUser: {
+		kind: 'invoke',
+		channel: 'slack:user-connect',
+		class: 'remote',
+		remote: 'forbidden',
+		arity: 1,
+		validate: (a) => a.length === 1 && typeof a[0] === 'string' && a[0].length <= 256,
+	},
+	disconnectSlackUser: {
+		kind: 'invoke',
+		channel: 'slack:user-disconnect',
+		class: 'remote',
+		remote: 'forbidden',
+		arity: 0,
+		validate: noArgs,
+	},
+	// spec/todo-and-slack-inbox#slack-inbox: the Slack section — its list, the open mention's thread, a month of the archive, its actions.
+	readSlackInbox: {
+		kind: 'invoke',
+		channel: 'slack-inbox:read',
+		class: 'remote',
+		arity: 0,
+		validate: noArgs,
+	},
+	slackInboxOpened: {
+		kind: 'invoke',
+		channel: 'slack-inbox:opened',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && typeof a[0] === 'boolean',
+	},
+	refreshSlackInbox: {
+		kind: 'invoke',
+		channel: 'slack-inbox:refresh',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && (a[0] === null || isSlackInboxTarget(a[0])),
+	},
+	slackInboxThread: {
+		kind: 'invoke',
+		channel: 'slack-inbox:thread',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	slackInboxMonth: {
+		kind: 'invoke',
+		channel: 'slack-inbox:month',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && typeof a[0] === 'string' && /^\d{4}-\d{2}$/.test(a[0]),
+	},
+	slackInboxDone: {
+		kind: 'invoke',
+		channel: 'slack-inbox:done',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	slackInboxDismiss: {
+		kind: 'invoke',
+		channel: 'slack-inbox:dismiss',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	slackInboxTodo: {
+		kind: 'invoke',
+		channel: 'slack-inbox:todo',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	slackInboxUndoTodo: {
+		kind: 'invoke',
+		channel: 'slack-inbox:untodo',
+		class: 'remote',
+		arity: 1,
+		validate: (a) => a.length === 1 && isSlackMentionId(a[0]),
+	},
+	onSlackInbox: { kind: 'subscribe', channel: 'slack-inbox:changed', class: 'remote' },
 	// spec/remote-access-and-mobile#architecture, spec/remote-access-and-mobile#module-and-settings: a remote client saves settings but never switches the `remoteAccess` module.
 	saveSettings: {
 		kind: 'invoke',

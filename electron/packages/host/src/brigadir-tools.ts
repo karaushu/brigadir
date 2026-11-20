@@ -51,8 +51,8 @@ export const brigadirChatTools: readonly Tool[] = [
 	),
 	tool(
 		'secret_request',
-		'Show a secret field in the chat for the person to paste a token into. The value goes from the field to Brigadir and the system key store; you never see it. kind: "slackBotToken" (xoxb-…) or "slackAppToken" (xapp-…). Waits until the person pastes it or closes the card, then returns the check: connected as @bot, the scopes that are missing, or Slack\'s error.',
-		{ kind: z.enum(['slackBotToken', 'slackAppToken']) },
+		'Show a secret field in the chat for the person to paste a token into. The value goes from the field to Brigadir and the system key store; you never see it. kind: "slackBotToken" (xoxb-…), "slackAppToken" (xapp-…) or "slackUserToken" (xoxp-…, the person\'s own User OAuth Token for the Slack section). Waits until the person pastes it or closes the card, then returns the check: connected as @bot, the scopes that are missing, or Slack\'s error.',
+		{ kind: z.enum(['slackBotToken', 'slackAppToken', 'slackUserToken']) },
 		'Never ask the person to paste a token, key or password into the chat itself: use this card.'
 	),
 	tool(

@@ -1,6 +1,6 @@
 # Agent and crew templates, crew editor
 
-A crew is a named tree of agents, each with its own provider, model, effort, zone and extra instructions. Agent and crew templates live in a global library; when a task is created, its crew becomes an immutable snapshot (`CrewSpec`) in `task.json`. This file covers the data contract, the built-in roles, the roster the foreman reads, the crew editor, the template library and the implementation slices M1–M5. How a crew runs (orchestration tools, reviews, leads) is in [Crew](crew.md).
+A crew is a named tree of agents, each with its own provider, model, effort, zone and extra instructions. Roles (agent templates) and crew templates live in a global library; when a task is created, its crew becomes an immutable snapshot (`CrewSpec`) in `task.json`. This file covers the data contract, roles as profiles, the built-in roles, the roster the foreman reads, the crew editor and the role library. How a crew runs (orchestration tools, reviews, leads) is in [Crew](crew.md).
 
 <a id="model"></a>
 ## Model
@@ -15,15 +15,17 @@ A crew is a named tree of agents, each with its own provider, model, effort, zon
 
 | Entity | What it is | Where it lives |
 | --- | --- | --- |
-| Agent template (`AgentTemplate`) | name, role, optional provider, launch choices, specialty, instructions | `~/.brigadir/templates/agents/<id>.json` |
-| Crew agent (`CrewAgent`) | tree node: name, template, overrides, zone, specialty, extra instructions, subordinates, checkers | inside a crew template |
+| Role, an agent template (`AgentTemplate`) | a profile: name, rights, optional provider, launch choices, When to use, optional instructions | `~/.brigadir/templates/agents/<id>.json` |
+| Crew agent (`CrewAgent`) | tree node: name, template, overrides, zone, When to use, extra instructions, subordinates, checkers | inside a crew template |
 | Crew template (`CrewTemplate`) | the root `CrewAgent` (foreman) plus its tree | `~/.brigadir/templates/crews/<id>.json` |
 | Crew snapshot (`CrewSpec`) | fully resolved tree, stored in the task | `task.json` → `crew` |
 
 All types and checks are in `packages/core/src/crew.ts`. Pure editor operations are in `packages/core/src/crew-edit.ts`, and storage is in `packages/persistence/src/templates.ts`.
 
 <a id="agent-template"></a>
-### Agent template
+### Role: a profile
+
+A role is a profile, not a persona: who runs (provider, model, effort), what it may do (rights), one line on when to use it, and optional short instructions. The tool set's own rules come from its rights in code, so a role with no instructions is a working agent.
 
 ```json
 {
@@ -33,21 +35,44 @@ All types and checks are in `packages/core/src/crew.ts`. Pure editor operations 
   "provider": "codex",
   "choices": { "modeId": "read-only", "configOptions": { "model": "gpt-6-astra", "reasoning_effort": "high" } },
   "choiceNames": { "model": "6 Astra", "reasoning_effort": "High" },
-  "summary": "Reviews API changes; give it every backend part to check",
-  "instructions": "You do not write code. ...",
+  "whenToUse": "API changes; give it every backend part to check",
+  "instructions": "Read the OpenAPI file before the diff.",
   "builtin": false
 }
 ```
 
 | Field | Rule |
 | --- | --- |
-| `role` | `foreman` \| `developer` \| `reviewer`. This is the tool set the host gives the agent. |
+| `role` | `foreman` \| `developer` \| `reviewer`: the **rights**, the tool set the host gives the agent ([Rights](#rights)). |
 | `provider` | `claude` \| `codex`, optional. If it is missing, the agent uses the default agent from Settings ▸ Agents. |
 | `choices` | `CrewChoices = { modeId?, configOptions?: Record<id, string \| boolean> }`. Ids and values come only from the provider catalog (`session/new` config options), never from a model table of our own. |
 | `choiceNames` | Display names next to the ids, so a template stays readable on a machine that has not seen that provider's catalog. |
-| `summary` | The specialty: one English line, at most 240 chars, no line breaks. It is written for the **parent**, not for the agent. |
-| `instructions` | The agent's **role** in English ("who you are, how you work"), not the task. The foreman writes the task in `create_worker_task`. |
+| `whenToUse` | **When to use**: one English line, at most 240 chars, no line breaks. It is written for whoever picks the role, not for the agent: the [Auto](crew.md#auto-roles) agent hiring, a foreman distributing parts or composing a crew, and the person. They pick a role by this line, not by its name. |
+| `instructions` | Optional, short, in English: what this role does beyond the rules of its rights ("who you are"), not the task. The foreman writes the task in `create_worker_task`. |
 | `builtin` | `true` only for templates shipped in code. Those are never written to disk. |
+
+<a id="rights"></a>
+### Rights
+
+The rights are the tool sets the host gives: `foreman`, `developer`, `reviewer`. Each carries its rules in code (`crewRightsInstructions` in `packages/core/src/crew.ts`), versioned like the foreman brief, so no role repeats them:
+
+| Rights | Rules in code |
+| --- | --- |
+| `foreman` | None here: the foreman brief in code is the whole role ([Crew](crew.md#foreman-brief)). |
+| `developer` | Implement your part; own the listed files only; `read_notes` / `post_note` around shared contracts; `ask_foreman` instead of guessing; run the check the prompt names before ending the turn and say what it showed; a check that fails for a reason outside the zone is reported, not worked around; do not commit. |
+| `reviewer` | Write no code; `read_report`, then `read_diff` one file at a time; look for what a check cannot show (wrong behaviour, a changed contract, work outside the files); a report that names no check is not a defect by itself: a doubt is checked by the reviewer as its check prompt says ([Reviews](reviews.md#findings)); comment only on something wrong in the change, with its evidence, that must change before acceptance, because every round runs the developer again; `submit_review` with line comments; `approve` when nothing is left. |
+
+A crew agent's role text is its rights' rules, then the role's instructions, joined by a blank line ([Resolution](#resolution)).
+
+<a id="schema"></a>
+### Documents and older files
+
+Role and crew files are `{ schemaVersion: 2, template }`. A file with `schemaVersion: 1` loads unchanged in meaning and is written as version 2 at its next save (`upgradeAgentTemplateDocument`, `upgradeCrewTemplateDocument`):
+
+- its `summary` (the line's former name) becomes `whenToUse`, in a role and in every node of a crew;
+- an own role whose instructions begin with the rules of its rights followed by a space or a line break (a duplicate of Developer, Reviewer or Senior developer, a node saved as a role) loses that copy, so the rules are not given twice; any other text stays as written.
+
+The same holds for an imported file and for a schedule's one-off crew. A task's crew snapshot is never rewritten: an older one keeps the line as `summary`, read as When to use (`specWhenToUse`), and its instructions as resolved then.
 
 <a id="crew-template"></a>
 ### Crew template
@@ -77,7 +102,7 @@ All types and checks are in `packages/core/src/crew.ts`. Pure editor operations 
 }
 ```
 
-`CrewAgent` fields are `id`, `name`, `template: string | null`, and optionally `provider`, `choices`, `choiceNames`, `summary`, `zone: string[]`, `extraInstructions`, `agents: CrewAgent[]`, `checkedBy: string[]` and `leafDraft`.
+`CrewAgent` fields are `id`, `name`, `template: string | null`, and optionally `provider`, `choices`, `choiceNames`, `whenToUse`, `zone: string[]`, `extraInstructions`, `agents: CrewAgent[]`, `checkedBy: string[]` and `leafDraft`.
 
 - The root has the same type as every other node. Its overrides are stored like any node's.
 - `name` is what people see in the sidebar and on the board. It is also how the foreman addresses an agent in `create_worker_task(agent:)`; the host resolves the name to the node id from the snapshot.
@@ -85,24 +110,24 @@ All types and checks are in `packages/core/src/crew.ts`. Pure editor operations 
 - `extraInstructions` is **appended** after the template's instructions. The template text is not copied into the node, so editing a template reaches every node that uses it, while each node keeps its own addition.
 - `zone` uses the same path format as `files` in `create_worker_task`.
 - `checkedBy` holds stable node ids. The UI shows names, and renaming a node never breaks an edge.
-- `template: null` is an empty agent: a developer with no template that uses the provider defaults.
+- `template: null` is an empty agent: a developer with no role, with the developer's [rules](#rights) and the provider defaults.
 - `leafDraft` is editor state only and never reaches `CrewSpec` (see [Editor operations](#editor-operations)).
 
 <a id="builtin-templates"></a>
-## Built-in templates
+## Built-in roles
 
-The product works without any user template. There is one built-in **agent** template per tool set the host gives (Foreman, Developer, Reviewer), plus **Senior developer**: a Developer on a stronger model, so a crew can pay for strength only where a part needs it. Four **specialists** cover the roles people would otherwise write themselves: **Tester** and **Technical writer** write files, **Designer** and **Security reviewer** only check. A specialist is a Developer or a Reviewer with its own instructions and specialty; it has no rights of its own. Any other role is a person's own template, written from scratch or as a duplicate of a built-in. Every template that is not a foreman can also be the role of a task without a crew ([Tasks](tasks.md#sheet-role)) and the role of a subagent a task's agent starts when the person mentions the template in the composer ([Composer](composer.md#agent-blocks)).
+The product works without any own role. There is one built-in role per set of rights (Foreman, Developer, Reviewer), plus **Senior developer**: a Developer on a stronger model, so a crew can pay for strength only where a part needs it. Four more profiles cover the roles people would otherwise write themselves: **Tester** and **Technical writer** write files, **Designer** and **Security reviewer** only check. Each is a Developer or a Reviewer with its own When to use, model and short instructions; it has no rights of its own. Any other role is a person's own, written from scratch, saved from the [model question](crew.md#auto-model), or a duplicate of a built-in. Every role that is not a foreman can also be the role of a task without a crew ([Tasks](tasks.md#sheet-role)) and the role of a subagent a task's agent starts when the person mentions the role in the composer ([Composer](composer.md#agent-blocks)).
 
-| Id | Name | Role | Instructions |
-| --- | --- | --- | --- |
-| `foreman-default` | Foreman | `foreman` | Empty: the foreman brief in code is the whole role. Nodes with subordinates use this template too. |
-| `developer` | Developer | `developer` | Implement your part; own the listed files only; `read_notes` / `post_note` around shared contracts; `ask_foreman` instead of guessing; run the check the prompt names before ending the turn and say what it showed; a check that fails for a reason outside the zone is reported, not worked around; do not commit. |
-| `senior-developer` | Senior developer | `developer` | The Developer text, plus: read the code around the change first and say in the last message what was verified and how. Specialty: `Migrations, performance work, cross-module refactors and parts without a clear spec`. Claude `opus`, effort `high`. |
-| `tester` | Tester | `developer` | Write and run the automated tests of a part and own only the listed test files; for a bug, first a test that fails because of it; test what a caller or a person can observe; never change the code under test: a defect stays as a failing test and is reported with what it shows; follow the project's test style; run the tests before ending the turn and say which passed and which failed; do not commit. A check of the running app by hand is a different job, not the tester's unless its prompt asks for it, and then it follows the [smoke](crew.md#smoke) rules: the flows the change touches, once, within the prompt's time box (10 minutes when none is stated), no matrix of checks or devices, no repeats, report and stop. Specialty: `Automated tests for a part: unit and integration tests, a failing test for a bug; changes no production code; not a manual check of the running app`. Claude `sonnet`. |
-| `technical-writer` | Technical writer | `developer` | Write the documents of a change (README, guides, the spec, API comments) and own only the listed files; read the code and its diff first and describe what the code does now; keep the project's structure, terms and tone; never change behaviour: a disagreement between code and a document goes to `ask_foreman`; run every command and example written; do not commit. Specialty: `Documentation for a change: README, guides, the spec, API comments; changes no behaviour`. Claude `sonnet`. |
-| `reviewer` | Reviewer | `reviewer` | Write no code; `read_report`, then `read_diff` one file at a time; look for what a check cannot show (wrong behaviour, a changed contract, work outside the files); a report that names no check is not a defect by itself: a doubt is checked by the reviewer as its check prompt says ([Reviews](reviews.md#findings)); comment only on something wrong in the change, with its evidence, that must change before acceptance, because every round runs the developer again; `submit_review` with line comments; `approve` when nothing is left. |
-| `designer` | Designer | `reviewer` | Write no code; check the changed screens against the **design source** the part prompt or the plan names (a Figma node or frame, a mock-up file, a reference screen); with none named, the first step is `ask_foreman` for it, never a judgement from neighbouring screens. `read_report` and `read_diff`, open the design source, then the changed screen in the running app. For each design node of the screen, one table: node · property · expected from the design · found in the app · screenshot. Properties: size; padding and gaps; corner radius; border; colour or token; typography; icon and its size; states. Icons are listed one by one. Themes, hover, pressed, focus, disabled, loading, empty and error states, keyboard use and long text are rows of the same table where the design or the change has them. Each node has its design image saved to a file and one screenshot in the app taken after the last change; the tables are filed with [`submit_design_review`](design-review.md#tool) and the check's `reviewId`, and a row's value on the device comes from the screenshot or the UI tree, never from the code. No approval from the code alone, and none without having opened the screen and the design: with no tool to open either, say so with `ask_foreman` and do not approve. Economy: `simulator_act` and `browser_act` already wait and report what changed, so no sleeps, no screenshot or tree read to confirm an action, `simulator_wait` for what comes later; sizes and positions from the boxes of `browser_ui` / `simulator_ui`; screenshots for table rows, not for finding the way; each design node read once. Comment only on what must change before acceptance; each comment names the node, the property, expected and found, at the line that sets the property; `submit_review`, then `approve` once the design review passed: the host refuses an approval before ([In the flow](design-review.md#flow)). Specialty: `Checks changed screens against the design source (Figma node, mock-up, reference screen), node by node, in the running app`. |
-| `security-reviewer` | Security reviewer | `reviewer` | Write no code; `read_report`, then `read_diff` one file at a time; follow untrusted input to where it is used (queries, commands, paths, markup, prompts); look for missing access checks, secrets and personal data in code, logs and URLs, unsafe file and network access, new dependencies and widened permissions, weakened validation; report only a defect with a path: the input, the line, the consequence; no style remarks; `submit_review`, then `approve`. Specialty: `Checks changes for security defects: untrusted input, access checks, secrets`. Claude `opus`, effort `high`. |
+| Id | Name | Rights | When to use | Instructions (beyond the rights) | Model |
+| --- | --- | --- | --- | --- | --- |
+| `foreman-default` | Foreman | `foreman` | `Splits the work, accepts the parts` | None: the foreman brief in code is the whole role. Nodes with subordinates use this role too. | — |
+| `developer` | Developer | `developer` | `Parts with a clear spec` | None. | — |
+| `senior-developer` | Senior developer | `developer` | `Migrations, refactors, unclear specs` | Its parts are the hard ones: read the code around the change first; say in the last message what was verified and how. | Claude `opus`, effort `high` |
+| `tester` | Tester | `developer` | `Writes tests, changes no production code` | Writes and runs the automated tests of its part and owns only test files; for a bug, first a test that fails because of it; tests what a caller or a person can observe, in the project's test style; never changes the code under test: a defect stays as a failing test and is reported with what it shows; says which tests passed and which failed. A check of the running app by hand is not its job unless its prompt asks; then it is a [smoke](crew.md#smoke): once, within the prompt's time box (10 minutes when none is stated), report and stop. | Claude `sonnet` |
+| `technical-writer` | Technical writer | `developer` | `Writes docs, changes no behaviour` | Writes the documents of a change (README, guides, the spec, API comments); reads the code and its diff first and describes what the code does now; keeps the project's structure, terms and tone; never changes behaviour: a disagreement between code and a document goes to `ask_foreman`; runs every command and example written. | Claude `sonnet` |
+| `reviewer` | Reviewer | `reviewer` | `Checks the work, writes no code` | None. | — |
+| `designer` | Designer | `reviewer` | `Checks screens against the design` | Checks the changed screens against the **design source** the part prompt or the plan names (a Figma node or frame, a mock-up file, a reference screen); with none named, the first step is `ask_foreman` for it, never a judgement from neighbouring screens. Opens the design source, then the changed screen in the running app. For each design node of the screen, one table: node · property · expected from the design · found in the app · screenshot. Properties: size; padding and gaps; corner radius; border; colour or token; typography; icon and its size; states. Icons are listed one by one. Themes, hover, pressed, focus, disabled, loading, empty and error states, keyboard use and long text are rows of the same table where the design or the change has them. Each node has its design image saved to a file and one screenshot in the app taken after the last change; the tables are filed with [`submit_design_review`](design-review.md#tool) and the check's `reviewId`, and a row's value on the device comes from the screenshot or the UI tree, never from the code. No approval from the code alone, and none without having opened the screen and the design: with no tool to open either, say so with `ask_foreman` and do not approve. Economy: `simulator_act` and `browser_act` already wait and report what changed, so no sleeps, no screenshot or tree read to confirm an action, `simulator_wait` for what comes later; sizes and positions from the boxes of `browser_ui` / `simulator_ui`; screenshots for table rows, not for finding the way; each design node read once. Each comment names the node, the property, expected and found, at the line that sets the property; `approve` once the design review passed: the host refuses an approval before ([In the flow](design-review.md#flow)). | — |
+| `security-reviewer` | Security reviewer | `reviewer` | `Looks for security defects in changes` | Follows untrusted input to where it is used (queries, commands, paths, markup, prompts); looks for missing access checks, secrets and personal data in code, logs and URLs, unsafe file and network access, new dependencies and widened permissions, weakened validation; reports only a defect with a path: the input, the line, the consequence; leaves style and ordinary bugs aside. | Claude `opus`, effort `high` |
 
 | Id | Name | Tree |
 | --- | --- | --- |
@@ -115,10 +140,11 @@ The **starter tree** (`starterCrewTemplate`) is not a library crew: Foreman → 
 Rules:
 
 - Built-in instructions are versioned with the code, like the foreman brief.
+- Built-in When to use lines are stored in English, given to agents in English, and shown in the interface language through the message catalog.
 - Foreman, Developer and Reviewer have no fixed model: empty `choices` means the provider's default model at launch. Senior developer, Tester, Technical writer and Security reviewer ship with a model (and the first and the last with an effort), like the nodes of the Review crew; the values are catalog ids, and a catalog without them shows the usual amber substitution (see [Choices at launch](#launch-check)).
-- A person **can change the provider, model and effort of every built-in role**, Senior developer and the specialists included. The name, rights, specialty and instructions stay the app's. The overlay is stored in `templates/builtin/<id>.json` as `{ schemaVersion: 1, template: { id, provider?, choices?, choiceNames? } }` and replaces the app's provider and choices whole. Saving an overlay equal to the app's values deletes the file. **Reset** in the library does that; it is offered while the role differs from the app's values. See also the built-in role overlay in [Agents and providers](agents-and-providers.md).
-- A person **can edit a built-in crew in place**: its agents, their templates, models, zones, additions and check edges. The id and the name stay the app's. The edited crew is stored whole in `templates/builtin/<id>.json` as `{ schemaVersion: 1, template }`, a crew document under the built-in id with `builtin: true`, and stands in for the app's crew everywhere a crew is picked by id: the launch sheet, the PR review, schedules. Saving a tree equal to the app's deletes the file. **Reset** in the library does that; it is offered while the tree differs from the app's. A file that is not a valid crew, or fails `crewIssues` against the agent library, is reported as an issue and the app's crew is used. **Save as crew template** from the editor still saves a copy under a new id.
-- Deleting a built-in crew only **hides** it (`templates/builtin/hidden-crews.json`, `{ schemaVersion: 1, crews: [...] }`); its edits stay on disk. **Restore default crews** brings every hidden crew back, edited as it was.
+- A person **can change the provider, model and effort of every built-in role**, Senior developer and the specialists included. The name, rights, When to use and instructions stay the app's. The overlay is stored in `templates/builtin/<id>.json` as `{ schemaVersion: 1, template: { id, provider?, choices?, choiceNames? } }` and replaces the app's provider and choices whole. Saving an overlay equal to the app's values deletes the file. **Reset** in the library does that; it is offered while the role differs from the app's values. See also the built-in role overlay in [Agents and providers](agents-and-providers.md).
+- A person **can edit a built-in crew in place**: its agents, their templates, models, zones, additions and check edges. The id and the name stay the app's. The edited crew is stored whole in `templates/builtin/<id>.json` as `{ schemaVersion: 2, template }` ([Documents and older files](#schema)), a crew document under the built-in id with `builtin: true`, and stands in for the app's crew everywhere a crew is picked by id: the launch sheet, the PR review, schedules. Saving a tree equal to the app's deletes the file. **Reset** in the library does that; it is offered while the tree differs from the app's. A file that is not a valid crew, or fails `crewIssues` against the agent library, is reported as an issue and the app's crew is used. **Save as crew template** from the editor still saves a copy under a new id.
+- Deleting a built-in crew only **hides** it (`templates/builtin/hidden-crews.json`, `{ schemaVersion: 1, crews: [...] }`); its edits stay on disk. **Restore built-in crews** brings every hidden crew back, edited as it was.
 
 <a id="unshipped-crew-ids"></a>
 Data on disk may still name the ids `default` and `tests`, which the app does not ship (`unshippedCrewTemplateIds`). They are not reserved, and each reference keeps working:
@@ -126,7 +152,7 @@ Data on disk may still name the ids `default` and `tests`, which the app does no
 | What names the id | What happens |
 | --- | --- |
 | A person's edit, `templates/builtin/<id>.json`, of a crew that is not hidden | The next library read moves it to `templates/crews/<id>.json` as an own crew (`builtin: false`) with the same id, name and tree; the copy is created only where nothing is (a hard link of a written temp file, so a reader that lost a race, in this process or another, never replaces the moved crew or a later edit of it), moves run one at a time per data folder in the process, and the source file is removed only after the copy is written. Everything below that names the id then opens this crew. A copy that fails `crewIssues` is listed as an issue like any own crew, not dropped. |
-| The same edit of a crew listed in `hidden-crews.json` | Stays where it is, untouched. The id counts in `hiddenCrews`, so **Restore default crews** is offered; restoring empties the list, and the next read moves the edit as above. |
+| The same edit of a crew listed in `hidden-crews.json` | Stays where it is, untouched. The id counts in `hiddenCrews`, so **Restore built-in crews** is offered; restoring empties the list, and the next read moves the edit as above. |
 | A file there that is not a valid crew document or is a symlink, or a target in `templates/crews/` that already exists | Stays where it is; an invalid or unsafe file is listed as an issue and the rest of the library reads as usual. A symlink holds no edit, so a hidden id with one offers nothing to restore. |
 | A `crewTemplateId` older data keeps in `launchDefaults` | Ignored: the sheet always starts on `Auto` ([Choosing the crew](crew.md#launch)). |
 | A schedule's crew `{ templateId }` | A run whose id is not in the library and is one of these ids runs as `Auto` (`unshippedCrewLaunch`), and so does a schedule saved with `{ compose: true }` or the id `compose`; any other missing id still fails the run with `The crew template is unavailable`. |
@@ -146,7 +172,7 @@ When a task is created, its crew is resolved into a `CrewSpec` and stored whole 
 - A worker task stores `crewTaskId` (the root foreman task), `crewNodeId` and `parentTaskId` (its direct foreman or lead).
 - The tree defines the crew size. Plan parts belong to developers and leads only, never to reviewers.
 - Each worker is a separate host process with its own provider. One process still hosts exactly one agent session, so providers never mix inside one ACP session.
-- The worker's role text reaches it in its [session brief](agents-and-providers.md#session-brief): template instructions, then the node's addition, then its place in the tree. It is the appended system prompt where the agent takes one, else a `.context` block of its first prompt (a plain text block on the ACP wire, so Claude and Codex receive it the same way). The agent reads it; the transcript and journal never show it. Because the source is `task.json`, it survives a restart. The foreman's prompt is the first prompt's `.text`.
+- The worker's role text reaches it in its [session brief](agents-and-providers.md#session-brief): its rights' rules and the role's instructions, then the node's addition, then its place in the tree. It is the appended system prompt where the agent takes one, else a `.context` block of its first prompt (a plain text block on the ACP wire, so Claude and Codex receive it the same way). The agent reads it; the transcript and journal never show it. Because the source is `task.json`, it survives a restart. The foreman's prompt is the first prompt's `.text`.
 
 <a id="resolution-contract"></a>
 ## Tree and resolution contract
@@ -159,8 +185,8 @@ JSON is validated at the persistence boundary and on import. A TypeScript type a
 | Item | Limit |
 | --- | --- |
 | Agent or crew name | 1–80 chars after trim, no `\r`, `\n` or `\0` |
-| `summary` | ≤ 240 chars, single line |
-| `instructions`, `extraInstructions` | ≤ 100,000 chars |
+| `whenToUse` | ≤ 240 chars, single line |
+| `instructions`, `extraInstructions` | ≤ 100,000 chars; a resolved node's `instructions` (rights' rules and the role's) ≤ 120,000 |
 | `zone` | ≤ 256 entries, each path ≤ 1024 chars |
 | Children per node, `checkedBy` per node | ≤ 64 |
 | Nodes per crew | ≤ 256 (structural depth ≤ 32) |
@@ -200,8 +226,8 @@ JSON is validated at the persistence boundary and on import. A TypeScript type a
 
 1. `provider` is the node's provider, else the template's, else the default agent from Settings ▸ Agents.
 2. Choices are merged in layers: optional per-provider defaults, then the template's choices, then the node's choices. `configOptions` merge by key, and `modeId` is merged separately. **If the node changes the template's provider, the template's choices and names are dropped.** Model, mode and effort never carry over between providers.
-3. `instructions` come from the template, and `extraInstructions` from the node.
-4. `summary` is the node's, else the template's, else empty, all after trim.
+3. `instructions` are the rules of the node's [rights](#rights) (by its effective role, so a lead gets none), then the template's instructions; `extraInstructions` come from the node.
+4. `whenToUse` is the node's, else the template's, else empty, all after trim.
 5. The effective `zone` is the node's normalized zone, else the parent's effective zone.
 
 `CrewSpec`:
@@ -211,7 +237,7 @@ JSON is validated at the persistence boundary and on import. A TypeScript type a
 | `schemaVersion` | `1` |
 | `templateId` | `string \| null`. Records origin only; it is never read back. `auto` for the crew of an Auto task, `compose` for a crew snapshot with a palette. |
 | `name`, `resolvedAt` | Crew name; ISO time of resolution |
-| `root` | `CrewSpecAgent`: `id`, `name`, `template?` (origin, so the editor can reopen a resolved crew), `role`, `provider`, `requestedChoices`, `choiceNames`, `summary?`, `instructions`, `extraInstructions`, effective `zone`, `checkedBy`, `agents` |
+| `root` | `CrewSpecAgent`: `id`, `name`, `template?` (origin, so the editor can reopen a resolved crew), `role`, `provider`, `requestedChoices`, `choiceNames`, `whenToUse?` (an older snapshot: `summary?`), `instructions` (rights' rules and the role's, resolved), `extraInstructions`, effective `zone`, `checkedBy`, `agents` |
 | `compose?` | A palette snapshot of templates and provider models the foreman composes its crew from ([Crew](crew.md#compose)) |
 
 `isCrewSpec` also checks these invariants: the root is a `foreman`; ids and names are unique; a node has children if and only if it is a `foreman` (the root is the exception, since it may have none); every edge goes to a sibling `reviewer`; only developers are checked; the root has no checkers.
@@ -232,12 +258,12 @@ The foreman's brief is composed in `packages/orchestrator/src/brief.ts` (`forema
 2. For a lead, its place in the larger tree.
 3. The **roster** of its direct children, or the palette of a snapshot that carries one ([Crew](crew.md#compose)).
 4. The crew tools brief.
-5. The template's `instructions`.
+5. The template's `instructions` (a foreman's rights add none).
 6. The node's `extraInstructions`.
 
 The roster is the only place a foreman learns who its agents are. Each lead gets the same block for its own branch.
 
-Each child is described as `` `Name` (summary; Provider · model · effort; leads `A`, `B`; zone `p/**`; checked by `R`) ``. A reviewer gets `checks `A`, `B``, or `reviewer, checks nobody yet` when it checks no one. The roster ends with an instruction to pass `agent` to `create_worker_task` / `propose_plan`, to match parts to specialty and zone, and the [model ladder](crew.md#model-ladder).
+Each child is described as `` `Name` (when to use: …; Provider · model · effort; leads `A`, `B`; zone `p/**`; checked by `R`) ``. A reviewer gets `checks `A`, `B``, or `reviewer, checks nobody yet` when it checks no one. The roster ends with an instruction to pass `agent` to `create_worker_task` / `propose_plan`, to give each part to the agent whose When to use line and zone fit it, and the [model ladder](crew.md#model-ladder).
 
 - **Model and effort** (`specModel`) come from `requestedChoices`: the name from `choiceNames`, else the id, or `provider default model` when no model is chosen. The host finds the effort option by the same kinds the controls use (`thought_level`, `effort`, `reasoning_effort`, `thinking_level`). If no effort is chosen, or the model has none, that part is omitted.
 - A brief written before a worker started is not rewritten when that worker's model turns out to be unavailable.
@@ -290,15 +316,16 @@ The inspector is 376 px wide, with row size M. Its rows, top to bottom:
 | Provider | `Claude` \| `Codex` segments. If the node picks a provider other than the template's, that is its own override (caption `own`), and the node's choices are cleared. |
 | Model, Effort, Mode | The same catalog-driven popups as the composer and the launch sheet. The effort list belongs to the node's chosen model, and changing the model drops an effort that model lacks. Values inherited from the template are shown as they are; a node override is captioned `own`. If the provider catalog is not known yet, the template's `choiceNames` are shown dimmed with "the catalog appears after the first launch". |
 | Zone | Mono field, comma-separated paths. The placeholder is `parent zone` under a lead or when the parent has a zone, else `whole project · name folders`. |
-| Specialty | One-line English field (≤ 240 chars; line breaks become spaces). Its placeholder is the template's `summary` when there is one, so the inherited text is visible; otherwise "In English." |
+| When to use | One-line English field (≤ 240 chars; line breaks become spaces). Its placeholder is the template's `whenToUse` when there is one, so the inherited text is visible; otherwise "One line, in English." |
 | Subordinates | Chips (clicking one selects that node), `none` when empty, and a square 24 px `+` chip. Not shown for reviewers. |
 | Checked by | Amber chips with × (click removes the check), and `+` with a popup of the sibling reviewers not yet added (developers only). Empty shows `nobody`, or for a lead `nobody · the foreman accepts the branch`. |
 | Lead note | "Manages subordinates in its zone. Writes no code. Without subordinates, uses the original template." |
-| Template instructions «{name}» | Collapsed, read-only block (`· read-only`) that expands to the full text. Instructions are edited only through the template. For a lead or the root it shows the Foreman template. |
+| Rules of every developer / checker | Collapsed, read-only block (`· read-only`) with the [rules of the node's rights](#rights); not shown for a lead or the root. |
+| Template instructions «{name}» | Collapsed, read-only block (`· read-only`) that expands to the role's instructions; not shown when the role has none. Instructions are edited only through the role. For a lead or the root it shows the Foreman role. |
 | Additionally for {name} | Multi-line English field, 64 px tall, placeholder "Additional instructions, in English." Caption `only this agent`, or for the root "Add to the briefing." |
 | Actions | **Save as agent template** (leaf) or **Save branch as template** (lead); **Remove agent** or **Remove with subordinates**, in danger style. Not shown for the root. |
 
-- **Root inspector**: name, template (locked to Foreman), provider, model, effort, mode, template instructions and the addition. It has no zone (the root owns the whole project), no Specialty and no Checked by. The caption says these instructions add to the briefing and do not replace it. For a running foreman the root shows only "The foreman is already working: its settings stay."
+- **Root inspector**: name, template (locked to Foreman), provider, model, effort, mode, template instructions and the addition. It has no zone (the root owns the whole project), no When to use and no Checked by. The caption says these instructions add to the briefing and do not replace it. For a running foreman the root shows only "The foreman is already working: its settings stay."
 - **Catalog source**: the editor and the library call `readProviderCatalog` (IPC `templates:catalog`). Main probes the provider in a temporary directory. If that fails, it falls back to the catalog of the latest task of that provider in this workspace. A failed probe is retried after 5 minutes.
 - While a save is in flight, every field is disabled.
 - Small text (captions, labels, the node's second line, legend, notes, the issue line) is 10.5 px. Fields, popups, segments, buttons and chips use the shared `ui/` components at their own sizes; the editor adds no local copies.
@@ -319,30 +346,31 @@ All of these are pure functions in `crew-edit.ts`. Each returns a new template.
 | `duplicateCrewTemplate` | Deep copy with a new template id and `builtin: false`. Node ids are kept. |
 | `branchAsCrewTemplate` | A lead's branch becomes a crew template with the lead as root (template Foreman). `leafDraft`, `checkedBy` and `zone` are dropped. |
 
-**Save as agent template** creates a new own template from the node. It takes the node's effective role and specialty, `instructions = template instructions + "\n\n" + extraInstructions`, and the merged provider, choices and names. The node then points at the new template, and its overrides, specialty and addition are cleared.
+**Save as agent template** creates a new own role from the node. It takes the node's effective rights and When to use, `instructions = template instructions + "\n\n" + extraInstructions`, and the merged provider, choices and names. The node then points at the new role, and its overrides, When to use and addition are cleared.
 
 <a id="template-library"></a>
-## Template library
+## Role library
 
-Templates are **global, not per project**. Repository-specific knowledge ("always require tests here") belongs in `CLAUDE.md`, which every worker inherits, and a role does not depend on the repository. The library is the **Templates** tab of Settings (`TemplatesSettings.tsx`). The app menu item **Templates…** opens that tab. The tab's layout is in [Settings, modules and onboarding](settings-modules-and-onboarding.md).
+Roles and crews are **global, not per project**. Repository-specific knowledge ("always require tests here") belongs in `CLAUDE.md`, which every worker inherits, and a role does not depend on the repository. The library is the **Templates** tab of Settings (`TemplatesSettings.tsx`). The app menu item **Templates…** opens that tab. The tab's layout is in [Settings, modules and onboarding](settings-modules-and-onboarding.md).
 
 <a id="library-list"></a>
 ### List and actions
 
-- The list is master-detail in two groups, **Agents** and **Crews**, in a 272 px column. Built-ins come first, then own templates sorted by name, each with the pencil glyph. Agents are cards ([Agent cards](#agent-cards)); crews are rows with a tail of the agent count and levels.
-- The list footer has only `+ ▾` and `−`. The `+ ▾` menu offers **New agent** (a developer with empty instructions), **New crew** (the [starter tree](#builtin-templates)), a separator, **Import…**, and **Restore default crews** while any built-in crew is hidden.
-- `−` deletes an own template or hides a built-in crew. It is disabled for built-in agents.
-- Detail header: **Reset** (only on a customized built-in agent or an edited built-in crew), **Duplicate** (adds ` 2` to the name), **Edit…** (crews, built-in ones included; disabled while the crew has issues) and **Export…**. A built-in template carries the tag `built-in`.
-- **Agent detail**: Name, Specialty (not for foreman templates; on a built-in it is the app's line shown as text, and only when the built-in has one), Provider (a provider turned off in Settings ▸ Agents is disabled unless the template already uses it; changing the provider clears the choices), Model, Effort, Mode, **Rights ▸ Checker** (switch between `developer` and `reviewer`; caption "Reads reports and changes, submits reviews, and approves work. Writes no code."), and **Instructions** (caption "Agent role, in English").
+- The list is master-detail in two groups, **Roles** and **Crews**, in a 272 px column. Built-ins come first, Foreman among them, then own roles sorted by name, each with the pencil glyph. Roles are cards ([Role cards](#agent-cards)); crews are rows with a tail of the agent count and levels.
+- The list footer has only `+ ▾` and `−`. The `+ ▾` menu offers **New role** (developer rights, no When to use, no instructions), **New crew** (the [starter tree](#builtin-templates)), a separator, **Import…**, and **Restore built-in crews** while any built-in crew is hidden.
+- `−` deletes an own role or crew, or hides a built-in crew. It is disabled for built-in roles.
+- Detail header: **Reset** (only on a customized built-in role or an edited built-in crew), **Duplicate** (adds ` 2` to the name), **Edit…** (crews, built-in ones included; disabled while the crew has issues) and **Export…**. A built-in template carries the tag `built-in`.
+- **Role detail**, the editor of one role: Name, **When to use** (one line, ≤ 240 chars, line breaks become spaces, placeholder "One line, in English."; a built-in's is the app's line in the interface language, read-only like its name), Provider (a provider turned off in Settings ▸ Agents is disabled unless the role already uses it; changing the provider clears the choices), Model, Effort, Mode, **Rights ▸ Checker** (switch between `developer` and `reviewer`; caption "Reads reports and changes, submits reviews, and approves work. Writes no code."; not shown for a foreman), and **Instructions** (caption "Agent role, in English", placeholder `Optional`). Above the field, a collapsed read-only block shows the [rules of the rights](#rights) the agent gets before the role's instructions: `Rules of every developer` or `Rules of every checker` (`· read-only`), in English as the agent reads them; it follows the Checker switch at once. A foreman has no such block, since its rules are the foreman brief. A built-in with no instructions of its own (Developer, Reviewer) shows the block alone; Foreman has no Instructions block.
+- <a id="provider-off"></a>**A role whose provider is off** in Settings ▸ Agents: its card ends with `{provider} is off` in the warning colour, and its detail shows the same line under Provider. Auto does not hire it ([Roles to hire from](crew.md#auto-roles)).
 
 <a id="agent-cards"></a>
-### Agent cards
+### Role cards
 
-Every agent template in the list is a `ui/OptionCard` card without the radio mark, one under another; the group is one radio group, so the arrow keys walk it. The card of the selected template is chosen; pressing a card selects it.
+Every role in the list is a `ui/OptionCard` card without the radio mark, one under another; the group is one radio group, so the arrow keys walk it. The card of the selected role is chosen; pressing a card selects it. Its second line is the role's **When to use**.
 
-- A **built-in** card is the role guide: the role's glyph and name, its work in one line, three strength dots (`ui/LevelDots`) with a hint for model and effort, and under them the model each enabled provider has for that work: the provider glyph and the model's catalog name. Dots and hints are the app's advice for the role, the [model ladder](crew.md#model-ladder) as a picture; they do not follow a changed provider or model.
+- A **built-in** card is the role guide: the role's glyph and name, its When to use line, three strength dots (`ui/LevelDots`) with a hint for model and effort, and under them the model each enabled provider has for that work: the provider glyph and the model's catalog name. Dots and hints are the app's advice for the role, the [model ladder](crew.md#model-ladder) as a picture; they do not follow a changed provider or model.
 
-  | Role | Work | Dots | Hint | Claude | Codex |
+  | Role | When to use | Dots | Hint | Claude | Codex |
   | --- | --- | --- | --- | --- | --- |
   | Foreman | Splits the work, accepts the parts | 3 | `Strongest model · Medium` | `fable` | `astra` |
   | Developer | Parts with a clear spec | 1 | `Faster model · Medium` | `sonnet` | `terra` |
@@ -354,24 +382,24 @@ Every agent template in the list is a `ui/OptionCard` card without the radio mar
   | Security reviewer | Looks for security defects in changes | 2 | `Strong model · High` | `opus` | `sol` |
 
   The last two columns are words, not model ids (`roleModelWords`, `roleModelPick` in `packages/core/src/role-models.ts`): the model shown is the first entry of the provider's catalog whose value or name says the word, under the catalog's own name (`Opus 5.5`, `6.1 Sol`), the way the Helper agent finds its default ([Agents and providers](agents-and-providers.md#helper-agent)). A provider turned off shows nothing; a catalog that has no such entry shows nothing for that provider; before the catalog is known the word itself is shown. The cards only show: they change no template.
-- An **own** card has the glyph of its rights (helmet for a foreman, review for a checker, code otherwise), the name with the pencil glyph at the end of the line, the Specialty as its line (without one: `Splits the work, accepts the parts`, `Checks the work, writes no code` or `Writes code` by its rights), and under it the provider glyph with the model and effort it names, or `Default model`.
+- An **own** card has the glyph of its rights (helmet for a foreman, review for a checker, code otherwise), the name with the pencil glyph at the end of the line, its When to use as its line (without one: `Splits the work, accepts the parts`, `Checks the work, writes no code` or `Writes code` by its rights), and under it the provider glyph with the model and effort it names, or `Default model`.
 
 - **Best for** row under Effort: `Clear parts · Hard parts · Leading and checking`, with the one that fits this template in full colour and the rest muted (`templateFit`). A foreman or a reviewer leads and checks; a developer fits hard parts when its effort is `high` or above, clear parts otherwise.
 - **Effort dots** beside the Effort popup: one dot per level of the model (`default` is not a level), filled up to the chosen one. Levels past `high` fill amber, and a line under the row says "An effort above High costs about as much as a stronger model." `high` is found by the level's value or name, a presentation rule and not a table of levels (rule 7); a model without such a level never warns.
-- A built-in agent is read-only apart from provider, model and effort: its name is locked, its Mode and Rights are disabled, and its instructions are shown read-only so they can still be read and copied in full.
-- Agent edits **autosave** 300 ms after the last change, without a busy state, so the focused field keeps its focus.
+- A built-in role is read-only apart from provider, model and effort: its name and When to use are locked, its Mode and Rights are disabled, and its instructions are shown read-only so they can still be read and copied in full.
+- Role edits **autosave** 300 ms after the last change, without a busy state, so the focused field keeps its focus.
 - **Crew detail**: the Agents list and Levels, edited with the same `CrewEditor`.
 - Failures show as one line in the detail pane that names the action, for example "The template could not be saved." or "Could not export the template."
 
 <a id="library-storage"></a>
 ### Storage, import and export
 
-- Files are `{ schemaVersion: 1, template }` documents, written atomically with pretty-printed JSON. Directories are created with mode `0700`, and writes are serialized.
+- Files are `{ schemaVersion: 2, template }` documents ([Documents and older files](#schema)), written atomically with pretty-printed JSON. Directories are created with mode `0700`, and writes are serialized.
 - Read rules: a file name must equal its `template.id`; symlinks, non-files and reserved built-in ids in `templates/agents` and `templates/crews` are reported as `issues` and skipped. Edits of built-ins live only in `templates/builtin/`. A crew that fails `crewIssues` against the current agent library is reported as an issue too.
-- Deleting an agent template leaves crews that reference it invalid (listed as issues) until they are edited. Tasks keep their snapshots.
+- Deleting a role leaves crews that reference it invalid (listed as issues) until they are edited. Tasks keep their snapshots.
 - `saveCrew` re-validates the crew against the library before writing. A crew with `builtin: true` and a built-in crew id is written as that crew's edit; any other use of a reserved id is refused.
 - **Export…** uses the system save dialog and writes `<name>.json` (`/`, `:` and `\` replaced with `-`) with the document, indented by 2 spaces.
-- **Import…** uses the system open dialog. The file must be at most 2,000,000 chars and a valid agent or crew document; it is validated before anything is written, and `builtin` is forced to `false`. Under remote access, both dialogs run on the device (see [Remote access and mobile](remote-access-and-mobile.md)).
+- **Import…** uses the system open dialog. The file must be at most 2,000,000 chars and a valid role or crew document of either version ([Documents and older files](#schema)); it is validated before anything is written, and `builtin` is forced to `false`. Under remote access, both dialogs run on the device (see [Remote access and mobile](remote-access-and-mobile.md)).
 - IPC: `templates:read`, `templates:save-agent`, `templates:save-crew`, `templates:delete` (`kind`, `id`), `templates:restore-crews`, `templates:export`, `templates:import`, `templates:catalog`. Every write returns the fresh `CrewLibrary` (`agents`, `crews`, `issues`, `hiddenCrews`).
 
 <a id="launch"></a>

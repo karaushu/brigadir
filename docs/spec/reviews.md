@@ -58,6 +58,13 @@ provider's own option catalog.
   `readOnlyAgent`): isolated in a worktree on branch `<task branch>-<reviewer slug>` (the
   [worker naming rule](crew.md#workers)), the task's repos, no setup command and no `.env` copying. Writes are refused
   ("You check the work and do not write code.").
+- **When the review ends** (`passed`, `accepted`, `stopped`, `failed`, a plan's approval included) the host stops its
+  reviewers' hosts and removes their worktrees and branches; their tasks stay as the review's log, with their journals and
+  the review's record. A branch goes only when another branch of the repo holds its commits (the reviewer writes none),
+  and a branch checked out elsewhere stays. A worktree whose files differ from the last round's snapshot (someone edited
+  or added a file there) stays with its branch, and so does one whose reviewer host still runs. The reviewers of a review
+  still open keep theirs. A host that starts removes what reviews that ended earlier left behind, branches of a removal
+  that stopped half-way included. Nothing of the person's is touched.
 - **Its tree is the round's snapshot.** Before a round the host sets every repo of the reviewer's worktree to the round's
   result tree (`git read-tree -u --reset <tree>`), so the files on disk are the task's state under review, uncommitted
   changes included. A worktree that [joined the task](tasks.md#agent-worktrees) as a checkout of the root's repo stands
@@ -71,7 +78,8 @@ provider's own option catalog.
   review stay in it unchecked. A foreman task adds the reviewers below its root; findings go to the foreman, which
   returns work to its workers. An Auto task keeps them in `reviewCrew` until its first hire and below the root of its
   crew from then on; its agent fixes the findings itself or hands them to the worker of that zone.
-- Reviewer tasks stay service rows under the task's card in the sidebar ([Surfaces](#surfaces)).
+- Reviewer tasks stay service rows under the task's card in the sidebar ([Surfaces](#surfaces)). A plan reviewer's task is
+  titled `reviews the plan`, a code reviewer's `reviews the changes`.
 
 <a id="start"></a>
 
@@ -83,7 +91,8 @@ provider's own option catalog.
   once with the resolved reviewer; the others open the launch dialog of
   [Review with an agent](pull-requests-and-ci.md#review-launch) titled `Review before PR` with the note
   `<task title> · +N −M`: instructions, project review notes, `What` (`All changes · Since the last review`), `Who`
-  (`Agent · Crew`; the agent capsule's inherited entry is `Auto` with the resolved reviewer as its detail) and
+  (`Agent · Crew`; the agent capsule's inherited entry is `Auto` with the resolved reviewer as its detail — the
+  list's tail, and `Auto · Codex · gpt-5.5` on the closed popup; `What`'s caption is `From the task start · N files`) and
   `Remember for code reviews` (action `taskReview`). `Starting…` on the button; a failure keeps the dialog with `Could
 not start the review: …` and `Retry`.
 - **The host** starts a `pre-pr` review when the person presses `Create PR` ([gate](#before-pr)), a `plan` review when a plan is
@@ -94,7 +103,7 @@ not start the review: …` and `Retry`.
   returns at once with `proposed: true`; the proposal stays until the person starts the review or dismisses it with
   `Not now`. Refused while a review runs: `A review of this task is already running.`
 - A review the person starts, or a review before the PR the host starts, while the task's agent is in a turn waits for
-  that turn to end and reads its snapshot. A mid-task review — the agent's or the host's — reads at once (the host takes
+  that turn to end and reads its snapshot. A turn that fails, or that a host restart cuts off, has ended too. A mid-task review — the agent's or the host's — reads at once (the host takes
   a checkpoint first) while the agent works on. A plan review reads at once: the agent's turn waits for the plan's
   answer.
 
@@ -141,7 +150,8 @@ then checks only whether each finding is closed.` and, for a `mid` review, `Then
    the finding's thread.
 3. **Check closure once.** The turn that took the batch ends → the host opens a closure check from the new snapshot. A
    foreman hands fixes to its workers: its closure check opens at the first turn end after the batch at which its crew
-   has no open work (an objection without edits leaves none, so it opens at once). The check:
+   has no open work (an objection without edits leaves none, so it opens at once). An [Auto](crew.md#auto) agent fixes
+   the findings itself: its closure check opens when its fixing turn ends, whatever its workers still do. The check:
    `Check task <id> of \`Task agent\` (reviewId …, closure check)` with the reviewer's own findings, their state
 (`fixed`, the agent's objection) and the instruction: for each finding decide whether it is closed — an objection the
 reviewer accepts counts as closed; call `approve`when all are closed and the fix introduced no problem; otherwise`submit_review`with one item`{replyTo: <findingId>, text: why it is still open}`per open finding and, only for a
@@ -160,10 +170,11 @@ problem the fix brought in) is accepted.`), a `replyTo` that is not this reviewe
    recorded as accepted and their threads resolved.
 
 - **Stop.** `Stop` (strip) cancels the open round and shuts the reviewers down; their tasks stay as the review's log until
-  the task is archived or deleted. The review ends `stopped`.
+  the task is archived or deleted, and their worktrees and branches go ([Reviewer sessions](#reviewer-sessions)). The
+  review ends `stopped`.
 - **Restart.** The review's record and its runs are on disk; after a host restart the review continues from its state:
-  a round being read is dispatched again, a batch waiting for the agent's turn stays queued, a review waiting for the
-  person keeps waiting.
+  a round being read is dispatched again, a review that waited for the agent's turn reads (no turn runs after a
+  restart), a batch waiting for the agent's turn stays queued, a review waiting for the person keeps waiting.
 - **Outdated.** A later change of the task's tree (agent or person) makes a passed or accepted review before the PR
   `outdated`: it covers only the snapshot it read. A mid-task review stays as it ended: the agent works on after it.
 - **A mid-task review that ends** `passed` with no findings, or `accepted`, while the task's agent waits prompts it once
@@ -199,6 +210,13 @@ design source, and no passed design review covers the state you read. …` with 
 a missing design review, is the reviewer's finding at the line that sets the property (or at the screen's file); the
 closure check approves only when a new `passed` design review covers the fix.
 
+<a id="smoke"></a>
+**Smoke.** A mid-task review or a review before the PR of a task with the browser or the simulator module adds the
+task's newest [smoke report](smoke-run.md#review) to the reviewer's prompt: a failed step the change since the report
+does not fix is a finding; with no report, a change that shows in the running app is a finding (`No smoke run checked
+this change in the running app.`) — the one wish for a check that is a finding, since the smoke is a required step. A
+crew reviewer of a part gets no smoke paragraph.
+
 <a id="remark"></a>
 **A remark.** `approve(taskId, reviewId, note?)` takes an optional `note` (up to 2000 characters): something the person
 should know that needs no fix — a risk to watch, the check the reviewer ran. It is stored with the approval, starts no
@@ -232,6 +250,9 @@ the state in muted text, the **step track**, actions, chevron.
   fill; a hovered step `--tint`. Each step has the tooltip `Plan review`, `Mid-task review`, `Review before PR`
   (with its review's own state: `stopped`, `did not start` and `outdated` share the glyph, not the word). A click opens
   the strip on that step's findings.
+- **A narrow column** (the chat beside an open panel): the title and the state with its findings link keep their room;
+  the step track gives way first and hides while the text would be cut beside it, then the text ends with `…`. The
+  actions and the chevron stay. The steps stay reachable in the open strip's segments.
 - **A toned or hovered row fills the deck edge to edge** — horizontally across the deck's padding, and up to the deck's
   top edge when it is the deck's first row and down to the island's top border when it is the deck's last ([Queue deck placement](composer.md#queue-deck)).
 
@@ -282,10 +303,14 @@ you`; `review · <point> · did not start`; `review · <point> · changed after 
 - **Threads.** A reviewer's finding card shows the reviewer's provider glyph and name, the line link and its tag. Under
   it: the agent's reply, the reviewer's reason for `open`, and a footer — `Sent to <agent> · fixing` with `Log`,
   `<reviewer> closed it`, or `Your call` with `Open the review` (expands the strip).
-- **Sidebar.** Reviewers are rows under the task's card, like crew workers: `<reviewer> · Review`, `· N findings ·
-waits`, `· Approved`, `· N open` (amber). A review waiting for the person makes the task `needs-you` with the reason
-  line `Review · <N findings> open`; the card takes the `needs-you` fill. The rows stay until the next change after
-  the review, or the archive.
+- **Sidebar.** The current review's reviewers are rows under the task's card, like crew workers, under a solo task's,
+  an Auto task's or a crew's card alike; an earlier review's reviewers have no row, and a review that did not start has none. A row is named by the reviewer
+  (`Codex`, `Codex 2`), never by its role, and says the review's state, never the reviewer task's title: `<reviewer> ·
+  Review` while it reads or checks, `· N findings · waits` while the agent fixes (N = what it filed), `· Approved`,
+  `· N open` in amber with the amber `needs-you` glyph while the person decides (N = its findings still open, so it
+  agrees with the task's line), `· Accepted` after the person's `Accept`, `· Review stopped`, `· Review did not start`. A review
+  waiting for the person makes the task `needs-you` with the reason line `Review · <N findings> open`; the card takes
+  the `needs-you` fill. The rows stay until the next change after the review, or the archive.
 - **Notifications.** The review handing open findings to the person is a `needs-you` notice
   ([Notice kinds](notifications-slack-notes-and-schedules.md#notice-kinds)).
 
@@ -347,6 +372,11 @@ workers`) stays available all the time.
 A reviewer on any provider reads everything through host tools; it needs no connector of its own.
 
 - **The task's prompt** (and, for a crew, nothing of the workers: they have not started).
+- **The person's answers to the plan** after that prompt, oldest first, in every round: each `Plan further…` text, each
+  `Send edits` version and each message in [chat while the plan waits](chat-turns-plans-and-questions.md#plan-chat),
+  since the last approved plan, read back from the prompts that carried them. They are marked as the person's own words and as part of
+  what was asked: where they differ from the task's prompt the later message decides, and a plan that follows them is
+  not `contradicts` or `out-of-scope`. Past 20 000 characters the newest stay and the prompt says how many were left out.
 - **The plan**: `read_plan(taskId, reviewId)` → `{revision, text}`: the plan's Markdown as presented (a split is
   rendered as Markdown: the summary, then per part its number, title, executor with its role, provider and model, files,
   scopes and prompt, then the crew's roster). In a closure check it adds `read` (the revision the first read had), `previous` (the
@@ -419,7 +449,9 @@ to fix N findings of the plan review that are still open…` with the reviewer's
    `read_plan` with the revision diff. The reviewer answers `approve`, or `submit_plan_review` with
    `{replyTo: <findingId>, text}` per finding still open and `{kind, text, where?, introduced: true}` only for a
    problem the revision brought in; gaps are not asked again. The host refuses other items with the messages of the code
-   loop. When the author's turn ends without presenting the plan again, the check runs on the plan as it was.
+   loop. When the author's turn ends without presenting the plan again, the check runs on the plan as it was. A
+   foreman's turn is the one that read the split's rejection — the turn whose `propose_plan` returned it, or the turn of
+   the decision prompt when that turn had already ended; another turn of the foreman meanwhile is not its answer.
 4. **The person decides** while the plan waits: the open findings stand in the strip with `Fix {n}` / `Accept`.
    `Fix {n}` answers the waiting plan and sends the batch again (step 2), then one more closure check. `Accept` closes
    the review as `accepted`; the plan keeps waiting for approval. A revision presented while the person decides (from
@@ -491,6 +523,8 @@ not list it. `reason` (1–200 characters) is one line on why, shown in the chat
 - Returns `{class, previous?, next}`; `next` (English) is what the class asks of the agent now:
   - Small: do the task without a plan card; a review runs before the PR; past the limit of files or changed lines
     (named with its numbers) the host starts a mid-task review by itself.
+  - Any class, with the browser or the simulator module on, adds: run one [smoke](smoke-run.md#who) before the review
+    before the PR when the change shows in the running app.
   - Medium and Large: save the ticket or the contract with `save_source`, then present a plan for approval before any
     edit — a Claude session with `EnterPlanMode` and `ExitPlanMode`; a Codex session, which cannot enter its plan mode by
     itself, writes the plan in its reply and ends its turn without edits. Large adds: call `request_review` after a layer

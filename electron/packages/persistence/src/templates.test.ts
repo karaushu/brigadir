@@ -5,6 +5,7 @@ import { test, expect } from 'vitest';
 import {
 	builtinAgentTemplates,
 	builtinCrewTemplates,
+	crewRightsInstructions,
 	starterCrewTemplate,
 	templateLookup,
 	type AgentTemplate,
@@ -47,7 +48,7 @@ test('stores own templates next to built-ins, refuses built-in writes and report
 		await store.saveAgent(designer);
 		await store.saveCrew(crew);
 		const text = await readFile(join(root, 'templates', 'crews', 'front.json'), 'utf8');
-		expect(text.startsWith('{\n  "schemaVersion": 1,\n  "template": {')).toBe(true);
+		expect(text.startsWith('{\n  "schemaVersion": 2,\n  "template": {')).toBe(true);
 		expect(JSON.parse(text).template).toEqual(crew);
 		let library = await store.read();
 		expect(library.agents.map((item) => item.id)).toEqual([
@@ -88,7 +89,7 @@ test('stores own templates next to built-ins, refuses built-in writes and report
 		);
 		await writeFile(
 			join(root, 'templates', 'crews', 'newer.json'),
-			'{"schemaVersion":2,"template":{}}'
+			'{"schemaVersion":3,"template":{}}'
 		);
 		library = await store.read();
 		expect(library.issues).toEqual(
@@ -267,7 +268,7 @@ test("a built-in crew keeps a person's edit beside the app's id and name, and th
 		const saved = await store.saveCrew(edited);
 		// The id, the name and `builtin` stay the app's; the tree is the person's.
 		expect(saved).toEqual({ ...edited, name: 'Review crew' });
-		expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ schemaVersion: 1, template: saved });
+		expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ schemaVersion: 2, template: saved });
 		let library = await store.read();
 		expect(library.crews).toEqual([saved]);
 		expect(library.issues).toEqual([]);
@@ -331,7 +332,7 @@ test("a person's edit of a crew the app no longer ships becomes their own crew u
 	try {
 		const store = new TemplateStore(root);
 		await write('default', edit);
-		// A hidden one waits, untouched, and keeps «Restore default crews» offered.
+		// A hidden one waits, untouched, and keeps «Restore built-in crews» offered.
 		await write('tests', { ...edit, id: 'tests', name: 'Crew with tests' });
 		await writeFile(hiddenFile, JSON.stringify({ schemaVersion: 1, crews: ['tests'] }));
 		let library = await store.read();
@@ -341,7 +342,7 @@ test("a person's edit of a crew the app no longer ships becomes their own crew u
 		expect(library.issues).toEqual([]);
 		expect(
 			JSON.parse(await readFile(join(root, 'templates', 'crews', 'default.json'), 'utf8'))
-		).toEqual({ schemaVersion: 1, template: own });
+		).toEqual({ schemaVersion: 2, template: own });
 		await expect(readFile(join(builtin, 'default.json'), 'utf8')).rejects.toThrow();
 		expect(JSON.parse(await readFile(join(builtin, 'tests.json'), 'utf8')).template.id).toBe(
 			'tests'
@@ -471,6 +472,97 @@ test('creates a document only where nothing is, in one step, so a slower writer 
 		expect(await readFile(path, 'utf8')).toBe('edited');
 		// No temp file is left behind either way.
 		expect(await readdir(root)).toEqual(['crew.json']);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+// spec/crew-templates-and-editor#schema
+test('reads version 1 roles and crews as version 2 and writes them so at the next save', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'templates-v1-'));
+	const agents = join(root, 'templates', 'agents'),
+		crews = join(root, 'templates', 'crews');
+	const old = {
+		id: 'frontend',
+		name: 'Frontend dev',
+		role: 'developer',
+		summary: 'React screens of the admin app',
+		instructions: `${crewRightsInstructions.developer}\n\nUse the admin's design tokens.`,
+		builtin: false,
+	};
+	// A copy of a built-in's text that is not its rights' rules stays as written.
+	const own = {
+		id: 'writer',
+		name: 'Writer',
+		role: 'reviewer',
+		instructions: 'Read twice.',
+		builtin: false,
+	};
+	const oldCrew = {
+		...crew,
+		root: {
+			...crew.root,
+			agents: [
+				{
+					id: 'ui',
+					name: 'UI',
+					template: 'frontend',
+					summary: 'Owns the screens',
+					checkedBy: ['design'],
+				},
+				{ id: 'design', name: 'Design', template: 'writer' },
+			],
+		},
+	};
+	try {
+		await mkdir(agents, { recursive: true });
+		await mkdir(crews, { recursive: true });
+		await writeFile(
+			join(agents, 'frontend.json'),
+			JSON.stringify({ schemaVersion: 1, template: old })
+		);
+		await writeFile(
+			join(agents, 'writer.json'),
+			JSON.stringify({ schemaVersion: 1, template: own })
+		);
+		await writeFile(
+			join(crews, 'front.json'),
+			JSON.stringify({ schemaVersion: 1, template: oldCrew })
+		);
+		const store = new TemplateStore(root);
+		const library = await store.read();
+		expect(library.issues).toEqual([]);
+		const frontend = library.agents.find((item) => item.id === 'frontend')!;
+		expect(frontend).toEqual({
+			id: 'frontend',
+			name: 'Frontend dev',
+			role: 'developer',
+			whenToUse: 'React screens of the admin app',
+			instructions: "Use the admin's design tokens.",
+			builtin: false,
+		});
+		expect(library.agents.find((item) => item.id === 'writer')).toEqual(own);
+		const front = library.crews.find((item) => item.id === 'front')!;
+		expect(front.root.agents![0]).toEqual({
+			id: 'ui',
+			name: 'UI',
+			template: 'frontend',
+			whenToUse: 'Owns the screens',
+			checkedBy: ['design'],
+		});
+		// The files stay as they were until a save writes them as version 2.
+		expect(JSON.parse(await readFile(join(agents, 'frontend.json'), 'utf8')).schemaVersion).toBe(1);
+		await store.saveAgent(frontend);
+		await store.saveCrew(front);
+		expect(JSON.parse(await readFile(join(agents, 'frontend.json'), 'utf8'))).toEqual({
+			schemaVersion: 2,
+			template: frontend,
+		});
+		expect(JSON.parse(await readFile(join(crews, 'front.json'), 'utf8'))).toEqual({
+			schemaVersion: 2,
+			template: front,
+		});
+		expect((await store.read()).agents.find((item) => item.id === 'frontend')).toEqual(frontend);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

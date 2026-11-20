@@ -112,6 +112,12 @@ const whenToUse: Record<string, string> = {
 		'Call it when the task comes from a ticket, a spec or a contract you were given or fetched (for example from Notion, Jira or Linear), before you present a plan.',
 	submit_design_review:
 		'Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.',
+	smoke_start:
+		'Call it once the work is done and before the review before the pull request, when your change shows in the running app: list the flows the change touches, then go through them once. Not per part, not per device, and not again to be sure.',
+	smoke_report:
+		'Call it when the steps of your smoke run are done, or at once when a browser or simulator tool says the report is due.',
+	ready_to_look:
+		'Call it as soon as a screen you build is assembled and shows in the browser or on the simulator, before your own checks of it; once per screen.',
 	read_plan: 'Call it first in a plan review, with the reviewId of the check you were asked to do.',
 	read_sources:
 		'Call it in a plan review after read_plan, to check the plan against the ticket and the contract.',
@@ -341,7 +347,7 @@ const humanTools: Tool[] = [
 	// spec/design-review#tool: a screen checked against its design node by node; the host verifies the images and screenshots itself.
 	{
 		name: 'submit_design_review',
-		description: `File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. ${designCheckPrompt} screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo.`,
+		description: `File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. ${designCheckPrompt} screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area: the node's frame on the screenshot, tight around the node (its frame from simulator_ui or browser_ui), never the screen or a section around it, as fractions 0–1 of the screenshot's width and height; rows[].area: the element a row is about, the same way. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo.`,
 		shape: {
 			screen: z.string().trim().min(1).max(80),
 			nodes: z
@@ -372,6 +378,47 @@ const humanTools: Tool[] = [
 			reviewId: z.string().trim().min(1).max(128).optional(),
 		},
 		run: async (args, call, signal) => text(await call('submit_design_review', args, signal)),
+	},
+	// spec/smoke-run#start: one pass through the flows a change touches, under the limit the person set; the host stops it at the limit.
+	{
+		name: 'smoke_start',
+		description:
+			"Start a smoke run of this task: one pass through the flows your change touches, in the browser or on the simulator, under a time limit the person sets. The person sees it running above the composer. steps: the flows in the order you go through them, e.g. 'Clients list', 'Client card · tabs'. At the limit Brigadir stops the run: the browser and simulator tools stop answering until you file the report with smoke_report. Returns started: true with the limit in minutes and when it ends.",
+		shape: {
+			steps: z.array(z.string().trim().min(1).max(120)).min(1).max(12),
+		},
+		run: async (args, call, signal) => text(await call('smoke_start', args, signal)),
+	},
+	{
+		name: 'smoke_report',
+		description:
+			"File the report of this task's smoke run: each step with its result — passed, failed (note: what goes wrong, on which screen) or unchecked (note: why it was not checked) — and a summary of a few sentences for the person and the reviewer. A started step you leave out counts as unchecked. The review before the pull request reads the report: a failed step you do not fix becomes a finding. Returns reported: true with the counts and what to do next.",
+		shape: {
+			steps: z
+				.array(
+					z.object({
+						step: z.string().trim().min(1).max(120),
+						result: z.enum(['passed', 'failed', 'unchecked']),
+						note: z.string().trim().max(500).optional(),
+					})
+				)
+				.min(1)
+				.max(24),
+			summary: z.string().trim().min(1).max(2000),
+		},
+		run: async (args, call, signal) => text(await call('smoke_report', args, signal)),
+	},
+	// spec/smoke-run#ready: the person hears that a screen can be looked at; the agent goes on.
+	{
+		name: 'ready_to_look',
+		description:
+			"Tell the person that a screen is assembled and can be looked at: they get a notification and a row in the chat that opens it. It does not wait and asks nothing; keep working. screen: what to look at, e.g. 'Details screen'. where: simulator (the task's device) or browser. tab: the browser tab (default: the tab you opened). The same screen again is not announced twice. Returns notified: true, or notified: false with the reason.",
+		shape: {
+			screen: z.string().trim().min(1).max(80),
+			where: z.enum(['simulator', 'browser']),
+			tab: browserTab,
+		},
+		run: async (args, call, signal) => text(await call('ready_to_look', args, signal)),
 	},
 	{
 		name: 'review_reply',
@@ -920,7 +967,7 @@ const crewShapes: Record<CrewToolName, { description: string; shape: z.ZodRawSha
 	// spec/crew#auto-tools: the Auto agent's hire; the card waits for the person like a plan.
 	hire_workers: {
 		description:
-			'Hire workers for independent parts of this task: each part becomes a worker task in its own worktree, started from a commit of your edits so far. Per part: title, role (one of your roles), zone (the paths or globs it writes; zones of parts never overlap, and you no longer write inside them), lines and files (your estimate of what it changes), the full prompt for the worker (it sees nothing of this conversation: the goal, the expected behaviour, what stays untouched, the command that proves it), optionally acceptance, scopes, minutes and tokens (its budget; the default applies otherwise). summary says on the card what each part is and why the parts are independent. The person approves, edits or declines; wait for the result even if this call runs asynchronously. A part that overlaps another or is too small for a worker stays with you, and the rest are hired. Declined means you do the parts yourself.',
+			'Hire workers for independent parts of this task: each part becomes a worker task in its own worktree, started from a commit of your edits so far. Per part: title, role (the name of the role whose when-to-use line fits the part), zone (the paths or globs it writes; zones of parts never overlap, and you no longer write inside them), lines and files (your estimate of what it changes), the full prompt for the worker (it sees nothing of this conversation: the goal, the expected behaviour, what stays untouched, the command that proves it), optionally acceptance, scopes, minutes and tokens (its budget; the default applies otherwise). summary says on the card what each part is and why the parts are independent. The person approves, edits or declines; wait for the result even if this call runs asynchronously. A part that overlaps another or is too small for a worker stays with you, and the rest are hired. Declined means you do the parts yourself.',
 		shape: {
 			summary: z.string().max(20_000).default(''),
 			parts: z
@@ -980,6 +1027,7 @@ export const hiddenToolMessages: Record<string, string> = {
 };
 const noHidden: ReadonlySet<string> = new Set();
 const ownReviewTools: ReadonlySet<string> = new Set(['request_review', 'review_reply']);
+const smokeTools: ReadonlySet<string> = new Set(['smoke_start', 'smoke_report', 'ready_to_look']);
 const served = new Map<string, Served>();
 /**
  * Registration order of the SDK server: the human's tools, then the crew tools of the role. Built once per role and set
@@ -1007,9 +1055,14 @@ export function mcpTools(
 			!(role === 'foreman' && tool.name === 'set_task_class') &&
 			// spec/design-review#who: any agent with the simulator or the browser files a design review.
 			(tool.name !== 'submit_design_review' || modules.simulator || modules.browser) &&
+			// spec/smoke-run#start: a solo agent, an Auto agent and a crew developer, with the simulator or the browser.
+			(!smokeTools.has(tool.name) ||
+				((modules.simulator || modules.browser) &&
+					(role === null || role === 'auto' || role === 'developer'))) &&
 			(humanToolsAllowed(role) ||
 				isWorkspaceTool(tool.name) ||
 				tool.name === 'submit_design_review' ||
+				smokeTools.has(tool.name) ||
 				// spec/reviews#points: a crew developer's part is a task with reviews of its own.
 				(role === 'developer' && ownReviewTools.has(tool.name)))
 		);

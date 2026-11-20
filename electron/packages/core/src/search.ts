@@ -532,6 +532,13 @@ export const settingDefinitions: readonly SettingDefinition[] = [
 		value: (s) => raw(`${s.reviews.smallTask.files} · ${s.reviews.smallTask.lines}`),
 	},
 	{
+		id: 'reviews-smoke-limit',
+		tab: 'agents',
+		section: 'Reviews',
+		label: key('Smoke run limit'),
+		value: (s) => raw(`${s.reviews.smokeMinutes} min`),
+	},
+	{
 		id: 'helper-agent',
 		tab: 'agents',
 		section: 'Agents',

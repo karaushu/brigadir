@@ -1,0 +1,20 @@
+/* spec/reviews#strip: a link in running text — dotted at rest, solid on hover. */
+.link {
+	flex: none;
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	color: inherit;
+	text-decoration: underline dotted;
+	text-underline-offset: 2px;
+	cursor: default;
+}
+.link:hover {
+	text-decoration-style: solid;
+}
+.link:focus-visible {
+	outline: 1.5px solid var(--accent);
+	outline-offset: 1px;
+	border-radius: 3px;
+}

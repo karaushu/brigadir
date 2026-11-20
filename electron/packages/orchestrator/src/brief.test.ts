@@ -18,7 +18,7 @@ const tester: AgentTemplate = {
 	id: 'tester',
 	name: 'Tester',
 	role: 'developer',
-	summary: 'Writes Playwright e2e tests; give it every test part.',
+	whenToUse: 'Writes Playwright e2e tests; give it every test part.',
 	instructions: 'You write tests.',
 	builtin: false,
 };
@@ -37,14 +37,14 @@ const crew: CrewTemplate = {
 				id: 'lead',
 				name: 'UI-лід',
 				template: 'foreman-default',
-				summary: 'Owns the admin screens',
+				whenToUse: 'Owns the admin screens',
 				zone: ['apps/ui/**'],
 				agents: [
 					{
 						id: 'dev',
 						name: 'Верстальник',
 						template: 'developer',
-						summary: 'Lays out React screens',
+						whenToUse: 'Lays out React screens',
 					},
 				],
 			},
@@ -78,18 +78,21 @@ const spec = resolveCrew(crew, {
 	now: '2026-09-25T10:00:00.000Z',
 });
 
-it('tells the foreman the specialty, model and effort of each agent (spec/crew-templates-and-editor#roster)', () => {
+it('tells the foreman the When to use, model and effort of each agent (spec/crew-templates-and-editor#roster)', () => {
 	const brief = foremanBrief(spec, 'root');
 	expect(brief).toContain(
-		'`UI-лід` (Owns the admin screens; Claude · Claude Sonnet 5 · High; leads `Верстальник`; zone `apps/ui/**`)'
+		'`UI-лід` (when to use: Owns the admin screens; Claude · Claude Sonnet 5 · High; leads `Верстальник`; zone `apps/ui/**`)'
 	);
 	expect(brief).toContain(
-		'`API` (Codex · GPT-6 Astra · xhigh; zone `services/api/**`; checked by `Ревʼюер`)'
+		'`API` (when to use: Parts with a clear spec; Codex · GPT-6 Astra · xhigh; zone `services/api/**`; checked by `Ревʼюер`)'
 	);
 	expect(brief).toContain(
-		'`Тести` (Writes Playwright e2e tests; give it every test part; Claude · Claude Sonnet 5 · High; checked by `Ревʼюер`)'
+		'`Тести` (when to use: Writes Playwright e2e tests; give it every test part; Claude · Claude Sonnet 5 · High; checked by `Ревʼюер`)'
 	);
-	expect(brief).toContain('`Розробник` (Claude · Claude Sonnet 5 · High)');
+	expect(brief).toContain(
+		'`Розробник` (when to use: Parts with a clear spec; Claude · Claude Sonnet 5 · High)'
+	);
+	expect(brief).toContain('Give each part to the agent whose when-to-use line and zone fit it.');
 	expect(brief).not.toContain('Lays out React screens');
 });
 it('names the provider default when no model is chosen, leaves out an unknown effort, and shows the lead only its branch', () => {
@@ -98,10 +101,12 @@ it('names the provider default when no model is chosen, leaves out an unknown ef
 		defaultProvider: 'codex',
 		now: '2026-09-25T10:00:00.000Z',
 	});
-	expect(foremanBrief(bare, 'root')).toContain('`Розробник` (Codex · provider default model)');
+	expect(foremanBrief(bare, 'root')).toContain(
+		'`Розробник` (when to use: Parts with a clear spec; Codex · provider default model)'
+	);
 	const lead = foremanBrief(spec, 'lead');
 	expect(lead).toContain(
-		'Your agents: `Верстальник` (Lays out React screens; Claude · Claude Sonnet 5 · High; zone `apps/ui/**`)'
+		'Your agents: `Верстальник` (when to use: Lays out React screens; Claude · Claude Sonnet 5 · High; zone `apps/ui/**`)'
 	);
 	expect(lead).not.toContain('GPT-6 Astra');
 });
@@ -184,7 +189,7 @@ it('gives a composing foreman the palette instead of a roster, and the roster on
 	expect(brief).toContain('You compose your crew yourself');
 	// The person's own `Tester` stands in for the built-in one: a name means one template.
 	expect(brief).toContain(
-		'Templates: `Developer` (developer; default Claude · provider default model), `Senior developer` (developer; Migrations, performance work, cross-module refactors and parts without a clear spec; default Claude · Opus · High), `Technical writer` (developer; Documentation for a change: README, guides, the spec, API comments; changes no behaviour; default Claude · Sonnet), `Reviewer` (reviewer; default Claude · provider default model), `Designer` (reviewer; Checks changed screens against the design source (Figma node, mock-up, reference screen), node by node, in the running app; default Claude · provider default model), `Security reviewer` (reviewer; Checks changes for security defects: untrusted input, access checks, secrets; default Claude · Opus · High), `Tester` (developer; Writes Playwright e2e tests; give it every test part; default Claude · provider default model).'
+		'Templates: `Developer` (writes code; when to use: Parts with a clear spec; default Claude · provider default model), `Senior developer` (writes code; when to use: Migrations, refactors, unclear specs; default Claude · Opus · High), `Technical writer` (writes code; when to use: Writes docs, changes no behaviour; default Claude · Sonnet), `Reviewer` (checks, writes no code; when to use: Checks the work, writes no code; default Claude · provider default model), `Designer` (checks, writes no code; when to use: Checks screens against the design; default Claude · provider default model), `Security reviewer` (checks, writes no code; when to use: Looks for security defects in changes; default Claude · Opus · High), `Tester` (writes code; when to use: Writes Playwright e2e tests; give it every test part; default Claude · provider default model). Pick a template by its when-to-use line, not by its name.'
 	);
 	expect(brief).toContain('Models: Claude: `OPUS` (effort LOW, MAX), `HAIKU` (effort LOW).');
 	// spec/crew#compose: the fewest agents; one developer without a reviewer is a whole crew for one chain of steps.
@@ -211,7 +216,9 @@ it('gives a composing foreman the palette instead of a roster, and the roster on
 		)
 	);
 	const after = foremanBrief(approved, 'root');
-	expect(after).toContain('Your agents: `API` (Claude · OPUS · MAX; checked by `Check`)');
+	expect(after).toContain(
+		'Your agents: `API` (when to use: Parts with a clear spec; Claude · OPUS · MAX; checked by `Check`)'
+	);
 	expect(after).not.toContain('You compose your crew');
 });
 

@@ -486,6 +486,10 @@ it('takes the tools of a module switched off out of the list and tells open sess
 			'set_task_class',
 			'save_source',
 			'submit_design_review',
+			// spec/smoke-run#start: the smoke run and Ready to look come with the simulator or the browser.
+			'smoke_start',
+			'smoke_report',
+			'ready_to_look',
 			'review_reply',
 			'add_folder',
 			'commands_list',

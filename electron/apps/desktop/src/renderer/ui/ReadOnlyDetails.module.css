@@ -1,0 +1,40 @@
+/* spec/appearance#one-look-one-component: a disclosure where only the chevron turns (spec/appearance#motion). */
+.details summary {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-height: var(--control-h-s);
+	font-size: var(--text-10-5);
+	color: var(--fg2);
+	cursor: default;
+	list-style: none;
+}
+.details summary:hover {
+	color: var(--fg);
+}
+.details summary::-webkit-details-marker {
+	display: none;
+}
+.details summary > svg {
+	transition: transform var(--motion-fast);
+}
+.details[open] summary > svg {
+	transform: rotate(90deg);
+}
+.details small {
+	font-size: inherit;
+	color: var(--fg3);
+}
+.details p {
+	margin: 0 0 0 14px;
+	font-size: var(--text-11);
+	line-height: 1.5;
+	color: var(--fg2);
+	white-space: pre-wrap;
+	user-select: text;
+}
+@media (prefers-reduced-motion: reduce) {
+	.details summary > svg {
+		transition: none;
+	}
+}

@@ -24,6 +24,8 @@ import {
 	taskTokenSum,
 	tokenHold,
 	tokenMembers,
+	crewMembers,
+	budgetRoot,
 	tokenTally,
 } from './task-tokens';
 
@@ -165,6 +167,16 @@ describe('tokens of a task (spec/agents-and-providers#task-tokens)', () => {
 		expect(tally.estimate).toBe(38_000);
 		tally = reduceTokenTally(tally, { kind: 'host.stopped', reason: 'shutdown' });
 		expect(tally).toMatchObject({ estimate: 0, running: false });
+	});
+	it('counts the reviewers of a worker’s own review, which carry the worker, toward the root', () => {
+		const root = { id: 'root', projectId: 'p' },
+			worker = { id: 'worker', projectId: 'p', crewTaskId: 'root' },
+			reviewer = { id: 'reviewer', projectId: 'p', crewTaskId: 'worker' },
+			stranger = { id: 'other', projectId: 'p', crewTaskId: 'elsewhere' };
+		const tasks = [reviewer, stranger, worker];
+		expect(crewMembers(root, tasks).map((item) => item.id)).toEqual(['worker', 'reviewer']);
+		expect(budgetRoot(reviewer, [root, ...tasks]).id).toBe('root');
+		expect(budgetRoot(stranger, [root, ...tasks]).id).toBe('other');
 	});
 	it('sums a crew over its foreman, workers and reviewers, split by provider', () => {
 		const tasks = crew.map((journal) => task(journal)),

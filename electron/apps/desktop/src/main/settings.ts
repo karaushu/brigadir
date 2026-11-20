@@ -5,6 +5,7 @@ import {
 	defaultRemoteAccess,
 	defaultSlackSettings,
 	withSlackDefaults,
+	withReviewDefaults,
 	withModuleDefaults,
 	isRecord,
 	migrateHelperAgent,
@@ -175,6 +176,8 @@ export class Settings {
 						...notifications,
 						...remoteAccess,
 						...('slack' in value ? { slack: withSlackDefaults(value.slack) } : {}),
+						// spec/settings-modules-and-onboarding#settings-keys: `reviews` from before `Smoke run limit` reads it as 10 minutes.
+						...('reviews' in value ? { reviews: withReviewDefaults(value.reviews) } : {}),
 					}
 				: value;
 			// spec/appearance#evolution-redesign: `suggestModel` became `helperAgent`; the choice carries over with the lowest effort.

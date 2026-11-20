@@ -68,8 +68,9 @@ While a turn runs, the last row of the log is a status line, for example `⟳ Wo
 <a id="turn-footer"></a>
 ### Turn footer
 
-Each completed turn ends with a footer: `Done · 1 min 4 s` (or `Interrupted` / `Error`), then `Copy response`, `Turn actions` (`…`), an optional background chip, and **changed-file chips** with `+N −M`.
+Each completed turn ends with a footer: `Done · 1 min 4 s` (or `Plan sent back` / `Interrupted` / `Error`), then `Copy response`, `Turn actions` (`…`), an optional background chip, and **changed-file chips** with `+N −M`.
 
+- **`Plan sent back`** ends a turn whose plan for approval went back for revision — plan chat, `Plan further…`, `Send edits`, a plan review's findings or `Fix N` reject the request with its reject option and the agent ends the turn (`turn.completed` `cancelled`). It is the normal end of a planning turn: the `Turns` panel shows it with the done glyph, and the task's status after it is not `interrupted`. `Interrupted` stays for a turn the person stopped or that a host restart cut off.
 - Chips come from the turn's **snapshot checkpoints**, not from parsing tool calls (see [Diff and review](diff-and-review.md)). They are the real delta of the turn, including changes made through the terminal (`sed`, code generators). `activity:turn-changes` (`readTurnChanges`) returns at most 200 files plus `total`.
 - Clicking a chip opens the Changes panel and the diff on that file, limited to the turn's range.
 - The chip path is truncated **from the left**, with the file name in bold (`FilePath`), the same pattern as the diff file header and the sidebar repo section.
@@ -153,7 +154,7 @@ A subagent the agent runs in the background (Claude `Agent` with `run_in_backgro
 
 | Entity | Who | Source | Where |
 | --- | --- | --- | --- |
-| **Plan row** (`PlanRow`) | Any agent | ACP `session/update` `plan`, normalized to `plan.changed {entries}` | One row in the transcript |
+| **Plan row** (`PlanRow`) | Any agent | ACP `session/update` `plan`, or `plan_update` kind `items` (Claude's todo list), normalized to `plan.changed {entries}` | One row in the transcript |
 | **Plan for approval** | Any agent in plan mode | A permission whose tool kind is ACP `switch_mode`; plan documents `plan.document` | A card in the chat |
 | **Plan card** (`PlanCard`) | The Foreman | `crew.plan.requested` / `crew.plan.resolved` | A card in the Foreman's chat |
 
@@ -192,7 +193,7 @@ A plan the agent writes in plan mode, so the person can read it, edit it and app
 **Rules** (`core/plan-approval.ts`, `PlanApproval.tsx`):
 
 1. **What counts.** A permission request with `tool.category === 'switch_mode'` (`isPlanApproval`). The plan text is the tool's text `content`, else the last plan document of the session before the request that was not removed (`planApprovalText`). `rawInput` (for example `planFilePath`) is never read. A `switch_mode` permission without any text stays an ordinary permission card.
-2. **Plan documents.** The transport declares `clientCapabilities.plan` and maps `plan_update` kind `markdown` → `plan.document {planId, text}` and `plan_removed` → `plan.removed`. Kinds `items` and `file` are not shown. While the agent writes a plan without a request, the transcript shows a `Plan · <agent> is writing…` card at the place of that `planId`'s first `plan.document`, updated in place.
+2. **Plan documents.** The transport declares `clientCapabilities.plan` and maps `plan_update` kind `markdown` → `plan.document {planId, text}`, kind `items` → `plan.changed {entries}` (the step checklist, as `plan`), and `plan_removed` → `plan.removed`. Kind `file` is not shown. While the agent writes a plan without a request, the transcript shows a `Plan · <agent> is writing…` card at the place of that `planId`'s first `plan.document`, updated in place.
 3. **Card.** It takes the request's place in the chat, at the width of the conversation column.
    - Header: a "waiting for you" dot, the document glyph, `Plan for approval`, `<agent> is waiting for approval`, an `edited in the editor` badge when it applies, and `Open in editor` on the right.
    - Body: the chat's Markdown renderer, folded to about 210 px with a fade, plus `Whole plan · N lines` / `Collapse plan`.
@@ -221,6 +222,7 @@ A plan the agent writes in plan mode, so the person can read it, edit it and app
     - The person's row shows only their own words (`planChatWords`). The folded card reads `Plan in revision` with no quote.
     - While the request waits, the composer placeholder reads `Ask about the plan or say what to change`.
     - Without a reject option, the message is held as before.
+    - **A reviewer's question.** A reviewer of the task's own review that asks the Auto agent ([`ask_foreman`](crew.md#ask-foreman)) while its plan waits answers the plan the same way: the request is rejected with its first `reject_once` (else the first `reject_*`), the question runs as the agent's next turn in front of the queue, and its prompt adds `Your plan was sent back so that you can answer. After you answer, present the plan for approval again, unchanged unless the answer changes it.` A foreman's split whose `propose_plan` call still holds its turn is answered likewise: the call returns `approved: false` with the question, which asks it to call `propose_plan` again after answering; once that turn has ended the question queues as usual.
 12. **Plan review.** When the plan is presented, the host starts its [plan review](reviews.md#plan-review) by itself. The reviewer's findings reach the agent through the same path as plan chat: the waiting plan is answered with its reject option and the findings run right after the turn, before anything queued; the next presentation is the revision the reviewer checks against the [revision diff](#plan-revisions).
 
 There is no global `⌘↩` for `Approve plan`, because it would collide with the composer. Shortcuts exist only inside the `Plan further…` field.
@@ -330,7 +332,7 @@ The question of a task that [reached its token budget](agents-and-providers.md#b
 | Part | Look |
 | --- | --- |
 | Header | pause glyph, `{Provider} budget reached`, hint `{tokens} of {budget} tokens` (`≈` when the count was an estimate), `waiting {age}` after a minute |
-| Body | `The task is paused.`, or `The task and its {n} workers are paused.` for a crew (four `uk` forms); below, muted: `Turns that run now finish. Nothing new starts: no hires, no deliveries, no queued messages.` |
+| Body | `The task is paused.`, or `The task and its {n} workers are paused.` for a crew (four `uk` forms); `{n}` counts the members that are not dismissed or completed, and with none of them the body is `The task is paused.`; below, muted: `Turns that run now finish. Nothing new starts: no hires, no deliveries, no queued messages.` |
 | Actions | `Stop now` (ghost), `Finish turns, then stop` (soft), `Raise to {n}` — the primary split button; its menu (`ui/MenuPopover` with `Esc`) lists `Raise to {n}` and the next two values, then `No limit for this task` |
 
 - **After the answer** the card folds into the plain line `{Provider} budget reached · Resolved` with the answer under it: `Raise to {n}`, `No limit for this task`, `Finish turns, then stop` or `Stop now`. `budget.decided` draws nothing of its own.
@@ -341,12 +343,17 @@ The question of a task that [reached its token budget](agents-and-providers.md#b
 
 While the budget question waits, the same question stands as the first row of the [deck](composer.md#queue-deck) over the composer, `amber` tone: pause glyph, `Budget reached`, then `Stop now`, `Finish turns` (the short label), and the `Raise to {n}` split button with the same menu. The row's chevron expands the provider breakdown of `Task usage` with the account lines and the sentence `Turns that run now finish; nothing new starts.` An answer in the strip or in the card closes both; the strip leaves the deck when nothing waits.
 
+<a id="budget-held"></a>
+### Held at the budget
+
+After `Finish turns, then stop` or `Stop now` the task stays held at its budget until the budget changes, and the deck keeps one `amber` row for it in the strip's place (`tokenHold` with state `finish` or `stop`): pause glyph, `Paused at the budget`, then the `Raise to {n}` split button with the same menu. A raise here changes the provider's budget (`setTokenBudget`), which lifts the hold and resumes what waits; `No limit for this task` removes it. The chevron expands the same breakdown as the strip. The row leaves the deck when the hold is lifted.
+
 <a id="later"></a>
 ## Later
 
 - Marks on the turn rail for a turn that failed or waits for a permission, coloured like the sidebar state.
 - Background commands for Codex. Its background terminals exist only through AIR `asyncTasks`, which alters `exitCode` and `rawOutput` of ordinary calls.
-- Plan documents of kinds `items` and `file`.
+- Plan documents of kind `file`.
 - Comparing any two revisions of a plan, not only a revision and the one before it.
 
 <a id="non-goals"></a>

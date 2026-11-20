@@ -1,0 +1,84 @@
+/* spec/smoke-run: the smoke run's own pieces. The deck row is ui/Deck, the service rows are the crew's (Crew.module.css .service), links ui/TextLink. */
+.steps {
+	margin: 0;
+	padding: 2px 0 4px;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	color: var(--fg2);
+	font-size: var(--text-12);
+	line-height: 1.25;
+}
+.steps > li {
+	display: flex;
+	gap: 8px;
+	min-width: 0;
+}
+.steps > li > span:last-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.number {
+	flex: none;
+	min-width: 12px;
+	color: var(--fg3);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+.report {
+	display: flex;
+	flex-direction: column;
+}
+.glyph {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg2);
+}
+.glyph[data-tone='green'] {
+	color: var(--green);
+}
+.glyph[data-tone='red'] {
+	color: var(--red);
+}
+/* The report's summary is the agent's text under the row, like a message. */
+.summary {
+	margin: 2px 16px 10px;
+	padding: 0 16px;
+	font-size: var(--text-13-5);
+	line-height: 1.6;
+	color: var(--fg);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.results {
+	margin: -4px 16px 10px;
+	padding: 0 8px;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: var(--text-11-5);
+}
+.results > li {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	min-width: 0;
+}
+.results > li > .glyph {
+	align-self: center;
+}
+.step {
+	flex: none;
+	max-width: 50%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.results small {
+	min-width: 0;
+	color: var(--fg2);
+	overflow-wrap: anywhere;
+}

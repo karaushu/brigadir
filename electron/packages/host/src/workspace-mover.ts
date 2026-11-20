@@ -11,8 +11,11 @@ import {
 	restoreProject,
 	rollbackMove,
 	saveMove,
+	stoppedRow,
+	type MoveCommand,
 	type MoveDeps,
 	type MoveDocument,
+	type MoveHold,
 } from './workspace-move';
 
 /** spec/crew#auto-move: the stay reasons as the agent reads them. */
@@ -23,8 +26,7 @@ export const stayReason = {
 	ignored: 'ignored by git',
 	outside: 'outside git',
 } as const;
-/** The host's hold of the task while it moves: the last capture, then nothing reads or writes the folder. */
-export type MoveHold = { capture(): Promise<void>; detach(): Promise<void> };
+export type { MoveHold } from './workspace-move';
 export type MoveWork = (hold: MoveHold) => Promise<boolean>;
 /** What follows the move for one starter: in the host that starts in the worktree (`moved`), or in this one (`failed`). */
 export type MoveEnd = {
@@ -40,6 +42,8 @@ export type WorkspaceMoverDeps = MoveDeps & {
 	/** No prompt starts until `work` settles: the host in the worktree finishes the move first. */
 	gate?(work: Promise<void>): void;
 	sessionId(): string | null;
+	/** spec/crew#auto-move: starts the saved commands again in this host's folder; the ids that started. */
+	restartCommands?(commands: readonly MoveCommand[]): Promise<string[]>;
 	/** The task runs in a worktree now (the host after the switch). */
 	worktree(): Promise<boolean>;
 };
@@ -128,7 +132,13 @@ export class WorkspaceMover {
 	private async run(doc: MoveDocument, hold: MoveHold): Promise<boolean> {
 		const { store, key } = this.deps;
 		const sessionId = (await store.task(key)).provider === 'claude' ? this.deps.sessionId() : null;
-		let current: MoveDocument = { ...doc, state: 'moving', ...(sessionId ? { sessionId } : {}) };
+		let current: MoveDocument = {
+			...doc,
+			state: 'moving',
+			...(sessionId ? { sessionId } : {}),
+			...(hold.stopped?.length ? { stopped: hold.stopped } : {}),
+			...(hold.restart?.length ? { restart: hold.restart } : {}),
+		};
 		try {
 			await saveMove(store, key, current);
 			if (doc.waited) await this.deps.emit(this.event(doc, 'moving'));
@@ -155,8 +165,18 @@ export class WorkspaceMover {
 	/** Nothing moved: the row says why; the starter tells whom it concerns. */
 	private async fail(doc: MoveDocument, message: string) {
 		await saveMove(this.deps.store, this.deps.key, { ...doc, state: 'failed', message });
-		await this.deps.emit({ ...this.event(doc, 'failed'), message });
+		// The task stays in the project folder: the saved commands the agent had started run there again.
+		const stopped = stoppedRow(doc, await this.restartCommands(doc));
+		await this.deps.emit({
+			...this.event(doc, 'failed'),
+			message,
+			...(stopped.length ? { stopped } : {}),
+		});
 		await this.end(doc)?.failed(doc, message);
+	}
+	private async restartCommands(doc: MoveDocument) {
+		if (!doc.restart?.length || !this.deps.restartCommands) return [];
+		return this.deps.restartCommands(doc.restart).catch(() => [] as string[]);
 	}
 	/**
 	 * What a host finds at its start: a move that waited for the turn, one that stopped half-way, or one that switched the task before this
@@ -194,13 +214,19 @@ export class WorkspaceMover {
 				({ event }) =>
 					event.kind === 'workspace.move' && event.id === current.id && event.state === 'moved'
 			);
-		if (!announced)
+		// spec/crew#auto-move: the saved commands the agent had started run again in the worktree, in every host that finishes the move (an
+		// earlier one that stopped took its commands with it); the row, written once, names what the restart stopped.
+		const restarted = await this.restartCommands(current);
+		if (!announced) {
+			const stopped = stoppedRow(current, restarted);
 			await this.deps.emit({
 				...this.event(current, 'moved'),
 				...(current.branch ? { branch: current.branch } : {}),
 				...(current.base ? { base: current.base } : {}),
 				stayed: current.stayed ?? [],
+				...(stopped.length ? { stopped } : {}),
 			});
+		}
 		await this.end(current)?.moved(current, `${movePreface(current)}\n\n`);
 		await saveMove(store, key, { ...current, state: 'moved' });
 	}

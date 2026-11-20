@@ -4,6 +4,7 @@ import {
 	defaultSmallTaskLimit,
 	hiredPartsBack,
 	isReviewSettings,
+	smokeMinutesOf,
 	overSmallTask,
 	runningHires,
 	smallTaskLimitOf,
@@ -97,9 +98,25 @@ describe('spec/reviews#tripwire', () => {
 			files: 15,
 			lines: 300,
 		});
-		expect(isReviewSettings({ smallTask: { files: 500, lines: 20_000 } })).toBe(true);
-		expect(isReviewSettings({ smallTask: { files: 501, lines: 300 } })).toBe(false);
-		expect(isReviewSettings({ smallTask: { files: 15, lines: 9 } })).toBe(false);
+		expect(isReviewSettings({ smallTask: { files: 500, lines: 20_000 }, smokeMinutes: 60 })).toBe(
+			true
+		);
+		expect(isReviewSettings({ smallTask: { files: 501, lines: 300 }, smokeMinutes: 10 })).toBe(
+			false
+		);
+		expect(isReviewSettings({ smallTask: { files: 15, lines: 9 }, smokeMinutes: 10 })).toBe(false);
+		// spec/smoke-run#limit: `Smoke run limit` is 1–60 minutes; a document from before it reads as 10.
+		expect(isReviewSettings({ smallTask: { files: 15, lines: 300 }, smokeMinutes: 61 })).toBe(
+			false
+		);
+		expect(isReviewSettings({ smallTask: { files: 15, lines: 300 } })).toBe(false);
+		expect(smokeMinutesOf({ reviews: { smallTask: { files: 4, lines: 50 } } })).toBe(10);
+		expect(
+			smokeMinutesOf({ reviews: { smallTask: { files: 4, lines: 50 }, smokeMinutes: 25 } })
+		).toBe(25);
+		expect(
+			smokeMinutesOf({ reviews: { smallTask: { files: 4, lines: 50 }, smokeMinutes: 0 } })
+		).toBe(10);
 	});
 	it('watches a task with no class or a Small one, until it fires once', () => {
 		expect(tripwireArmed([])).toBe(true);

@@ -18,6 +18,26 @@ export type WorkspaceStayed = { path: string; reason: WorkspaceStayReason };
 /** spec/crew#auto-move: how many stayed paths an event carries; the chat row shows 20 of them. */
 export const workspaceStayedLimit = 200;
 /**
+ * spec/crew#auto-move: what the move's host restart stopped: a saved project command (`command`), a console of the person (`console`) or the
+ * agent's background command (`background`). `restarted`: a saved command the agent had started, started again by the host.
+ */
+export type WorkspaceStopped = {
+	kind: 'command' | 'console' | 'background';
+	name: string;
+	restarted?: true;
+};
+/** spec/crew#auto-move: how many stopped items an event carries. */
+export const workspaceStoppedLimit = 64;
+export function isWorkspaceStopped(value: unknown): value is WorkspaceStopped {
+	return (
+		isRecord(value) &&
+		['command', 'console', 'background'].includes(String(value.kind)) &&
+		typeof value.name === 'string' &&
+		value.name.length <= 200 &&
+		(value.restarted === undefined || value.restarted === true)
+	);
+}
+/**
  * spec/tasks#worktree-move: `waiting` — the person's move waits for the agent's turn to end; `cancelled` — the person cancelled it while it
  * waited. A hire's move starts at `moving`.
  */
@@ -45,6 +65,8 @@ export type WorkspaceMoveEvent = {
 	stayed?: WorkspaceStayed[];
 	/** Why the move failed, as git or the step gave it. */
 	message?: string;
+	/** What the restart of the move stopped, and which saved commands started again. */
+	stopped?: WorkspaceStopped[];
 };
 const text = (value: unknown): value is string => typeof value === 'string';
 export function isWorkspaceStayed(value: unknown): value is WorkspaceStayed {
@@ -73,7 +95,11 @@ export function isWorkspaceMoveFields(value: unknown): boolean {
 		(value.stayed === undefined ||
 			(Array.isArray(value.stayed) &&
 				value.stayed.length <= workspaceStayedLimit &&
-				value.stayed.every(isWorkspaceStayed)))
+				value.stayed.every(isWorkspaceStayed))) &&
+		(value.stopped === undefined ||
+			(Array.isArray(value.stopped) &&
+				value.stopped.length <= workspaceStoppedLimit &&
+				value.stopped.every(isWorkspaceStopped)))
 	);
 }
 /** A tree entry of one path: git mode and object id; null — the path is absent. */

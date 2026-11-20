@@ -18,6 +18,7 @@ import {
 	type AgentTemplate,
 	type CrewSpec,
 	type ProviderCatalog,
+	roleInstructions,
 } from './index';
 
 const select = (id: string, category: string, values: string[]) => ({
@@ -54,7 +55,7 @@ const designer: AgentTemplate = {
 	id: 'ux-designer',
 	name: 'Designer',
 	role: 'reviewer',
-	summary: 'Checks screens and tokens',
+	whenToUse: 'Checks screens and tokens',
 	instructions: 'Check the UI.',
 	builtin: false,
 };
@@ -147,7 +148,7 @@ describe('composeCrew (spec/crew#compose)', () => {
 			provider: 'claude',
 			requestedChoices: { configOptions: { model: 'opus', effort: 'max' } },
 			choiceNames: { model: 'OPUS', effort: 'MAX' },
-			summary: 'Server routes',
+			whenToUse: 'Server routes',
 			zone: ['services/api/**'],
 		});
 		expect(crew[0]!.checkedBy).toEqual([crew[1]!.id]);
@@ -155,9 +156,10 @@ describe('composeCrew (spec/crew#compose)', () => {
 		expect(crew[1]).toMatchObject({
 			template: 'ux-designer',
 			role: 'reviewer',
-			summary: 'Checks screens and tokens',
-			instructions: 'Check the UI.',
+			whenToUse: 'Checks screens and tokens',
 		});
+		// spec/crew-templates-and-editor#rights: the checker's rules, then the role's own text.
+		expect(crew[1]!.instructions).toBe(roleInstructions('reviewer', 'Check the UI.'));
 		expect(crew[2]!.checkedBy).toEqual([crew[1]!.id]);
 		const proposed = composedSpec(spec, crew);
 		expect(isCrewSpec(proposed)).toBe(true);
@@ -310,9 +312,14 @@ describe('records with a crew', () => {
 		const template = specAsTemplate(composedSpec(spec, crew), (id) => !!lookup(id));
 		expect(template.root.template).toBe(foremanTemplateId);
 		expect(resolveCrew(template, { lookup, defaultProvider: 'claude' }).root.agents).toEqual(crew);
-		// A template gone from the library keeps what the agent was told as its addition.
-		const orphan = specAsTemplate(composedSpec(spec, crew), (id) => id !== 'ux-designer').root
-			.agents![1]!;
-		expect(orphan).toMatchObject({ template: null, extraInstructions: 'Check the UI.' });
+		// A template gone from the library keeps what the agent was told as its addition; a checker stays a checker, its rules given once.
+		const reopened = specAsTemplate(composedSpec(spec, crew), (id) => id !== 'ux-designer'),
+			orphan = reopened.root.agents![1]!;
+		expect(orphan).toMatchObject({ template: 'reviewer', extraInstructions: 'Check the UI.' });
+		const look = resolveCrew(reopened, { lookup, defaultProvider: 'claude' }).root.agents[1]!;
+		expect(look.role).toBe('reviewer');
+		expect(`${look.instructions}\n\n${look.extraInstructions}`).toBe(
+			roleInstructions('reviewer', 'Check the UI.')
+		);
 	});
 });

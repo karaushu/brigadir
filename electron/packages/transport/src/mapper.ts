@@ -192,11 +192,21 @@ export function mapUpdate(update: ACP.SessionUpdate): AgentEvent {
 					status: entry.status,
 				})),
 			};
-		// spec/chat-turns-plans-and-questions#plan-approval: only the markdown form is shown; `items` and `file` stay unhandled for now.
+		// spec/chat-turns-plans-and-questions#plan-approval: the markdown form is a plan document; the `items` form is the step checklist (Claude's
+		// todo list), the same entries as `plan`; a `file` form stays unhandled.
 		case 'plan_update':
 			return update.plan.type === 'markdown'
 				? { kind: 'plan.document', planId: update.plan.planId, text: update.plan.content }
-				: { kind: 'unhandled', name: `plan_update:${update.plan.type}` };
+				: update.plan.type === 'items'
+					? {
+							kind: 'plan.changed',
+							entries: update.plan.entries.map((entry) => ({
+								text: entry.content,
+								priority: entry.priority,
+								status: entry.status,
+							})),
+						}
+					: { kind: 'unhandled', name: `plan_update:${update.plan.type}` };
 		case 'plan_removed':
 			return { kind: 'plan.removed', planId: update.planId };
 		case 'config_option_update':

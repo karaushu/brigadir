@@ -155,3 +155,47 @@ it('folds an appended journal incrementally, like the full projection, without t
 		full = time(() => turnSummaries(records));
 	expect(incremental).toBeLessThan(full);
 });
+it('a turn that ends because its plan went back is returned, not interrupted (spec/chat-turns-plans-and-questions#turn-footer)', async () => {
+	const { lastTurnPlanReturned } = await import('./turns');
+	const { statusAfterTurn, pendingInputs } = await import('./session');
+	const plan = {
+		id: 'p1',
+		tool: { id: 'plan-tool', title: 'Approve Plan', category: 'switch_mode' },
+		options: [
+			{ id: 'exit-plan-default', name: 'Yes', kind: 'allow_once' },
+			{ id: 'reject', name: 'No, keep planning', kind: 'reject_once' },
+		],
+	} as never;
+	const records = (events: SessionEvent[]): EventRecord[] =>
+		events.map((event, index) => ({
+			schemaVersion: 1,
+			seq: index + 1,
+			at: new Date(index * 1000).toISOString(),
+			event,
+		}));
+	const answered = (optionId: string | null): EventRecord[] =>
+		records([
+			{ kind: 'turn.started', text: 'plan' },
+			{ kind: 'permission.requested', request: plan },
+			{ kind: 'permission.resolved', id: 'p1', optionId },
+			{ kind: 'turn.completed', reason: 'cancelled' },
+		]);
+	// Plan chat, `Plan further…`, findings or `Fix N` reject the plan: the planning turn ends normally.
+	expect(turnSummaries(answered('reject'))[0]!.status).toBe('returned');
+	expect(lastTurnPlanReturned(answered('reject'))).toBe(true);
+	expect(statusAfterTurn('cancelled', pendingInputs([]), false, true)).toBe('done');
+	// Stop while the plan waits resolves it without an option: an interruption.
+	expect(turnSummaries(answered(null))[0]!.status).toBe('interrupted');
+	expect(lastTurnPlanReturned(answered(null))).toBe(false);
+	expect(statusAfterTurn('cancelled', pendingInputs([]), false, false)).toBe('interrupted');
+	// A plan rejected in an earlier turn does not count for the next one.
+	const later = [
+		...answered('reject'),
+		...records([
+			{ kind: 'turn.started', text: 'next' },
+			{ kind: 'turn.completed', reason: 'cancelled' },
+		]).map((record, index) => ({ ...record, seq: 10 + index })),
+	];
+	expect(turnSummaries(later).map((turn) => turn.status)).toEqual(['returned', 'interrupted']);
+	expect(lastTurnPlanReturned(later)).toBe(false);
+});

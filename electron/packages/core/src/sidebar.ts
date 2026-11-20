@@ -119,6 +119,8 @@ export type CrewWorkerRow = {
 	role: CrewSpecAgent['role'];
 	/** spec/sidebar#crew-card: an Auto worker that was dismissed stays as a quiet row with its `+N −M`. */
 	dismissed: boolean;
+	/** spec/reviews#surfaces: a reviewer of the task's own review (not a crew's reviewer). */
+	reviewer?: true;
 };
 /** Worker rows of a foreman card in tree order with the agent name as prefix and lead depth (spec/crew-templates-and-editor#after-launch, spec/crew#subordinates). */
 export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]): CrewWorkerRow[] {
@@ -126,8 +128,19 @@ export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]):
 	const spec = foreman.crew ?? foreman.reviewCrew;
 	if (!spec) return [];
 	const current = foreman.crew ? null : new Set(spec.root.checkedBy);
+	// spec/reviews#surfaces: under a crew's card too, only the current review's reviewers have rows; earlier reviews' reviewers stay in the spec, unchecked.
+	const earlier = new Set(
+		foreman.crew
+			? spec.root.agents
+					.filter((agent) => isTaskReviewAgent(agent) && !spec.root.checkedBy.includes(agent.id))
+					.map((agent) => agent.id)
+			: []
+	);
 	const workers = tasks.filter(
-		(task) => task.crewTaskId === foreman.id && (!current || current.has(task.crewNodeId ?? ''))
+		(task) =>
+			task.crewTaskId === foreman.id &&
+			(!current || current.has(task.crewNodeId ?? '')) &&
+			!earlier.has(task.crewNodeId ?? '')
 	);
 	const rows: CrewWorkerRow[] = [];
 	const visit = (agent: CrewSpecAgent, depth: number) => {
@@ -137,12 +150,16 @@ export function crewWorkerRows(foreman: AgentTask, tasks: readonly AgentTask[]):
 				.sort((a, b) => (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '')))
 				rows.push({
 					task,
-					// spec/sidebar#crew-card: an Auto worker's row is `{role} · {part}`.
-					name: foreman.auto ? autoRoleLabel(foreman.auto, child) : child.name,
+					// spec/sidebar#crew-card: an Auto worker's row is `{role} · {part}`; spec/reviews#surfaces: a reviewer's is its own name (`Codex 2`).
+					name:
+						foreman.auto && !isTaskReviewAgent(child)
+							? autoRoleLabel(foreman.auto, child)
+							: child.name,
 					depth,
 					provider: task.provider ?? child.provider,
 					role: child.role,
 					dismissed: !!foreman.auto && task.status === 'completed',
+					...(isTaskReviewAgent(child) ? { reviewer: true as const } : {}),
 				});
 			visit(child, depth + 1);
 		}
@@ -167,11 +184,16 @@ export function crewTaskLabel(task: AgentTask, tasks: readonly AgentTask[]): str
 	);
 	const spec = foreman?.crew ?? foreman?.reviewCrew,
 		node = spec ? findSpecAgent(spec.root, task.crewNodeId) : null,
-		name = node ? (foreman?.auto ? autoRoleLabel(foreman.auto, node) : node.name) : undefined;
+		name = node
+			? foreman?.auto && !isTaskReviewAgent(node)
+				? autoRoleLabel(foreman.auto, node)
+				: node.name
+			: undefined;
 	return name ? `${name} · ${task.title}` : task.title;
 }
 import { findSpecAgent, type CrewSpecAgent } from './crew';
 import { autoRoleLabel } from './auto';
+import { isTaskReviewAgent } from './crew-compose';
 /** spec/sidebar#open-last: what was open when the app last ran — a project (or `*`, All projects) and, inside it, a task. */
 export type SidebarSelection = { project: string; task?: string };
 export const isSidebarSelection = (value: unknown): value is SidebarSelection =>

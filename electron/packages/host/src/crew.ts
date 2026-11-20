@@ -381,6 +381,12 @@ export type CrewHostDeps = {
 	held?(): Promise<boolean>;
 	/** spec/crew#ask-foreman: the question is over; its prompt, if it still waits in this host's queue, is taken out. */
 	dropQuestion?(questionId: string): Promise<void>;
+	/** spec/crew#ask-foreman: a reviewer's question answers a waiting plan for approval — rejected, the question in front of the queue; false
+	 *  when no plan waits or this agent cannot answer questions. */
+	answerPlan?(
+		text: string,
+		marker: Extract<SessionEvent, { kind: 'turn.started' }>['crew']
+	): Promise<boolean>;
 };
 export type SelfReviewHooks = {
 	/** The task review the round belongs to (`task-review.json`). */
@@ -415,6 +421,10 @@ export type SelfReviewHooks = {
 		reviewId: string,
 		round: readonly { tree: string }[]
 	): Promise<DesignGateInput | null>;
+	/** spec/reviews#reviewer-sessions: a review of the task is open — its reviewers keep their worktrees. */
+	live?(): boolean;
+	/** spec/reviews#smoke: the task's newest smoke report for the reviewer; empty without the browser and the simulator. */
+	smoke?(): string;
 };
 /** spec/reviews#loop: a file of one repo — the same path in two repos of a project is two files. */
 export const scopedPath = (scopeId: string, path: string) => `${scopeId}\0${path}`;
@@ -429,6 +439,14 @@ export function staleIntroduced(
 	return stale ? stale.anchor.path : null;
 }
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const processAlive = (pid: number) => {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return isRecord(error) && error.code === 'EPERM';
+	}
+};
 const name = (key: TaskKey) => `${key.projectId}/${key.id}`;
 const slug = (text: string) =>
 	transliterate(text)
@@ -689,12 +707,32 @@ export class CrewHost {
 				const task = await this.deps.store
 					.task({ projectId: this.deps.key.projectId, id: worker.taskId })
 					.catch(() => null);
-				if ((task?.status === 'queued' && !task.hasStarted) || worker.next?.state === 'queued')
+				if (
+					((task?.status === 'queued' && !task.hasStarted) || worker.next?.state === 'queued') &&
+					!(await this.parked(worker))
+				)
 					this.waiting.push(worker.taskId);
 			}
 			this.watchSlots();
 			this.watchMerges();
 		});
+	}
+	/** spec/crew#auto-hire: a worker whose start waits for a decision that is not made yet (a hire interrupted half-way); it is not launched at start. */
+	protected async parked(_worker: CrewWorkerRecord): Promise<boolean> {
+		return false;
+	}
+	/** A worker that waited for a decision starts now, as a new one would; a launch a stopped host left half-way goes on from there. */
+	protected async launchLater(worker: CrewWorkerRecord) {
+		if (this.waiting.includes(worker.taskId) || this.launching.has(worker.taskId)) return;
+		const key = this.workerKey(worker),
+			task = await this.deps.store.task(key).catch(() => null);
+		if (!task || task.hasStarted) return;
+		// The worktree's preparation resumes from its manifest.
+		if (task.status === 'preparing' || task.status === 'interrupted')
+			await this.deps.store.setStatus(key, 'queued');
+		else if (task.status !== 'queued') return;
+		this.waiting.push(worker.taskId);
+		this.watchSlots();
 	}
 	async stop() {
 		this.stopping = true;
@@ -887,6 +925,21 @@ export class CrewHost {
 	/** spec/reviews#plan-review: the split that waits for the person, if any. */
 	async waitingPlan(): Promise<CrewPlan | null> {
 		return this.planWaiter?.plan ?? (await this.pendingPlan());
+	}
+	/** The turn that proposed this plan has ended (Codex may end a turn with the MCP call still pending). */
+	private planTurnEnded(planId: string) {
+		const records = this.deps.records(),
+			requested = records.findLastIndex(
+				({ event }) => event.kind === 'crew.plan.requested' && event.plan.id === planId
+			);
+		return (
+			requested >= 0 &&
+			records
+				.slice(requested + 1)
+				.some(({ event }) =>
+					['turn.completed', 'session.failed', 'host.stopped'].includes(event.kind)
+				)
+		);
 	}
 	async decidePlan(decision: CrewPlanDecision, review?: string) {
 		if (!isCrewPlanDecision(decision)) throw new Error('Invalid plan decision');
@@ -1209,14 +1262,17 @@ export class CrewHost {
 			(worker) => worker.nodeId === checker.id && !worker.acceptedAt
 		);
 		if (existing) return existing;
-		if (this.checksSelf(checker.id))
+		if (this.checksSelf(checker.id)) {
+			// spec/reviews#reviewer-sessions: the reviewer's task says what it reviews — the plan, or the changes.
+			const point = this.deps.self?.point() ?? 'pre-pr';
 			return this.spawnWorkerTask(
 				checker,
-				'reviews the changes',
-				`You review the changes of this task before its pull request. Reports to check arrive as prompts with a reviewId. Until then, wait; do not modify files.`,
+				point === 'plan' ? 'reviews the plan' : 'reviews the changes',
+				`You do the ${reviewPointPrompt[point]} of this task. ${point === 'plan' ? 'Plans' : 'Reports'} to check arrive as prompts with a reviewId. Until then, wait; do not modify files.`,
 				[],
 				true
 			);
+		}
 		const checks = this.node.agents
 			.filter((agent) => agent.checkedBy.includes(checker.id))
 			.map((agent) => agent.name);
@@ -1878,6 +1934,9 @@ export class CrewHost {
 			if (!this.stopping) {
 				this.watchSlots();
 				this.awaitHost(key);
+				// spec/crew#reviewer: a reviewer host that died in the middle of a check gets the check again in a new host.
+				if (this.reviews.some((run) => run.state === 'reviewing' && run.dispatched.length))
+					void this.serial(() => this.dispatchReviews()).catch(() => {});
 			}
 		});
 		return link;
@@ -1889,7 +1948,13 @@ export class CrewHost {
 			record.event.kind === 'session.failed'
 		)
 			this.watchSlots();
-		if (record.event.kind === 'session.started' || record.event.kind === 'turn.completed')
+		// spec/crew#reviewer: a check whose reviewer turn failed or was cut off goes out again.
+		if (
+			record.event.kind === 'session.started' ||
+			record.event.kind === 'turn.completed' ||
+			record.event.kind === 'session.failed' ||
+			record.event.kind === 'host.stopped'
+		)
 			void this.serial(async () => {
 				await this.dispatchReviews();
 				if (record.event.kind === 'turn.completed') await this.retireReviewers();
@@ -2345,8 +2410,81 @@ export class CrewHost {
 		))
 			await gitText(target.path, ['read-tree', '-u', '--reset', target.tree]);
 	}
-	/** One reviewer serves one check at a time; the rest wait FIFO and survive a restart (spec/crew#reviewer). */
-	private async dispatchReviews() {
+	/**
+	 * spec/crew#reviewer: a check whose reviewer turn ended without a verdict — cancelled (`Stop now` at the budget, a stop), failed, or cut
+	 * off with its host — is sent to that reviewer again, at most three times in all. A turn that ended by itself without a verdict is
+	 * silence: never an approval, and not sent again.
+	 */
+	private async reclaimChecks() {
+		let changed = false;
+		for (const run of this.reviews.filter((item) => item.state === 'reviewing'))
+			for (const reviewerId of [...run.dispatched]) {
+				const reviewer = this.workers.find(
+					(worker) => worker.nodeId === reviewerId && !worker.acceptedAt
+				);
+				if (!reviewer || run.verdicts.some((verdict) => verdict.reviewerNodeId === reviewerId))
+					continue;
+				if (!(await this.checkLost(run, this.workerKey(reviewer)))) continue;
+				run.dispatched = run.dispatched.filter((id) => id !== reviewerId);
+				changed = true;
+			}
+		if (changed) await this.saveReviews();
+	}
+	private async checkLost(run: ReviewRun, key: TaskKey) {
+		const records = (await this.journal(key).catch(() => null))?.records ?? [],
+			mark = `(reviewId ${run.reviewId}`,
+			starts = records.filter(
+				(record) => record.event.kind === 'turn.started' && record.event.text.includes(mark)
+			),
+			last = starts.at(-1),
+			alive = async () => Boolean(await this.link(key).catch(() => null));
+		// The check still waits in the reviewer's queue: a host that is gone is started again to run it.
+		const removed = new Set(
+			records.flatMap((record) => (record.event.kind === 'prompt.removed' ? [record.event.id] : []))
+		);
+		const queued = records.filter(
+			(record) =>
+				record.seq > (last?.seq ?? 0) &&
+				record.event.kind === 'prompt.queued' &&
+				record.event.prompt.command.kind === 'prompt' &&
+				record.event.prompt.command.text.includes(mark)
+		);
+		if (
+			queued.some(
+				(record) => record.event.kind === 'prompt.queued' && !removed.has(record.event.prompt.id)
+			)
+		) {
+			if (!(await alive())) await this.spawn(key).catch(() => null);
+			return false;
+		}
+		// Never started and not queued: taken out unread, or recorded as sent by a host that stopped before sending it.
+		if (!last) return true;
+		const end = records.find(
+			(record) =>
+				record.seq > last.seq &&
+				['turn.completed', 'session.failed', 'host.stopped'].includes(record.event.kind)
+		);
+		const lost = end
+			? end.event.kind !== 'turn.completed' || end.event.reason === 'cancelled'
+			: !(await alive());
+		if (lost && starts.length >= 3) {
+			// spec/crew#reviewer: the check went out three times and never came back: the reviewer needs the person.
+			if ((await this.deps.store.task(key).catch(() => null))?.status !== 'needs-you')
+				await this.deps.store.setStatus(key, 'needs-you').catch(() => {});
+			return false;
+		}
+		return lost;
+	}
+	/** One reviewer serves one check at a time; the rest wait FIFO and survive a restart (spec/crew#reviewer). Dispatches run one after
+	 *  another: two callers must not both find a check unsent and send it twice. */
+	private dispatchTail: Promise<unknown> = Promise.resolve();
+	private dispatchReviews(): Promise<void> {
+		const result = this.dispatchTail.catch(() => {}).then(() => this.dispatchNow());
+		this.dispatchTail = result;
+		return result;
+	}
+	private async dispatchNow() {
+		await this.reclaimChecks();
 		for (const reviewerId of new Set(
 			this.reviews.filter((run) => run.state === 'reviewing').flatMap((run) => run.reviewerNodeIds)
 		)) {
@@ -2579,8 +2717,8 @@ export class CrewHost {
 			approved: false,
 			comments: comments.length + insist.length,
 			at: new Date().toISOString(),
+			...(comments.length ? { commentIds: comments.map((comment) => comment.id) } : {}),
 		});
-		this.pendingBatches.set(`${run.reviewId}/${reviewer.nodeId}`, comments);
 		await this.saveReviews();
 		// One row per verdict only when several reviewers share a round; a single reviewer's verdict is the round's summary row. A task's own
 		// review has its own rows (spec/reviews#strip).
@@ -2599,15 +2737,17 @@ export class CrewHost {
 		await this.settleRun(run);
 		return { sent: comments.length, reviewId: run.reviewId };
 	}
-	private pendingBatches = new Map<string, ReviewComment[]>();
 	/** All verdicts in: comments go to the developer as one batch (round 1), or the dispute goes up (round 2); approvals go up as the report (spec/crew#reviewer). */
 	private async settleRun(run: ReviewRun) {
 		if (run.state !== 'reviewing' || run.verdicts.length < run.reviewerNodeIds.length) return;
 		const worker = this.worker(run.taskId);
-		const comments = run.reviewerNodeIds.flatMap(
-			(id) => this.pendingBatches.get(`${run.reviewId}/${id}`) ?? []
+		// The verdicts name their comments on disk: a verdict given before a restart keeps its batch.
+		const comments = await this.storedComments(
+			worker,
+			run.reviewerNodeIds.flatMap(
+				(id) => run.verdicts.find((verdict) => verdict.reviewerNodeId === id)?.commentIds ?? []
+			)
 		);
-		for (const id of run.reviewerNodeIds) this.pendingBatches.delete(`${run.reviewId}/${id}`);
 		if (this.isSelf(worker)) return this.settleSelf(run, worker, comments);
 		if (run.verdicts.every((verdict) => verdict.approved)) {
 			// Re-check the trees: nothing may slip in after the last approval.
@@ -2781,10 +2921,28 @@ export class CrewHost {
 		await this.saveQuestions();
 		await this.deps.emit({ kind: 'crew.question.requested', question });
 		this.scheduleEscalation(question);
-		await this.deps.prompt(
-			`Worker \`${worker.name} · ${worker.title}\` asks (questionId ${question.id}):\n${text}${options.length ? `\nOptions: ${options.join(' | ')}` : ''}\nAnswer with prompt_task(taskId "${worker.taskId}", text, questionId "${question.id}"). The worker is blocked until you answer.`,
-			{ kind: 'question', questionId: question.id, agent: worker.name }
-		);
+		const prompt = `Worker \`${worker.name} · ${worker.title}\` asks (questionId ${question.id}):\n${text}${options.length ? `\nOptions: ${options.join(' | ')}` : ''}\nAnswer with prompt_task(taskId "${worker.taskId}", text, questionId "${question.id}"). The worker is blocked until you answer.`,
+			marker = { kind: 'question' as const, questionId: question.id, agent: worker.name };
+		// spec/crew#ask-foreman: a reviewer of the task's own review asks while a waiting plan holds the author's turn — the question answers
+		// the plan as plan chat does, runs as the author's next turn, and the author presents the plan again.
+		if (this.checksSelf(worker.nodeId)) {
+			// Only a `propose_plan` call that still holds the foreman's turn: after that turn ended the foreman is free to take the question.
+			if (this.planWaiter && !this.planTurnEnded(this.planWaiter.plan.id))
+				if (
+					await this.rejectPlanForReview(
+						`${prompt}\nYour split was sent back so that you can answer. After you answer, call propose_plan again with the split, unchanged unless the answer changes it.`
+					)
+				)
+					return question;
+			if (
+				await this.deps.answerPlan?.(
+					`${prompt}\nYour plan was sent back so that you can answer. After you answer, present the plan for approval again, unchanged unless the answer changes it.`,
+					marker
+				)
+			)
+				return question;
+		}
+		await this.deps.prompt(prompt, marker);
 		return question;
 	}
 	private scheduleEscalation(question: CrewQuestion) {
@@ -3337,6 +3495,17 @@ export class CrewHost {
 		}
 		return comments;
 	}
+	/** The stored comments with these ids, in this order. */
+	private async storedComments(worker: CrewWorkerRecord, ids: readonly string[]) {
+		if (!ids.length) return [];
+		const path = await safePath(
+			await this.deps.store.taskDir(this.workerKey(worker)),
+			'review.json'
+		);
+		const doc = await readDocument(path, 16 * 1024 * 1024).catch(() => null);
+		const all = Array.isArray(doc?.comments) ? (doc.comments as ReviewComment[]) : [];
+		return ids.flatMap((id) => all.filter((comment) => comment.id === id));
+	}
 	private async storeComments(worker: CrewWorkerRecord, comments: ReviewComment[]) {
 		const path = await safePath(
 			await this.deps.store.taskDir(this.workerKey(worker)),
@@ -3373,7 +3542,7 @@ export class CrewHost {
 			guidance = this.deps.self?.guidance() ?? '';
 		if (this.deps.self?.point() === 'plan')
 			return this.deps.self.planPrompt(run.taskId, run.reviewId, run.round, reviewer.name);
-		const design = await this.designParagraph(run, reviewer);
+		const design = `${await this.designParagraph(run, reviewer)}${this.deps.self?.smoke?.() ?? ''}`;
 		if (run.round <= 1)
 			return `Check task ${run.taskId} of \`${worker.name}\` (reviewId ${run.reviewId}, first read).\n${report}${brief}\nThis is the ${point} of the task's changes. The files of your tree are the task's state now. Read with read_report and read_diff passing this reviewId, once and in full: this is the only read, and nothing new can be raised later. Check the change against the task above. Leave only real findings you can demonstrate, each on its lines, with submit_review(taskId, reviewId, comments); when nothing must change, call approve(taskId, reviewId). ${findingRule(true)} Do not change files.${design}${guidance}`;
 		const path = await safePath(await this.deps.store.taskDir(this.deps.key), 'review.json');
@@ -3824,6 +3993,100 @@ export class CrewHost {
 			this.retired.add(reviewer.taskId);
 			await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
 		}
+	}
+	/**
+	 * spec/reviews#reviewer-sessions: the reviewers of the task's own reviews that ended give up their worktrees and branches; their tasks and
+	 * logs stay. The reviewers of the review still open keep theirs. A reviewer's host stops first: its agent runs in that worktree.
+	 */
+	async dropReviewers() {
+		const root = this.deps.context.spec.root;
+		for (const worker of this.workers) {
+			const agent = findSpecAgent(root, worker.nodeId);
+			if (
+				agent?.role !== 'reviewer' ||
+				this.checks(agent) ||
+				this.isReviewWorker(agent) ||
+				this.dropping.has(worker.taskId) ||
+				(this.deps.self?.live?.() && this.checksSelf(worker.nodeId))
+			)
+				continue;
+			this.dropping.add(worker.taskId);
+			await this.dropReviewer(worker)
+				.catch(() => {})
+				.finally(() => this.dropping.delete(worker.taskId));
+		}
+	}
+	private dropping = new Set<string>();
+	private async dropReviewer(worker: CrewWorkerRecord) {
+		const key = this.workerKey(worker),
+			store = this.deps.store,
+			trees = new Worktrees(
+				store,
+				new ProcessCoordinator(join(dirname(this.deps.services.mcpEntry), 'process-owner'))
+			),
+			// What is left to remove: the worktree, else the branches of a removal that stopped before them.
+			pending = await safePath(await store.taskDir(key), 'reviewer-cleanup.json'),
+			state = await trees.read(key),
+			left = state
+				? { branch: state.branch, sources: state.repositories.map((repo) => repo.source) }
+				: await readDocument(pending)
+						.then((doc) =>
+							typeof doc.branch === 'string' &&
+							Array.isArray(doc.sources) &&
+							doc.sources.every((item) => typeof item === 'string')
+								? { branch: doc.branch, sources: doc.sources as string[] }
+								: null
+						)
+						.catch(() => null);
+		if (!left || this.stopping) return;
+		if (state) {
+			const link = await this.link(key);
+			if (link) {
+				this.retired.add(worker.taskId);
+				await link.peer.request('command', { kind: 'shutdown' }).catch(() => {});
+				await Promise.race([link.closed, delay(15_000)]);
+				if (this.links.get(name(key)) === link) return;
+			}
+			// A host that did not answer may still run in the worktree; one that was told to stop gets a moment to exit.
+			const identity = await readIdentity(store, key).catch(() => null);
+			for (let wait = link ? 150 : 0; identity && processAlive(identity.pid) && wait > 0; wait--)
+				await delay(100);
+			if (identity && processAlive(identity.pid)) return;
+			// The reviewer's files are the last round's snapshot (index and files); anything else is someone's edit and keeps the worktree.
+			for (const repo of state.repositories) {
+				const target = await safePath(state.root, repo.relativePath);
+				const status = await gitText(target, [
+					'status',
+					'--porcelain=v1',
+					'--untracked-files=all',
+					'--ignore-submodules=all',
+				]).catch(() => null);
+				if (status === null) continue;
+				if (
+					status
+						.split('\n')
+						.some((line) => line.length > 1 && (line[1] !== ' ' || line.startsWith('??')))
+				)
+					return;
+			}
+			await atomicJson(pending, { schemaVersion: 1, ...left });
+			await trees.remove(key);
+			await store.clearPreparation(key);
+		}
+		// The branch goes only when another branch holds its commits: the reviewer writes none, so it is the task's own history.
+		for (const source of left.sources) {
+			const ref = `refs/heads/${left.branch}`;
+			const holders = await gitText(source, [
+				'for-each-ref',
+				'--format=%(refname)',
+				'--contains',
+				ref,
+				'refs/heads',
+			]).catch(() => '');
+			if (holders.split('\n').some((line) => line && line !== ref))
+				await gitText(source, ['branch', '-D', '--', left.branch]).catch(() => {});
+		}
+		await rm(pending, { force: true });
 	}
 	async stopWorkers() {
 		for (const worker of this.workers.filter((worker) => !crewWorkerClosed(worker))) {

@@ -240,6 +240,7 @@ The «what is it doing now» line, derived in main and never written to `task.js
 | `question` | `question.requested` | `Question · {text}` |
 | `proposal` | `task.proposal.requested` | `New task · {title}` |
 | `review` | `task-review.verified` with open or new findings | `Review · {N findings} open` ([Reviews](reviews.md#surfaces)) |
+| `ready` | `task.ready` | `Ready to look` in `--accent`; a tool activity after it does not replace it, a request does ([Ready to look](smoke-run.md#ready-surfaces)) |
 | — | `tokenHold` in `task.json` while the [budget question](agents-and-providers.md#budget-reached) waits | `{Provider} budget reached` (amber, like a question) |
 | none | — | `Waiting for the repo` when blocked by a lock, else the state label |
 
@@ -249,7 +250,7 @@ The «what is it doing now» line, derived in main and never written to `task.js
 - Reset on `turn.started`, `turn.completed`, `session.failed`, `host.stopped`, `permission.resolved`, `question.resolved`,
   `task.proposal.resolved`. `task-review.decided` and `task-review.finished` end the `review` line and give it back to the
   request that still waits (a plan for approval, a permission, a question, a proposal), else to nothing: a plan whose
-  review passed or was accepted reads `Plan for approval` again. A `needs-you` task drops a tool activity; a `working` task drops a non-tool one.
+  review passed or was accepted reads `Plan for approval` again. A `needs-you` task drops a tool activity; a `working` task drops a non-tool one other than `ready`.
 - Titles are capped at 240 characters, paths at 1024. Subagent events do not drive the foreman's line.
 - The renderer refreshes on a bounded throttle so a continuous tool stream cannot postpone the update forever. It re-reads the workspace after every event that changes a card (`workspaceEventKinds`): turns, requests and their answers, crew events — hires, model questions and dismissals included — and every `task-review.*` event.
 

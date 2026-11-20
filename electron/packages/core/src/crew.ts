@@ -13,7 +13,9 @@ export type AgentTemplate = {
 	provider?: AgentProvider;
 	choices?: CrewChoices;
 	choiceNames?: Record<string, string>;
-	summary?: string;
+	/** spec/crew-templates-and-editor#agent-template: the line by which the Auto agent, a foreman and the person pick the role. */
+	whenToUse?: string;
+	/** Optional, short: what the role does beyond the rules of its rights (spec/crew-templates-and-editor#rights). */
 	instructions: string;
 	builtin: boolean;
 };
@@ -30,7 +32,7 @@ export type CrewAgent = {
 	provider?: AgentProvider;
 	choices?: CrewChoices;
 	choiceNames?: Record<string, string>;
-	summary?: string;
+	whenToUse?: string;
 	zone?: string[];
 	extraInstructions?: string;
 	agents?: CrewAgent[];
@@ -53,7 +55,9 @@ export type CrewSpecAgent = {
 	provider: AgentProvider;
 	requestedChoices: CrewChoices;
 	choiceNames: Record<string, string>;
-	/** spec/crew-templates-and-editor#roster; older snapshots have none. */ summary?: string;
+	/** spec/crew-templates-and-editor#roster; older snapshots have none. */ whenToUse?: string;
+	/** spec/crew-templates-and-editor#schema: the same line in an older snapshot; read it through `specWhenToUse`. */ summary?: string;
+	/** The rules of the node's rights, then its role's instructions, as resolved at launch. */
 	instructions: string;
 	extraInstructions: string;
 	zone: string[];
@@ -80,13 +84,16 @@ export type CrewComposeProvider = {
 	>;
 };
 export type CrewCompose = { templates: CrewSpecAgent[]; providers: CrewComposeProvider[] };
-export type AgentTemplateDocument = { schemaVersion: 1; template: AgentTemplate };
-export type CrewTemplateDocument = { schemaVersion: 1; template: CrewTemplate };
+/** spec/crew-templates-and-editor#schema: version 2 names the line `whenToUse`; version 1 files are upgraded on read. */
+export type AgentTemplateDocument = { schemaVersion: 2; template: AgentTemplate };
+export type CrewTemplateDocument = { schemaVersion: 2; template: CrewTemplate };
 
-/** spec/crew-templates-and-editor#roster: the specialty is one line the parent reads in the crew roster. */
-export const crewSummaryLimit = 240;
+/** spec/crew-templates-and-editor#agent-template: When to use is one line whoever picks the role reads. */
+export const crewWhenToUseLimit = 240;
 export const crewNameLimit = 80,
 	crewInstructionsLimit = 100_000,
+	/** spec/crew-templates-and-editor#limits: a resolved node's text holds its rights' rules besides the role's own. */
+	crewResolvedInstructionsLimit = 120_000,
 	crewZoneLimit = 256,
 	crewZonePathLimit = 1024,
 	crewAgentsPerNodeLimit = 64,
@@ -110,25 +117,61 @@ export const composeCrewId = 'compose';
 /** spec/tasks#sheet-rail: the `Crew` popup's first item, `Auto` (spec/crew#auto); a launch names it like a crew id. */
 export const autoCrewId = 'auto';
 
+/** spec/crew-templates-and-editor#rights: the rules of the developer's tool set; every developer role starts with them. */
 const developerInstructions =
 	'You implement your part of the work. You own the listed files and directories: change only them, other files belong to other agents. Read anything you need across the project. Keep changes small and coherent; do not refactor outside your zone. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the check your task prompt names (a test, a typecheck, a build) and say what it showed. If it fails for a reason outside your files, say so instead of working around it. Do not commit; the host snapshots your tree.';
+/** spec/crew-templates-and-editor#rights: the rules of the checker's tool set; every reviewer role starts with them. */
+const reviewerInstructions =
+	'You do not write code. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Look for what a check cannot show: wrong behaviour, a contract changed under other agents, work outside the assigned files. The report ends with the last message of the agent; a report that names no check is not a defect by itself: when you doubt, check it yourself the way each check prompt says. Comment only on something wrong in the change, with its evidence, that must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line, say what is wrong and what you expect instead. Call approve when nothing is left. Do not fix things yourself.';
+/** spec/crew-templates-and-editor#rights: what each tool set's agent is told before its role's own instructions. A foreman's whole role is its brief in code. */
+export const crewRightsInstructions: Readonly<Record<CrewRole, string>> = {
+	foreman: '',
+	developer: developerInstructions,
+	reviewer: reviewerInstructions,
+};
+/** spec/crew-templates-and-editor#resolution: the role text an agent gets — the rules of its rights, then the role's instructions. */
+export function roleInstructions(role: CrewRole, own: string): string {
+	return [crewRightsInstructions[role], own.trim()].filter(Boolean).join('\n\n');
+}
+/** spec/crew-templates-and-editor#schema: a role's own instructions without a copy of its rights' rules at their start. */
+export function ownInstructions(role: CrewRole, text: string): string {
+	const rules = crewRightsInstructions[role],
+		trimmed = text.trim();
+	if (!rules) return text;
+	if (trimmed === rules) return '';
+	// Older built-ins joined the rules and their own text with a space (Senior developer) or a blank line.
+	return trimmed.startsWith(rules) && /^\s/.test(trimmed.slice(rules.length))
+		? trimmed.slice(rules.length).trim()
+		: text;
+}
 /** spec/crew-templates-and-editor#builtin-templates: the check is against the design source, node by node, with evidence from the running app (spec/crew#smoke). */
 const designerInstructions = [
-	'You do not write code. You check that the changed screens match their design. The design source is named in the part prompt or the plan: a Figma node or frame, a mock-up file, or a reference screen. When none is named, your first step is to ask the foreman for it with ask_foreman; do not judge from neighbouring screens instead.',
-	'When the report of an agent you check arrives, read it with read_report and its diff with read_diff. Open the design source with the tool it needs, then open the changed screen in the running app with the browser or simulator tools you have.',
+	'You check that the changed screens match their design. The design source is named in the part prompt or the plan: a Figma node or frame, a mock-up file, or a reference screen. When none is named, your first step is to ask the foreman for it with ask_foreman; do not judge from neighbouring screens instead. Open the design source with the tool it needs, then open the changed screen in the running app with the browser or simulator tools you have.',
 	"For each design node of the changed screen, fill one table: node, property, expected from the design, found in the app, screenshot. The properties are size; padding and gaps; corner radius; border; colour or token; typography (font, size, weight, line height); icon and its size; states. List the icons one by one, each in its own row. The light and the dark theme, the hover, pressed, focus, disabled, loading, empty and error states, keyboard use and long text are rows of the same table wherever the design or the change has them. Each node has its image from the design, saved to a file, and one screenshot of it in the app taken after the last change. File the tables with submit_design_review, passing the reviewId of your check; a row's value on the device comes from the screenshot or the UI tree, never from the code.",
 	'Never approve from the code alone, and never without having opened the screen and the design. When you have no tool to open either of them, say so to the foreman with ask_foreman and do not approve.',
 	'Use the tools economically. simulator_act and browser_act already wait for the screen and report what changed: do not sleep, take a screenshot or read the tree again to check that an action worked, and use simulator_wait for what comes later. Read sizes and positions from the boxes of browser_ui and simulator_ui; take screenshots for the rows of the table, not to find your way. Read each design node once and keep what it says.',
-	'Comment only on what must change before the part is accepted, because every round runs the agent again. Each comment names the node, the property, what the design expects and what you found; send the comments with submit_review, pointing at the line that sets the property. Call approve once your design review passed: the host refuses an approval before that. Do not fix things yourself.',
+	'Each comment names the node, the property, what the design expects and what you found, at the line that sets the property. Call approve once your design review passed: the host refuses an approval before that.',
 ].join('\n\n');
+/**
+ * spec/crew-templates-and-editor#builtin-templates: the built-in roles are profiles — rights, When to use, a model where the role needs one,
+ * and short instructions beyond the rules of the rights. The When to use lines are message keys too: the library shows them translated.
+ */
 export const builtinAgentTemplates: readonly AgentTemplate[] = [
-	{ id: foremanTemplateId, name: 'Foreman', role: 'foreman', instructions: '', builtin: true },
+	{
+		id: foremanTemplateId,
+		name: 'Foreman',
+		role: 'foreman',
+		whenToUse: 'Splits the work, accepts the parts',
+		instructions: '',
+		builtin: true,
+	},
 	{
 		id: developerTemplateId,
 		name: 'Developer',
 		role: 'developer',
 		builtin: true,
-		instructions: developerInstructions,
+		whenToUse: 'Parts with a clear spec',
+		instructions: '',
 	},
 	/** spec/crew-templates-and-editor#builtin-templates: a Developer on a stronger model, for the parts the model ladder sends up (spec/crew#model-ladder). */
 	{
@@ -139,10 +182,10 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		provider: 'claude',
 		choices: { configOptions: { model: 'opus', effort: 'high' } },
 		choiceNames: { model: 'Opus', effort: 'High' },
-		summary: 'Migrations, performance work, cross-module refactors and parts without a clear spec',
-		instructions: `${developerInstructions} Your parts are the hard ones: read the code around the change before you write, and say in your last message what you verified and how.`,
+		whenToUse: 'Migrations, refactors, unclear specs',
+		instructions:
+			'Your parts are the hard ones: read the code around the change before you write, and say in your last message what you verified and how.',
 	},
-	/** spec/crew-templates-and-editor#builtin-templates: the specialists are a Developer or a Reviewer with their own instructions and specialty. */
 	{
 		id: testerTemplateId,
 		name: 'Tester',
@@ -151,10 +194,9 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		provider: 'claude',
 		choices: { configOptions: { model: 'sonnet' } },
 		choiceNames: { model: 'Sonnet' },
-		summary:
-			'Automated tests for a part: unit and integration tests, a failing test for a bug; changes no production code; not a manual check of the running app',
+		whenToUse: 'Writes tests, changes no production code',
 		instructions:
-			'You write and run the automated tests of your part. You own the listed test files and directories: change only them, other files belong to other agents. Read anything you need across the project. For a bug, first write a test that fails because of it. Test what a caller or a person can observe, not private details, and cover the edge cases the task names and the ones the code suggests. Follow the tests the project already has: their layout, helpers and commands. Do not change the code under test: when a test shows a defect, keep the failing test and say what it shows and where, so the agent that owns the code can fix it. Before touching a shared type or contract, call read_notes; after changing one, call post_note with the fact others need. When something in your task is unclear, call ask_foreman instead of guessing. Before you end your turn, run the tests you wrote and say which passed and which failed. Do not commit; the host snapshots your tree. Checking the running app by hand is a different job: it is not yours unless your prompt asks for it. When it does, it is a smoke: go once through the flows the change touches, within the time your prompt states (10 minutes when it states none), with no matrix of checks or devices and no repeats to be sure; then report what you found and stop.',
+			'You write and run the automated tests of your part; the files you own are test files. For a bug, first write a test that fails because of it. Test what a caller or a person can observe, and follow the tests the project already has: their layout, helpers and commands. Do not change the code under test: when a test shows a defect, keep the failing test and say what it shows and where. Say which tests passed and which failed. Checking the running app by hand is not your job unless your prompt asks for it; then it is a smoke: once through the flows the change touches, within the time your prompt states (10 minutes when it states none), with no repeats; report and stop.',
 	},
 	{
 		id: technicalWriterTemplateId,
@@ -164,26 +206,24 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		provider: 'claude',
 		choices: { configOptions: { model: 'sonnet' } },
 		choiceNames: { model: 'Sonnet' },
-		summary:
-			'Documentation for a change: README, guides, the spec, API comments; changes no behaviour',
+		whenToUse: 'Writes docs, changes no behaviour',
 		instructions:
-			'You write the documents of a change: the README, guides, the spec, comments on a public API. You own the listed files and directories: change only them, other files belong to other agents. Read the code and its diff before you write, and describe what the code does now, not what was planned. Keep the structure, terms and tone of the documents the project already has, and say a thing once, where a reader will look for it. Do not change behaviour: when the code and a document disagree and you cannot tell which is right, call ask_foreman. Run every command and example you write. Before you end your turn, run the check your task prompt names, when it names one, and say what it showed. Do not commit; the host snapshots your tree.',
+			'You write the documents of a change: the README, guides, the spec, comments on a public API. Read the code and its diff first, and describe what the code does now, not what was planned. Keep the structure, terms and tone the project already has. Do not change behaviour: when the code and a document disagree and you cannot tell which is right, call ask_foreman. Run every command and example you write.',
 	},
 	{
 		id: reviewerTemplateId,
 		name: 'Reviewer',
 		role: 'reviewer',
 		builtin: true,
-		instructions:
-			'You do not write code. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Look for what a check cannot show: wrong behaviour, a contract changed under other agents, work outside the assigned files. The report ends with the last message of the agent; a report that names no check is not a defect by itself: when you doubt, check it yourself the way each check prompt says. Comment only on something wrong in the change, with its evidence, that must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line, say what is wrong and what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
+		whenToUse: 'Checks the work, writes no code',
+		instructions: '',
 	},
 	{
 		id: designerTemplateId,
 		name: 'Designer',
 		role: 'reviewer',
 		builtin: true,
-		summary:
-			'Checks changed screens against the design source (Figma node, mock-up, reference screen), node by node, in the running app',
+		whenToUse: 'Checks screens against the design',
 		instructions: designerInstructions,
 	},
 	{
@@ -194,9 +234,9 @@ export const builtinAgentTemplates: readonly AgentTemplate[] = [
 		provider: 'claude',
 		choices: { configOptions: { model: 'opus', effort: 'high' } },
 		choiceNames: { model: 'Opus', effort: 'High' },
-		summary: 'Checks changes for security defects: untrusted input, access checks, secrets',
+		whenToUse: 'Looks for security defects in changes',
 		instructions:
-			'You do not write code. You check the work for security defects. When the report of an agent you check arrives, read it with read_report and read its diff one file at a time with read_diff. Follow untrusted input from where it enters to where it is used: queries, shell commands, file paths, markup, prompts to a model. Look for missing or misplaced access checks; secrets, tokens and personal data in code, logs, errors and URLs; unsafe file and network access; new dependencies and widened permissions; validation or defaults made weaker. Report a defect only when you can show its path: the input, the line where it becomes dangerous, and what an attacker gains. Leave style and ordinary bugs to other reviewers. Comment only on what must change before the part is accepted, because every round runs the agent again. Send review comments with submit_review: point at the line and say what you expect instead. Call approve when nothing is left. Do not fix things yourself.',
+			'You check the work for security defects. Follow untrusted input from where it enters to where it is used: queries, shell commands, file paths, markup, prompts to a model. Look for missing or misplaced access checks; secrets, tokens and personal data in code, logs, errors and URLs; unsafe file and network access; new dependencies and widened permissions; validation or defaults made weaker. Report a defect only when you can show its path: the input, the line where it becomes dangerous, and what an attacker gains. Leave style and ordinary bugs to other reviewers.',
 	},
 ];
 /** spec/crew-templates-and-editor#builtin-templates: the starter tree of «New crew» and the intro; not a library crew. */
@@ -291,9 +331,17 @@ export function isBuiltinTemplateId(id: string) {
 
 const text = (value: unknown, limit: number): value is string =>
 	typeof value === 'string' && value.length <= limit && !value.includes('\0');
-/** One line without control characters: it goes into the roster inline. */
-export function isCrewSummary(value: unknown): value is string {
-	return typeof value === 'string' && value.length <= crewSummaryLimit && !/[\r\n\0]/.test(value);
+/** One line without control characters: it goes into the roster and the Auto palette inline. */
+export function isWhenToUse(value: unknown): value is string {
+	return typeof value === 'string' && value.length <= crewWhenToUseLimit && !/[\r\n\0]/.test(value);
+}
+/** spec/crew#auto-model: free text as a When to use line — one line, clipped at a word to the limit. */
+export function whenToUseLine(text: string): string {
+	const line = text.replace(/[\s\0]+/g, ' ').trim();
+	if (line.length <= crewWhenToUseLimit) return line;
+	const cut = line.slice(0, crewWhenToUseLimit - 1),
+		space = cut.lastIndexOf(' ');
+	return `${(space > crewWhenToUseLimit / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 const names = (value: unknown): value is Record<string, string> =>
 	isRecord(value) &&
@@ -342,7 +390,7 @@ export function isAgentTemplate(value: unknown): value is AgentTemplate {
 		(value.provider === undefined || value.provider === 'claude' || value.provider === 'codex') &&
 		(value.choices === undefined || isCrewChoices(value.choices)) &&
 		(value.choiceNames === undefined || names(value.choiceNames)) &&
-		(value.summary === undefined || isCrewSummary(value.summary)) &&
+		(value.whenToUse === undefined || isWhenToUse(value.whenToUse)) &&
 		text(value.instructions, crewInstructionsLimit) &&
 		typeof value.builtin === 'boolean' &&
 		Object.keys(value).every((key) =>
@@ -353,7 +401,7 @@ export function isAgentTemplate(value: unknown): value is AgentTemplate {
 				'provider',
 				'choices',
 				'choiceNames',
-				'summary',
+				'whenToUse',
 				'instructions',
 				'builtin',
 			].includes(key)
@@ -427,7 +475,7 @@ function isCrewAgentShape(
 		(value.provider === undefined || value.provider === 'claude' || value.provider === 'codex') &&
 		(value.choices === undefined || isCrewChoices(value.choices)) &&
 		(value.choiceNames === undefined || names(value.choiceNames)) &&
-		(value.summary === undefined || isCrewSummary(value.summary)) &&
+		(value.whenToUse === undefined || isWhenToUse(value.whenToUse)) &&
 		(value.zone === undefined || isZone(value.zone)) &&
 		(value.extraInstructions === undefined ||
 			text(value.extraInstructions, crewInstructionsLimit)) &&
@@ -448,7 +496,7 @@ function isCrewAgentShape(
 				'provider',
 				'choices',
 				'choiceNames',
-				'summary',
+				'whenToUse',
 				'zone',
 				'extraInstructions',
 				'agents',
@@ -707,29 +755,34 @@ export function resolveCrewAgent(
 	const zone = agent.zone?.length
 		? agent.zone.map((entry) => normalizeZonePath(entry)!)
 		: parentZone;
+	const role = crewAgentRole(agent, context.lookup, isRoot);
 	return {
 		id: agent.id,
 		name: crewName(agent.name),
 		...(agent.template !== null ? { template: agent.template } : {}),
-		role: crewAgentRole(agent, context.lookup, isRoot),
+		role,
 		provider,
 		requestedChoices,
 		choiceNames,
-		summary: crewSummary(agent, context.lookup),
-		instructions: template?.instructions ?? '',
+		whenToUse: crewWhenToUse(agent, context.lookup),
+		instructions: roleInstructions(role, template?.instructions ?? ''),
 		extraInstructions: agent.extraInstructions ?? '',
 		zone,
 		checkedBy: [...(agent.checkedBy ?? [])],
 		agents: (agent.agents ?? []).map((child) => resolveCrewAgent(child, context, zone, false)),
 	};
 }
-/** Node specialty, else the template's (spec/crew-templates-and-editor#roster). Trimmed: an empty field inherits. */
-export function crewSummary(agent: CrewAgent, lookup: CrewTemplateLookup): string {
+/** Node When to use, else the template's (spec/crew-templates-and-editor#resolution). Trimmed: an empty field inherits. */
+export function crewWhenToUse(agent: CrewAgent, lookup: CrewTemplateLookup): string {
 	return (
-		agent.summary?.trim() ||
-		(agent.template === null ? '' : lookup(agent.template)?.summary?.trim()) ||
+		agent.whenToUse?.trim() ||
+		(agent.template === null ? '' : lookup(agent.template)?.whenToUse?.trim()) ||
 		''
 	);
+}
+/** spec/crew-templates-and-editor#schema: a resolved node's When to use; an older snapshot keeps it as `summary`. */
+export function specWhenToUse(agent: Pick<CrewSpecAgent, 'whenToUse' | 'summary'>): string {
+	return (agent.whenToUse ?? agent.summary ?? '').trim();
 }
 export function resolveCrew(template: CrewTemplate, context: ResolveContext): CrewSpec {
 	if (!isCrewTemplate(template)) throw new Error('Invalid crew template');
@@ -757,8 +810,10 @@ function isSpecAgentShape(
 		(value.provider === 'claude' || value.provider === 'codex') &&
 		isCrewChoices(value.requestedChoices) &&
 		names(value.choiceNames) &&
-		(value.summary === undefined || isCrewSummary(value.summary)) &&
-		text(value.instructions, crewInstructionsLimit) &&
+		(value.whenToUse === undefined || isWhenToUse(value.whenToUse)) &&
+		(value.summary === undefined || isWhenToUse(value.summary)) &&
+		(value.whenToUse === undefined || value.summary === undefined) &&
+		text(value.instructions, crewResolvedInstructionsLimit) &&
 		text(value.extraInstructions, crewInstructionsLimit) &&
 		isZone(value.zone) &&
 		Array.isArray(value.checkedBy) &&
@@ -775,6 +830,7 @@ function isSpecAgentShape(
 				'provider',
 				'requestedChoices',
 				'choiceNames',
+				'whenToUse',
 				'summary',
 				'instructions',
 				'extraInstructions',
@@ -999,7 +1055,7 @@ export function builtinCrewCustomized(template: CrewTemplate): boolean {
 export function isAgentTemplateDocument(value: unknown): value is AgentTemplateDocument {
 	return (
 		isRecord(value) &&
-		value.schemaVersion === 1 &&
+		value.schemaVersion === 2 &&
 		isAgentTemplate(value.template) &&
 		Object.keys(value).length === 2
 	);
@@ -1007,10 +1063,59 @@ export function isAgentTemplateDocument(value: unknown): value is AgentTemplateD
 export function isCrewTemplateDocument(value: unknown): value is CrewTemplateDocument {
 	return (
 		isRecord(value) &&
-		value.schemaVersion === 1 &&
+		value.schemaVersion === 2 &&
 		isCrewTemplate(value.template) &&
 		Object.keys(value).length === 2
 	);
+}
+/** spec/crew-templates-and-editor#schema: a role as version 1 stored it — the line was `summary`, and an own role's text could repeat its rights' rules. */
+export function upgradeAgentTemplate(value: unknown): unknown {
+	if (!isRecord(value) || 'whenToUse' in value) return value;
+	const { summary, ...rest } = value;
+	const role = crewRoles.includes(rest.role as CrewRole) ? (rest.role as CrewRole) : null;
+	return {
+		...rest,
+		...(summary !== undefined ? { whenToUse: summary } : {}),
+		...(role && rest.builtin === false && typeof rest.instructions === 'string'
+			? { instructions: ownInstructions(role, rest.instructions) }
+			: {}),
+	};
+}
+function upgradeCrewAgent(value: unknown, depth: number): unknown {
+	if (!isRecord(value) || depth > 32) return value;
+	const { summary, ...rest } = value;
+	return {
+		...rest,
+		...('summary' in value && !('whenToUse' in value) ? { whenToUse: summary } : {}),
+		...('summary' in value && 'whenToUse' in value ? { summary } : {}),
+		...(Array.isArray(value.agents)
+			? { agents: value.agents.map((agent) => upgradeCrewAgent(agent, depth + 1)) }
+			: {}),
+	};
+}
+/** spec/crew-templates-and-editor#schema: a crew as version 1 stored it — every node's line was `summary`. */
+export function upgradeCrewTemplate(value: unknown): unknown {
+	return isRecord(value) && isRecord(value.root)
+		? { ...value, root: upgradeCrewAgent(value.root, 0) }
+		: value;
+}
+const upgradeDocument = (value: unknown, template: (item: unknown) => unknown): unknown =>
+	isRecord(value) && value.schemaVersion === 1 && Object.keys(value).length === 2
+		? { schemaVersion: 2, template: template(value.template) }
+		: value;
+/** spec/crew-templates-and-editor#schema: a version 1 role document read as version 2. */
+export function upgradeAgentTemplateDocument(value: unknown): unknown {
+	return upgradeDocument(value, upgradeAgentTemplate);
+}
+/** spec/crew-templates-and-editor#schema: a version 1 crew document read as version 2. */
+export function upgradeCrewTemplateDocument(value: unknown): unknown {
+	return upgradeDocument(value, upgradeCrewTemplate);
+}
+/** spec/crew-templates-and-editor#schema: a stored launch's one-off crew (a schedule's) in the current shape. */
+export function upgradeCrewLaunch(value: unknown): unknown {
+	return isRecord(value) && isRecord(value.template)
+		? { ...value, template: upgradeCrewTemplate(value.template) }
+		: value;
 }
 
 /** spec/crew-templates-and-editor#template-library library as the renderer sees it: builtins first, then own templates, plus files that could not be read. */

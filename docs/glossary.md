@@ -279,6 +279,7 @@ Names" category of STE.
 | Plan further… | Планувати далі… | Reject the plan with text about what to change. | |
 | Send edits | Надіслати правки | Replaces `Approve plan` when the user edited the plan. | |
 | Plan approved / Plan rejected | План погоджено / План відхилено | | |
+| Plan sent back | План повернуто | The end of a turn whose plan went back for revision; not an interruption. | «Перервано» |
 | Revision | Ревізія | One version of a plan for approval; the agent makes a new one after `Plan further…`. | «версія» |
 | Changes · Plan | Зміни · План | The plan card's switch: what changed since the revision before, or the plan itself. | |
 | Rewritten | Переписано | Most lines of the plan changed since the revision before. | |
@@ -327,10 +328,12 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Reset | Скинути | Return provider, model, and effort to the defaults. | |
 | Save as crew template / Save as agent template | Зберегти як шаблон бригади / Зберегти як шаблон агента | | |
 | Save branch as template | Зберегти гілку як шаблон | A branch of the crew tree, not a git branch. | |
-| New agent / New crew | Новий агент / Нова бригада | | |
-| Instructions | Інструкції | The role text of an agent template, in English. | «промпт» |
-| Specialty | Спеціалізація | One sentence for the foreman: what the agent is good at. | «Опис» |
-| Role / No role | Роль / Без ролі | The agent template a task without a crew gives its agent, on the New task sheet; also what an Auto task hires a part with: a worker row is `{role} · {part}`. | «шаблон», «профіль» |
+| New role / New crew | Нова роль / Нова бригада | The `+ ▾` items of the role library. | «Новий агент», «Новий профіль» |
+| Instructions | Інструкції | A role's optional short text in English, beyond the rules of its rights. | «промпт» |
+| When to use | Коли брати | A role's one line, in English, by which the Auto agent, a foreman and the person pick it. | «Спеціалізація», «Опис» |
+| Role / No role | Роль / Без ролі | A profile in the library: provider, model, effort, rights, When to use, optional instructions. What an Auto task hires a part with (a worker row is `{role} · {part}`), what a task without a crew gives its agent on the New task sheet. | «шаблон», «профіль», «персона» |
+| Roles | Ролі | The library's group of roles in Settings ▸ Templates. | «Агенти» |
+| Rights | Права | What a role may do: the tool set of a developer, a checker or a foreman. | «дозволи» |
 | Zone | Зона | The files an agent owns. | |
 | Subordinates | Підлеглі | The agents under a lead in the crew tree. | «сабагенти» |
 | Checker | Перевіряльник | An agent that reviews others and writes no code. | |
@@ -339,7 +342,7 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | round {n} of 2 | коло {n} з 2 | One fix-and-report exchange between an agent and its checker. | |
 | delegates and accepts | делегує й приймає | The solid line of the crew tree. | |
 | Remove with subordinates | Прибрати з підлеглими | | |
-| Restore default crews | Повернути типові бригади | | |
+| Restore built-in crews | Повернути вбудовані бригади | | «типові бригади» |
 | Review crew | Бригада ревʼю | The default crew: a foreman and two reviewers. | |
 | Crew log | Записи бригади | Notes the crew agents leave for each other. One item is a «запис». | «дошка», «нотатки» |
 | report | звіт | The structured summary of a worker. | |
@@ -454,6 +457,9 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Design review | Ревʼю дизайну | A screen checked against its Figma design node by node on the device, as a table per node (spec/design-review). `Design review passed` / `Ревʼю дизайну пройдено`. | «Контракт дизайну», «Перевірка дизайну» |
 | Property · Expected · On device | Властивість · Очікується · На пристрої | The columns of a design review's table. | |
 | mismatch · old screenshot · no screenshot · no design image | розбіжність · старий знімок · без знімка · без зображення дизайну | The tags of a design review's rows; `before the last change` / `до останньої зміни` under an old screenshot. | |
+| Smoke run | Smoke-прогін | One pass of an agent through the flows a change touches in the running app, under a time limit the host enforces (spec/smoke-run). In a service row `smoke`. | «тест», «перевірка» |
+| Smoke run limit | Межа smoke-прогону | The minutes after which the host stops a smoke run and asks for the report. | «ліміт», «стеля» |
+| Ready to look | Можна дивитись | The agent's notice that a screen is assembled and can be looked at; in a service row `ready` / `готово`. Not a question: the agent works on. | «Готово до перегляду» |
 | Plan vs ticket · Plan vs code · Gaps in the ticket | План і тикет · План і код · Прогалини в тикеті | The three lists of a plan review: what the author fixes (the first two) and the ticket's own gaps, which are questions for the person. | |
 | missed · contradicts · out of scope · wrong assumption · left open · cannot verify · split | пропущено · суперечить · поза задачею · хибне припущення · не вирішено · не перевірити · поділ | The kinds of a plan finding. | |
 | Gap | Прогалина | What the ticket itself leaves open; goes to the person, not to the author. Plural `1 прогалина · 2 прогалини · 5 прогалин`. | «питання» |
@@ -644,6 +650,7 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Task budget | Бюджет задачі | Tokens a task may use per provider before it pauses and asks. | |
 | Task usage | Токени задачі | The popover of a task's token counter: per provider, its budget and its agents. | «Використання» |
 | Budget reached | Бюджет вичерпано | A provider's count reached the task's budget; the task is paused. | «Ліміт вичерпано» (that is the subscription) |
+| Paused at the budget | Пауза через бюджет | The task stays held after `Finish turns, then stop` or `Stop now` until its budget changes. | |
 | No limit | Без ліміту | A provider without a task budget. | |
 | Context | Контекст | The context window of a session. | |
 | Initial setup | Початкові налаштування | | |

@@ -1,12 +1,14 @@
 import { afterEach, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SessionStore, atomicJson } from '@brigadir/persistence';
 import {
 	builtinAgentTemplates,
+	crewPalette,
+	planFeedbackPrompt,
 	resolveCrewAgent,
 	templateLookup,
 	type EventRecord,
@@ -60,6 +62,10 @@ async function setup(title: string) {
 	return { repo, store, task };
 }
 async function launch(store: SessionStore, key: TaskKey) {
+	return (await launchHost(store, key)).client;
+}
+/** The task's host and its client; `child` lets a test kill the host as a crash would. */
+async function launchHost(store: SessionStore, key: TaskKey, scenario: string[] = ['crew']) {
 	const config = join(await store.taskDir(key), 'config.json');
 	await atomicJson(config, {
 		schemaVersion: 1,
@@ -68,7 +74,7 @@ async function launch(store: SessionStore, key: TaskKey) {
 		mcpEntry: resolve('apps/desktop/out/services/mcp-relay'),
 		adapter: {
 			command: process.execPath,
-			args: [resolve('packages/transport/fixtures/agent.mjs'), 'crew'],
+			args: [resolve('packages/transport/fixtures/agent.mjs'), ...scenario],
 		},
 	});
 	const child = spawn(process.execPath, [resolve('apps/desktop/out/services/host.cjs'), config], {
@@ -93,7 +99,7 @@ async function launch(store: SessionStore, key: TaskKey) {
 	await until(async () =>
 		(await client.snapshot()).records.find((r) => r.event.kind === 'session.started')
 	);
-	return client;
+	return { client, child };
 }
 const find = (client: HostClient, test: (record: EventRecord) => boolean, timeout = 60_000) =>
 	until(async () => (await client.snapshot()).records.find(test), timeout);
@@ -394,4 +400,418 @@ it('refuses the approval of a task with a Figma link until a passed design revie
 		90_000
 	);
 	expect(finished.event).toMatchObject({ state: 'passed', point: 'pre-pr' });
+}, 300_000);
+
+// From the walkthrough's code audit: a review that waits for the agent's turn started only on `turn.completed`.
+it('a review waiting for a turn that fails, or for a turn a restart cut off, reads when that turn is over (spec/reviews#start)', async () => {
+	/** A review starts while the agent's turn runs `spend 1 <mode>`; `end` ends that turn and returns the client that sees the rest. */
+	const readsAfter = async (
+		mode: string,
+		end: (host: {
+			store: SessionStore;
+			task: TaskKey;
+			child: ChildProcess;
+			client: HostClient;
+		}) => Promise<HostClient>
+	) => {
+		const { store, task } = await setup('Write the output');
+		const { client, child } = await launchHost(store, task);
+		await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+		await find(client, (r) => r.event.kind === 'turn.completed');
+		await client.command({ kind: 'prompt', text: `spend 1 ${mode}` });
+		await find(
+			client,
+			(r) => r.event.kind === 'turn.started' && r.event.text === `spend 1 ${mode}`
+		);
+		await client.command({
+			kind: 'startReview',
+			reviewers: [reviewer],
+			who: { kind: 'agent' },
+			instructions: '',
+			guidance: '',
+		});
+		await find(client, (r) => r.event.kind === 'task-review.started');
+		const file = join(await store.taskDir(task), 'task-review.json');
+		expect(JSON.parse(await readFile(file, 'utf8')).review.state).toBe('waiting');
+		const next = await end({ store, task, child, client });
+		const read = await find(next, (r) => r.event.kind === 'task-review.findings', 90_000);
+		expect(read.event).toMatchObject({ findings: 1, reviewers: ['Reviewer'] });
+	};
+	// The turn fails: the journal gets `session.failed`, never `turn.completed`.
+	await readsAfter('slow fail', async ({ client }) => {
+		await find(client, (r) => r.event.kind === 'session.failed');
+		return client;
+	});
+	// The host dies in the middle of the turn; the next host finds the review still waiting.
+	await readsAfter('hold', async ({ store, task, child }) => {
+		child.kill('SIGKILL');
+		await new Promise((done) => child.once('exit', done));
+		return (await launchHost(store, task)).client;
+	});
+}, 360_000);
+
+// spec/reviews#plan-review, seen in the walkthrough (H): a plan reviewer's task was titled `reviews the changes`.
+it('a plan review reads the waiting plan; its reviewer’s task says it reviews the plan (spec/reviews#reviewer-sessions)', async () => {
+	const { store, task } = await setup('Keep the focus ring');
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['normal', log]);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await find(client, (r) => r.event.kind === 'permission.requested');
+	await client.command({
+		kind: 'startReview',
+		point: 'plan',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const created = await find(client, (r) => r.event.kind === 'crew.worker.created');
+	expect(created.event).toMatchObject({ name: 'Reviewer', title: 'reviews the plan' });
+	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(read.event).toMatchObject({ point: 'plan', findings: 1, gaps: 1 });
+}, 180_000);
+
+/** The prompts the fixture agents got, from the log they share. */
+const agentPrompts = async (log: string) =>
+	(await readFile(log, 'utf8').catch(() => ''))
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line) as { event: string; params: unknown })
+		.filter((entry) => entry.event === 'prompt')
+		.map((entry) => String(entry.params));
+const presented = (client: HostClient, n: number) =>
+	until(async () =>
+		(await client.snapshot()).records.filter((r) => r.event.kind === 'permission.requested')
+			.length >= n
+			? true
+			: undefined
+	);
+
+// Seen in the walkthrough (A): the plan reviewer read only the task's first prompt and filed findings for doing what the person asked later.
+it('a plan reviewer reads the person’s answers to the plan after the task’s prompt (spec/reviews#plan-inputs)', async () => {
+	const { store, task } = await setup('Keep the focus ring');
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['normal', log]);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await presented(client, 1);
+	// Chat while the plan waits, then `Plan further…` on the next plan.
+	await client.command({ kind: 'prompt', text: 'Is Safari 16 in scope?', steer: true });
+	await find(
+		client,
+		(r) => r.event.kind === 'turn.started' && r.event.text.endsWith('Is Safari 16 in scope?')
+	);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await presented(client, 2);
+	await client.command({
+		kind: 'prompt',
+		text: planFeedbackPrompt('Cover Edge too'),
+		answersPlan: true,
+	});
+	await presented(client, 3);
+	await client.command({
+		kind: 'startReview',
+		point: 'plan',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	const check = (await agentPrompts(log)).find((text) =>
+		text.startsWith('Check the plan of task')
+	)!;
+	expect(check).toContain('<task_prompt>\nplan\n</task_prompt>');
+	expect(check).toContain("These are the person's own words");
+	expect(check).toContain(
+		'<person_message kind="chat">\nIs Safari 16 in scope?\n</person_message>'
+	);
+	expect(check.indexOf('Is Safari 16 in scope?')).toBeLessThan(check.indexOf('Cover Edge too'));
+	expect(check).toContain(
+		'<person_message kind="plan further">\nCover Edge too\n</person_message>'
+	);
+}, 180_000);
+
+// Seen in the walkthrough (A, question 2): a plan reviewer asked the author while the plan approval held its turn; nobody could answer.
+it('a reviewer’s question to an Auto agent held by its plan answers the plan as plan chat does, and the agent presents it again (spec/crew#ask-foreman)', async () => {
+	const { store, task } = await setup('Keep the focus ring');
+	const lookup = {
+		lookup: templateLookup([...builtinAgentTemplates]),
+		defaultProvider: 'claude' as const,
+	};
+	await store.updateTask(task, {
+		auto: {
+			roles: crewPalette(builtinAgentTemplates, lookup, []).templates,
+			budget: { minutes: 40, tokens: 400_000 },
+		},
+	});
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['normal', log]);
+	await client.command({ kind: 'prompt', text: 'plan' });
+	await presented(client, 1);
+	await client.command({
+		kind: 'prompt',
+		text: planFeedbackPrompt('Safari only; ask the author first'),
+		answersPlan: true,
+	});
+	await presented(client, 2);
+	await client.command({
+		kind: 'startReview',
+		point: 'plan',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const asked = await find(client, (r) => r.event.kind === 'crew.question.requested', 90_000);
+	// The waiting plan is answered with its reject option, and the question is the agent's next turn.
+	const plan = (await client.snapshot()).records
+		.filter((r) => r.event.kind === 'permission.requested')
+		.at(-1)!;
+	const rejected = await find(
+		client,
+		(r) =>
+			r.event.kind === 'permission.resolved' &&
+			r.event.id === (plan.event as { request: { id: string } }).request.id
+	);
+	expect(rejected.event).toMatchObject({ optionId: 'reject' });
+	const turn = await find(
+		client,
+		(r) => r.seq > asked.seq && r.event.kind === 'turn.started' && r.event.crew?.kind === 'question'
+	);
+	expect(turn.event.kind === 'turn.started' && turn.event.text).toContain(
+		'Your plan was sent back so that you can answer'
+	);
+	const answered = await find(client, (r) => r.event.kind === 'crew.question.resolved', 60_000);
+	expect(answered.event).toMatchObject({ answeredBy: 'foreman' });
+	// The agent presents the plan again, and the reviewer, answered, gives its verdict.
+	await presented(client, 3);
+	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(read.event).toMatchObject({ point: 'plan', findings: 1 });
+}, 240_000);
+
+/** The reviewer's task of the review that `client` runs, once the crew created it. */
+async function reviewerOf(client: HostClient, task: TaskKey, name = 'Reviewer') {
+	const created = await find(
+		client,
+		(r) => r.event.kind === 'crew.worker.created' && r.event.name === name
+	);
+	return { projectId: task.projectId, id: (created.event as { taskId: string }).taskId };
+}
+/** The reviewer's own journal, read from disk. */
+const journalOf = async (store: SessionStore, key: TaskKey) =>
+	(await readFile(join(await store.taskDir(key), 'events.jsonl'), 'utf8').catch(() => ''))
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => JSON.parse(line) as EventRecord);
+/** The fixture reviewer holds its first read of a «hold the verdict» task until its turn is cancelled: it logs `held` once it waits. */
+const holding = (log: string, n = 1) =>
+	until(async () =>
+		(await readFile(log, 'utf8').catch(() => ''))
+			.split('\n')
+			.filter((line) => line.includes('"event":"held"')).length >= n
+			? true
+			: undefined
+	);
+
+// From the walkthrough's code audit: a check whose reviewer turn was cancelled was never sent again, and the review stood still.
+it('a check whose reviewer turn was cancelled goes to the reviewer again (spec/crew#reviewer)', async () => {
+	const { store, task } = await setup('hold the verdict');
+	const log = join(store.root, 'agents.log');
+	const { client } = await launchHost(store, task, ['crew', log]);
+	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(client, (r) => r.event.kind === 'turn.completed');
+	await client.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const key = await reviewerOf(client, task);
+	await holding(log);
+	// `Stop now` at the budget, or a stop in the reviewer's chat: its turn ends cancelled with no verdict.
+	const own = await connectHost((await readIdentity(store, key))!);
+	cleanup.push(async () => own.close());
+	await own.command({ kind: 'cancel' });
+	const read = await find(client, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(read.event).toMatchObject({ findings: 1, reviewers: ['Reviewer'] });
+	const turns = (await journalOf(store, key)).filter(
+		(r) => r.event.kind === 'turn.started' && r.event.text.startsWith('Check task')
+	);
+	expect(turns).toHaveLength(2);
+
+	// The reviewer's host dies in the middle of a check: a new host of the reviewer gets it.
+	const dead = await setup('hold the verdict');
+	const deadLog = join(dead.store.root, 'agents.log');
+	const second = (await launchHost(dead.store, dead.task, ['crew', deadLog])).client;
+	await second.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(second, (r) => r.event.kind === 'turn.completed');
+	await second.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const deadKey = await reviewerOf(second, dead.task);
+	await holding(deadLog);
+	process.kill((await readIdentity(dead.store, deadKey))!.pid, 'SIGKILL');
+	const again = await find(second, (r) => r.event.kind === 'task-review.findings', 90_000);
+	expect(again.event).toMatchObject({ findings: 1 });
+	expect((await journalOf(dead.store, deadKey)).some((r) => r.event.kind === 'host.stopped')).toBe(
+		true
+	);
+}, 300_000);
+
+// From the walkthrough's code audit: the first verdict of a round with two reviewers waited in memory; a restart before the second lost it.
+it('a restart between the verdicts of two reviewers keeps the first one’s findings in the batch (spec/crew#reviewer)', async () => {
+	const second = resolveCrewAgent(
+		{ id: 'second', name: 'Second', template: 'reviewer', provider: 'claude' },
+		{ lookup: templateLookup([...builtinAgentTemplates]), defaultProvider: 'claude' },
+		[],
+		false
+	);
+	const { store, task } = await setup('hold the verdict');
+	const log = join(store.root, 'agents.log');
+	const first = await launchHost(store, task, ['crew', log]);
+	await first.client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(first.client, (r) => r.event.kind === 'turn.completed');
+	await first.client.command({
+		kind: 'startReview',
+		reviewers: [reviewer, second],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const keys = [
+		await reviewerOf(first.client, task),
+		await reviewerOf(first.client, task, 'Second'),
+	];
+	// One reviewer holds its read; the other's verdict is in.
+	await holding(log);
+	const runs = join(await store.taskDir(task), 'crew-reviews.json');
+	await until(async () => {
+		const doc = JSON.parse(await readFile(runs, 'utf8').catch(() => '{"reviews":[]}'));
+		return doc.reviews.some((run: { verdicts: unknown[] }) => run.verdicts.length === 1)
+			? true
+			: undefined;
+	});
+	first.child.kill('SIGKILL');
+	await new Promise((done) => first.child.once('exit', done));
+	const client = (await launchHost(store, task, ['crew', log])).client;
+	// The held reviewer's turn is cancelled; its check goes out again and it answers.
+	for (const key of keys) {
+		const own = await connectHost((await readIdentity(store, key))!);
+		cleanup.push(async () => own.close());
+		await own.command({ kind: 'cancel' });
+	}
+	const batch = await find(
+		client,
+		(r) => r.event.kind === 'turn.started' && !!r.event.review,
+		90_000
+	);
+	expect(batch.event.kind === 'turn.started' && batch.event.text).toMatch(
+		/left 2 findings in the review before the pull request/
+	);
+}, 300_000);
+
+/** Where a reviewer's worktree lives and its branch, read while it has them. */
+async function reviewerTree(store: SessionStore, key: TaskKey) {
+	const reviewerTask = await until(async () => {
+		const value = await store.task(key);
+		return value.preparation?.state === 'ready' && value.worktreeBranch ? value : undefined;
+	});
+	return {
+		path: (await store.projectForTask(reviewerTask)).path,
+		branch: reviewerTask.worktreeBranch!,
+	};
+}
+const gone = async (repo: string, tree: { path: string; branch: string }) =>
+	!(await readFile(join(tree.path, 'README.md'), 'utf8').then(
+		() => true,
+		() => false
+	)) &&
+	!(await git(repo, 'worktree', 'list')).stdout.includes(tree.path) &&
+	!(await git(repo, 'branch', '--list', tree.branch)).stdout.trim();
+
+// Decision of the walkthrough (I, question 7): every review left a worktree and a branch in the person's repo until the archive.
+it('an ended review’s reviewer gives up its worktree and branch, keeping its task and log; leftovers go at the next start (spec/reviews#reviewer-sessions)', async () => {
+	const { repo, store, task } = await setup('Clean output');
+	const client = await launch(store, task);
+	await client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+	await find(client, (r) => r.event.kind === 'turn.completed');
+	await client.command({
+		kind: 'startReview',
+		reviewers: [reviewer],
+		who: { kind: 'agent' },
+		instructions: '',
+		guidance: '',
+	});
+	const key = await reviewerOf(client, task);
+	const tree = await reviewerTree(store, key);
+	expect(await gone(repo, tree)).toBe(false);
+	const finished = await find(client, (r) => r.event.kind === 'task-review.finished', 90_000);
+	expect(finished.event).toMatchObject({ state: 'passed' });
+	await until(async () => ((await gone(repo, tree)) ? true : undefined), 60_000);
+	// The record and the log stay: the reviewer's task, its journal, and the review on disk.
+	expect((await store.task(key)).readOnlyAgent).toBe(true);
+	expect((await journalOf(store, key)).some((r) => r.event.kind === 'turn.started')).toBe(true);
+	expect((await git(repo, 'branch', '--list')).stdout).toContain('main');
+
+	// A review that ended while no host ran (here: marked ended on disk) leaves its reviewer's tree; the next host removes it.
+	const leftover = async (touch?: (tree: { path: string; branch: string }) => Promise<unknown>) => {
+		const left = await setup('hold the verdict');
+		const log = join(left.store.root, 'agents.log');
+		const first = await launchHost(left.store, left.task, ['crew', log]);
+		await first.client.command({ kind: 'prompt', text: '@write out/result.txt done' });
+		await find(first.client, (r) => r.event.kind === 'turn.completed');
+		await first.client.command({
+			kind: 'startReview',
+			reviewers: [reviewer],
+			who: { kind: 'agent' },
+			instructions: '',
+			guidance: '',
+		});
+		const key = await reviewerOf(first.client, left.task);
+		const tree = await reviewerTree(left.store, key);
+		await holding(log);
+		first.child.kill('SIGKILL');
+		await new Promise((done) => first.child.once('exit', done));
+		await touch?.(tree);
+		const file = join(await left.store.taskDir(left.task), 'task-review.json');
+		const doc = JSON.parse(await readFile(file, 'utf8'));
+		await atomicJson(file, {
+			...doc,
+			review: { ...doc.review, state: 'stopped', finishedAt: new Date().toISOString() },
+		});
+		const client = (await launchHost(left.store, left.task, ['crew', log])).client;
+		return { ...left, key, tree, client };
+	};
+	const plain = await leftover();
+	// The reviewer's host, still holding its read, stops first.
+	await until(async () => ((await gone(plain.repo, plain.tree)) ? true : undefined), 60_000);
+	expect((await plain.store.task(plain.key)).worktreeBranch).toBeUndefined();
+	// Someone's edit in the reviewer's worktree keeps the worktree and its branch.
+	const edited = await leftover((tree) => writeFile(join(tree.path, 'notes.txt'), 'mine\n'));
+	await find(edited.client, (r) => r.event.kind === 'session.started');
+	await delay(3000);
+	expect(await readFile(join(edited.tree.path, 'notes.txt'), 'utf8')).toBe('mine\n');
+	expect((await git(edited.repo, 'branch', '--list', edited.tree.branch)).stdout.trim()).not.toBe(
+		''
+	);
+	// A commit only the reviewer's branch holds keeps the branch; the worktree goes.
+	const committed = await leftover((tree) =>
+		git(tree.path, 'commit', '-q', '--allow-empty', '-m', 'mine')
+	);
+	await until(
+		async () =>
+			(await git(committed.repo, 'worktree', 'list')).stdout.includes(committed.tree.path)
+				? undefined
+				: true,
+		60_000
+	);
+	await delay(1000);
+	expect(
+		(await git(committed.repo, 'branch', '--list', committed.tree.branch)).stdout.trim()
+	).not.toBe('');
 }, 300_000);

@@ -136,6 +136,10 @@
 .task[data-status='needs-you'] small {
 	color: var(--amber);
 }
+/* spec/smoke-run#ready-surfaces: the agent's `Ready to look` reads in the accent; the card's fill and glyph stay. */
+.taskCopy small[data-ready] {
+	color: var(--accent);
+}
 .task[aria-pressed='true'] .taskTitle {
 	font-weight: 500;
 }

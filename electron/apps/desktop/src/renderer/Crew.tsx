@@ -7,6 +7,7 @@ import {
 	withoutTaskReviewers,
 	resolveCrew,
 	specAsTemplate,
+	specWhenToUse,
 	templateLookup,
 	type CrewLibrary,
 	commentCount,
@@ -35,6 +36,7 @@ import {
 	type WorktreeJoinedEvent,
 	type WorktreeRemovedEvent,
 	type WorkspaceStayed,
+	type WorkspaceStopped,
 	type Locale,
 	type SessionCommand,
 	findSpecAgent,
@@ -285,9 +287,9 @@ export function PlanCard({
 											)}
 										</small>
 									)}
-									{agent.summary && (
-										<span className={styles.memberSummary} title={agent.summary}>
-											{agent.summary}
+									{specWhenToUse(agent) && (
+										<span className={styles.memberSummary} title={specWhenToUse(agent)}>
+											{specWhenToUse(agent)}
 										</span>
 									)}
 									{agent.zone.length > 0 && (
@@ -727,6 +729,8 @@ export function CrewEventRow({
 			marker.kind === 'part-dropped' ||
 			marker.kind === 'review-comments' ||
 			marker.kind === 'review-continue' ||
+			// spec/smoke-run#limit: the host's ask for the smoke report is not the person's message.
+			marker.kind === 'smoke-report' ||
 			marker.kind === 'hire-decision' ||
 			marker.kind === 'zone-touched'
 		)
@@ -993,18 +997,21 @@ export function WorkspaceMoveRow({
 		);
 	if (event.state === 'failed')
 		return (
-			<div className={styles.service} data-crew-row="workspace-move" data-state="failed">
-				<span className={styles.failed}>
-					<Glyph name="agent-failed" size={12} />
-				</span>
-				<small>{t(locale, 'workspace')}</small>
-				<span className={styles.label}>{t(locale, 'Could not move to a worktree')}</span>
-				{event.message && (
-					<small className={styles.error} title={event.message}>
-						{event.message}
-					</small>
-				)}
-			</div>
+			<>
+				<div className={styles.service} data-crew-row="workspace-move" data-state="failed">
+					<span className={styles.failed}>
+						<Glyph name="agent-failed" size={12} />
+					</span>
+					<small>{t(locale, 'workspace')}</small>
+					<span className={styles.label}>{t(locale, 'Could not move to a worktree')}</span>
+					{event.message && (
+						<small className={styles.error} title={event.message}>
+							{event.message}
+						</small>
+					)}
+				</div>
+				<MoveStopped items={event.stopped ?? []} locale={locale} />
+			</>
 		);
 	const stayed = event.stayed ?? [];
 	const reason = (item: WorkspaceStayed) =>
@@ -1053,6 +1060,7 @@ export function WorkspaceMoveRow({
 					)}
 				</div>
 			)}
+			<MoveStopped items={event.stopped ?? []} locale={locale} />
 		</>
 	);
 }
@@ -1093,6 +1101,37 @@ export function WorktreeRow({
 			<small className={styles.ok}>{t(locale, 'joined the task')}</small>
 			{event.by === 'person' && <small>{t(locale, 'you allowed it')}</small>}
 			{event.standsForRoot && <small>{t(locale, 'holds the task’s work')}</small>}
+		</div>
+	);
+}
+/** spec/crew#auto-move: what the move's restart stopped, one line each; a saved command the agent had started reads `started again`. */
+export function MoveStopped({
+	items,
+	locale,
+}: {
+	items: readonly WorkspaceStopped[];
+	locale: Locale;
+}) {
+	if (!items.length) return null;
+	const kind = (item: WorkspaceStopped) =>
+		t(
+			locale,
+			item.kind === 'command'
+				? 'command'
+				: item.kind === 'console'
+					? 'console'
+					: 'in the background'
+		);
+	return (
+		<div className={styles.paths} data-move-stopped>
+			{items.map((item, index) => (
+				<div key={index} data-restarted={item.restarted || undefined}>
+					{item.name}{' '}
+					<span>
+						· {kind(item)} · {t(locale, item.restarted ? 'started again' : 'stopped')}
+					</span>
+				</div>
+			))}
 		</div>
 	);
 }

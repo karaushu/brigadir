@@ -318,7 +318,7 @@ export const defaultAppSettings: AppSettings = {
 	},
 	updates: { autoDownload: true },
 	auto: { anyModel: false, partBudget: { ...defaultAutoSettings.partBudget } },
-	reviews: { smallTask: { ...defaultReviewSettings.smallTask } },
+	reviews: { ...defaultReviewSettings, smallTask: { ...defaultReviewSettings.smallTask } },
 };
 export function isAgentDefaults(value: unknown): value is AgentDefaults {
 	return (

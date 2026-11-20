@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { builtinAgentTemplates, type AgentTemplate } from './crew';
+import {
+	builtinAgentTemplates,
+	developerTemplateId,
+	reviewerTemplateId,
+	type AgentTemplate,
+} from './crew';
 import {
 	agentTemplateAttachment,
 	soloInstructions,
@@ -55,6 +60,14 @@ it('keeps the instructions of an own template and sends its crew words to the pe
 	expect(role.instructions.endsWith(own.instructions)).toBe(true);
 	// Nothing to redirect when the template has no text.
 	expect(soloRole({ ...own, instructions: '' }).instructions).not.toContain('instructions below');
+	// spec/crew-templates-and-editor#rights: an own role starts with the solo text of its rights, so one without instructions still works.
+	expect(soloRole({ ...own, instructions: '' }).instructions).toContain(
+		soloInstructions[developerTemplateId]!
+	);
+	expect(soloRole({ ...own, role: 'reviewer' }).instructions).toContain(
+		soloInstructions[reviewerTemplateId]!
+	);
+	expect(subagentRole({ ...own, instructions: '' })).toContain('You implement the task.');
 });
 it('accepts a task with a role and one whose role was taken away', () => {
 	const task = { id: 't1', projectId: 'p1', title: 'Docs', status: 'backlog' };

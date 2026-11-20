@@ -16,6 +16,8 @@ import {
 	templateLookup,
 	isId,
 	isRecord,
+	upgradeAgentTemplateDocument,
+	upgradeCrewTemplateDocument,
 	type AgentTemplate,
 	type BuiltinAgentChoices,
 	type CrewTemplate,
@@ -27,9 +29,11 @@ export type TemplateLibrary = {
 	agents: AgentTemplate[];
 	crews: CrewTemplate[];
 	issues: ReadIssue[];
-	/** spec/pull-requests-and-ci#review-crew: built-in crews the person deleted; the UI offers `Restore default crews` while any are hidden. */
+	/** spec/pull-requests-and-ci#review-crew: built-in crews the person deleted; the UI offers `Restore built-in crews` while any are hidden. */
 	hiddenCrews: string[];
 };
+/** spec/crew-templates-and-editor#schema: role and crew files of version 1 are read and upgraded; new ones are version 2. */
+const templateVersions = [1, 2] as const;
 const hiddenCrewsPath = 'templates/builtin/hidden-crews.json';
 /** spec/crew-templates-and-editor#unshipped-crew-ids: the move of each data folder, process-wide. */
 const adoptions = new Map<string, Promise<void>>();
@@ -94,7 +98,9 @@ export class TemplateStore {
 		const crews: CrewTemplate[] = [];
 		for (const base of builtinCrewTemplates) {
 			try {
-				const doc = await readDocument(await this.file('builtin', base.id));
+				const doc = upgradeCrewTemplateDocument(
+					await readDocument(await this.file('builtin', base.id), undefined, templateVersions)
+				);
 				if (
 					!isCrewTemplateDocument(doc) ||
 					doc.template.id !== base.id ||
@@ -134,7 +140,7 @@ export class TemplateStore {
 		}
 	}
 	/** spec/pull-requests-and-ci#review-crew: the hidden built-in crews. Ids the app does not ship are dropped, except one whose edit still waits in
-	 *  `templates/builtin/` (spec/crew-templates-and-editor#unshipped-crew-ids): it keeps `Restore default crews` offered. */
+	 *  `templates/builtin/` (spec/crew-templates-and-editor#unshipped-crew-ids): it keeps `Restore built-in crews` offered. */
 	private async hidden(issues?: ReadIssue[]): Promise<string[]> {
 		const listed = await this.hiddenIds(issues),
 			kept: string[] = [];
@@ -165,7 +171,7 @@ export class TemplateStore {
 		return run;
 	}
 	/** A person's edit of a crew the app does not ship becomes an own crew under the same id, so the launch default and schedules that name it
-	 *  keep it. An edit of a hidden crew waits for `Restore default crews`; an invalid or unsafe file stays and is an issue; an own crew already
+	 *  keep it. An edit of a hidden crew waits for `Restore built-in crews`; an invalid or unsafe file stays and is an issue; an own crew already
 	 *  under that id is never overwritten. The source goes only after the copy is written. */
 	private async adoptNow(issues: ReadIssue[]) {
 		const hidden = await this.hiddenIds();
@@ -174,12 +180,14 @@ export class TemplateStore {
 			const path = `templates/builtin/${id}.json`;
 			try {
 				const source = await this.file('builtin', id),
-					doc = await readDocument(source);
+					doc = upgradeCrewTemplateDocument(
+						await readDocument(source, undefined, templateVersions)
+					);
 				if (!isCrewTemplateDocument(doc) || doc.template.id !== id)
 					throw new ReadFailure('invalid_document');
 				await mkdir(await this.dir('crews'), { recursive: true, mode: 0o700 });
 				const moved = await newJson(await this.file('crews', id), {
-					schemaVersion: 1,
+					schemaVersion: 2,
 					template: { ...doc.template, builtin: false },
 				});
 				if (moved)
@@ -212,7 +220,7 @@ export class TemplateStore {
 				continue;
 			}
 			try {
-				const doc = await readDocument(await this.file(kind, id));
+				const doc = await readDocument(await this.file(kind, id), undefined, templateVersions);
 				if (!isRecord(doc.template) || doc.template.id !== id || isBuiltinTemplateId(id))
 					throw new ReadFailure('invalid_document');
 				documents.push(doc);
@@ -232,7 +240,9 @@ export class TemplateStore {
 			builtins = builtinAgentTemplates.map((template) =>
 				withBuiltinChoices(template, choices.get(template.id))
 			);
-		for (const doc of await this.list('agents', issues)) {
+		// spec/crew-templates-and-editor#schema: a version 1 file reads as version 2 and is written so at its next save.
+		for (const stored of await this.list('agents', issues)) {
+			const doc = upgradeAgentTemplateDocument(stored) as Record<string, unknown>;
 			if (isAgentTemplateDocument(doc) && !doc.template.builtin) agents.push(doc.template);
 			else
 				issues.push({
@@ -241,7 +251,8 @@ export class TemplateStore {
 				});
 		}
 		const lookup = templateLookup([...builtins, ...agents]);
-		for (const doc of await this.list('crews', issues)) {
+		for (const stored of await this.list('crews', issues)) {
+			const doc = upgradeCrewTemplateDocument(stored) as Record<string, unknown>;
 			if (
 				isCrewTemplateDocument(doc) &&
 				!doc.template.builtin &&
@@ -272,10 +283,10 @@ export class TemplateStore {
 				return this.saveBuiltinChoices(template);
 			if (template.builtin || isBuiltinTemplateId(template.id))
 				throw new Error('Built-in templates are read-only');
-			if (!isAgentTemplateDocument({ schemaVersion: 1, template }))
+			if (!isAgentTemplateDocument({ schemaVersion: 2, template }))
 				throw new Error('Invalid agent template');
 			await mkdir(await this.dir('agents'), { recursive: true, mode: 0o700 });
-			await atomicJson(await this.file('agents', template.id), { schemaVersion: 1, template });
+			await atomicJson(await this.file('agents', template.id), { schemaVersion: 2, template });
 			return template;
 		});
 	}
@@ -312,7 +323,7 @@ export class TemplateStore {
 		const base = builtinCrewTemplates.find((item) => item.id === template.id)!,
 			edited = withBuiltinCrew(base, template),
 			file = await this.file('builtin', base.id);
-		if (!isCrewTemplateDocument({ schemaVersion: 1, template: edited }))
+		if (!isCrewTemplateDocument({ schemaVersion: 2, template: edited }))
 			throw new Error('Invalid crew template');
 		const issues = crewIssues(edited, templateLookup((await this.read()).agents));
 		if (issues.length) throw new Error(issues[0]!.message);
@@ -323,7 +334,7 @@ export class TemplateStore {
 			return base;
 		}
 		await mkdir(await this.dir('builtin'), { recursive: true, mode: 0o700 });
-		await atomicJson(file, { schemaVersion: 1, template: edited });
+		await atomicJson(file, { schemaVersion: 2, template: edited });
 		return edited;
 	}
 	saveCrew(template: CrewTemplate) {
@@ -331,13 +342,13 @@ export class TemplateStore {
 			if (template.builtin && isBuiltinCrewId(template.id)) return this.saveBuiltinCrew(template);
 			if (template.builtin || isBuiltinTemplateId(template.id))
 				throw new Error('Built-in templates are read-only');
-			if (!isCrewTemplateDocument({ schemaVersion: 1, template }))
+			if (!isCrewTemplateDocument({ schemaVersion: 2, template }))
 				throw new Error('Invalid crew template');
 			const library = await this.read();
 			const issues = crewIssues(template, templateLookup(library.agents));
 			if (issues.length) throw new Error(issues[0]!.message);
 			await mkdir(await this.dir('crews'), { recursive: true, mode: 0o700 });
-			await atomicJson(await this.file('crews', template.id), { schemaVersion: 1, template });
+			await atomicJson(await this.file('crews', template.id), { schemaVersion: 2, template });
 			return template;
 		});
 	}
@@ -365,7 +376,7 @@ export class TemplateStore {
 			await unlink(await this.file('crews', id));
 		});
 	}
-	/** spec/pull-requests-and-ci#review-crew: `Restore default crews` brings every hidden built-in crew back. */
+	/** spec/pull-requests-and-ci#review-crew: `Restore built-in crews` brings every hidden built-in crew back. */
 	restoreCrews() {
 		return this.serial(async () => {
 			await unlink(await safePath(this.root, hiddenCrewsPath)).catch((error) => {

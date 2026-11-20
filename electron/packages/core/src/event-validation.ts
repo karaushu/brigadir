@@ -37,6 +37,7 @@ import {
 import { isReviewPoint, isTaskReviewWho } from './task-review';
 import { isDesignNode, isDesignReviewState, isDesignVerdict } from './design-review';
 import { isTaskClass } from './task-class';
+import { isSmokeStep, isSmokeStepList, smokeLimits } from './smoke';
 const starter = (v: unknown) => v === 'person' || v === 'agent' || v === 'host';
 import { isBackgroundId, isBackgroundPath } from './background';
 type Check = (v: unknown) => boolean;
@@ -345,6 +346,39 @@ const checks: Record<string, Check> = {
 			state: (v) => ['passed', 'accepted', 'stopped', 'failed', 'outdated'].includes(String(v)),
 		},
 		{ failure: text, approval: (v) => v === true, open: number }
+	),
+	'smoke.started': object({ id: isId, steps: isSmokeStepList, limitMs: tokens }),
+	'smoke.extended': object({ id: isId, limitMs: tokens, by: (v) => v === 'person' }),
+	'smoke.stopped': object({ id: isId, cause: (v) => v === 'limit' || v === 'person' }),
+	'smoke.reported': object(
+		{
+			id: isId,
+			steps: (v) =>
+				Array.isArray(v) &&
+				v.length >= 1 &&
+				v.length <= smokeLimits.reportSteps + smokeLimits.steps &&
+				v.every(isSmokeStep),
+			summary: (v) => typeof v === 'string' && v.length <= smokeLimits.summary,
+			elapsedMs: number,
+		},
+		{ stopped: (v) => v === 'limit' || v === 'person' }
+	),
+	'smoke.dropped': object({
+		id: isId,
+		reason: (v) => v === 'cancelled' || v === 'no-report',
+		elapsedMs: number,
+	}),
+	'task.ready': object(
+		{
+			id: isId,
+			screen: (v) => typeof v === 'string' && v.length > 0 && v.length <= smokeLimits.screen,
+			where: (v) => v === 'simulator' || v === 'browser',
+		},
+		{
+			device: (v) => typeof v === 'string' && v.length <= 200,
+			tab: (v) => typeof v === 'string' && v.length <= 32,
+			url: (v) => typeof v === 'string' && v.length <= 4096,
+		}
 	),
 	'source.saved': object({ id: isId, title: text, chars: number }, { url: text }),
 	'design.reviewed': object(

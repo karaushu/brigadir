@@ -670,3 +670,42 @@ it('names the joined stand-in of the root and whether the root changed itself', 
 	};
 	expect(joinedStandIn({ launch: launch('aaaaaaaaaaaaaaaa') }, changed)?.rootChanged).toBe(true);
 });
+it('spec/architecture-and-platform#read-issues: a read that fails locally is a read issue of the task, not GitHub state, until a read succeeds', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'brigadir-pr-local-')),
+		repo = join(dir, 'repo');
+	try {
+		await mkdir(repo);
+		await gitText(repo, ['init', '-b', 'main']);
+		const store = await SessionStore.at(join(dir, 'data')),
+			project = await store.addProject(repo),
+			task = await store.createTask(project.id, 'Local failure', 'claude');
+		const runner = vi.fn<GhRunner>(async () => ({ code: 0, stdout: '', stderr: '' })),
+			actions = new ForgeActions(store.root, {} as Sessions, new Forge(runner));
+		const snapshots = join(await store.taskDir(task), 'snapshots.json');
+		await writeFile(snapshots, '{ not json');
+		await expect(actions.read(task, true)).rejects.toThrow();
+		const workspace = () =>
+			actions.decorate({
+				projects: [],
+				tasks: [{ ...task, title: 'x', status: 'done' }],
+				issues: [],
+			});
+		await vi.waitFor(() =>
+			expect(workspace().issues).toEqual([
+				{ path: `projects/${project.id}/tasks/${task.id}/git`, code: 'git_failed' },
+			])
+		);
+		expect(runner).not.toHaveBeenCalled();
+		await rm(snapshots);
+		await actions.read(task, false);
+		await vi.waitFor(() => expect(workspace().issues).toEqual([]));
+		// A project whose folder is gone has nothing to read: no read issue.
+		await writeFile(snapshots, '{ not json');
+		await rm(repo, { recursive: true, force: true });
+		await expect(actions.read(task, false)).rejects.toThrow();
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		expect(workspace().issues).toEqual([]);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});

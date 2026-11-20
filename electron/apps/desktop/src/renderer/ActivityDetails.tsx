@@ -282,7 +282,9 @@ export function TurnFooter({
 						? 'Interrupted'
 						: turn.status === 'failed'
 							? 'Error'
-							: 'Done'
+							: turn.status === 'returned'
+								? 'Plan sent back'
+								: 'Done'
 				)}
 				{turn.duration !== null ? ` · ${formatDuration(locale, turn.duration)}` : ''}
 			</span>

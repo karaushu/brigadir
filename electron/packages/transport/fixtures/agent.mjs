@@ -4,6 +4,7 @@ import { Readable, Writable } from 'node:stream';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {join} from 'node:path';
+import { tmpdir } from 'node:os';
 import { appendFileSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -20,7 +21,9 @@ const signedOut=()=>Boolean(process.env.BRIGADIR_TEST_AUTH_FILE)&&!existsSync(pr
 // ended; `steering-codex` ends the running turn and starts its own, reported by codex-shaped `threadStatus`.
 // spec/crew#assignment-after-compaction `crew-compaction`: steering as `steering`, and compactions a crew member's host answers (see the prompt handler).
 const crewCompaction=scenario==='crew-compaction';let crewSteer;
-const steering=scenario==='steering'||scenario==='steering-late'||scenario==='steering-codex'||crewCompaction;let steerWaiter;
+// spec/crew#auto-hire `crew-steering`: the scripted crew agent with steering; a steer is heard at once (`injected`).
+const crewSteering=scenario==='crew-steering';
+const steering=scenario==='steering'||scenario==='steering-late'||scenario==='steering-codex'||crewCompaction||crewSteering;let steerWaiter;
 const threadStatus=(client,type)=>update(client,{sessionUpdate:'session_info_update',_meta:{codex:{threadStatus:{type,...(type==='active'?{activeFlags:[]}:{})}}}});
 // spec/chat-turns-plans-and-questions#agent-started-turns `agent-turn`: Claude Code begins a turn on its own after a background task — the wire of a live
 // run (claude-agent-turn.jsonl). `agent-turn-codex`: the same shape told by codex `threadStatus`.
@@ -94,6 +97,7 @@ connection = agent({name:'fixture'})
  .onRequest('_session/steering',params=>params,async({params,client})=>{
   const text=params.prompt.map(item=>item.type==='text'?item.text:'').join('');record('steer',{text,meta:params._meta});
   // codex-acp with no running turn starts its own; Claude answers promptRequired.
+  if(crewSteering)return {outcome:'injected'};
   if(scenario==='steering-late'||!steerWaiter&&scenario!=='steering-codex')return {outcome:'promptRequired',reason:'noRunningTurn'};
   const waiter=steerWaiter;steerWaiter=undefined;
   // `crew-compaction`: `compact-step-decline` — the turn ends while the steer is out and the agent answers promptRequired; `compact-step-adopt` — codex-acp
@@ -170,7 +174,7 @@ connection = agent({name:'fixture'})
   if(scenario==='catalog')await update(client,{sessionUpdate:'usage_update',used:42,size:100});
   // spec/composer#agent-capsule: the agent announces /compact, so the context popover offers Compact.
   if(scenario==='catalog')await update(client,{sessionUpdate:'available_commands_update',availableCommands:[{name:'compact',description:'Summarise and free context',input:null}]});
-  if(scenario==='crew'&&text.startsWith('Write only a commit message')){
+  if((scenario==='crew'||crewSteering)&&text.startsWith('Write only a commit message')){
    // spec/crew#accept: the one-shot commit message generator of crew acceptance. The answer takes `<type>: [<Area>]` from the repo's
    // recent commits, so a test sees the log reached the call; a part titled «no message» fails it to show the fallback.
    const material=JSON.parse(text.slice(text.indexOf('\n')+1)),changes=Array.isArray(material)?material:material.changes;
@@ -179,7 +183,7 @@ connection = agent({name:'fixture'})
    await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:`${style?.[1]??'feat'}: [${style?.[2]??'Fixture'}] ${material.task??'change'}\n\nFiles: ${files.join(', ')}`}});
    return {stopReason:'end_turn'};
   }
-  if(scenario==='crew'){
+  if(scenario==='crew'||crewSteering){
    // Scripted crew agent: `@call <tool> <json>` calls a brigadir MCP tool, `@write <path> <text>` writes inside cwd. Never a provider.
    const config=mcpServers.find(s=>s.name==='brigadir');let out='';
    let script=params.prompt.filter(item=>item.type==='text'&&!item.text.startsWith('<attached_context')).map(item=>item.text).join('\n');
@@ -189,19 +193,26 @@ connection = agent({name:'fixture'})
    // spec/reviews#loop: a task's own review says `first read` or `closure check`; a crew member's check says `round n of 2`.
    const own=/^Check task (\S+) of `[^`]*` \(reviewId (\S+), (first read|closure check)\)/.exec(script);
    if(own){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const title=script.split('\n')[1]??'';const finding=/^- id (\S+) \(/m.exec(script)?.[1];
+    // spec/crew#reviewer: a task titled «hold the verdict» — the first reviewer to read a check holds it until its turn is cancelled; the check sent again is answered.
+    if(/hold the verdict/i.test(title)){let first=true;try{mkdirSync(join(tmpdir(),`brigadir-fixture-hold-${own[2]}`));}catch{first=false;}if(first){record('held',{reviewId:own[2]});await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}}
     script=own[3]==='first read'?(file&&!/clean/i.test(title)?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round 1: say hello instead"}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"${/remark/i.test(title)?',"note":"Ran the output check: it prints done."':''}}`)
      :/dispute/i.test(title)&&finding?`@call submit_review {"taskId":"${own[1]}","reviewId":"${own[2]}","comments":[{"replyTo":"${finding}","text":"Still says done."}]}`:`@call approve {"taskId":"${own[1]}","reviewId":"${own[2]}"}`;}
    const check=/^Check task (\S+) of `[^`]*` \(reviewId (\S+), round (\d) of \d\)/.exec(script);
    if(check&&/hold the verdict/.test(script.split('\n')[1]??'')){await new Promise(resolve=>{release=resolve;});release=undefined;return {stopReason:'cancelled'};}
    if(check){const file=/^- (\S+) [A-Z]/m.exec(script)?.[1];const dispute=/dispute/i.test(script.split('\n')[1]??'');const comment=file&&(check[3]==='1'||dispute);
     script=comment?`@call submit_review {"taskId":"${check[1]}","reviewId":"${check[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round ${check[3]}: say hello instead"}]}`:`@call approve {"taskId":"${check[1]}","reviewId":"${check[2]}"}`;}
+   // spec/smoke-run#limit: the host's ask for the smoke report is answered with one, every flow unchecked.
+   if(/with smoke_report:/.test(script)&&!/^@/m.test(script))script='@call smoke_report {"steps":[{"step":"Clients list","result":"unchecked","note":"the run stopped first"}],"summary":"Stopped before the steps were done."}';
    for(const line of script.split('\n')){
+    if(line.startsWith('@sleep ')){await new Promise(resolve=>setTimeout(resolve,Number(line.slice(7))));continue;}
     if(line.startsWith('@write ')){const rest=line.slice(7);const space=rest.indexOf(' ');const path=space<0?rest:rest.slice(0,space);const full=join(process.cwd(),path);mkdirSync(dirname(full),{recursive:true});writeFileSync(full,(space<0?'':rest.slice(space+1))+'\n');out+=`wrote ${path}\n`;}
     else if(line.startsWith('@call ')){
      const rest=line.slice(6);const space=rest.indexOf(' ');const name=space<0?rest:rest.slice(0,space);const args=space<0?{}:JSON.parse(rest.slice(space+1));
      const mcp=new Client({name:'fixture',version:'1.0.0'});const stdio=new StdioClientTransport({command:config.command,args:config.args,env:{...process.env,...Object.fromEntries(config.env.map(e=>[e.name,e.value]))}});
      const controller=new AbortController();release=()=>controller.abort();
-     try{await mcp.connect(stdio);const result=await mcp.callTool({name,arguments:args},undefined,{signal:controller.signal,timeout:600000});out+=`${name}: ${result.content.map(item=>item.text??'').join('')}${result.isError?' [error]':''}\n`;record('crew-call',{name,args,result});}
+     // `crew-steering`: the call is a top-level tool of the turn, as in claude-agent-acp; its end is a step boundary for held messages.
+     const toolCallId=`mcp-${name}-${Date.now()}`;if(crewSteering)await update(client,{sessionUpdate:'tool_call',toolCallId,title:name,kind:'other',status:'in_progress'});
+     try{await mcp.connect(stdio);const result=await mcp.callTool({name,arguments:args},undefined,{signal:controller.signal,timeout:600000});if(crewSteering)await update(client,{sessionUpdate:'tool_call_update',toolCallId,status:'completed'});out+=`${name}: ${result.content.map(item=>item.text??'').join('')}${result.isError?' [error]':''}\n`;record('crew-call',{name,args,result});}
      catch(error){if(controller.signal.aborted)return {stopReason:'cancelled'};out+=`${name} failed: ${error.message}\n`;record('crew-call',{name,args,error:error.message});}
      finally{await mcp.close();release=undefined;}
     }
@@ -328,6 +339,8 @@ connection = agent({name:'fixture'})
    const ids={taskId:planCheck[1],reviewId:planCheck[2]};
    try{await mcp.connect(stdio);
     const call=async(name,args)=>{const result=await mcp.callTool({name,arguments:args});record('plan-review-call',{name,args,text:result.content?.[0]?.text??'',error:!!result.isError});};
+    // spec/crew#ask-foreman: a person's answer that says `ask the author first` makes the first read ask the plan's author.
+    if(planCheck[3]!=='closure check'&&text.includes('ask the author first'))await call('ask_foreman',{question:'Why does the plan leave Firefox out?'});
     await call('read_plan',ids);await call('read_sources',ids);
     if(planCheck[3]==='closure check')await call('approve',ids);
     else await call('submit_plan_review',{...ids,findings:[{kind:'missed',text:'Firefox is not covered',where:'plan.md:9'}],gaps:[{text:'Which browsers must keep the ring?'}]});}
@@ -338,7 +351,14 @@ connection = agent({name:'fixture'})
   // spec/chat-turns-plans-and-questions#plan-approval: a plan for approval, Claude-shaped (plan in the tool content) or Codex-shaped (plan_update, then a request without text).
   // spec/reviews#plan-loop: the plan review's findings come back as a batch; the revision covers Firefox.
   const planReviewed=text.includes(' in the plan review. Revise the plan')||text.startsWith('The person asks you to fix');
-  if(text==='plan'||text==='plan-codex'||text.startsWith('I did not approve the plan.')||text.startsWith('I edited your plan.')||planReviewed) {
+  // spec/crew#ask-foreman: a reviewer's question that sent the plan back — answer it with prompt_task, then present the plan again.
+  const asked=/^Worker `[^`]*` asks \(questionId (\S+)\):[\s\S]*?prompt_task\(taskId "([^"]+)"/.exec(text);
+  if(asked&&text.includes('present the plan for approval again')){
+   const config=mcpServers.find(s=>s.name==='brigadir'),mcp=new Client({name:'fixture',version:'1.0.0'}),stdio=new StdioClientTransport({command:config.command,args:config.args,env:{...process.env,...Object.fromEntries(config.env.map(e=>[e.name,e.value]))}});
+   try{await mcp.connect(stdio);const result=await mcp.callTool({name:'prompt_task',arguments:{taskId:asked[2],text:'Firefox is out of scope: the person asked for Safari only.',questionId:asked[1]}});record('question-answer',{text:result.content?.[0]?.text??'',error:!!result.isError});}
+   finally{await mcp.close();}
+  }
+  if(text==='plan'||text==='plan-codex'||text.startsWith('I did not approve the plan.')||text.startsWith('I edited your plan.')||planReviewed||asked&&text.includes('present the plan for approval again')) {
    record('plan-prompt',text);
    const plan0='# Keep the focus ring in Safari\n\n## Context\n`Button.module.css` sets `outline: none`.\n\n## Changes\n1. Add the `--focus-ring` token.\n2. Use `:focus-visible` in `Button.module.css`.\n3. Test that Tab keeps the ring.\n\n## Checks\n- `pnpm --filter kit test`\n- Safari: Tab through the story.\n- Firefox: the ring stays.\n- Chrome: the ring stays.';
    const plan=planReviewed?plan0.replace('3. Test that Tab keeps the ring.','3. Test that Tab keeps the ring.\n4. Firefox: Tab keeps the ring too.'):plan0;

@@ -5,8 +5,9 @@ import { isRecord } from './workspace';
 /** spec/sidebar#layout: independent OS and in-app sound policies; native delivery lives in main. */
 export type NotificationScope = 'needs-you' | 'turn-ended';
 /** `page` — a notification of a page in the task's browser (spec/browser-and-simulator#notifications). */
+/** `ready` — the agent's Ready to look (spec/smoke-run#ready-surfaces): shown like a page's, sounding like a turn's end. */
 export type NoticeKind =
-	'needs-you' | 'turn-ended' | 'failed' | 'rate-limited' | 'scope-violation' | 'page';
+	'needs-you' | 'turn-ended' | 'failed' | 'rate-limited' | 'scope-violation' | 'page' | 'ready';
 export type SoundSlot = 'needsYou' | 'turnEnded' | 'failed';
 export const soundSlots: readonly SoundSlot[] = ['needsYou', 'turnEnded', 'failed'];
 /** spec/notifications-slack-notes-and-schedules#macos-permission: one «When» picker; `turn-ended` also covers needs-you. `off` silences every kind. */
@@ -73,8 +74,10 @@ export function notificationDecision(
 		visibility.task.projectId === task.projectId
 	)
 		return { show: false, sound: null };
-	const turn = kind === 'turn-ended';
-	const show = preferences.mode !== 'off' && (!turn || preferences.mode === 'turn-ended');
+	const turn = kind === 'turn-ended' || kind === 'ready';
+	// spec/notifications-slack-notes-and-schedules#notice-kinds: `ready` shows whenever notifications are on; it sounds only when a turn's end does.
+	const show =
+		preferences.mode !== 'off' && (kind !== 'turn-ended' || preferences.mode === 'turn-ended');
 	const sound =
 		preferences.soundMode === 'off' || (turn && preferences.soundMode !== 'turn-ended')
 			? null
@@ -104,6 +107,8 @@ export function noticeKind(event: SessionEvent): NoticeKind | null {
 			return event.status === 'rejected' ? 'rate-limited' : null;
 		case 'scope.violation':
 			return 'scope-violation';
+		case 'task.ready':
+			return 'ready';
 		case 'turn.completed':
 			return event.reason === 'cancelled' ? null : 'turn-ended';
 		default:

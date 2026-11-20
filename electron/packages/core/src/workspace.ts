@@ -77,7 +77,8 @@ export type Project = {
 /** `plan` is a permission that is a plan for approval (spec/chat-turns-plans-and-questions#plan-approval). */
 /** `review`: a review's open findings wait for the person (spec/reviews#surfaces); `count` is how many. */
 export type TaskActivity = {
-	kind: 'tool' | 'permission' | 'question' | 'plan' | 'proposal' | 'review';
+	/** `ready`: spec/smoke-run#ready-surfaces — the agent's `Ready to look`, over the tool activity. */
+	kind: 'tool' | 'permission' | 'question' | 'plan' | 'proposal' | 'review' | 'ready';
 	title: string;
 	path: string | null;
 	count?: number;
@@ -189,7 +190,12 @@ export type AgentTask = {
 		import('./task-tokens').TokenHold | null;
 };
 export type ReadIssueCode =
-	'invalid_document' | 'unsupported_schema' | 'unreadable' | 'unsafe_path';
+	| 'invalid_document'
+	| 'unsupported_schema'
+	| 'unreadable'
+	| 'unsafe_path'
+	/** spec/architecture-and-platform#read-issues: a task's repository state (branch, base, remote) could not be read with git. */
+	| 'git_failed';
 export type ReadIssue = { path: string; code: ReadIssueCode };
 /** Desktop may include its home directory for display-only path abbreviation. */
 export type WorkspaceSnapshot = {
@@ -303,7 +309,7 @@ export function isAgentTask(value: unknown): value is AgentTask {
 		(value.activity === undefined ||
 			value.activity === null ||
 			(isRecord(value.activity) &&
-				['tool', 'permission', 'question', 'plan', 'proposal', 'review'].includes(
+				['tool', 'permission', 'question', 'plan', 'proposal', 'review', 'ready'].includes(
 					value.activity.kind as string
 				) &&
 				(value.activity.count === undefined ||

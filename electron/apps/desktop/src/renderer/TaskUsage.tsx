@@ -12,6 +12,7 @@ import {
 	taskTokenSum,
 	tokenCount,
 	tokenMembers,
+	budgetRoot,
 	type AgentProvider,
 	type AgentTask,
 	type BudgetDecision,
@@ -43,7 +44,7 @@ export type TaskTokensView = {
 	hold: TokenHold | null;
 	lead: BudgetLead | null;
 	spans: QuotaSpan[];
-	/** The crew's members besides the root (workers, leads, reviewers). */ workers: number;
+	/** spec/chat-turns-plans-and-questions#budget-card: the members besides the root (workers, leads, reviewers) that are paused with it — not a dismissed or completed one. */ workers: number;
 	label(taskId: string): string;
 };
 export function tokensView(
@@ -52,10 +53,7 @@ export function tokensView(
 	locale: Locale
 ): TaskTokensView {
 	const member = Boolean(task.crewTaskId && task.crewTaskId !== task.id),
-		root = member
-			? (tasks.find((item) => item.id === task.crewTaskId && item.projectId === task.projectId) ??
-				task)
-			: task,
+		root = member ? budgetRoot(task, tasks) : task,
 		own = member ? [task] : tokenMembers(root, tasks),
 		sum = member ? taskTokenSum(task, [task]) : taskTokenSum(root, tasks),
 		budget = member ? undefined : root.tokenBudget;
@@ -67,7 +65,9 @@ export function tokensView(
 		hold: member ? null : (root.tokenHold ?? null),
 		lead: budgetLead(sum, budget),
 		spans: quotaSpans(own.map((item) => item.tokens)),
-		workers: Math.max(0, own.length - 1),
+		workers: own.filter(
+			(item) => item.id !== root.id && item.status !== 'completed' && !item.archived
+		).length,
 		label: (taskId) => {
 			if (taskId === root.id && !member) return t(locale, 'Agent');
 			const item = tasks.find((entry) => entry.id === taskId);
@@ -582,6 +582,96 @@ export function BudgetStrip({
 				<div className={s.stripDetails}>
 					<UsageBreakdown view={view} locale={locale} disabled />
 					<small>{t(locale, 'Turns that run now finish; nothing new starts.')}</small>
+				</div>
+			)}
+		</>
+	);
+}
+/**
+ * spec/chat-turns-plans-and-questions#budget-held: after `Finish turns, then stop` or `Stop now` the task stays held at the budget; the deck keeps
+ * a row that says so, with the raise. Raising changes the budget (`setTokenBudget`), which lifts the hold; the chevron opens the breakdown.
+ */
+/** spec/chat-turns-plans-and-questions#budget-held: the hold the deck's row stands for — after `finish` or `stop`; the question has its own strip. */
+export const heldRow = (hold: TokenHold | null): TokenHold | null =>
+	hold && hold.state !== 'asked' ? hold : null;
+/** spec/chat-turns-plans-and-questions#budget-held: a raise from the held row changes the provider's budget; `No limit for this task` removes it. */
+export function raiseHeld(
+	send: (command: SessionCommand) => unknown,
+	hold: Pick<TokenHold, 'provider'>,
+	decision: BudgetDecision,
+	budget: number | undefined,
+	reload: () => Promise<unknown>
+) {
+	return changeBudget(
+		send,
+		hold.provider,
+		decision === 'unlimited' ? null : (budget ?? null),
+		reload
+	);
+}
+export function BudgetHeldStrip({
+	hold,
+	view,
+	locale,
+	disabled,
+	send,
+	open = false,
+}: {
+	hold: TokenHold;
+	view: TaskTokensView;
+	locale: Locale;
+	disabled: boolean;
+	send(command: SessionCommand): unknown;
+	/** Starts expanded (the tests: a server render cannot click the chevron). */
+	open?: boolean;
+}): ReactNode {
+	const [shown, setShown] = useState(open);
+	const tokens = Math.max(
+		hold.tokens,
+		view.sum.providers.find((item) => item.provider === hold.provider)?.tokens ?? 0
+	);
+	const raise = (decision: BudgetDecision, budget?: number) => {
+		void raiseHeld(send, hold, decision, budget, () => useWorkspace.getState().load());
+	};
+	return (
+		<>
+			<DeckList label={t(locale, 'Paused at the budget')} data-budget-strip="held">
+				<DeckRow
+					hover
+					tone="amber"
+					label={
+						<span className={s.stripGlyph}>
+							<Glyph name="pause" size={12} />
+						</span>
+					}
+					actions={
+						<>
+							<RaiseButton
+								question={hold}
+								tokens={tokens}
+								locale={locale}
+								disabled={disabled}
+								answer={raise}
+							/>
+							<IconButton
+								size="s"
+								label={t(locale, shown ? 'Collapse' : 'Expand')}
+								aria-expanded={shown}
+								onClick={() => setShown(!shown)}>
+								<Glyph name="chevron-down" size={12} />
+							</IconButton>
+						</>
+					}>
+					<DeckRowButton expanded={shown} onClick={() => setShown(!shown)}>
+						<p>
+							<b>{t(locale, 'Paused at the budget')}</b>
+						</p>
+					</DeckRowButton>
+				</DeckRow>
+			</DeckList>
+			{shown && (
+				<div className={s.stripDetails}>
+					<UsageBreakdown view={view} locale={locale} disabled />
 				</div>
 			)}
 		</>

@@ -101,6 +101,25 @@ do:
 - `Header: the design image could not be read (no such file). Save the node's image from Figma to a file.`
 - With mismatches: `Fix the mismatches, take new screenshots of those nodes and submit the screen again.`
 - `passed`: `The design review passed.`
+- Last, `warnings` about the [area](#area) of accepted nodes, one line each.
+
+<a id="area"></a>
+
+### The area
+
+A node's `area` is its frame on the screenshot, as tight around the node as the design image is around the design node:
+the [pair](#card) shows the two at the same scale only then, and the rows read from a wider crop read the wrong
+pixels. The tool's description says so. The host checks the shape and warns; it does not refuse:
+
+- No `area`: `{node}: pass its area on the screenshot, tight around the node, so the person sees the node next to its
+  design.`
+- An area whose width-to-height ratio (in the screenshot's pixels) is more than half again (`designAreaRatio`, 1.5)
+  from the design image's: `{node}: its area on the screenshot is {a}:1 (width to height), the design image {d}:1. Fit
+  the area tightly around this node (its frame from simulator_ui or browser_ui), not the screen or a section around it,
+  and check the rows you read from it. If the app really draws the node that much {wider|taller}, keep the area and say
+  so in a row.`
+- The node stays accepted with its rows: an app that draws a node much taller or wider than the design is a mismatch
+  the agent must be able to file, and the host cannot tell it from a loose crop.
 
 <a id="flow"></a>
 
@@ -146,7 +165,10 @@ Every design review is a card of the filing task's chat ([`ChatCard`](appearance
 
 - **Per node:** a chip (`link` glyph, the node's name) and the node id (mono, `--fg3`); under it the preview pair —
   two tiles side by side, 86 px tall, `--tint` with a 1 px `--sep` inset frame and a 7 px radius, the image fitted
-  (cropped to the node's `area` when it has one), and a caption: `Figma` (bold) and the node id; `Device` (bold) and
+  (cropped to the node's `area` when it has one) — both images of the pair at one scale: they show the same node, so
+  they take one width, as wide as the tile allows while the image with the narrower aspect ratio still fits its
+  height, and a device crop of another shape is taller or shorter than its Figma half, never smaller; a pair with
+  one image missing fits each tile on its own — and a caption: `Figma` (bold) and the node id; `Device` (bold) and
   the shot id. Then the node's rows.
 - **The table:** four columns, `Property` · `Expected` · `On device` · the tag, a 10 px `--fg3` header; rows 28 px with
   a hairline on top, values in mono 11 px. A matching row ends with `check-pass` in `--green`. A mismatch: the
@@ -171,7 +193,7 @@ Every design review is a card of the filing task's chat ([`ChatCard`](appearance
 ### The viewer
 
 A popover over the chat, 500 px wide: the head is the node's name, its id (mono, `--fg3`) and `Esc`
-([`PopupClose`](appearance.md#popup-close)); the body has the two images 170 px tall, captions `Figma · <id>` and
+([`PopupClose`](appearance.md#popup-close)); the body has the two images in tiles 170 px tall, at one scale as in the card, captions `Figma · <id>` and
 `Device · <shot> · <device> · <time>`, the mismatched rows' areas outlined on the device image, and the node's rows.
 `Esc`, a click outside or `PopupClose` closes it, and focus returns to the tile.
 
@@ -179,7 +201,7 @@ A popover over the chat, 500 px wide: the head is the node's name, its id (mono,
 
 ## Data
 
-- `shots/shots.json`, `schemaVersion: 1` (rule 10): `shots` — `id`, `file` (`s12.jpg`), `tool` ∈ `simulator |
+- `shots/shots.json`, `schemaVersion: 1` (rule 10): `shots` — `id`, `file` (`s12.png`), `tool` ∈ `simulator |
   browser`, `device?`, `at`, `trees` (`scopeId`, `tree`), `kept?` — and `next` (the next number). One image file per shot.
 - `design/design-reviews.json`, `schemaVersion: 1`: `reviews`, the last 50 — `id`, `screen`, `at`, `state`,
   `reviewId?`, `trees` (the trees it was filed on) and `nodes` as in the event. A node's design image is copied to

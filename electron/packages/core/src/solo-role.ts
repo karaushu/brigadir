@@ -42,9 +42,12 @@ export function soloRoleTemplates(agents: readonly AgentTemplate[]): AgentTempla
 /** spec/tasks#sheet-role: a checker writes no code — the task gets `readOnlyAgent`. */
 export const soloRoleChecks = (template: Pick<AgentTemplate, 'role'>) =>
 	template.role === 'reviewer';
+/** spec/tasks#agent-context: an own role's rights as a solo or subagent text — the Developer's or the Reviewer's (spec/crew-templates-and-editor#rights). */
+const rightsText = (texts: Readonly<Record<string, string>>, template: AgentTemplate) =>
+	texts[template.role === 'reviewer' ? reviewerTemplateId : developerTemplateId]!;
 /**
- * spec/tasks#agent-context: the role of a solo agent as the task keeps it. A built-in gets its solo text; an own template its
- * instructions as written, with a sentence that sends its crew words to the person.
+ * spec/tasks#agent-context: the role of a solo agent as the task keeps it. A built-in gets its solo text; an own role the solo text of
+ * its rights, then its instructions as written, with a sentence that sends their crew words to the person.
  */
 export function soloRole(template: AgentTemplate): TaskRole {
 	const solo = template.builtin ? soloInstructions[template.id] : undefined,
@@ -55,6 +58,7 @@ export function soloRole(template: AgentTemplate): TaskRole {
 		instructions: [
 			`You work on this task alone, as ${template.name}: you answer to the person, and there is no foreman and no crew.`,
 			soloRoleChecks(template) ? 'You write no code and change no files in this task.' : '',
+			solo === undefined ? rightsText(soloInstructions, template) : '',
 			solo === undefined && text
 				? 'Where the instructions below name a foreman, a crew, a report to check or crew tools, turn to the person instead.'
 				: '',
@@ -66,7 +70,7 @@ export function soloRole(template: AgentTemplate): TaskRole {
 }
 
 /**
- * spec/composer#agent-blocks: the role of a subagent a task's agent starts from a template the person mentioned. The same texts as a
+ * spec/composer#agent-blocks: the role of a subagent a task's agent starts from a role the person mentioned. The same texts as a
  * solo role, with the agent that started it in the person's place.
  */
 export function subagentRole(template: AgentTemplate): string {
@@ -75,6 +79,7 @@ export function subagentRole(template: AgentTemplate): string {
 	return [
 		`You work as ${template.name}, a subagent: you answer to ${starter}, and your last message is your whole answer to it. There is no foreman and no crew.`,
 		soloRoleChecks(template) ? 'You write no code and change no files.' : '',
+		own === undefined ? rightsText(subagentInstructions, template) : '',
 		own === undefined && text
 			? `Where the instructions below name a foreman, a crew, a report to check or crew tools, turn to ${starter} instead.`
 			: '',

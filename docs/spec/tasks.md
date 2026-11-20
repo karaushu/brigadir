@@ -206,7 +206,7 @@ The person frees the project folder for other work: `Move to a worktree` moves a
 | The task already has a worktree | not shown |
 
 - **When.** At once when no turn runs; the host starts for a task whose host sleeps. While a turn runs the move waits for it to end: the chat row reads `Waiting for the turn to end` with `Cancel`, and the composer queues the person's messages as during any move. `Cancel` drops a waiting move (row `Move to a worktree cancelled`); once the move started it cannot be cancelled.
-- **What.** The `workspace` chat row in its states (`waiting`, `moving`, `moved` with or without paths that stayed, `failed`, `cancelled`), the same failure rule: nothing is lost, the task stays in the project folder, the reason is shown. After a move the agent's next prompt starts with one English sentence naming the worktree's path and branch and the paths that stayed, so it works there; no turn starts for it.
+- **What.** The `workspace` chat row in its states (`waiting`, `moving`, `moved` with or without paths that stayed, `failed`, `cancelled`) with the lines of what the restart stopped ([Crew](crew.md#auto-move)), the same failure rule: nothing is lost, the task stays in the project folder, the reason is shown. After a move the agent's next prompt starts with one English sentence naming the worktree's path and branch and the paths that stayed, so it works there; no turn starts for it.
 - The journal event is `workspace.move` with `by: 'person'` and no `hireId`.
 
 <a id="agent-worktrees"></a>
@@ -230,7 +230,7 @@ A git worktree the agent makes itself joins the task, so the diff, the snapshots
 
 - Scope boundaries go structurally through `additionalDirectories` of the session.
 - An English repository-context block (type, branch, writable/read-only) is added to the first GUI prompt or the initial CLI prompt. User files such as `CLAUDE.md` are never edited.
-- A task with a role starts its session brief with the role: one sentence that the agent works alone and answers to the person, then the role text. For a built-in template the text is its solo variant (`soloInstructions` in `packages/core/src/solo-role.ts`): what the role does, without the crew tools. For an own template it is the template's Instructions as written, with a sentence to turn to the person wherever they name a foreman, a crew or crew tools. A checker is also told it changes no files.
+- A task with a role starts its session brief with the role: one sentence that the agent works alone and answers to the person, then the role text. For a built-in template the text is its solo variant (`soloInstructions` in `packages/core/src/solo-role.ts`): what the role does, without the crew tools. For an own role it is the solo text of its rights (Developer's or Reviewer's), then the role's Instructions as written, with a sentence to turn to the person wherever they name a foreman, a crew or crew tools. A checker is also told it changes no files.
 - Read-only repos: the policy layer rejects writes; writes that bypass it through shell commands are caught by snapshots and surface as the notice `The task only reads these repos, but files in them changed during the turn.`
 - Commit and push across submodules run in dependency order (submodule before parent): [Git](git.md).
 

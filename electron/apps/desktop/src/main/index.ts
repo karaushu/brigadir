@@ -203,6 +203,8 @@ import {
 	isAutoModelRequest,
 	isAgentTemplateDocument,
 	isCrewTemplateDocument,
+	upgradeAgentTemplateDocument,
+	upgradeCrewTemplateDocument,
 	type CrewLaunch,
 	type AutoTask,
 	type ProviderCatalog,
@@ -1398,7 +1400,13 @@ const notifications = new Notifications({
 	answerPermission: (key, id, optionId) =>
 		sessions.command(key, { kind: 'answerPermission', id, optionId }),
 	openTask,
-	// spec/remote-access-and-mobile#phone: the same notice reaches the paired phones as a Web Push.
+	// spec/smoke-run#ready-surfaces: a click on `Ready to look` opens the screen as the chat row's `Show` does.
+	// The same deferred window action as openTask, so a closed window opens on the screen too.
+	showScreen: (key, ready) =>
+		dispatchWindowAction('notification:open', {
+			...key,
+			show: { where: ready.where, ...(ready.tab ? { tab: ready.tab } : {}) },
+		}),
 	push: (type, task, key) => remoteAccess.pushPhones(type, task, key),
 	badge: (count) => {
 		routedNotices.badge(count);
@@ -3189,9 +3197,11 @@ void app.whenReady().then(async () => {
 	registerRead('browser:live', () => browsers.liveTasks());
 	registerRead('simulator:toolchain', () => simulators.found());
 	registerRead('workspace:read', async () => {
-		const workspace = projectIcons.decorate(
-			await taskLabels.decorate(
-				await taskActivities.decorate(await taskDiffs.decorate(await sessions.workspace()))
+		const workspace = forge.decorate(
+			projectIcons.decorate(
+				await taskLabels.decorate(
+					await taskActivities.decorate(await taskDiffs.decorate(await sessions.workspace()))
+				)
 			)
 		);
 		try {
@@ -4874,7 +4884,7 @@ void app.whenReady().then(async () => {
 			name: `${template.name.replace(/[\/:\\]/g, '-').slice(0, 200)}.json`,
 			extensions: ['json'],
 			filterName: 'JSON',
-			text: `${JSON.stringify({ schemaVersion: 1, template }, null, 2)}\n`,
+			text: `${JSON.stringify({ schemaVersion: 2, template }, null, 2)}\n`,
 		});
 	});
 	handleClient('templates:import', async (client) => {
@@ -4887,10 +4897,17 @@ void app.whenReady().then(async () => {
 		if (!path) return null;
 		const text = await readFileNode(path, 'utf8');
 		if (text.length > 2_000_000) throw new Error('The file is too large');
-		const doc: unknown = JSON.parse(text);
+		const raw: unknown = JSON.parse(text);
+		// spec/crew-templates-and-editor#schema: an import is an own template, of either document version.
+		const own =
+			isRecord(raw) && isRecord(raw.template)
+				? { ...raw, template: { ...raw.template, builtin: false } }
+				: raw;
 		const store = await TemplateStore.at(process.env.BRIGADIR_DATA_DIR);
-		if (isAgentTemplateDocument(doc)) await store.saveAgent({ ...doc.template, builtin: false });
-		else if (isCrewTemplateDocument(doc)) await store.saveCrew({ ...doc.template, builtin: false });
+		const role = upgradeAgentTemplateDocument(own),
+			crew = upgradeCrewTemplateDocument(own);
+		if (isAgentTemplateDocument(role)) await store.saveAgent(role.template);
+		else if (isCrewTemplateDocument(crew)) await store.saveCrew(crew.template);
 		else throw new Error('The file is not a Brigadir template');
 		return store.read();
 	});

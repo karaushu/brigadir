@@ -14,6 +14,8 @@ import {
 	planAllowOptions,
 	planApprovalText,
 	planApproveOption,
+	planAsks,
+	planAsksBrief,
 	planEditsPrompt,
 	planFeedbackPrompt,
 	planLineCount,
@@ -383,4 +385,45 @@ it('wraps a chat message to a waiting plan and gives the words back', async () =
 		},
 	] as EventRecord[]);
 	expect(rows.find((row) => row.kind === 'message')).toMatchObject({ role: 'user', text: 'Why?' });
+});
+
+it('gives a plan reviewer the person’s answers to the plans since the last approval, in order (spec/reviews#plan-inputs)', () => {
+	const turn = (text: string, extra = {}) => ({ kind: 'turn.started', text, ...extra });
+	const journal = [
+		turn('Plan a focus ring'),
+		{ kind: 'permission.requested', request: claude },
+		{ kind: 'permission.resolved', id: 'r1', optionId: 'reject' },
+		turn(planChatPrompt('Is Safari 16 in scope?')),
+		{ kind: 'permission.requested', request: { ...claude, id: 'r3' } },
+		{ kind: 'permission.resolved', id: 'r3', optionId: 'exit-plan-default' },
+		// After the approval: a new plan, and only its answers count.
+		turn(planFeedbackPrompt('Cover Edge too')),
+		turn('A finding batch', { review: { id: 'b', comments: [] } }),
+		turn(planEditsPrompt('# Ring\n\n1. Edge')),
+		turn(planChatPrompt('and keep Firefox'), { crew: { kind: 'review-continue' } }),
+		turn('Thanks'),
+	].map((event, index) => ({ seq: index + 1, at, event })) as EventRecord[];
+	expect(planAsks(journal.slice(0, 5))).toEqual([{ kind: 'chat', text: 'Is Safari 16 in scope?' }]);
+	const asks = planAsks(journal);
+	expect(asks).toEqual([
+		{ kind: 'plan further', text: 'Cover Edge too' },
+		{ kind: 'edits', text: '# Ring\n\n1. Edge' },
+	]);
+	const brief = planAsksBrief(asks);
+	expect(brief).toContain("These are the person's own words");
+	expect(brief.indexOf('Cover Edge too')).toBeLessThan(brief.indexOf('1. Edge'));
+	expect(brief).toContain(
+		'<person_message kind="plan further">\nCover Edge too\n</person_message>'
+	);
+	expect(planAsksBrief([])).toBe('');
+	// Past the limit the newest answers stay and the prompt says how many were left out.
+	const long = planAsksBrief(asks, 80);
+	expect(long).toContain('1. Edge');
+	expect(long).not.toContain('Cover Edge too');
+	expect(long).toContain('1 earlier message is left out for length.');
+	// One answer longer than the limit is cut, never left out; the earlier ones fill what is left.
+	const huge = planAsksBrief([asks[0]!, { kind: 'edits', text: 'x'.repeat(30_000) }]);
+	expect(huge).toContain('[The message is cut here for length.]');
+	expect(huge).toContain('Cover Edge too');
+	expect(huge.length).toBeLessThan(21_000);
 });

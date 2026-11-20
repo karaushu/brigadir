@@ -197,9 +197,11 @@ function TurnRow({
 			? t(locale, 'Running')
 			: turn.status === 'done'
 				? t(locale, 'Done')
-				: turn.status === 'failed'
-					? t(locale, 'Failed')
-					: t(locale, 'Interrupted');
+				: turn.status === 'returned'
+					? t(locale, 'Plan sent back')
+					: turn.status === 'failed'
+						? t(locale, 'Failed')
+						: t(locale, 'Interrupted');
 	return (
 		<button
 			type="button"
@@ -212,7 +214,7 @@ function TurnRow({
 				<span className={styles.icon} role="img" aria-label={status}>
 					{turn.status === 'running' ? (
 						<Glyph name="check-run" size={13} />
-					) : turn.status === 'done' ? (
+					) : turn.status === 'done' || turn.status === 'returned' ? (
 						<Glyph name="turn-done" size={13} />
 					) : turn.status === 'failed' ? (
 						<Glyph name="check-fail" size={13} />

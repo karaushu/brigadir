@@ -153,6 +153,8 @@ export type CrewTurnMarker =
 	| { kind: 'review-comments'; round: number; comments: number }
 	/** spec/reviews#loop: a mid-task review ended while the agent waited; it goes on with the task. */
 	| { kind: 'review-continue' }
+	/** spec/smoke-run#limit: the host asks for the report of a smoke run that is still open. */
+	| { kind: 'smoke-report' }
 	/** spec/crew#auto-hire: the person decided a hire after the agent's call was gone (its turn ended, or the host restarted). */
 	| { kind: 'hire-decision'; hireId: string; approved: boolean }
 	/** spec/crew#auto-guard: the Auto agent changed files of a zone it hired out. */
@@ -350,6 +352,7 @@ export function isCrewTurnMarker(value: unknown): value is CrewTurnMarker {
 				Number(value.comments) >= 0
 			);
 		case 'review-continue':
+		case 'smoke-report':
 			return Object.keys(value).length === 1;
 		case 'hire-decision':
 			return isId(value.hireId) && typeof value.approved === 'boolean';
@@ -494,6 +497,9 @@ export type ReviewVerdict = {
 	at: string;
 	/** spec/reviews#remark: the reviewer's remark with an approval; never a finding. */
 	note?: string;
+	/** spec/crew#reviewer: the comments this verdict stored, sent as one batch once every verdict of the run is in; on disk, so a restart
+	 *  between two verdicts keeps the first. */
+	commentIds?: string[];
 };
 export type ReviewRunState =
 	'reviewing' | 'comments' | 'approved' | 'disputed' | 'superseded' | 'cancelled';
@@ -549,7 +555,11 @@ export function isReviewRun(value: unknown): value is ReviewRun {
 				typeof item.approved === 'boolean' &&
 				Number.isSafeInteger(item.comments) &&
 				typeof item.at === 'string' &&
-				(item.note === undefined || (typeof item.note === 'string' && item.note.length <= 2000))
+				(item.note === undefined || (typeof item.note === 'string' && item.note.length <= 2000)) &&
+				(item.commentIds === undefined ||
+					(Array.isArray(item.commentIds) &&
+						item.commentIds.length <= 500 &&
+						item.commentIds.every((id) => typeof id === 'string' && id.length <= 200)))
 		) &&
 		['reviewing', 'comments', 'approved', 'disputed', 'superseded', 'cancelled'].includes(
 			String(value.state)

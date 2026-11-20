@@ -217,22 +217,52 @@ export function isTaskOwnTokens(value: unknown): value is TaskOwnTokens {
 
 // ── Summing over a task's members ───────────────────────────────────────
 
-/** spec/agents-and-providers#task-tokens: the task whose budget covers this one — a crew's root (`crewTaskId`), else the task itself. */
-export function budgetRootId(task: Pick<AgentTask, 'id' | 'crewTaskId'>): string {
-	return task.crewTaskId ?? task.id;
+type CrewLink = Pick<AgentTask, 'id' | 'projectId' | 'crewTaskId'>;
+/**
+ * spec/agents-and-providers#task-tokens: the task whose budget covers this one — the end of its `crewTaskId` chain (a crew's root; for a
+ * reviewer of a worker's own review, the worker's root), else the task itself.
+ */
+export function budgetRoot<T extends CrewLink>(task: T, tasks: readonly T[]): T {
+	let current = task;
+	const seen = new Set([task.id]);
+	while (current.crewTaskId && current.crewTaskId !== current.id) {
+		const id = current.crewTaskId,
+			next = tasks.find((item) => item.id === id && item.projectId === current.projectId);
+		if (!next || seen.has(next.id)) break;
+		seen.add(next.id);
+		current = next;
+	}
+	return current;
 }
-/** The task and every task that carries its id as `crewTaskId`: foreman, leads, workers, reviewers, the reviewers of a solo task. */
-export function tokenMembers<T extends Pick<AgentTask, 'id' | 'projectId' | 'crewTaskId'>>(
-	root: T,
+/**
+ * Every task whose `crewTaskId` chain leads to `root`: foreman, leads, workers, reviewers, the reviewers of a solo task, and the reviewers
+ * of a worker's own review (they carry the worker).
+ */
+export function crewMembers<T extends CrewLink>(
+	root: Pick<AgentTask, 'id' | 'projectId'>,
 	tasks: readonly T[]
 ): T[] {
-	return [
-		root,
-		...tasks.filter(
-			(task) =>
-				task.id !== root.id && task.projectId === root.projectId && task.crewTaskId === root.id
-		),
-	];
+	const ids = new Set([root.id]),
+		members: T[] = [];
+	for (let grew = true; grew;) {
+		grew = false;
+		for (const task of tasks)
+			if (
+				!ids.has(task.id) &&
+				task.projectId === root.projectId &&
+				task.crewTaskId !== undefined &&
+				ids.has(task.crewTaskId)
+			) {
+				ids.add(task.id);
+				members.push(task);
+				grew = true;
+			}
+	}
+	return members;
+}
+/** The task and its members ([crewMembers]). */
+export function tokenMembers<T extends CrewLink>(root: T, tasks: readonly T[]): T[] {
+	return [root, ...crewMembers(root, tasks)];
 }
 export type TokenMember = {
 	taskId: string;

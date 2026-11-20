@@ -156,7 +156,7 @@ try {
 		shot.result && Math.max(shot.result.width, shot.result.height) <= 1000,
 		'screenshot',
 		shot.error ??
-			`${shot.result.width}×${shot.result.height}, ${Math.round((shot.result.jpeg.length * 3) / 4 / 1024)} KB`
+			`${shot.result.width}×${shot.result.height}, ${Math.round((shot.result.png.length * 3) / 4 / 1024)} KB`
 	);
 
 	let t0 = Date.now();
@@ -181,7 +181,7 @@ try {
 	await sleep(1500);
 	const shot2 = await call({ cmd: 'screenshot', maxSide: 600 });
 	check(
-		shot2.result && shot2.result.jpeg !== shot.result.jpeg,
+		shot2.result && shot2.result.png !== shot.result.png,
 		'screenshot differs after tap',
 		`${shot2.result.width}×${shot2.result.height}`
 	);

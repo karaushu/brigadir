@@ -190,17 +190,19 @@ describe('spec/crew#auto-roles, spec/crew#auto-model', () => {
 			saveAs: 'Vision developer',
 		};
 		expect(isAutoModelAnswer(answer)).toBe(true);
-		const role = modelRole(developer, answer, 'role-1');
+		const role = modelRole(developer, answer, 'role-1', 'Parts that work\nfrom screenshots');
 		expect(role).toMatchObject({
 			id: 'role-1',
 			name: 'Vision developer',
+			// spec/crew#auto-model: the agent's reason, as one line, is the new role's When to use.
+			whenToUse: 'Parts that work from screenshots',
 			provider: 'codex',
 			instructions: developer.instructions,
 			requestedChoices: { configOptions: { model: 'gpt-6-astra', reasoning_effort: 'high' } },
 			choiceNames: { model: 'GPT-6 Astra', reasoning_effort: 'High' },
 		});
 		const { saveAs: _saveAs, ...unnamed } = answer;
-		expect(modelRole(developer, unnamed, 'r2').name).toBe('Developer · GPT-6 Astra · High');
+		expect(modelRole(developer, unnamed, 'r2', 'x').name).toBe('Developer · GPT-6 Astra · High');
 	});
 });
 
@@ -333,5 +335,52 @@ describe('spec/sidebar#crew-card: Auto worker rows', () => {
 			dismissed: false,
 		});
 		expect(autoRoleLabel(undefined, spec.root.agents[0]!)).toBe('Developer 2');
+	});
+	it("show a reviewer by its own name and only the current review's reviewers (spec/reviews#surfaces)", () => {
+		const all = roles(),
+			developer = all.find((role) => role.id === 'developer')!,
+			reviewer = all.find((role) => role.id === 'reviewer') ?? developer;
+		const spec = autoSpec({ provider: 'claude' });
+		const review = (id: string, name: string) => ({
+			...reviewer,
+			id,
+			name,
+			role: 'reviewer' as const,
+			template: reviewer.id,
+			zone: [],
+			checkedBy: [],
+			agents: [],
+		});
+		spec.root.agents = [
+			{ ...developer, id: 'w1', name: 'Developer', template: developer.id, zone: ['a/**'] },
+			review('review-a-1', 'Codex'),
+			review('review-b-1', 'Codex 2'),
+		];
+		spec.root.checkedBy = ['review-b-1'];
+		const lead: AgentTask = {
+			id: 'lead',
+			projectId: 'p',
+			title: 'Lead',
+			status: 'working',
+			crew: spec,
+			auto: { roles: all, budget: { minutes: 40, tokens: 400_000 } },
+		};
+		const member = (id: string, node: string): AgentTask => ({
+			id,
+			projectId: 'p',
+			title: 'reviews the changes',
+			status: 'done',
+			crewTaskId: 'lead',
+			crewNodeId: node,
+			parentTaskId: 'lead',
+		});
+		const tasks = [lead, member('w', 'w1'), member('r1', 'review-a-1'), member('r2', 'review-b-1')];
+		expect(
+			crewWorkerRows(lead, tasks).map((row) => [row.task.id, row.name, row.reviewer ?? false])
+		).toEqual([
+			['w', 'Developer', false],
+			['r2', 'Codex 2', true],
+		]);
+		expect(crewTaskLabel(tasks[3]!, tasks)).toBe('Codex 2 · reviews the changes');
 	});
 });

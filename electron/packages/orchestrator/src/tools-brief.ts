@@ -26,6 +26,15 @@ const sharedSimulator =
 	'You get a device of your own when one can start, and your own Metro port (RCT_METRO_PORT, in your session and terminals): start Metro in your worktree on it. When no device can start (the device cap, low memory), you share one with your crew: while another agent uses it, your call waits up to 60 seconds; if it is still busy, do other work and retry later.';
 const deviceKinds =
 	'Pass device to any simulator tool to use another kind (iPhone, iPad, Android, a model such as iPhone 17 Pro); simulator_state lists the devices and who holds each.';
+/** spec/smoke-run#brief: the smoke run and Ready to look, for the agents that have them; empty without the browser and the simulator. */
+export function smokeBrief(role: CrewProcessRole | null, tools: BriefTools): string {
+	if (!tools.browser && !tools.simulator) return '';
+	const both = words([tools.browser && 'browser', tools.simulator && 'simulator'], 'and');
+	if (role === 'developer')
+		return 'Run a smoke run (smoke_start, then smoke_report) only when your part prompt asks for one. As soon as a screen of your part is assembled, call ready_to_look once for it.';
+	if (role !== null && role !== 'auto') return '';
+	return `When a change a person can see is done, check it once with a smoke run before the review before the pull request: smoke_start with the flows it touches, go through them once, then smoke_report with what passed, what failed, and what you could not check and why. The person sets its time limit; at the limit the ${both} tools stop answering until you file the report.${role === 'auto' ? ' With hired workers, run it once after their parts are back, not per part.' : ''} As soon as a screen you build is assembled, call ready_to_look once for it.`;
+}
 /** spec/agents-and-providers#tools-awareness: the `instructions` of `initialize`; the console line stays when every module is off (spec/terminal-and-cli-agents#agent-console-tools). */
 export function toolsInstructions(role: CrewProcessRole | null, tools: BriefTools): string {
 	const lines: string[] = [];
@@ -37,6 +46,8 @@ export function toolsInstructions(role: CrewProcessRole | null, tools: BriefTool
 		lines.push(
 			`- The project simulator, an iOS Simulator or Android Emulator device (simulator_*). For a React Native or other mobile app, check your change on the device${role === 'developer' ? ' when your task prompt asks for it' : ''}: simulator_open, simulator_ui, simulator_act, simulator_wait, simulator_screenshot, simulator_logs. simulator_act already waits for the screen to settle and lists what changed: do not sleep or take a screenshot to check a tap, and use simulator_wait for what comes later. ${deviceKinds}${simulatorQueued(role) ? ` ${sharedSimulator}` : ''}`
 		);
+	const smoke = smokeBrief(role, tools);
+	if (smoke) lines.push(`- ${smoke}`);
 	if (tools.commands)
 		lines.push(
 			"- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits."
@@ -96,7 +107,8 @@ export function toolsBrief(role: CrewProcessRole | null, tools: BriefTools): str
 			? ' You get a simulator device and a Metro port of your own when one can start; otherwise a call may wait for the shared device, and if it stays busy, retry later.'
 			: '';
 	const slack = tools.slack && humanToolsAllowed(role) ? ` ${slackRule}` : '';
-	return `This app gives you ${list}.${check}${queue}${slack}`;
+	const smoke = smokeBrief(role, tools);
+	return `This app gives you ${list}.${check}${smoke ? ` ${smoke}` : ''}${queue}${slack}`;
 }
 /** spec/agents-and-providers#tools-awareness, spec/crew#smoke: how the foreman's plan uses its crew's tools; empty when no module is on. */
 export function crewToolsBrief(tools: WorkspaceTools): string {

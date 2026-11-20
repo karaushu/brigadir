@@ -12,7 +12,7 @@
      "name": "brigadir",
      "version": "0.1.0"
     },
-    "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+    "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- When a change a person can see is done, check it once with a smoke run before the review before the pull request: smoke_start with the flows it touches, go through them once, then smoke_report with what passed, what failed, and what you could not check and why. The person sets its time limit; at the limit the browser tools stop answering until you file the report. As soon as a screen you build is assembled, call ready_to_look once for it.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
    },
    "jsonrpc": "2.0",
    "id": 1
@@ -516,7 +516,7 @@
     },
     {
      "name": "submit_design_review",
-     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area: the node's frame on the screenshot, tight around the node (its frame from simulator_ui or browser_ui), never the screen or a section around it, as fractions 0–1 of the screenshot's width and height; rows[].area: the element a row is about, the same way. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -676,6 +676,119 @@
        "screen",
        "nodes",
        "verdict"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "smoke_start",
+     "description": "Start a smoke run of this task: one pass through the flows your change touches, in the browser or on the simulator, under a time limit the person sets. The person sees it running above the composer. steps: the flows in the order you go through them, e.g. 'Clients list', 'Client card · tabs'. At the limit Brigadir stops the run: the browser and simulator tools stop answering until you file the report with smoke_report. Returns started: true with the limit in minutes and when it ends. Call it once the work is done and before the review before the pull request, when your change shows in the running app: list the flows the change touches, then go through them once. Not per part, not per device, and not again to be sure.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "steps": {
+        "minItems": 1,
+        "maxItems": 12,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 120
+        }
+       }
+      },
+      "required": [
+       "steps"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "smoke_report",
+     "description": "File the report of this task's smoke run: each step with its result — passed, failed (note: what goes wrong, on which screen) or unchecked (note: why it was not checked) — and a summary of a few sentences for the person and the reviewer. A started step you leave out counts as unchecked. The review before the pull request reads the report: a failed step you do not fix becomes a finding. Returns reported: true with the counts and what to do next. Call it when the steps of your smoke run are done, or at once when a browser or simulator tool says the report is due.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "steps": {
+        "minItems": 1,
+        "maxItems": 24,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "step": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 120
+          },
+          "result": {
+           "type": "string",
+           "enum": [
+            "passed",
+            "failed",
+            "unchecked"
+           ]
+          },
+          "note": {
+           "type": "string",
+           "maxLength": 500
+          }
+         },
+         "required": [
+          "step",
+          "result"
+         ]
+        }
+       },
+       "summary": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+       }
+      },
+      "required": [
+       "steps",
+       "summary"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "ready_to_look",
+     "description": "Tell the person that a screen is assembled and can be looked at: they get a notification and a row in the chat that opens it. It does not wait and asks nothing; keep working. screen: what to look at, e.g. 'Details screen'. where: simulator (the task's device) or browser. tab: the browser tab (default: the tab you opened). The same screen again is not announced twice. Returns notified: true, or notified: false with the reason. Call it as soon as a screen you build is assembled and shows in the browser or on the simulator, before your own checks of it; once per screen.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "screen": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "where": {
+        "type": "string",
+        "enum": [
+         "simulator",
+         "browser"
+        ]
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      },
+      "required": [
+       "screen",
+       "where"
       ]
      },
      "execution": {
@@ -1410,7 +1523,7 @@
       "name": "brigadir",
       "version": "0.1.0"
      },
-     "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+     "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). After you change anything a person sees in a web app, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- When a change a person can see is done, check it once with a smoke run before the review before the pull request: smoke_start with the flows it touches, go through them once, then smoke_report with what passed, what failed, and what you could not check and why. The person sets its time limit; at the limit the browser tools stop answering until you file the report. As soon as a screen you build is assembled, call ready_to_look once for it.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
     },
     "jsonrpc": "2.0",
     "id": 14
@@ -1904,7 +2017,7 @@
     },
     {
      "name": "submit_design_review",
-     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area: the node's frame on the screenshot, tight around the node (its frame from simulator_ui or browser_ui), never the screen or a section around it, as fractions 0–1 of the screenshot's width and height; rows[].area: the element a row is about, the same way. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3297,7 +3410,7 @@
    "tools": [
     {
      "name": "submit_design_review",
-     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area: the node's frame on the screenshot, tight around the node (its frame from simulator_ui or browser_ui), never the screen or a section around it, as fractions 0–1 of the screenshot's width and height; rows[].area: the element a row is about, the same way. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4621,7 +4734,7 @@
      "name": "brigadir",
      "version": "0.1.0"
     },
-    "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). When your task prompt asks for a check of a page, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+    "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). When your task prompt asks for a check of a page, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- Run a smoke run (smoke_start, then smoke_report) only when your part prompt asks for one. As soon as a screen of your part is assembled, call ready_to_look once for it.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
    },
    "jsonrpc": "2.0",
    "id": 1
@@ -4651,7 +4764,7 @@
     },
     {
      "name": "submit_design_review",
-     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area: the node's frame on the screenshot, tight around the node (its frame from simulator_ui or browser_ui), never the screen or a section around it, as fractions 0–1 of the screenshot's width and height; rows[].area: the element a row is about, the same way. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4811,6 +4924,119 @@
        "screen",
        "nodes",
        "verdict"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "smoke_start",
+     "description": "Start a smoke run of this task: one pass through the flows your change touches, in the browser or on the simulator, under a time limit the person sets. The person sees it running above the composer. steps: the flows in the order you go through them, e.g. 'Clients list', 'Client card · tabs'. At the limit Brigadir stops the run: the browser and simulator tools stop answering until you file the report with smoke_report. Returns started: true with the limit in minutes and when it ends. Call it once the work is done and before the review before the pull request, when your change shows in the running app: list the flows the change touches, then go through them once. Not per part, not per device, and not again to be sure.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "steps": {
+        "minItems": 1,
+        "maxItems": 12,
+        "type": "array",
+        "items": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 120
+        }
+       }
+      },
+      "required": [
+       "steps"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "smoke_report",
+     "description": "File the report of this task's smoke run: each step with its result — passed, failed (note: what goes wrong, on which screen) or unchecked (note: why it was not checked) — and a summary of a few sentences for the person and the reviewer. A started step you leave out counts as unchecked. The review before the pull request reads the report: a failed step you do not fix becomes a finding. Returns reported: true with the counts and what to do next. Call it when the steps of your smoke run are done, or at once when a browser or simulator tool says the report is due.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "steps": {
+        "minItems": 1,
+        "maxItems": 24,
+        "type": "array",
+        "items": {
+         "type": "object",
+         "properties": {
+          "step": {
+           "type": "string",
+           "minLength": 1,
+           "maxLength": 120
+          },
+          "result": {
+           "type": "string",
+           "enum": [
+            "passed",
+            "failed",
+            "unchecked"
+           ]
+          },
+          "note": {
+           "type": "string",
+           "maxLength": 500
+          }
+         },
+         "required": [
+          "step",
+          "result"
+         ]
+        }
+       },
+       "summary": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+       }
+      },
+      "required": [
+       "steps",
+       "summary"
+      ]
+     },
+     "execution": {
+      "taskSupport": "forbidden"
+     }
+    },
+    {
+     "name": "ready_to_look",
+     "description": "Tell the person that a screen is assembled and can be looked at: they get a notification and a row in the chat that opens it. It does not wait and asks nothing; keep working. screen: what to look at, e.g. 'Details screen'. where: simulator (the task's device) or browser. tab: the browser tab (default: the tab you opened). The same screen again is not announced twice. Returns notified: true, or notified: false with the reason. Call it as soon as a screen you build is assembled and shows in the browser or on the simulator, before your own checks of it; once per screen.",
+     "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+       "screen": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "where": {
+        "type": "string",
+        "enum": [
+         "simulator",
+         "browser"
+        ]
+       },
+       "tab": {
+        "description": "The browser tab (browser_state lists the tabs of this task); default: the tab you opened.",
+        "type": "string",
+        "pattern": "^b[0-9a-z]{1,16}$"
+       }
+      },
+      "required": [
+       "screen",
+       "where"
       ]
      },
      "execution": {
@@ -5564,7 +5790,7 @@
       "name": "brigadir",
       "version": "0.1.0"
      },
-     "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). When your task prompt asks for a check of a page, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
+     "instructions": "Brigadir, the app this session runs in, gives you tools a person would otherwise use for you:\n- A real browser in the window of this task (browser_*). When your task prompt asks for a check of a page, open the page yourself with browser_open, check it with browser_ui and browser_screenshot, and click, type and navigate with browser_act. Read browser_console and browser_network when something looks wrong. Local pages need no permission.\n- Run a smoke run (smoke_start, then smoke_report) only when your part prompt asks for one. As soon as a screen of your part is assembled, call ready_to_look once for it.\n- The project's saved commands (commands_*): dev servers, builds, tests and scripts the person runs from the toolbar. Call commands_list before you start one yourself and run it with commands_run, not with your shell: it runs in the console of this task, where the person sees it, and gives you its local address. Use your shell only when no saved command fits.\n- The console of this task (console_*): the terminal tabs the person opened beside you, with the dev servers, logs and commands they run there. When the person mentions the console, a log, an error on their screen or a server they started, call console_list and read it with console_read instead of asking them to paste the output.\nCheck yourself what these tools can check: do not ask the person to open a page, start a server or paste the console output for you. The person sees every action you take in the browser, and every command you run."
     },
     "jsonrpc": "2.0",
     "id": 14
@@ -5593,7 +5819,7 @@
    "tools": [
     {
      "name": "submit_design_review",
-     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area and rows[].area: where the node or the element is on the screenshot, as fractions 0–1 of its width and height. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
+     "description": "File a design review of one screen: per design node its Figma reference, its image from the design and a device screenshot of this task, with a table of properties. Check the screen against its design node by node, in the running app. A node is a part of the design such as a header, a list row, a tab bar or a button, never the whole screen at once. For each node: open it in Figma and save its image to a file (your Figma tool's export or download, or the image address it gives); open the screen on the device and take simulator_screenshot (browser_screenshot for a web page) after your last change; read the values from the design and from the app (sizes and positions from simulator_ui or browser_ui), and fill one row per property: size, padding and gaps, corner radius, border, shadow, colour or token, typography, each icon and its size, and the states the design draws. Icons, paddings, radii, borders and shadows are rows. A row's on-device value comes from the screenshot or the UI tree, never from the code. Then call submit_design_review with every node. screen: the screen or state checked. nodes[].figma: the node's Figma link with node-id, or its id; figmaImage: an absolute path of a PNG, JPEG or WebP file with the node's image from the design, or an http(s) address of it; shot: the id simulator_screenshot or browser_screenshot gave (s12); area: the node's frame on the screenshot, tight around the node (its frame from simulator_ui or browser_ui), never the screen or a section around it, as fractions 0–1 of the screenshot's width and height; rows[].area: the element a row is about, the same way. verdict: passed only when every row matches. reviewId: when you file it as part of a review you were asked to do. The host checks every node itself: a node without a readable design image, without a screenshot of this task, or whose screenshot was taken before the task's files changed is not accepted, with all its rows. Returns the state (passed, mismatch or refused) and exactly which nodes to redo. Call it when the task has a design source (a Figma node or frame): after the screen is built and again after a fix, before you propose a review or the person creates a PR; in a review, before you approve. Every call is the whole screen: all its nodes, each with a screenshot taken after the last change.",
      "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",

@@ -19,6 +19,7 @@ import {
 } from './auto';
 import type { CrewDismissReason } from './crew-runtime';
 import type { TaskClass, TaskClassCause } from './task-class';
+import type { ReadyWhere, SmokeDropReason, SmokeStep, SmokeStopCause } from './smoke';
 import {
 	isCrewPlan,
 	isCrewPlanDecision,
@@ -195,6 +196,32 @@ export type SessionEvent =
 			files?: number;
 			lines?: number;
 	  }
+	/** spec/smoke-run#data: the agent started a smoke run; `limitMs` is the setting's limit then. */
+	| { kind: 'smoke.started'; id: string; steps: string[]; limitMs: number }
+	/** spec/smoke-run#limit: the person's `+5 min`; `limitMs` is the new total. */
+	| { kind: 'smoke.extended'; id: string; limitMs: number; by: 'person' }
+	/** spec/smoke-run#limit: the host stopped the run at its limit, or the person's `Stop`. */
+	| { kind: 'smoke.stopped'; id: string; cause: SmokeStopCause }
+	| {
+			kind: 'smoke.reported';
+			id: string;
+			steps: SmokeStep[];
+			summary: string;
+			elapsedMs: number;
+			stopped?: SmokeStopCause;
+	  }
+	/** spec/smoke-run#limit: the run ended without a report. */
+	| { kind: 'smoke.dropped'; id: string; reason: SmokeDropReason; elapsedMs: number }
+	/** spec/smoke-run#ready: the agent says a screen is assembled and can be looked at. */
+	| {
+			kind: 'task.ready';
+			id: string;
+			screen: string;
+			where: ReadyWhere;
+			device?: string;
+			tab?: string;
+			url?: string;
+	  }
 	/** spec/reviews#save-source: the author saved a ticket, spec or contract next to the plan. */
 	| { kind: 'source.saved'; id: string; title: string; url?: string; chars: number }
 	/** spec/design-review#data: a screen checked against its design, with what the host verified of each node. */
@@ -354,6 +381,9 @@ export type SessionCommand =
 			failure?: string;
 	  }
 	| { kind: 'stopReview' }
+	/** spec/smoke-run#limit: the person's `+5 min` and `Stop` on the deck row. */
+	| { kind: 'extendSmoke'; id: string }
+	| { kind: 'stopSmoke'; id: string }
 	/** spec/reviews#loop: the person's `Fix {n}` or `Accept` on the open findings. */
 	| { kind: 'decideReview'; decision: 'fix' | 'accept' }
 	| { kind: 'dismissReviewProposal' }
@@ -689,6 +719,9 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 		case 'stopReview':
 		case 'dismissReviewProposal':
 			return true;
+		case 'extendSmoke':
+		case 'stopSmoke':
+			return isId(v.id);
 		case 'answerCrewQuestion':
 			return (
 				isId(v.id) && text(v.answer) && v.answer.trim().length > 0 && v.answer.length <= 100_000
@@ -800,9 +833,11 @@ import {
 export function statusAfterTurn(
 	reason: string | undefined,
 	inputs: PendingInputs,
-	reviewWaits: boolean
+	reviewWaits: boolean,
+	/** spec/chat-turns-plans-and-questions#turn-footer: the turn ended because its plan went back — no interruption. */
+	planReturned = false
 ): 'interrupted' | 'needs-you' | 'done' {
-	if (reason === 'cancelled') return 'interrupted';
+	if (reason === 'cancelled' && !planReturned) return 'interrupted';
 	return inputs.crewQuestions.length > 0 ||
 		inputs.budget !== null ||
 		inputs.crewHire !== null ||
@@ -810,6 +845,19 @@ export function statusAfterTurn(
 		reviewWaits
 		? 'needs-you'
 		: 'done';
+}
+/**
+ * spec/crew#auto-hire, spec/crew#plan, spec/architecture-and-platform#host-lifecycle: the task's status when its host stopped under a running turn
+ * (a stop, or a restart after the host exited). The turn is gone, but a hire card, a split, a worker's question, the budget question or a
+ * review's open findings still wait for the person, so the task needs them; otherwise the turn was interrupted.
+ */
+export function statusAfterStop(
+	inputs: PendingInputs,
+	reviewWaits = false
+): 'interrupted' | 'needs-you' {
+	return statusAfterTurn(undefined, inputs, reviewWaits) === 'needs-you'
+		? 'needs-you'
+		: 'interrupted';
 }
 export function waitsForPerson(inputs: PendingInputs) {
 	return (

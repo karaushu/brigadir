@@ -721,7 +721,10 @@ export type DesktopBridge = {
 	onNotificationPermission(listener: (value: NotificationPermission) => void): () => void;
 	setVisibleTask(key: TaskKey | null): Promise<void>;
 	onProjectOpen(listener: (id: string) => void): () => void;
-	onNotificationOpen(listener: (key: TaskKey) => void): () => void;
+	/** `show`: spec/smoke-run#ready-surfaces — a click on Ready to look also shows the screen in the task. */
+	onNotificationOpen(
+		listener: (key: TaskKey & { show?: { where: 'simulator' | 'browser'; tab?: string } }) => void
+	): () => void;
 	/** spec/notifications-slack-notes-and-schedules#notification-center: the notification center — history and live requests, its actions, a toast the window hands over. */
 	readNoticeCenter(): Promise<import('./notice-center').NoticeCenter>;
 	noticeCenterAction(action: import('./notice-center').NoticeCenterAction): Promise<void>;

@@ -15,6 +15,7 @@ import {
 } from '@brigadir/core';
 import { connectHost, readIdentity, type HostClient } from './index';
 import {
+	areaWarning,
 	checkDesignInput,
 	designAnswer,
 	designGate,
@@ -192,6 +193,16 @@ describe('design review through the host', () => {
 		});
 		expect(event.nodes[0]!.figmaFile).toMatch(/^design\/[^/]+\/figma-1\.png$/);
 		expect(agentText(records)).toContain('The design review passed.');
+		// spec/design-review#area: no area, or one far from the design image's shape, is accepted with a warning.
+		expect(agentText(records)).toContain('Header: pass its area on the screenshot');
+		records = await turn(
+			client,
+			submit([node(figma, 's1', true, { area: { x: 0, y: 0, width: 1, height: 0.2 } })], 'passed')
+		);
+		expect(reviewed(records).state).toBe('passed');
+		expect(agentText(records)).toContain(
+			'Header: its area on the screenshot is 5.00:1 (width to height), the design image 1.00:1. Fit the area tightly'
+		);
 
 		// A mismatch: the rows are accepted, the state says so, the answer asks for a fix.
 		records = await turn(client, submit([node(figma, 's1', false)], 'mismatch'));
@@ -238,6 +249,7 @@ describe('design review through the host', () => {
 			await readFile(join(await store.taskDir(key), 'design', 'design-reviews.json'), 'utf8')
 		);
 		expect(doc.reviews.map((review: DesignReview) => review.state)).toEqual([
+			'passed',
 			'passed',
 			'mismatch',
 			'mismatch',
@@ -355,6 +367,28 @@ describe('design review rules', () => {
 		// A passed one of the round's trees, the task's own or the reviewer's, lets it go.
 		expect(designGate({ ...linked, own: [review('passed', ['a'])] }, false)).toBe(null);
 		expect(designGate({ ...linked, reviewer: [review('passed', ['a', 'z'])] }, false)).toBe(null);
+	});
+	it('warns when the area is far from the design image’s shape, and accepts the node', () => {
+		const square = { width: 300, height: 300 },
+			phone = { width: 400, height: 1000 };
+		// The node's frame: 0.75 × 0.3 of a 400 × 1000 shot is 300 × 300, the design image's shape.
+		expect(areaWarning({ area: { x: 0, y: 0, width: 0.75, height: 0.3 } }, square, phone)).toEqual(
+			[]
+		);
+		// The whole screen against a square node: 0.4:1 against 1:1.
+		expect(areaWarning({ area: { x: 0, y: 0, width: 1, height: 1 } }, square, phone)[0]).toContain(
+			'its area on the screenshot is 0.40:1 (width to height), the design image 1.00:1'
+		);
+		expect(areaWarning({ area: { x: 0, y: 0, width: 1, height: 1 } }, square, phone)[0]).toContain(
+			'much taller'
+		);
+		// Up to half again apart is a node the app draws a little differently.
+		expect(areaWarning({ area: { x: 0, y: 0, width: 0.75, height: 0.42 } }, square, phone)).toEqual(
+			[]
+		);
+		expect(areaWarning({}, square, phone)[0]).toContain('pass its area');
+		expect(areaWarning({ area: { x: 0, y: 0, width: 1, height: 1 } }, null, phone)).toEqual([]);
+		expect(designAnswer(review('passed', ['a']), ['Header: x']).next).toContain('Header: x');
 	});
 	it('answers with what to redo', () => {
 		const answer = designAnswer({

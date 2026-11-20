@@ -37,6 +37,7 @@ The Settings tab **Notifications** sits between Language and Agents. `settings.j
 | `rate-limited` | `rate-limit.changed` with `rejected`, on the transition into a block | `mode` ≠ `off` |
 | `scope-violation` | `scope.violation` (a read-only repo changed) | `mode` ≠ `off` |
 | `page` | a page notification from the task's browser ([Browser](browser-and-simulator.md#notifications)) | `mode` ≠ `off` |
+| `ready` | `task.ready` — the agent's [Ready to look](smoke-run.md#ready-surfaces); not `needs-you`: no badge and no `Needs you` entry | `mode` ≠ `off`; its sound is the `Turn ended` slot, only when the sound's `When` is `When a turn ends` |
 
 - While a task is rate-limited, `failed` and `turn-ended` notices are suppressed.
 - Never notified: progress, individual tool calls.
@@ -130,7 +131,7 @@ Rules:
 - A refusal by the person is not a failure: e.g. `add_folder` not applied shows `Did not add the folder` with the reason on a second line.
 - Every toast is also written to the [notification center](#notification-center) unless `log: false` (a CI run that main records itself).
 
-App-level toasts: notifications denied (above); GitHub (`ForgeToast`): `Install GitHub CLI (gh) to create pull requests.` / `Sign in with gh auth login to use GitHub.` / `GitHub status could not be read.` with `Retry`, resolved when the state is `ready` again; `Unavailable fonts: {fonts}. Using the system font.` once per set of missing fonts.
+App-level toasts: notifications denied (above); GitHub (`ForgeToast`): `Install GitHub CLI (gh) to create pull requests.` / `Sign in with gh auth login to use GitHub.` / `GitHub status could not be read.` with `Retry`, resolved when the state is `ready` again — raised only by GitHub's own failures, never by a local git failure ([GitHub status](pull-requests-and-ci.md#github-status)); `Unavailable fonts: {fonts}. Using the system font.` once per set of missing fonts.
 
 <a id="notice-chips"></a>
 ## Notice chips (class S)

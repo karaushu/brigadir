@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
 	designCounts,
 	designMatchCount,
@@ -113,6 +113,38 @@ function DesignImage({
 		</svg>
 	);
 }
+/**
+ * spec/design-review#card: the two images of a `Figma | Device` pair show the same node, so they stand at one scale — one width, the node's —
+ * however their aspect ratios differ. The narrower of the two ratios bounds that width by the tile's height; null while an image is missing.
+ */
+export function pairAspect(
+	figma: { width: number; height: number } | null,
+	device: { width: number; height: number } | null,
+	crop?: DesignArea
+): number | null {
+	if (!figma || !device || figma.height <= 0 || device.height <= 0) return null;
+	const box = crop ?? { x: 0, y: 0, width: 1, height: 1 },
+		width = Math.max(1, box.width * device.width),
+		height = Math.max(1, box.height * device.height);
+	return Math.min(figma.width / figma.height, width / height);
+}
+/** The natural size of a design review's image, once read. */
+function useImageSize(task: TaskKey, file: string | null) {
+	const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+	useEffect(() => {
+		let live = true;
+		setSize(null);
+		if (file)
+			loadImage(task, file).then(
+				(value) => live && setSize({ width: value.width, height: value.height }),
+				() => {}
+			);
+		return () => {
+			live = false;
+		};
+	}, [task.projectId, task.id, file]);
+	return size;
+}
 const marksOf = (node: DesignNode) =>
 	node.state === 'ok' ? node.rows.flatMap((row) => (!row.match && row.area ? [row.area] : [])) : [];
 /** spec/design-review#card: the `Figma | Device` pair of a node; a tile opens the viewer. */
@@ -164,9 +196,17 @@ function Pair({
 			{text}
 		</>
 	);
-	const shot = node.shot;
+	const shot = node.shot,
+		shown = shot && node.state !== 'no-shot' ? shot.file : null,
+		figmaSize = useImageSize(task, node.figmaFile ?? null),
+		deviceSize = useImageSize(task, shown),
+		aspect = pairAspect(figmaSize, deviceSize, node.area);
 	return (
-		<div className={s.pair} data-large={large || undefined}>
+		<div
+			className={s.pair}
+			data-large={large || undefined}
+			data-same-scale={aspect !== null || undefined}
+			style={aspect !== null ? ({ '--pair-aspect': aspect } as CSSProperties) : undefined}>
 			{tile(
 				'figma',
 				node.figmaFile ? (

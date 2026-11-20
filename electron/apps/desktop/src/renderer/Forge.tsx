@@ -59,6 +59,17 @@ export function requestForgeAction(
 ) {
 	pendingAction = { projectId: task.projectId, id: task.id, action, scopeId };
 }
+/** spec/architecture-and-platform#read-issues: the workspace shows a `Git` read issue of this task. */
+const hasGitIssue = (task: AgentTask) =>
+	Boolean(
+		useWorkspace
+			.getState()
+			.workspace?.issues.some(
+				(issue) =>
+					issue.code === 'git_failed' &&
+					issue.path.split(/[\\/]/).join('/') === `projects/${task.projectId}/tasks/${task.id}/git`
+			)
+	);
 export function ForgeProvider({
 	task,
 	locale,
@@ -77,7 +88,9 @@ export function ForgeProvider({
 			done?: ((value: ForgeSnapshot) => void) | undefined;
 		} | null>(null),
 		mounted = useRef(true),
-		revision = useRef(0);
+		revision = useRef(0),
+		// spec/architecture-and-platform#read-issues: a read that failed locally is a read issue in main; the workspace is read again to show or clear it.
+		failedLocally = useRef(false);
 	const present = usePresence(Boolean(modal)),
 		lastModal = useRef(modal);
 	if (modal) lastModal.current = modal;
@@ -86,6 +99,11 @@ export function ForgeProvider({
 		const id = ++revision.current;
 		try {
 			const value = await window.brigadir.readForge(task, remote, fresh);
+			// The issue may stand from an earlier read (another visit of the task): a good read clears it in main, so read the workspace again.
+			if (failedLocally.current || hasGitIssue(task)) {
+				failedLocally.current = false;
+				void useWorkspace.getState().load();
+			}
 			if (mounted.current && id === revision.current) {
 				setData(value);
 				setError('');
@@ -101,6 +119,10 @@ export function ForgeProvider({
 			}
 			return value;
 		} catch (error) {
+			if (!failedLocally.current) {
+				failedLocally.current = true;
+				void useWorkspace.getState().load();
+			}
 			if (mounted.current && id === revision.current) setError(failure(error));
 		}
 	}
@@ -188,29 +210,32 @@ export function ForgeProvider({
 		</ForgeContext.Provider>
 	);
 }
-/** spec/notifications-slack-notes-and-schedules#toasts: GitHub state is a warning toast once per state, with Retry; the raw error never reaches the person. It leaves when GitHub is ready again. */
+/**
+ * spec/notifications-slack-notes-and-schedules#toasts: GitHub state is a warning toast once per state, with Retry; the raw error never reaches the person. It
+ * leaves when GitHub is ready again. Only GitHub's own failures raise it (gh, network, auth: the snapshot's `auth` and `error`); a read that failed
+ * locally is a read issue (spec/architecture-and-platform#read-issues), not this toast.
+ */
 const FORGE_TEXTS = [
 	'Install GitHub CLI (gh) to create pull requests.',
 	'Sign in with gh auth login to use GitHub.',
 	'GitHub status could not be read.',
 ] as const;
+export function forgeToastText(
+	data: Pick<ForgeSnapshot, 'auth' | 'error'> | null | undefined
+): (typeof FORGE_TEXTS)[number] | null {
+	if (!data) return null;
+	if (data.error) return FORGE_TEXTS[2];
+	if (data.auth === 'missing') return FORGE_TEXTS[0];
+	if (data.auth === 'login') return FORGE_TEXTS[1];
+	return data.auth !== 'ready' ? FORGE_TEXTS[2] : null;
+}
 export function ForgeToast() {
 	const context = useForge(),
 		data = context?.data,
 		locale = context?.locale,
 		refresh = useRef(context?.refresh);
 	refresh.current = context?.refresh;
-	const message = !context
-		? null
-		: context.error || data?.error
-			? FORGE_TEXTS[2]
-			: data?.auth === 'missing'
-				? FORGE_TEXTS[0]
-				: data?.auth === 'login'
-					? FORGE_TEXTS[1]
-					: data && data.auth !== 'ready'
-						? FORGE_TEXTS[2]
-						: null;
+	const message = !context ? null : forgeToastText(data);
 	useEffect(() => {
 		if (!locale) return;
 		for (const text of FORGE_TEXTS) if (text !== message) resolveToast(t(locale, text));

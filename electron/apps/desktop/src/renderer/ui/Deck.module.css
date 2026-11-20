@@ -203,3 +203,23 @@
 	outline-offset: 1px;
 	border-radius: 3px;
 }
+/* spec/smoke-run#deck: a row's state glyph in the label column and its two-part text (DeckRowGlyph, DeckRowText). */
+.glyph {
+	display: inline-flex;
+	color: var(--fg2);
+}
+.glyph[data-tone='green'] {
+	color: var(--green);
+}
+.glyph[data-tone='amber'] {
+	color: var(--amber);
+}
+.glyph[data-tone='red'] {
+	color: var(--red);
+}
+.title {
+	font-weight: 600;
+}
+.muted {
+	color: var(--fg2);
+}

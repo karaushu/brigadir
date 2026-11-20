@@ -57,4 +57,6 @@ export const workspaceEventKinds: ReadonlySet<string> = new Set([
 	'turn.usage',
 	'budget.reached',
 	'budget.decided',
+	// spec/smoke-run#ready-surfaces: `Ready to look` on the activity line and the unread dot.
+	'task.ready',
 ]);

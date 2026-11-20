@@ -38,6 +38,7 @@ it('keeps the browser, pull requests, commands and remote access on and the simu
 		notes: true,
 		schedules: true,
 		slack: false,
+		todo: true,
 	});
 	expect(withModuleDefaults({ browser: false, simulator: true })).toEqual({
 		browser: false,
@@ -48,6 +49,7 @@ it('keeps the browser, pull requests, commands and remote access on and the simu
 		notes: true,
 		schedules: true,
 		slack: false,
+		todo: true,
 	});
 	expect(isAppModules({ browser: true })).toBe(false);
 	expect(isAppModules({ browser: true, simulator: 1 })).toBe(false);
@@ -68,6 +70,7 @@ it('keeps the shortcuts of a module switched off free in the keymap', () => {
 			notes: true,
 			schedules: true,
 			slack: false,
+			todo: true,
 		})
 	).toEqual({ kind: 'command', commandId: 'simulator-home' });
 	expect(
@@ -80,6 +83,7 @@ it('keeps the shortcuts of a module switched off free in the keymap', () => {
 			notes: true,
 			schedules: true,
 			slack: false,
+			todo: true,
 		}).some((command) => command.id === 'pull-requests' || command.id.startsWith('command'))
 	).toBe(false);
 });

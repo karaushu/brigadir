@@ -484,6 +484,23 @@ function BrigadirCardView({
 				</Button>
 			</div>
 		);
+	// spec/todo-and-slack-inbox#todo-chat-tools: a to-do the agent added — its title, where it went, `Open list`.
+	if (card.type === 'todo')
+		return (
+			<div className={s.link} data-brigadir-card="todo" data-size="s">
+				<Glyph name="todo" size={14} />
+				<span>
+					<b>{card.title}</b>
+					<small>
+						{card.project ? `${card.project} › ` : ''}
+						{card.listName || t(locale, 'Untitled list')}
+					</small>
+				</span>
+				<Button size="s" onClick={() => useWorkspace.getState().openTodo(card.list)}>
+					{t(locale, 'Open list')}
+				</Button>
+			</div>
+		);
 	if (card.type === 'event')
 		return (
 			<div className={s.setting} data-brigadir-card="event" data-tone={card.tone} data-size="s">

@@ -66,8 +66,21 @@ export function useMenuContext(
 				!!markdownHost &&
 				(!inInput || codeEditor) &&
 				!closest('[data-browser],[data-role],[data-comment-draft]');
+			// spec/todo-and-slack-inbox#todo-item: the Todo screen with a list open; its list keys act with the focus in it (or nowhere), not in a field.
+			const todoScreen = document.querySelector<HTMLElement>('[data-todo-screen][data-todo-list]');
+			const todoList =
+				!!todoScreen &&
+				!modal &&
+				!inInput &&
+				(focus === document.body || !!focus?.closest('[data-todo-screen]'));
 			const next: MenuContext = {
 				...emptyMenuContext,
+				todo: !!todoScreen && !modal,
+				todoList,
+				todoItem:
+					todoList &&
+					todoScreen?.querySelector<HTMLElement>('[data-todo-selected]')?.dataset.todoSelected ===
+						'true',
 				project,
 				task,
 				needsYou,
@@ -222,6 +235,8 @@ export function useMenuContext(
 				'data-menu-diff-source',
 				'data-menu-reopen',
 				'data-move-under-way',
+				'data-todo-list',
+				'data-todo-selected',
 			],
 		});
 		document.addEventListener('focusin', publish);

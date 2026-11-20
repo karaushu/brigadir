@@ -337,6 +337,7 @@ export function Intro({
 		railSchedules: useRef<HTMLButtonElement>(null),
 		// spec/settings-modules-and-onboarding#intro-steps: the Brigadir step lights its tile.
 		railBrigadir: useRef<HTMLButtonElement>(null),
+		railTodo: useRef<HTMLButtonElement>(null),
 	};
 	const remoteOn = Boolean(remote?.enabled) && draft?.modules.remoteAccess !== false;
 	// spec/settings-modules-and-onboarding#intro-remote: a hovered module row lights its part of the window; access turned on lights the Remote tile.
@@ -349,6 +350,7 @@ export function Intro({
 		remoteAccess: refs.chip,
 		notes: refs.railNotes,
 		schedules: refs.railSchedules,
+		todo: refs.railTodo,
 		// spec/notifications-slack-notes-and-schedules#slack: Slack has no part of the window to light.
 		slack: { current: null },
 	};
@@ -508,6 +510,7 @@ export function Intro({
 						prs: draft.modules.pullRequests,
 						notes: draft.modules.notes,
 						schedules: draft.modules.schedules,
+						todo: draft.modules.todo,
 					}}
 					selected={step === 'brigadir' ? 'brigadir' : 'tasks'}
 					tileRefs={{
@@ -515,6 +518,7 @@ export function Intro({
 						notes: refs.railNotes,
 						schedules: refs.railSchedules,
 						brigadir: refs.railBrigadir,
+						todo: refs.railTodo,
 					}}
 					tools={
 						<>

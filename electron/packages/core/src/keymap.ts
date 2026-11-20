@@ -176,6 +176,8 @@ export function commandAccelerator(
 	command: MenuCommand,
 	keymap: KeymapSettings
 ): string | undefined {
+	// spec/todo-and-slack-inbox#todo-item: a list's own plain key reads the same everywhere and is not the keymap's.
+	if (command.fixed) return command.accelerator && normalizeAccelerator(command.accelerator);
 	if (command.id in keymap.overrides) {
 		const key = keymap.overrides[command.id];
 		return key ? pcSpelling(normalizeAccelerator(key)) : undefined;
@@ -235,6 +237,7 @@ const pcKeys: Record<string, string> = {
 	'section-prs': 'Alt+2',
 	schedules: 'Alt+4',
 	'section-brigadir': 'Alt+5',
+	'section-todo': 'Alt+6',
 };
 const printable = (key: string) =>
 	/^[A-Z0-9]$/.test(key) ||
@@ -292,7 +295,7 @@ function pcDefaults(preset: KeymapPreset) {
 		!pcReservedAccelerators[key] && !altGrUnsafe(key) && !taken(key, command);
 	const pending: { command: MenuCommand; candidates: string[]; cmd: boolean }[] = [];
 	for (const command of menuCommands) {
-		const mac = macDefault(command, preset);
+		const mac = command.fixed ? undefined : macDefault(command, preset);
 		if (!mac) continue;
 		const fixed = command.id in keys ? undefined : pcKeys[command.id];
 		pending.push({
@@ -325,12 +328,15 @@ export type ShortcutScope =
 	| 'browser'
 	| 'simulator'
 	| 'pullRequests'
-	| 'files';
+	| 'files'
+	| 'todo';
 /** Where a shortcut acts. Two commands conflict only in the same scope or when one of them is global. */
 export function shortcutScope(command: MenuCommand): ShortcutScope {
 	if (command.channel === 'editor') return command.group === 'Navigate' ? 'global' : 'editor';
 	if (command.when === 'pullRequests') return 'pullRequests';
 	if (command.when === 'fileTree') return 'files';
+	if (command.when === 'todo' || command.when === 'todoList' || command.when === 'todoItem')
+		return 'todo';
 	if (command.when === 'composerFormat') return 'composer';
 	if (command.group === 'Diff') return 'diff';
 	if (command.group === 'Browser') return 'browser';
@@ -352,7 +358,10 @@ export function shortcutScope(command: MenuCommand): ShortcutScope {
 }
 /** spec/composer-steering-queue-and-ghost#steering-hold: the focused composer (Add to queue) and a review, permission card or question (Submit) never act at once. */
 /** spec/composer#formatting: Ask the agent acts only outside a text field, the composer's formatting only inside one. */
+/** spec/todo-and-slack-inbox#todo-item: on the Todo screen ⌘N is Add a to-do; the window has no open project there (New task). */
 const exclusive = (a: MenuCommand, b: MenuCommand) =>
+	(shortcutScope(a) === 'todo' && b.when === 'project') ||
+	(shortcutScope(b) === 'todo' && a.when === 'project') ||
 	(a.when === 'composerFormat' && b.when === 'askAgent') ||
 	(b.when === 'composerFormat' && a.when === 'askAgent') ||
 	(a.when === 'composerQueue' && ['review', 'permission'].includes(b.when)) ||
@@ -370,6 +379,7 @@ export type ShortcutConflict =
 /** spec/settings-modules-and-onboarding#modules: a module switched off has no menu items, so its commands hold no shortcut. */
 export function keymapCommands(modules: AppModules = defaultModules) {
 	return menuCommands.filter((command) => {
+		if (command.fixed) return false;
 		const module = commandModule(command.id);
 		return !module || modules[module];
 	});

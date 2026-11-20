@@ -220,6 +220,41 @@ export type DesktopBridge = {
 	setNoteProject(id: string, project: string | null): Promise<void>;
 	deleteNote(id: string): Promise<void>;
 	onNotesChanged(listener: (change: import('./notes').NotesChange) => void): () => void;
+	/** spec/todo-and-slack-inbox#todo: every list with its items. */
+	todoLists(): Promise<import('./todo').TodoList[]>;
+	createTodoList(project: string | null, name: string): Promise<import('./todo').TodoList>;
+	renameTodoList(id: string, name: string): Promise<void>;
+	setTodoListProject(id: string, project: string | null): Promise<void>;
+	deleteTodoList(id: string): Promise<void>;
+	/** A new item at the top of the open items; its id. */
+	addTodoItem(listId: string, title: string, description: string): Promise<string>;
+	updateTodoItem(
+		listId: string,
+		itemId: string,
+		patch: import('./todo').TodoItemPatch
+	): Promise<void>;
+	/** The removed item and its place, for Undo; null when it was gone already. */
+	removeTodoItem(
+		listId: string,
+		itemId: string
+	): Promise<{ item: import('./todo').TodoItem; index: number } | null>;
+	restoreTodoItem(listId: string, item: import('./todo').TodoItem, index: number): Promise<void>;
+	/** A drag: before the open item `before`, null — after the last open item. */
+	placeTodoItem(listId: string, itemId: string, before: string | null): Promise<void>;
+	stepTodoItem(listId: string, itemId: string, delta: -1 | 1): Promise<void>;
+	moveTodoItemToList(listId: string, itemId: string, toListId: string): Promise<void>;
+	onTodoChanged(listener: (change: import('./todo').TodoChange) => void): () => void;
+	/** A list row's menu: what the person chose. */
+	todoListMenu(id: string): Promise<'rename' | 'project' | 'delete' | null>;
+	/** An item's menu, at the point or at the pointer. */
+	todoItemMenu(
+		x: number | null,
+		y: number | null
+	): Promise<'edit' | 'task' | 'move' | 'delete' | null>;
+	/** `Move to project…`: a project id, `none`, or null when dismissed. */
+	todoProjectMenu(id: string, x: number | null, y: number | null): Promise<string | null>;
+	/** `Move to list…`: the other lists; the chosen list's id. */
+	todoListPickMenu(id: string, x: number | null, y: number | null): Promise<string | null>;
 	/** spec/notifications-slack-notes-and-schedules#notes: the note's one chat — its rows, and whether the agent answers now. */
 	readNoteChat(id: string): Promise<import('./note-chat').NoteChatState>;
 	/** A message to the note's agent; the current note goes with it. A new choice of provider or model starts a new session. */

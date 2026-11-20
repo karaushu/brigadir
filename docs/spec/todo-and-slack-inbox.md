@@ -22,8 +22,8 @@ return when it is switched on.
   when every item is done). Context menu: `Rename…`, `Move to project…`, `Delete…` (`Delete the list?`, «The list and
   its items are deleted.»). ↑↓/↩.
 - **Its screen** (the main area): the open list — header with the list's name (click to rename), the project chip and
-  `…`; the add field `Add a to-do` on top; the open items in the person's order; `Done · N` under them, folded, the most
-  recently done first. `Select a list` / `No lists yet` · `New list` when none is open.
+  `…`; the add field `Add a to-do` on top (a new item goes to the top of the open items); the open items in the person's
+  order; `Done · N` under them, folded, the most recently done first. `Select a list` / `No lists yet` · `New list` when none is open.
 
 <a id="todo-item"></a>
 ### An item
@@ -38,7 +38,8 @@ return when it is switched on.
 - **Done**: the checkbox strikes the title, the row moves to `Done · N` after 1 s (unchecking within that second keeps
   it in place). Done items keep their descriptions.
 - **Context menu** (and `…` on hover): `Edit`, `Make a task` (the launch sheet with the title as the task title, the
-  description as the prompt and the list's project), `Move to list…`, `Delete`.
+  description as the prompt and the list's project; a list without a project asks which project, as a note does),
+  `Move to list…` (to the top of that list), `Delete`.
 - **Order and keys**: drag by the row (the handle appears on hover) or `⌥⌘↑` / `⌥⌘↓`; ↑↓ select, `Space` toggles done,
   `→` / `←` unfold and fold, `↩` edits, `⌫` deletes (undo with `⌘Z` while the list is open), `⌘N` focuses `Add a to-do`.
   These are `Edit` and `View` menu items while Todo is open ([rule 11](../../AGENTS.md)).

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { appModules, defaultModules, toolModule, type AppModules } from '@brigadir/core';
 import { servedTools, serveToolSet, text, type McpCall, type Served, type Tool } from './mcp';
 
 export { serveToolSet, type McpCall } from './mcp';
@@ -113,21 +114,59 @@ export const brigadirChatTools: readonly Tool[] = [
 	tool('unwatch', 'Stop telling about a task in this chat; without task, about every task.', {
 		task: task.optional(),
 	}),
+	// spec/todo-and-slack-inbox#todo-chat-tools: the person's own to-do lists (the Todo module).
+	tool(
+		'todo_add',
+		"Add a to-do to the person's Todo: title, an optional Markdown description, the project by name (none — No project) and the list by name (a missing list in that project is made; none — the project's most recently changed list, else a new list Inbox). The person sees a card with Open list.",
+		{
+			title: z.string().trim().min(1).max(500),
+			description: z.string().max(20000).optional(),
+			project: z.string().trim().min(1).max(200).optional(),
+			list: z.string().trim().min(1).max(120).optional(),
+		},
+		'Use it when the person asks to remember to do something themselves, or to add it to a to-do list. Not for work an agent should do: that is create_task.'
+	),
+	tool(
+		'todo_lists',
+		"The person's to-do lists: each list's name, project, how many items are done and its open items. project: only that project's lists (a name, or \"none\" for lists without one).",
+		{ project: z.string().trim().min(1).max(200).optional() },
+		'Call it before todo_add when you are not sure which list fits.'
+	),
 ];
-let served: Served | null = null;
-export function brigadirChatServed(): Served {
-	return (served ??= servedTools(brigadirChatTools));
+const served = new Map<string, Served>();
+/** spec/settings-modules-and-onboarding#module-off: a module switched off takes its tools from the chat (the Todo module, todo_*). */
+export function brigadirChatServed(modules: AppModules = defaultModules): Served {
+	const off = appModules.filter((module) => !modules[module]),
+		key = off.join(',');
+	let set = served.get(key);
+	if (!set) {
+		set = servedTools(
+			brigadirChatTools.filter((tool) => {
+				const module = toolModule(tool.name);
+				return !module || modules[module];
+			})
+		);
+		served.set(key, set);
+	}
+	return set;
 }
 export const brigadirChatInstructions =
 	"These are Brigadir's own tools: its settings, guided setups, secret fields and tasks. Use them instead of editing Brigadir's files or asking the person to do it in Settings. A token, key or password never goes through the chat: ask for it with secret_request. Only what a tool returned happened.";
 /** Serves the Brigadir chat's tools on a socket `mcp-relay` handed over. */
-export function serveBrigadirChat(socket: Parameters<typeof serveToolSet>[0], call: McpCall) {
+export function serveBrigadirChat(
+	socket: Parameters<typeof serveToolSet>[0],
+	call: McpCall,
+	modules: { current(): AppModules; subscribe(listener: () => void): () => void } = {
+		current: () => defaultModules,
+		subscribe: () => () => {},
+	}
+) {
 	return serveToolSet(
 		socket,
 		{
-			tools: brigadirChatServed,
+			tools: () => brigadirChatServed(modules.current()),
 			instructions: () => brigadirChatInstructions,
-			subscribe: () => () => {},
+			subscribe: (listener) => modules.subscribe(listener),
 		},
 		call
 	);

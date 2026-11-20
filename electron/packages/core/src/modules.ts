@@ -7,7 +7,8 @@ import { isRecord } from './workspace';
  * module on by default; access itself stays off until Settings ▸ Remote turns it on. spec/notifications-slack-notes-and-schedules#notes: notes are a module on by
  * default; switched off, their files stay in `~/.brigadir/notes/`. spec/notifications-slack-notes-and-schedules#schedules: scheduled tasks are a module on by default;
  * switched off, the timer stops and the schedules stay on disk. spec/notifications-slack-notes-and-schedules#slack: Slack is a module off by default — it needs a bot token;
- * switched off, nothing reaches Slack and the token stays in the Keychain.
+ * switched off, nothing reaches Slack and the token stays in the Keychain. spec/todo-and-slack-inbox#todo: Todo is a module on by default; switched off,
+ * its files stay in `~/.brigadir/todo/`.
  */
 export const appModules = [
 	'browser',
@@ -18,6 +19,7 @@ export const appModules = [
 	'notes',
 	'schedules',
 	'slack',
+	'todo',
 ] as const;
 export type AppModule = (typeof appModules)[number];
 export type AppModules = Record<AppModule, boolean>;
@@ -30,6 +32,7 @@ export const defaultModules: AppModules = {
 	notes: true,
 	schedules: true,
 	slack: false,
+	todo: true,
 };
 export function isAppModules(value: unknown): value is AppModules {
 	return (
@@ -64,6 +67,7 @@ export const moduleOffMessages: Record<AppModule, string> = {
 	notes: 'Notes are off in Settings.',
 	schedules: 'Scheduled tasks are off in Settings.',
 	slack: 'Slack is off in Settings.',
+	todo: 'Todo is off in Settings.',
 };
 /** Menu commands of a module that are not named by it (spec/settings-modules-and-onboarding#module-off): the PR toggle in View and the project command block of File. */
 const moduleCommands: Record<string, AppModule> = {
@@ -76,6 +80,7 @@ const moduleCommands: Record<string, AppModule> = {
 	connect: 'remoteAccess',
 	'note-new': 'notes',
 	'schedule-new': 'schedules',
+	'section-todo': 'todo',
 };
 /** The module a menu command belongs to: its toggle in View and every item of its own menu. */
 export function commandModule(id: string): AppModule | null {

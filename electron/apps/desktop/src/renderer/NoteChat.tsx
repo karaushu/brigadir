@@ -13,7 +13,7 @@ import {
 import { Button, IconButton } from './ui/Controls';
 import { Glyph } from './ui/Glyph';
 import { TextArea } from './ui/Input';
-import { ComposerIsland, ComposerBar } from './ui/ComposerIsland';
+import { ChatComposer, type ChatComposerHandle } from './ChatComposer';
 import { ComposerOptions, type CapsuleModelGroup } from './ComposerOptions';
 import { MarkdownStill, markdown } from './MarkdownBlock';
 import { noteLineLinks } from './note-markdown';
@@ -215,7 +215,7 @@ export function NoteChat({
 	const { rows, busy, choice } = useNoteChat(note.id),
 		[draft, setDraft] = useState(''),
 		log = useRef<HTMLDivElement>(null),
-		field = useRef<HTMLTextAreaElement>(null);
+		field = useRef<ChatComposerHandle>(null);
 	// The quote goes in front of what is typed, as a Markdown quote, and the field takes the focus.
 	useEffect(() => {
 		if (!quote) return;
@@ -224,12 +224,7 @@ export function NoteChat({
 			.map((line) => `> ${line}`)
 			.join('\n');
 		setDraft((current) => `${quoted}\n\n${current}`);
-		requestAnimationFrame(() => {
-			const element = field.current;
-			if (!element) return;
-			element.focus();
-			element.setSelectionRange(element.value.length, element.value.length);
-		});
+		requestAnimationFrame(() => field.current?.focus());
 	}, [quote?.id]);
 	const catalogs = useModelCatalogs();
 	const [pick, setPick] = useState<NoteChatChoice | null>(null);
@@ -378,36 +373,26 @@ export function NoteChat({
 				</div>
 			)}
 			<div className={s.compose}>
-				<ComposerIsland
-					onSubmit={(event) => {
-						event.preventDefault();
-						send();
-					}}>
-					{changed && (
-						<div className={s.context}>
-							<span className={s.chip} data-changed>
-								<Glyph name="note" size={12} />
-								<i>{t(locale, 'The note changed since the last message')}</i>
-							</span>
-						</div>
-					)}
-					<TextArea
-						ref={field}
-						embedded
-						className={s.field}
-						rows={Math.min(8, Math.max(2, draft.split('\n').length))}
-						value={draft}
-						placeholder={t(locale, 'Ask about this note')}
-						aria-label={t(locale, 'Ask about this note')}
-						onChange={(event) => setDraft(event.target.value)}
-						onKeyDown={(event) => {
-							if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-								event.preventDefault();
-								send();
-							}
-						}}
-					/>
-					<ComposerBar attach={null}>
+				<ChatComposer
+					ref={field}
+					locale={locale}
+					value={draft}
+					onChange={setDraft}
+					placeholder={t(locale, 'Ask about this note')}
+					busy={busy}
+					onSend={send}
+					onStop={() => void window.brigadir.stopNoteChat(note.id)}
+					context={
+						changed && (
+							<div className={s.context}>
+								<span className={s.chip} data-changed>
+									<Glyph name="note" size={12} />
+									<i>{t(locale, 'The note changed since the last message')}</i>
+								</span>
+							</div>
+						)
+					}
+					controls={
 						<ComposerOptions
 							provider={current.provider}
 							locale={locale}
@@ -422,23 +407,8 @@ export function NoteChat({
 								onChoose: (provider, model) => setPick({ provider, model }),
 							}}
 						/>
-						{busy ? (
-							<IconButton
-								label={t(locale, 'Stop')}
-								onClick={() => void window.brigadir.stopNoteChat(note.id)}>
-								<Glyph name="stop" size={12} />
-							</IconButton>
-						) : (
-							<Button
-								appearance="primary"
-								type="submit"
-								aria-label={t(locale, 'Send')}
-								disabled={!draft.trim()}>
-								<Glyph name="send" size={13} />
-							</Button>
-						)}
-					</ComposerBar>
-				</ComposerIsland>
+					}
+				/>
 			</div>
 		</aside>
 	);

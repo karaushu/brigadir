@@ -47,7 +47,7 @@ Every keyboard shortcut in Brigadir belongs to a native menu-bar item, and one t
 
 | Menu | Item · key |
 | --- | --- |
-| File | Open a project… `⌘O` · Connect… `⌥⌘O` · Close task `⇧⌘W` · Close tab `⌘W` · Reopen closed tab `⇧⌘T` · New task `⌘N` · New file… `⌥⌘N` · Delete… `⌘⌫` · Open Quickly… `⇧⌘O` · Open Quickly (alias) `⌘P` · Search Everywhere… `⇧⌘K` · Find in Files… `⇧⌘F` · Find Action… `⇧⌘A` · Archive task `⌃⌘A` · Project commands… `⌥⌘R` · Run current command `⌃⌘R` · Stop current command `⌃⌘.` · New command… · New note · New schedule… · Save `⌘S` |
+| File | Open a project… `⌘O` · Connect… `⌥⌘O` · Close task `⇧⌘W` · Close tab `⌘W` · Reopen closed tab `⇧⌘T` · New task `⌘N` · New file… `⌥⌘N` · Delete… `⌘⌫` · Open Quickly… `⇧⌘O` · Open Quickly (alias) `⌘P` · Search Everywhere… `⇧⌘K` · Find in Files… `⇧⌘F` · Find Action… `⇧⌘A` · Archive task `⌃⌘A` · Move to a worktree · Project commands… `⌥⌘R` · Run current command `⌃⌘R` · Stop current command `⌃⌘.` · New command… · New note · New schedule… · Save `⌘S` |
 | Edit | Undo `⌘Z` · Redo `⇧⌘Z` (plus the system roles) · Formatting ▸ Bold `⌘B`, Italic `⌘I`, Code `⌘E`, Link `⌘K` (composer text only) |
 | Editor | Find `⌘F` · Find and replace `⌥⌘F` · Find next `⌘G` · Find previous `⇧⌘G` · Replace all `⌥⌘↩` · Indent `⌘]` · Outdent `⌘[` · Toggle comment `⌘/` · Format document `⇧⌥F` · Go to definition `⌘B` · Find references `⌥F7` · Show completions `⌃Space` · Show parameters `⇧⌘Space` · Next/Previous problem `F2`/`⇧F2` · Next/Previous change `⌃⌥⇧↓`/`⌃⌥⇧↑` · Revert change `⌥⌘Z` · File history (no key) · Restart language servers · Ask the agent `⌘I` |
 | Navigate | Notifications `⇧⌘N` · Next/Previous agent needing you `⌘J`/`⇧⌘J` · Next/Previous document `⌥⌘→`/`⌥⌘←` · Next/Previous tool or hunk `⌥↓`/`⌥↑` · Next/Previous turn `⌥⌘↓`/`⌥⌘↑` · Expand/Collapse conversation `⌥⌘]`/`⌥⌘[` · Previous/Next location `⌃-`/`⌃⇧-` |
@@ -102,6 +102,7 @@ Keys that live outside the menu bar:
 - New task uses the current project.
 - Open a project… opens the system folder picker.
 - Close task keeps the editor buffers parked.
+- Move to a worktree acts on the open task and is enabled only where the task can move ([Tasks](tasks.md#move-to-worktree), context key `movable`); it has no default shortcut.
 - Next agent mode cycles only through the modes the provider declares.
 - Menu items appear together with the feature they belong to. There are no placeholder actions.
 - The label `Search Everywhere…` stays in English in every locale. All other items are translated.

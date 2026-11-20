@@ -278,6 +278,27 @@ const uk = {
 	'conflicts with edits made before the task': 'конфлікт із правками до задачі',
 	'ignored by git': 'ігнорує git',
 	'outside git': 'поза git',
+	// spec/tasks#move-to-worktree: the person's move — menus, the row's extra states and the refusals.
+	'Move to a worktree': 'Перенести у worktree',
+	'Waiting for the turn to end': 'Чекає на кінець турну',
+	'Move to a worktree cancelled': 'Перенесення у worktree скасовано',
+	'Only a solo or Auto task moves into a worktree.':
+		'У worktree переноситься лише задача з одним агентом або Авто.',
+	'A task in the terminal cannot move: its agent would stop.':
+		'Задачу в терміналі не перенести: її агент зупиниться.',
+	'The task cannot restart now.': 'Задачу зараз не можна перезапустити.',
+	'The project has no Git repository.': 'У проєкті немає Git-репозиторію.',
+	'The task already has a worktree.': 'Задача вже має worktree.',
+	'The move has already started.': 'Перенесення вже почалося.',
+	'Could not cancel the move.': 'Не вдалося скасувати перенесення.',
+	// spec/tasks#agent-worktrees: the rows of a worktree the agent made.
+	worktree: 'worktree',
+	'joined the task': 'приєднано до задачі',
+	'you allowed it': 'ви дозволили',
+	'holds the task’s work': 'тут робота задачі',
+	removed: 'видалено',
+	'branch {branch} kept': 'гілку {branch} збережено',
+	'branch deleted': 'гілку видалено',
 	'over budget': 'понад бюджет',
 	'{used} of {budget}': '{used} з {budget}',
 	zone: 'зона',

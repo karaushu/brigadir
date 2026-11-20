@@ -74,6 +74,7 @@ export function nativeMenu(
 				label: item.label,
 				...menuIcon(item.icon),
 				enabled: item.enabled ?? true,
+				...(item.sublabel ? { sublabel: item.sublabel } : {}),
 				...(item.checked === undefined ? {} : { type: 'checkbox' as const, checked: item.checked }),
 				...(item.accelerator ? { accelerator: item.accelerator, registerAccelerator: false } : {}),
 			};

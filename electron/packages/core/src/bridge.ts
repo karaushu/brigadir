@@ -825,9 +825,7 @@ export type DesktopBridge = {
 		sheet?: TaskSheet
 	): Promise<AgentTask>;
 	renameTask(key: TaskKey, title: string): Promise<void>;
-	taskMenu(
-		key: TaskKey
-	): Promise<
+	taskMenu(key: TaskKey): Promise<
 		| 'open'
 		| 'edit'
 		| 'rename'
@@ -838,6 +836,8 @@ export type DesktopBridge = {
 		| 'deleted'
 		| 'archived'
 		| 'restored'
+		/** spec/tasks#move-to-worktree: the window sends the move and shows the host's refusal. */
+		| 'move'
 		| null
 	>;
 	/** spec/tasks#archive: archive by hand; Restore takes tasks back with their statuses; delete from the Archive window after its own dialog. */

@@ -110,3 +110,54 @@ it('a folder from outside leaves the task once unchosen: no snapshot, no watch (
 		listedInTask(snapshots.current.scopes.find((item) => item.id === '8aa2182539d96de8')!)
 	).toBe(true);
 });
+it('a joined worktree counts from the commit it was made at: its commits and edits before the join are the task’s (spec/tasks#agent-worktrees)', async () => {
+	const { dir, store, task } = await fixture();
+	const repo = join(dir, 'couriers'),
+		worktree = join(dir, 'couriers-feature');
+	const snapshots = await Snapshots.open(store, task);
+	await snapshots.capture('baseline');
+	const start = (await git(repo, ['rev-parse', 'HEAD'])).toString().trim();
+	await git(repo, ['worktree', 'add', '-q', '-b', 'feature', worktree]);
+	await writeFile(join(worktree, 'committed.txt'), 'one\n');
+	await git(worktree, ['add', '-A']);
+	await git(worktree, ['commit', '-qm', 'agent commit']);
+	await writeFile(join(worktree, 'file.txt'), 'edited\n');
+	const point = await snapshots.addScope(
+		{
+			id: '1f2e3d4c5b6a7980',
+			name: 'couriers-feature',
+			kind: 'external',
+			path: worktree,
+			selected: true,
+		},
+		start
+	);
+	expect(point?.reason).toBe('join');
+	const doc = snapshots.current;
+	const join0 = doc.checkpoints.at(-2)!;
+	expect(join0.reason).toBe('join');
+	expect(join0.trees.find((tree) => tree.scopeId === '1f2e3d4c5b6a7980')!.tree).toBe(
+		(await git(repo, ['rev-parse', `${start}^{tree}`])).toString().trim()
+	);
+	const { readChanges } = await import('./index');
+	const files = (await readChanges(store, task)).files
+		.filter((file) => file.scopeId === '1f2e3d4c5b6a7980')
+		.map((file) => file.path)
+		.sort();
+	expect(files).toEqual(['committed.txt', 'file.txt']);
+	// It joins once: a second add takes no new start tree.
+	const count = snapshots.current.checkpoints.length;
+	await snapshots.addScope(
+		{
+			id: '1f2e3d4c5b6a7980',
+			name: 'couriers-feature',
+			kind: 'external',
+			path: worktree,
+			selected: true,
+		},
+		start
+	);
+	expect(snapshots.current.checkpoints.filter((item) => item.reason === 'join').length).toBe(
+		count - 3 + 2
+	);
+});

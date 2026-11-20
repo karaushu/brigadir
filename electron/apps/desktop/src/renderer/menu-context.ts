@@ -13,7 +13,8 @@ export function useMenuContext(
 	task: boolean,
 	needsYou: boolean,
 	relay = false,
-	archivable = false
+	archivable = false,
+	/** spec/tasks#move-to-worktree */ movable = false
 ) {
 	useEffect(() => {
 		let last = '',
@@ -72,6 +73,7 @@ export function useMenuContext(
 				needsYou,
 				relay,
 				archivable,
+				movable,
 				threeColumns: task && threeColumns,
 				// spec/task-window-workspace#layout-switch: View ▸ Layout ticks the task's switches.
 				layoutChat: task
@@ -229,5 +231,5 @@ export function useMenuContext(
 			document.removeEventListener('focusin', publish);
 			document.removeEventListener('focusout', schedule);
 		};
-	}, [project, task, needsYou, relay, archivable]);
+	}, [project, task, needsYou, relay, archivable, movable]);
 }

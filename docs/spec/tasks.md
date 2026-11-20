@@ -187,14 +187,43 @@ Order is fixed: **root → submodules → nested repos → `.env` copy → setup
 <a id="worktree-move"></a>
 ### Moving a running task into a worktree
 
-An `Auto` task without isolation that hires is moved into a worktree in the middle of the task ([Crew](crew.md#auto-move)): the same preparation as above, each repo from its own `HEAD`, then only the task's own changes (by snapshots) move from the project folder into the copies; what was dirty there before the task stays, and the project folder returns to its state at the task's start. After the switch the task is a worktree task in every respect: `launch.isolation` is `worktree`, the composer and the sidebar card show `Worktree · <branch>`, its diff counts from the worktree's start (`changeBase` = the `move` checkpoint), it holds no repo locks, and `Remove worktree…`, the PR and archiving work as for any worktree task. Nothing else moves a task between isolation modes.
+An `Auto` task without isolation that hires is moved into a worktree in the middle of the task ([Crew](crew.md#auto-move)): the same preparation as above, each repo from its own `HEAD`, then only the task's own changes (by snapshots) move from the project folder into the copies; what was dirty there before the task stays, and the project folder returns to its state at the task's start. After the switch the task is a worktree task in every respect: `launch.isolation` is `worktree`, the composer and the sidebar card show `Worktree · <branch>`, its diff counts from the worktree's start (`changeBase` = the `move` checkpoint), it holds no repo locks, and `Remove worktree…`, the PR and archiving work as for any worktree task. The person starts the same move with [Move to a worktree](#move-to-worktree); nothing else moves a task between isolation modes.
+
+<a id="move-to-worktree"></a>
+### Move to a worktree
+
+The person frees the project folder for other work: `Move to a worktree` moves a running solo or `Auto` task that works in the project folder into a worktree of its own. It is exactly the move an `Auto` hire makes ([Crew](crew.md#auto-move), steps 2–8): one implementation with two starters, the hire and the person.
+
+- **Where.** The task's context menu in the sidebar ([Sidebar](sidebar.md#task-menu)), the `Task repos` popover of the environment line under the composer (where the branch stands, [Composer](composer.md)), and File ▸ `Move to a worktree` in the menu bar, which also makes it an action of Search Everywhere ([Menus](search-menus-and-commands.md#menu-structure)). No default shortcut.
+- **For which task.** A task without a worktree whose project folder is a Git repository. Refused with the reason, in the menu as a disabled item and from the host as an error:
+
+| Case | Reason |
+| --- | --- |
+| A crew worker, a reviewer, a named crew's foreman | `Only a solo or Auto task moves into a worktree.` |
+| The agent runs in the terminal | `A task in the terminal cannot move: its agent would stop.` |
+| A task that is preparing, queued or already moving | `The task cannot restart now.` |
+| The project folder has no Git repository | `The project has no Git repository.` |
+| The task already has a worktree | not shown |
+
+- **When.** At once when no turn runs; the host starts for a task whose host sleeps. While a turn runs the move waits for it to end: the chat row reads `Waiting for the turn to end` with `Cancel`, and the composer queues the person's messages as during any move. `Cancel` drops a waiting move (row `Move to a worktree cancelled`); once the move started it cannot be cancelled.
+- **What.** The `workspace` chat row in its states (`waiting`, `moving`, `moved` with or without paths that stayed, `failed`, `cancelled`), the same failure rule: nothing is lost, the task stays in the project folder, the reason is shown. After a move the agent's next prompt starts with one English sentence naming the worktree's path and branch and the paths that stayed, so it works there; no turn starts for it.
+- The journal event is `workspace.move` with `by: 'person'` and no `hireId`.
 
 <a id="agent-worktrees"></a>
 ### Worktrees the agent creates
 
-- The session brief tells every agent not to run `git worktree add` itself and to ask the person first (`worktreeBrief`).
-- If it does anyway: after every completed tool whose input contains `worktree`, the host runs `git worktree list` in each writable repo of the task. A new path outside the project root and outside `~/.brigadir/worktrees`, not present when the host started, joins the task as a folder (`launch.scopes`, lock, snapshot, ACP roots from the next turn). No permission card: same repo, already writable.
-- A folder from outside that is a checkout of the task root's repo (same `git-common-dir`) gets `worktreeOf` = root id, whether added by the agent, `Add folder…` or `add_folder`. The composer footer and sidebar card show `Worktree · <its branch>`; diff and Repos show both. The newest such checkout wins; when it disappears the root's branch returns.
+A git worktree the agent makes itself joins the task, so the diff, the snapshots, the host's reviews and the review before the PR cover the work in it.
+
+- **The look.** After every finished tool whose input names `worktree`, at the end of every turn and when the host starts, the host lists the linked worktrees (`git worktree list`) of every writable git repo of the task. A worktree it has not judged yet is judged once (`agent-worktrees.json` in the task's folder keeps what it judged and what joined, so a restart judges nothing twice).
+- **Whose it is.** The creating process is not known, so the host goes by time and by what the agent ran:
+  - never joined: Brigadir's own worktrees (under `~/.brigadir/worktrees`: tasks, crew workers, reviewers, moves), worktrees inside the project folder (discovery owns them), a worktree another task already holds as a folder, and a worktree made outside this task's turns;
+  - joins without asking: a worktree made during one of the task's turns (its first `HEAD` reflog entry, else its git folder's birth time, within the turn ±2 s) when a tool of that turn named `worktree`, its folder or its branch;
+  - asks: a worktree made during a turn without such a tool, or whose time git does not tell. A card `Add worktree <name> · <branch> to the task` with `Allow` and `Deny`; `Deny` leaves it out for good. A card left unanswered when the host stops is asked again at its next look.
+- **Joining** is `add_folder` without the card ([Projects](projects-and-board.md#folders-mid-task)): the folder joins `launch.scopes` (with a lock for a task without isolation), the write policy and the repo manifest at once, and the ACP roots from the next turn. Its diff counts from the commit the worktree was made at, not from the moment it joined: a `join` checkpoint holds that commit's tree, then the folder is captured, so commits and edits the agent made there before the join are the task's ([Diff and review](diff-and-review.md#snapshots)).
+- **The row.** `worktree · <name> · <branch> · joined the task` (`· you allowed it` after a card); for a checkout of the root's repo the row adds `holds the task’s work`.
+- **The task's branch.** A joined checkout of the task root's repo (same `git-common-dir`) gets `worktreeOf` = root id, whether it joined by itself or by the person's `Add folder…` or `add_folder`. From then on its branch is the task's branch: the composer footer and the sidebar card show `Worktree · <its branch>`, the Diff and Repos show both repos (the root keeps its own changes, if any), a review reads the joined worktree's tree in place of the root's ([Reviews](reviews.md#reviewer-sessions)), and `Create PR` offers the joined branch; the root's own PR card stays only while the root has changes of its own in the task ([Pull requests](pull-requests-and-ci.md)). The newest such checkout wins; when it disappears the root's branch returns.
+- **Gone again.** A joined worktree the agent removes (`git worktree remove`), or one git still lists whose folder is gone (after a restart too), leaves the task (the host joined it, so the host lets it go; an unavailable folder the person added stays theirs to remove, [Projects](projects-and-board.md#external-folders)), with a row `worktree · <name> · removed` and either `branch <branch> kept` (its commits are still there) or `branch deleted`. Its snapshots stay in the task's history; the roots follow at the next turn.
+- **The brief** tells the agent that a worktree it makes joins the task when its turn ends, so it need not tell the person where the work is (`worktreeBrief`).
 
 <a id="agent-context"></a>
 ### What the agent is told

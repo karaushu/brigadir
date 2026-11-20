@@ -60,7 +60,9 @@ provider's own option catalog.
   ("You check the work and do not write code.").
 - **Its tree is the round's snapshot.** Before a round the host sets every repo of the reviewer's worktree to the round's
   result tree (`git read-tree -u --reset <tree>`), so the files on disk are the task's state under review, uncommitted
-  changes included.
+  changes included. A worktree that [joined the task](tasks.md#agent-worktrees) as a checkout of the root's repo stands
+  for the root: the reviewer's root gets the joined worktree's tree. Other repos from outside the project are read
+  through `read_diff` only, under their own name.
 - **What it reads:** the task's prompt (the first prompt of the task), for a worker the part's prompt and acceptance
   criteria, the project's [review notes](pull-requests-and-ci.md#review-notes), the person's instructions when they gave
   any, and the round's diff through `read_report` / `read_diff`.

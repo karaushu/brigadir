@@ -223,9 +223,20 @@ export function crewBrief(context: CrewContext, tools?: WorkspaceTools): string 
 /** spec/chat-turns-plans-and-questions#checklist-tools: English by rule 12; the adapter turns the checklist into ACP `plan`, the chat shows it as the plan row. */
 export const checklistBrief =
 	'For work with three or more steps, keep a step checklist with your todo, task or plan tool (`update_plan` in Codex) and mark each step as you finish it; the person sees that checklist in the chat, so do not repeat it as a list in your messages.';
-/** spec/tasks#agent-worktrees: the agent works in the checkouts it was given; a worktree of its own hides its branch and diff from the person. */
+/** A changed file's path as the reviewer reads it: relative to the project for its repos; a repo from outside (an added folder, a joined
+ *  worktree, spec/reviews#reviewer-sessions) under its own name. */
+export function scopePrefix(
+	scope: { path: string; name: string } | undefined,
+	projectPath: string
+) {
+	if (!scope || scope.path === projectPath) return '';
+	return scope.path.startsWith(`${projectPath}/`)
+		? `${scope.path.slice(projectPath.length + 1)}/`
+		: `${scope.name}/`;
+}
+/** spec/tasks#agent-worktrees: a worktree the agent makes joins the task, so it need not tell the person where the work is. */
 export const worktreeBrief =
-	"Work in the workspace repositories as they are. Do not create git worktrees yourself (`git worktree add`): if the work needs a separate branch or checkout, ask the person first, since Brigadir runs a task in its own worktree when the person chooses that. A worktree you create at the person's request joins this task, and the app shows its branch and diff.";
+	"Work in the workspace repositories as they are. If you create a git worktree yourself (`git worktree add`), it joins this task when your turn ends: the person sees its branch and diff in Brigadir and the task's reviews read it, so you need not tell them where the work is.";
 /** spec/agents-and-providers#context-tools: sessions with the person's tools learn that they can see what the person has open and selected. */
 export const contextBrief =
 	'When the person points at something without naming it ("this", "here", "the selected code", a pull request comment), call editor_state, or pr_state for a pull request, to see what is open and selected in their window.';
@@ -2289,13 +2300,27 @@ export class CrewHost {
 	 * (matched by its name in the project), index and files; the reviewer writes nothing, so nothing of its own is lost.
 	 */
 	private async syncReviewerTree(reviewer: CrewWorkerRecord, run: ReviewRun) {
-		const [own, theirs] = await Promise.all([
+		const [own, theirs, task] = await Promise.all([
 			readSnapshots(this.deps.store, this.deps.key),
 			readSnapshots(this.deps.store, this.workerKey(reviewer)),
+			this.deps.store.task(this.deps.key),
 		]);
+		// spec/reviews#reviewer-sessions: the newest joined checkout of the root's repo stands for the root; the root's own tree then waits.
+		const root = own?.scopes.find((entry) => entry.kind === 'root');
+		const standIn = task.launch?.scopes
+			.filter(
+				(choice) =>
+					choice.selected &&
+					!!root &&
+					choice.worktreeOf === root.id &&
+					run.scopeSnapshots.some((item) => item.scopeId === choice.id)
+			)
+			.at(-1)?.id;
 		for (const item of run.scopeSnapshots) {
+			if (standIn && item.scopeId === root?.id) continue;
 			const scope = own?.scopes.find((entry) => entry.id === item.scopeId),
-				target = scope && theirs?.scopes.find((entry) => entry.name === scope.name);
+				name = item.scopeId === standIn ? root?.name : scope?.name,
+				target = name !== undefined && theirs?.scopes.find((entry) => entry.name === name);
 			if (target && target.available !== false)
 				await gitText(target.path, ['read-tree', '-u', '--reset', item.result]);
 		}
@@ -3134,9 +3159,7 @@ export class CrewHost {
 			{ changes, project } = await this.workerChangesAt(worker, run);
 		const rel = (file: ChangedFile) => {
 			const scope = changes.scopes.find((item) => item.id === file.scopeId);
-			const prefix =
-				scope && scope.path !== project.path ? scope.path.slice(project.path.length + 1) + '/' : '';
-			return `${prefix}${file.path}`;
+			return `${scopePrefix(scope, project.path)}${file.path}`;
 		};
 		// The model reads a bounded list and unified hunks; full text only on request, capped too.
 		if (typeof input.path !== 'string' || !input.path) {
@@ -3208,9 +3231,7 @@ export class CrewHost {
 		const { changes, project } = await this.workerChangesAt(worker, run);
 		const rel = (file: ChangedFile) => {
 			const scope = changes.scopes.find((item) => item.id === file.scopeId);
-			const prefix =
-				scope && scope.path !== project.path ? scope.path.slice(project.path.length + 1) + '/' : '';
-			return `${prefix}${file.path}`;
+			return `${scopePrefix(scope, project.path)}${file.path}`;
 		};
 		// Check every comment first, then read the new-side blobs up to the first failing one in one batch per repo
 		// rather than two git processes per comment; errors still surface in comment order.

@@ -170,6 +170,7 @@ function validateSnapshots(doc: Record<string, unknown>, key: TaskKey) {
 				'quick-before',
 				'quick-after',
 				'move',
+				'join',
 			].includes(String(c.reason)) ||
 			!Array.isArray(c.trees)
 		)
@@ -344,8 +345,10 @@ export class Snapshots {
 		this.tail = result.catch(() => {});
 		return result;
 	}
-	/** spec/projects-and-board#folders-mid-task: a folder from outside the root (spec/projects-and-board#external-folders) joins the task chosen, also under a running agent; `refresh` adds its scope. */
-	addScope(choice: ScopeChoice) {
+	/** spec/projects-and-board#folders-mid-task: a folder from outside the root (spec/projects-and-board#external-folders) joins the task chosen, also under a running agent; `refresh` adds its scope.
+	 *  spec/tasks#agent-worktrees: `start` — the commit a worktree the agent made was made at; a `join` checkpoint holds its tree first, so the
+	 *  folder's diff counts from there, and the capture that follows is a `join` one. */
+	addScope(choice: ScopeChoice, start?: string) {
 		const result = this.tail.then(async () => {
 			if ((choice.kind !== 'external' && choice.kind !== 'folder') || !choice.path)
 				throw new Error('Only a folder outside the project joins a task');
@@ -374,6 +377,86 @@ export class Snapshots {
 			});
 			const scope = this.document.scopes.find((item) => item.id === choice.id);
 			if (scope) scope.selected = true;
+			if (start && isSha(start) && choice.kind === 'external') {
+				await this.startTree(choice.id, choice.path, start);
+				return this.captureNow('join');
+			}
+			return this.captureNow('refresh');
+		});
+		this.tail = result.catch(() => {});
+		return result;
+	}
+	/** spec/tasks#agent-worktrees: the `join` checkpoint of a joined worktree: its tree at `start`, beside the other repos' latest trees. Skipped when
+	 *  the repo already has a snapshot in the task (it joined before). */
+	private async startTree(scopeId: string, path: string, start: string) {
+		if (this.document.checkpoints.some((point) => point.trees.some((t) => t.scopeId === scopeId)))
+			return;
+		const tree = await gitText(path, ['rev-parse', '--verify', '--quiet', `${start}^{tree}`]);
+		if (!isSha(tree)) throw new Error('Invalid Git tree');
+		const id = this.document.checkpoints.length,
+			previous = this.document.checkpoints.at(-1);
+		const commit = await gitText(path, ['commit-tree', tree, '-m', `Brigadir snapshot ${id}`], {
+			env: {
+				GIT_AUTHOR_NAME: 'Brigadir',
+				GIT_AUTHOR_EMAIL: 'brigadir@localhost',
+				GIT_COMMITTER_NAME: 'Brigadir',
+				GIT_COMMITTER_EMAIL: 'brigadir@localhost',
+			},
+		});
+		if (!isSha(commit)) throw new Error('Invalid snapshot commit');
+		const settled = await advanceTip(path, this.key, scopeId, commit, undefined, null, () => id);
+		if (settled) this.tips.set(scopeId, commit);
+		const checkpoint: Checkpoint = {
+			id,
+			at: new Date().toISOString(),
+			reason: 'join',
+			trees: [
+				...(previous?.trees ?? []),
+				{ scopeId, tree, commit, ref: tipRef(this.key, scopeId) },
+			],
+		};
+		// The repo is listed with its first tree, as `refresh` would list it from the launch.
+		const listed = this.document.scopes.some((scope) => scope.id === scopeId)
+			? this.document.scopes
+			: [
+					...this.document.scopes,
+					...(await launchExtras((await this.store.task(this.key)).launch))
+						.filter((scope) => scope.id === scopeId)
+						.map((scope) => ({ ...scope, selected: true, available: true })),
+				];
+		const document = {
+			...this.document,
+			scopes: listed,
+			checkpoints: [...this.document.checkpoints, checkpoint],
+		};
+		await atomicText(
+			await safePath(await this.store.taskDir(this.key), 'snapshots.json'),
+			jsonText(document)
+		);
+		this.document = document;
+	}
+	/** spec/tasks#agent-worktrees: a joined worktree whose folder is gone leaves the task — present or not, it is no longer chosen; its
+	 *  snapshots stay in the history. */
+	leaveScope(id: string) {
+		const result = this.tail.then(async () => {
+			const task = await this.store.task(this.key);
+			if (task.launch?.scopes.some((choice) => choice.id === id))
+				await this.store.updateTask(this.key, {
+					launch: {
+						...task.launch,
+						scopes: task.launch.scopes.filter((choice) => choice.id !== id),
+					},
+				});
+			const scopes = this.document.scopes.map((scope) =>
+				scope.id === id ? { ...scope, selected: false } : scope
+			);
+			const document = { ...this.document, scopes };
+			await atomicText(
+				await safePath(await this.store.taskDir(this.key), 'snapshots.json'),
+				jsonText(document)
+			);
+			this.document = document;
+			this.scopeRevision++;
 			return this.captureNow('refresh');
 		});
 		this.tail = result.catch(() => {});

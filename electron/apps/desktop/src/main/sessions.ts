@@ -404,6 +404,13 @@ export class Sessions {
 	async command(key: TaskKey, command: SessionCommand) {
 		const client = await this.attach(key);
 		if (client) return client.command(command);
+		// spec/tasks#move-to-worktree: a task whose host sleeps moves too; its host starts for it, without the agent.
+		if (command.kind === 'moveToWorktree') {
+			await this.ensure(key, false);
+			const started = await this.attach(key);
+			if (!started) throw new Error('Host is not connected');
+			return started.command(command);
+		}
 		// spec/agents-and-providers#task-budget: without a host the budget is a field of task.json; a waiting question needs the host to answer it.
 		if (command.kind === 'setTokenBudget') {
 			const store = await SessionStore.at(this.dataDir),

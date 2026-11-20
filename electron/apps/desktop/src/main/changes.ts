@@ -133,7 +133,10 @@ export class Changes {
 			saves = new Set<string>(),
 			quick = new Map<number, { question: string; files: Set<string> }>();
 		let turn: Turn | null = null,
-			turnNumber = 0;
+			turnNumber = 0,
+			lastTurn: Turn | null = null,
+			/** spec/diff-and-review#snapshots: the agent's worktree joined; its `join` capture is that turn's. */
+			joinTurn: Turn | null = null;
 		for (const record of journal.records) {
 			const event = record.event;
 			if (event.kind === 'turn.started')
@@ -144,7 +147,12 @@ export class Changes {
 					excerpt: '',
 					tools: new Map(),
 				};
-			if (['turn.completed', 'host.stopped', 'session.failed'].includes(event.kind)) turn = null;
+			if (['turn.completed', 'host.stopped', 'session.failed'].includes(event.kind)) {
+				lastTurn = turn ?? lastTurn;
+				turn = null;
+			}
+			if (event.kind === 'worktree.joined')
+				joinTurn = event.by === 'agent' ? (turn ?? lastTurn) : null;
 			if (
 				turn &&
 				event.kind === 'message.delta' &&
@@ -161,8 +169,14 @@ export class Changes {
 				event.checkpoint >= from &&
 				event.checkpoint <= current.checkpoint &&
 				!boundaries.has(event.checkpoint)
-			)
-				boundaries.set(event.checkpoint, turn ? { ...turn, tools: new Map(turn.tools) } : null);
+			) {
+				const source = turn ?? joinTurn;
+				boundaries.set(
+					event.checkpoint,
+					source ? { ...source, tools: new Map(source.tools) } : null
+				);
+			}
+			if (event.kind === 'checkpoint.created') joinTurn = null;
 			if (event.kind === 'file.saved') saves.add(`${event.after}/${event.path}`);
 			if (event.kind === 'quick-ask.changed')
 				quick.set(event.after, { question: event.question, files: new Set(event.files) });
@@ -218,7 +232,7 @@ export class Changes {
 			}
 			const author = user
 				? 'user'
-				: !['tools', 'turn', 'refresh'].includes(checkpoint.reason) || !source
+				: !['tools', 'turn', 'refresh', 'join'].includes(checkpoint.reason) || !source
 					? 'unknown'
 					: 'agent';
 			const locations = new Set([

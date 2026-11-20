@@ -223,6 +223,9 @@ export type SessionEvent =
 	  }
 	/** spec/crew#auto-move: a task without isolation moves into a worktree before its hire; the newest event of an id is its chat row. */
 	| WorkspaceMoveEvent
+	/** spec/tasks#agent-worktrees: a worktree made in the task's turns joined it, or its folder went away. */
+	| WorktreeJoinedEvent
+	| WorktreeRemovedEvent
 	/** spec/crew#auto-dismiss */
 	| {
 			kind: 'crew.worker.dismissed';
@@ -321,6 +324,9 @@ export type SessionCommand =
 	| { kind: 'answerModel'; id: string; answer: AutoModelAnswer | null }
 	/** spec/crew#auto-dismiss: the person dismisses a worker of an Auto task from its row. */
 	| { kind: 'dismissWorker'; taskId: string }
+	/** spec/tasks#move-to-worktree: the person moves the task into a worktree; `cancelMove` drops a move that still waits for the turn. */
+	| { kind: 'moveToWorktree' }
+	| { kind: 'cancelMove' }
 	/** spec/crew#auto-budget: the Auto agent's host tells a worker's host its part went over budget. */
 	| {
 			kind: 'overBudget';
@@ -637,6 +643,9 @@ export function isSessionCommand(v: unknown): v is SessionCommand {
 			return isId(v.id) && (v.answer === null || isAutoModelAnswer(v.answer));
 		case 'dismissWorker':
 			return isId(v.taskId);
+		case 'moveToWorktree':
+		case 'cancelMove':
+			return Object.keys(v).length === 1;
 		case 'overBudget':
 			return (
 				text(v.title) &&
@@ -765,7 +774,11 @@ import { isScopeChoice, type ScopeChoice } from './launch';
 import { isTaskProposalResult, type TaskProposal, type TaskProposalResult } from './task-proposal';
 import { isBackgroundId, isSubagentId } from './background';
 import { isCrewSpecAgent, type CrewSpecAgent } from './crew';
-import type { WorkspaceMoveEvent } from './workspace-move';
+import type {
+	WorkspaceMoveEvent,
+	WorktreeJoinedEvent,
+	WorktreeRemovedEvent,
+} from './workspace-move';
 import {
 	isReviewPoint,
 	isReviewerChoice,

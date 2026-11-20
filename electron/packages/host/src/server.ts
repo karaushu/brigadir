@@ -49,7 +49,7 @@ import {
 } from '@brigadir/core';
 import { browserUrl, localBrowserUrl } from './browser-url';
 import { Terminals } from './terminals';
-import { dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { createServer } from 'node:net';
 import { chmod, open as openFile, readFile, realpath, stat, unlink } from 'node:fs/promises';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
@@ -103,7 +103,6 @@ import {
 	readOnlyChanges,
 	watchScopes,
 	Snapshots,
-	NewWorktrees,
 	worktreeOfRoot,
 	readChanges,
 } from '@brigadir/git';
@@ -500,7 +499,12 @@ export async function startHost(config: HostConfig) {
 				? new AutoCrewHost({
 						...deps,
 						app: (method, params) => (ui ? ui.request(method, params) : null),
-						workspace: { hold: holdWorkspace, gate: gateWorkspace, sessionId: () => sessionId() },
+						workspace: {
+							hold: holdWorkspace,
+							gate: gateWorkspace,
+							sessionId: () => sessionId(),
+							mover,
+						},
 					})
 				: new CrewHost(deps);
 		await host.start();
@@ -608,6 +612,30 @@ export async function startHost(config: HostConfig) {
 		const started = records.findLast((record) => record.event.kind === 'session.started')?.event;
 		return started?.kind === 'session.started' ? started.sessionId : null;
 	};
+	/** spec/tasks#move-to-worktree: a move that has not taken the hold yet is dropped; one that runs goes on. */
+	function unholdWorkspace() {
+		if (!workspaceDue || workspaceHeld) return false;
+		workspaceDue = null;
+		kickPrompts();
+		return true;
+	}
+	/** spec/crew#auto-move, spec/tasks#move-to-worktree: the one move of the task into a worktree; an Auto hire and the person start it. The
+	 *  person's move tells the agent in its next prompt (`mover.note`), so nothing follows it here. */
+	const mover = new WorkspaceMover(
+		{
+			store,
+			key: config.key,
+			services: { mcpEntry: config.mcpEntry },
+			records: () => records,
+			emit: (event) => emit(event),
+			hold: holdWorkspace,
+			unhold: unholdWorkspace,
+			gate: gateWorkspace,
+			sessionId: () => sessionId(),
+			worktree: async () => (await store.task(config.key)).launch?.isolation === 'worktree',
+		},
+		{ moved: async () => {}, failed: async () => {} }
+	);
 	/** The person's message or a service prompt while the task moves: it waits in the queue for the host in the new folder. */
 	function queueWhileMoving(c: Extract<SessionCommand, { kind: 'prompt' | 'submitReview' }>) {
 		return serialPrompt(async () => {
@@ -845,6 +873,9 @@ export async function startHost(config: HostConfig) {
 		sentScopeContext = manifest;
 		const briefBlock =
 			briefPending && brief ? [{ kind: 'text' as const, name: 'Brigadir brief', text: brief }] : [];
+		// spec/tasks#move-to-worktree: after the person's move the agent's next prompt says where the task now runs.
+		const moved = await mover.note().catch(() => null),
+			moveBlock = moved ? [{ kind: 'text' as const, name: 'Brigadir workspace', text: moved }] : [];
 		briefPending = false;
 		// spec/crew#assignment-after-compaction: the prompt answers the newest compaction before it goes out; the answer is journaled once the agent took
 		// the turn, so a request that fails — also before a restart — leaves the compaction due for the next prompt.
@@ -862,6 +893,7 @@ export async function startHost(config: HostConfig) {
 				[
 					...attachments.map((value) => ({ ...value.input, id: value.attachment.id })),
 					...briefBlock,
+					...moveBlock,
 					...assignmentInput,
 					...(context
 						? [{ kind: 'text' as const, name: 'Workspace repositories', text: context }]
@@ -870,6 +902,7 @@ export async function startHost(config: HostConfig) {
 				relay.resources
 			)
 			.then(async () => {
+				if (moved) await mover.told().catch(() => {});
 				if (answered !== null)
 					await emit({
 						kind: 'crew.assignment.restored',
@@ -1125,25 +1158,50 @@ export async function startHost(config: HostConfig) {
 	);
 	let ready = false;
 	let snapshots: Snapshots | null = null;
-	/** spec/tasks#agent-worktrees: a worktree the agent made itself joins the task. A finished tool whose input names `worktree` makes the
-	 *  host compare `git worktree list` of the task's writable repos with the last look; the first look is the baseline. */
-	const newWorktrees = new NewWorktrees(
-		[project.path, join(store.root, 'worktrees')].map((path) => {
+	/** spec/tasks#agent-worktrees: a worktree the agent made itself joins the task. The host looks after a finished tool whose input names
+	 *  `worktree`, at every turn's end and at its start; `AgentWorktrees` judges each worktree once. */
+	const realData = (() => {
+		try {
+			return realpathSync(store.root);
+		} catch {
+			return store.root;
+		}
+	})();
+	const agentWorktrees = new AgentWorktrees({
+		store,
+		key: config.key,
+		projectPath: (() => {
 			try {
-				return realpathSync(path);
+				return realpathSync(project.path);
 			} catch {
-				return path;
+				return project.path;
 			}
-		})
-	);
+		})(),
+		dataRoot: realData,
+		records: () => records,
+		repos: agentRepos,
+		inTask: (path) =>
+			(snapshots?.current.scopes ?? []).some(
+				(scope) => scope.path === path && scope.selected && scope.available !== false
+			),
+		join: joinWorktree,
+		leave: leaveWorktree,
+		ask: askWorktree,
+		emit: (event) => emit(event),
+	});
 	const worktreeTools = new Map<string, string>();
-	let adopting: Promise<void> = Promise.resolve();
+	/** True while `saving` is the host's own scope change, which commands wait for instead of being refused. */
+	let hostScopeChange = false;
 	function agentRepos() {
 		return (snapshots?.current.scopes ?? [])
-			.filter((scope) => isGitScope(scope) && writableByAgent(scope))
+			.filter((scope) => isGitScope(scope) && writableByAgent(scope) && scope.available !== false)
 			.map((scope) => scope.path);
 	}
 	function watchWorktreeTool(event: SessionEvent) {
+		if (event.kind === 'turn.completed' || event.kind === 'session.failed') {
+			adoptAgentWorktrees();
+			return;
+		}
 		if (event.kind !== 'tool.changed') return;
 		const { id, input, status } = event.patch;
 		if (input) worktreeTools.set(id, input);
@@ -1154,27 +1212,78 @@ export async function startHost(config: HostConfig) {
 		if (text && /worktree/i.test(text)) adoptAgentWorktrees();
 	}
 	function adoptAgentWorktrees() {
-		adopting = adopting
-			.then(async () => {
-				// Without the app the folder cannot be described; the next look still finds it new.
-				if (!snapshots || !ui || stopping || task.readOnlyAgent === true) return;
-				for (const path of await newWorktrees.found(agentRepos())) {
-					if (
-						snapshots.current.scopes.some(
-							(scope) => scope.path === path && scope.selected && scope.available !== false
-						)
-					)
-						continue;
-					const choice = await ui.request('folder', { path });
-					if (isScopeChoice(choice) && choice.kind === 'external' && choice.path)
-						await addTaskFolder(choice);
-				}
-			})
-			.catch((error) => {
-				process.stderr.write(
-					`[host] worktree adoption failed: ${error instanceof Error ? error.message : String(error)}\n`
-				);
-			});
+		// Without snapshots (a move holds the task) or for a task that only reads, nothing joins; the next look still finds it.
+		if (!snapshots || stopping || workspaceHeld || task.readOnlyAgent === true) return;
+		void agentWorktrees.look().catch((error) => {
+			process.stderr.write(
+				`[host] worktree look failed: ${error instanceof Error ? error.message : String(error)}\n`
+			);
+		});
+	}
+	/** spec/tasks#agent-worktrees: the folder joins as `add_folder` adds one, without the card; its diff counts from the commit it was made at. */
+	async function joinWorktree(found: FoundWorktree, by: 'agent' | 'person') {
+		if (!snapshots || !ui || stopping || workspaceHeld || task.readOnlyAgent === true) return null;
+		const choice = await ui.request('folder', { path: found.path });
+		if (!isScopeChoice(choice) || choice.kind !== 'external' || !choice.path) return null;
+		const repo = snapshots.current.scopes.find((scope) => scope.path === found.repo);
+		await addTaskFolder(choice, {
+			...(found.start ? { start: found.start } : {}),
+			joined: {
+				kind: 'worktree.joined',
+				scopeId: choice.id,
+				name: choice.name,
+				path: choice.path,
+				repo: !repo ? basename(found.repo) : repo.name === '.' ? project.name : repo.name,
+				...(found.branch ? { branch: found.branch } : {}),
+				by,
+			},
+		});
+		return choice.id;
+	}
+	/** spec/tasks#agent-worktrees: a joined worktree whose folder is gone leaves the task; the roots follow at the turn boundary. */
+	async function leaveWorktree(scopeId: string) {
+		if (!snapshots) return;
+		await saveFinished;
+		saving = true;
+		hostScopeChange = true;
+		const current = snapshots;
+		const operation = (async () => {
+			const revision = current.scopeRevision;
+			await current.leaveScope(scopeId);
+			task = await store.task(config.key);
+			if (revision !== current.scopeRevision) await emit({ kind: 'scopes.changed' });
+		})();
+		saveFinished = operation.catch(() => {});
+		try {
+			await operation;
+		} finally {
+			saving = false;
+			hostScopeChange = false;
+		}
+		if (transport && task.transport !== 'terminal') rootsStale = true;
+		kickPrompts();
+	}
+	/** spec/tasks#agent-worktrees: the host cannot tell whose worktree it is; the person decides on a card. Null — the host stopped first. */
+	async function askWorktree(found: FoundWorktree): Promise<boolean | null> {
+		if (!ui || stopping) return null;
+		const request: PermissionRequest = {
+			id: randomUUID(),
+			tool: {
+				id: randomUUID(),
+				title: `Add worktree ${basename(found.path)}${found.branch ? ` · ${found.branch}` : ''} to the task`,
+				category: 'edit',
+				input: found.path,
+			},
+			options: [
+				{ id: 'add', name: 'Allow', kind: 'allow_once' },
+				{ id: 'deny', name: 'Deny', kind: 'reject_once' },
+			],
+		};
+		const answer = permission(request, new AbortController().signal);
+		await emit({ kind: 'permission.requested', request });
+		const result = await answer;
+		if (result === 'add') return true;
+		return stopping ? null : false;
 	}
 	let toolCount = 0;
 	let lastCheckpoint: number | undefined;
@@ -2090,15 +2199,22 @@ export async function startHost(config: HostConfig) {
 		};
 	}
 	/** spec/projects-and-board#folders-mid-task: the folder joins the task now — scope, lock, write policy; the adapter's roots follow at the turn boundary. */
-	async function addTaskFolder(choice: ScopeChoice) {
+	async function addTaskFolder(
+		choice: ScopeChoice,
+		join: {
+			/** spec/tasks#agent-worktrees: the commit a worktree the agent made was made at. */ start?: string;
+			joined?: Omit<WorktreeJoinedEvent, 'standsForRoot'>;
+		} = {}
+	) {
 		if (!snapshots) throw new Error('Snapshots are unavailable');
 		await saveFinished;
 		// spec/tasks#agent-worktrees: another checkout of the root's repo stands for the root in the composer and the sidebar.
+		let of: string | undefined;
 		if (choice.kind === 'external' && choice.path) {
 			const root = snapshots.current.scopes.find(
-					(scope) => scope.kind === 'root' && scope.available !== false
-				),
-				of = await worktreeOfRoot(choice.path, root);
+				(scope) => scope.kind === 'root' && scope.available !== false
+			);
+			of = await worktreeOfRoot(choice.path, root);
 			choice = { ...choice, ...(of ? { worktreeOf: of } : {}) };
 		}
 		if (
@@ -2117,10 +2233,13 @@ export async function startHost(config: HostConfig) {
 			if (!claim.acquired) throw new Error(`${choice.name} is locked by another task.`);
 		}
 		saving = true;
+		hostScopeChange = !!join.joined;
 		const operation = (async () => {
 			const revision = snapshots.scopeRevision,
-				point = await snapshots.addScope(choice);
+				point = await snapshots.addScope(choice, join.start);
 			task = await store.task(config.key);
+			// The row comes before the capture's checkpoint, which is the agent's turn (spec/diff-and-review#why-changed).
+			if (join.joined) await emit({ ...join.joined, standsForRoot: !!of });
 			if (revision !== snapshots.scopeRevision) await emit({ kind: 'scopes.changed' });
 			if (point && point.id !== lastCheckpoint) {
 				await emit({ kind: 'checkpoint.created', checkpoint: point.id });
@@ -2132,6 +2251,7 @@ export async function startHost(config: HostConfig) {
 			await operation;
 		} finally {
 			saving = false;
+			hostScopeChange = false;
 		}
 		if (transport && task.transport !== 'terminal') rootsStale = true;
 		kickPrompts();
@@ -2305,6 +2425,8 @@ export async function startHost(config: HostConfig) {
 			await emit({ kind: 'pull-request.changed', scopeId: c.scopeId, pr: c.pr });
 			return;
 		}
+		// spec/tasks#agent-worktrees: the host's own scope change (a worktree joins or leaves) is short; a command waits for it.
+		if (saving && hostScopeChange) await saveFinished;
 		if (saving) throw new Error('A file is being saved');
 		if (c.kind === 'answerQuestion') {
 			const pending = questions.get(c.id);
@@ -2336,6 +2458,32 @@ export async function startHost(config: HostConfig) {
 			return;
 		}
 		// spec/crew#auto-hire, spec/crew#auto-model, spec/crew#auto-dismiss: the person's answers to an Auto task.
+		// spec/tasks#move-to-worktree: the person's move — the same move as a hire's, refused by one rule with the menus.
+		if (c.kind === 'moveToWorktree') {
+			const doc = await mover.read();
+			const root = snapshots?.current.scopes.find(
+				(scope) => scope.kind === 'root' && scope.available !== false
+			);
+			task = await store.task(config.key);
+			const refusal = moveRefusal(task, {
+				moving:
+					stopping ||
+					!!config.consoleOnly ||
+					!!workspaceDue ||
+					workspaceHeld ||
+					workspaceGate ||
+					['pending', 'moving', 'switching', 'switched'].includes(doc?.state ?? ''),
+				git: !!root && isGitScope(root),
+			});
+			if (refusal === 'worktree') throw new Error('The task already has a worktree.');
+			if (refusal) throw new Error(refusal);
+			await mover.start({ by: 'person' }, busy || starting);
+			return;
+		}
+		if (c.kind === 'cancelMove') {
+			if (!(await mover.cancel())) throw new Error('The move has already started.');
+			return;
+		}
 		if (c.kind === 'decideHire' || c.kind === 'answerModel' || c.kind === 'dismissWorker') {
 			if (!(crewHost instanceof AutoCrewHost)) throw new Error('This task is not an Auto task');
 			if (c.kind === 'decideHire') await crewHost.decideHire(c.decision);
@@ -3769,11 +3917,8 @@ export async function startHost(config: HostConfig) {
 		orphanTimer.unref();
 		snapshots = await Snapshots.open(store, config.key);
 		await checkpoint('baseline');
-		// spec/tasks#agent-worktrees: the worktrees that exist now are the baseline, never adopted.
-		adopting = newWorktrees.found(agentRepos()).then(
-			() => {},
-			() => {}
-		);
+		// spec/tasks#agent-worktrees: a worktree made in a turn the host did not see end, or one whose folder went while it was down.
+		adoptAgentWorktrees();
 		startScopeWatch();
 		if (crew && (crew.role === 'foreman' || crew.role === 'lead' || crew.role === 'auto'))
 			crewHost = await crewHostFor(crew);
@@ -3782,6 +3927,8 @@ export async function startHost(config: HostConfig) {
 			const spec = ownReviewCrew(task, crew?.role ?? null);
 			if (spec) crewHost = await crewHostFor(selfContext(spec));
 		}
+		// spec/tasks#move-to-worktree: the person's move goes on here (an Auto host resumed a hire's already).
+		if (!config.consoleOnly) await mover.resume();
 		await taskReview.load();
 		// spec/reviews#classes: the class checks start once the review's record is loaded.
 		void taskClass.start().catch(() => {});
@@ -3840,4 +3987,7 @@ export async function startHost(config: HostConfig) {
 	};
 }
 import { relayContext } from './relay-context';
+import { WorkspaceMover } from './workspace-mover';
+import { AgentWorktrees, type FoundWorktree } from './agent-worktrees';
+import { moveRefusal, type WorktreeJoinedEvent } from '@brigadir/core';
 import { finishSwitch } from './workspace-move';

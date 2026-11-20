@@ -50,27 +50,8 @@ import {
 } from '@brigadir/git';
 import { oneShotText } from '@brigadir/transport';
 import { CrewHost, type CrewHostDeps } from './crew';
-import {
-	applySwitch,
-	movedScopes,
-	newMoveId,
-	prepareMove,
-	readMove,
-	repoNames,
-	restoreProject,
-	rollbackMove,
-	saveMove,
-	type MoveDocument,
-} from './workspace-move';
-/** spec/crew#auto-move: the stay reasons as the agent reads them. */
-const stayReason = {
-	person: 'changed outside your turns',
-	moving: 'changed while the task moved',
-	conflict: 'changed before the task too, and your change does not merge',
-	ignored: 'ignored by git',
-	outside: 'outside git',
-} as const;
-
+import { movedScopes, readMove, type MoveDocument } from './workspace-move';
+import { WorkspaceMover, type MoveWork } from './workspace-mover';
 /**
  * spec/crew#auto: the host of an `Auto` task. Its agent writes code itself and hires workers through a card the person approves; each hire is a
  * new worker task. A named crew's foreman stays a `CrewHost`.
@@ -78,14 +59,14 @@ const stayReason = {
 export type AutoCrewDeps = CrewHostDeps & {
 	/** Ask the app (the window's peer); null when no window is connected. */
 	app(method: string, params: unknown): Promise<unknown> | null;
-	/** spec/crew#auto-move: the host's hold for moving the task into a worktree; absent where the host cannot restart (unit tests). */
+	/** spec/crew#auto-move: the host's hold for moving the task into a worktree; absent where the host cannot restart (unit tests). The
+	 *  host's own `mover` when it has one (spec/tasks#move-to-worktree: one move, two starters); otherwise this host makes one on the hold. */
 	workspace?: {
-		hold(
-			work: (hold: { capture(): Promise<void>; detach(): Promise<void> }) => Promise<boolean>
-		): void;
+		hold(work: MoveWork): void;
 		/** No prompt starts until `work` settles: the host in the worktree finishes the hire first. */
 		gate?(work: Promise<void>): void;
 		sessionId(): string | null;
+		mover?: WorkspaceMover;
 	};
 };
 type HireResult = { approved: boolean; parts: AutoHirePart[]; hired: AutoHired[]; moving?: true };
@@ -143,8 +124,31 @@ export class AutoCrewHost extends CrewHost {
 	private budgetTimer: ReturnType<typeof setInterval> | null = null;
 	/** spec/crew#auto-guard: paths already reported per worker, so a file is named once. */
 	private touched = new Map<string, Set<string>>();
+	private mover: WorkspaceMover;
 	constructor(private autoDeps: AutoCrewDeps) {
 		super(autoDeps);
+		const workspace = autoDeps.workspace;
+		this.mover =
+			workspace?.mover ??
+			new WorkspaceMover(
+				{
+					...this.moveDeps(),
+					emit: (event) => this.deps.emit(event),
+					...(workspace
+						? {
+								hold: (work: MoveWork) => workspace.hold(work),
+								sessionId: () => workspace.sessionId(),
+							}
+						: { sessionId: () => null }),
+					...(workspace?.gate ? { gate: (work: Promise<void>) => workspace.gate!(work) } : {}),
+					worktree: async () => this.deps.context.worktree === true,
+				},
+				{ moved: async () => {}, failed: async () => {} }
+			);
+		this.mover.onHire({
+			moved: (doc, preface) => this.hireMoved(doc, preface),
+			failed: (doc, message) => this.hireMoveFailed(doc, message),
+		});
 	}
 	private get auto(): AutoTask {
 		const auto = this.deps.context.auto;
@@ -155,12 +159,7 @@ export class AutoCrewHost extends CrewHost {
 		await super.start();
 		// spec/crew#auto-move: a move that waited for the turn, stopped half-way, or switched the task before this host started goes on. A
 		// switched one finishes its hire before any prompt of this host starts.
-		const move = await readMove(this.deps.store, this.deps.key).catch(() => null);
-		if (move?.state === 'switched' && this.deps.context.worktree) {
-			const finishing = this.finishMove(move);
-			if (this.autoDeps.workspace?.gate) this.autoDeps.workspace.gate(finishing);
-			else void finishing.catch(() => {});
-		} else if (move) setImmediate(() => void this.resumeMove(move).catch(() => {}));
+		await this.mover.resume();
 		this.budgetTimer = setInterval(() => void this.checkBudgets().catch(() => {}), budgetCheckMs);
 		this.budgetTimer.unref?.();
 	}
@@ -301,7 +300,11 @@ export class AutoCrewHost extends CrewHost {
 			if (refusedHere) throw new Error(refusedHere);
 			const move = await readMove(this.deps.store, this.deps.key).catch(() => null);
 			if (move && ['pending', 'moving', 'switching', 'switched'].includes(move.state))
-				throw new Error('The task is moving into a worktree for the previous hire.');
+				throw new Error(
+					move.by === 'person'
+						? 'The task is moving into a worktree.'
+						: 'The task is moving into a worktree for the previous hire.'
+				);
 			return await this.hireNow(input, signal);
 		} finally {
 			this.hiring = false;
@@ -395,6 +398,12 @@ export class AutoCrewHost extends CrewHost {
 			(moving.state === 'pending' || moving.state === 'moving' || moving.state === 'switching')
 		)
 			throw new Error('The hire is being decided');
+		// spec/tasks#move-to-worktree: the person's move runs; the host in the worktree takes the decision.
+		if (
+			moving?.by === 'person' &&
+			['pending', 'moving', 'switching', 'switched'].includes(moving.state)
+		)
+			throw new Error('The task is moving into a worktree.');
 		const edited = decision.parts ? editedHireParts(pending.parts, decision.parts) : null;
 		if (decision.parts && !edited) throw new Error('The edited parts do not match the hire');
 		for (const part of edited ?? [])
@@ -408,7 +417,7 @@ export class AutoCrewHost extends CrewHost {
 		);
 		// spec/crew#auto-move: a task without isolation moves into a worktree first; the hire goes on in the host that starts there.
 		if (decision.approved && !this.deps.context.worktree && autoHireable(parts).length) {
-			await this.startMove(pending, decision);
+			await this.mover.start({ hireId: pending.id, decision });
 			if (this.hireWaiter?.hire.id === pending.id) {
 				const waiter = this.hireWaiter;
 				this.hireWaiter = null;
@@ -454,84 +463,10 @@ export class AutoCrewHost extends CrewHost {
 			records: () => this.deps.records(),
 		};
 	}
-	/** spec/crew#auto-move, step 1: the approval is written down and the card closes; the move waits for the turn to end. */
-	private async startMove(hire: AutoHire, decision: AutoHireDecision) {
-		const [snapshots, project] = await Promise.all([
-			readSnapshots(this.deps.store, this.deps.key).catch(() => null),
-			this.deps.store.project(this.deps.key.projectId),
-		]);
-		const doc: MoveDocument = {
-			schemaVersion: 1,
-			id: newMoveId(),
-			hireId: hire.id,
-			decision,
-			state: 'pending',
-			repos: snapshots
-				? repoNames(movedScopes(snapshots, await realpath(project.path)), project.name)
-				: [],
-		};
-		await saveMove(this.deps.store, this.deps.key, doc);
-		await this.deps.emit({
-			kind: 'workspace.move',
-			id: doc.id,
-			hireId: doc.hireId,
-			state: 'moving',
-			repos: doc.repos,
-		});
-		this.holdMove(doc);
-	}
-	private holdMove(doc: MoveDocument) {
-		const workspace = this.autoDeps.workspace;
-		if (!workspace) return;
-		workspace.hold((hold) => this.runMove(doc, hold));
-	}
-	/** spec/crew#auto-move, steps 2–8, in the host that still runs in the project folder. True: the host restarts in the worktree. */
-	private async runMove(
-		doc: MoveDocument,
-		hold: { capture(): Promise<void>; detach(): Promise<void> }
-	): Promise<boolean> {
-		const store = this.deps.store,
-			key = this.deps.key;
-		const sessionId =
-			(await store.task(key)).provider === 'claude' ? this.autoDeps.workspace?.sessionId() : null;
-		let current: MoveDocument = { ...doc, state: 'moving', ...(sessionId ? { sessionId } : {}) };
-		try {
-			await saveMove(store, key, current);
-			await hold.capture();
-			await hold.detach();
-			current = await prepareMove(this.moveDeps(), current);
-			await saveMove(store, key, current);
-		} catch (error) {
-			await rollbackMove(this.moveDeps(), current.branch).catch(() => {});
-			await this.failMove(current, error instanceof Error ? error.message : String(error));
-			return false;
-		}
-		try {
-			current = await applySwitch(store, key, current);
-			current = await restoreProject(store, key, current);
-		} catch (error) {
-			// The next host finishes a switch it finds half-written (finishSwitch) and restores the project folder.
-			process.stderr.write(
-				`[host] workspace switch: ${error instanceof Error ? error.message : String(error)}\n`
-			);
-		}
-		return true;
-	}
 	/** spec/crew#auto-move: nothing moved; the hire resolves as not approved and the agent does the parts itself. */
-	private async failMove(doc: MoveDocument, message: string) {
-		const store = this.deps.store,
-			key = this.deps.key;
-		await saveMove(store, key, { ...doc, state: 'failed', message });
-		await this.deps.emit({
-			kind: 'workspace.move',
-			id: doc.id,
-			hireId: doc.hireId,
-			state: 'failed',
-			repos: doc.repos,
-			message,
-		});
+	private async hireMoveFailed(doc: MoveDocument, message: string) {
 		const hire = await this.pendingHire();
-		if (hire?.id === doc.hireId) {
+		if (hire && hire.id === doc.hireId && doc.decision) {
 			await atomicJson(await this.file(hireFile), {
 				schemaVersion: 1,
 				hire,
@@ -548,65 +483,18 @@ export class AutoCrewHost extends CrewHost {
 		}
 		await this.deps.prompt(
 			`The task could not move into a worktree: ${message}. The hire did not start and the task keeps running in the project folder, with your edits where they were. Do these parts yourself.`,
-			{ kind: 'hire-decision', hireId: doc.hireId, approved: false }
+			{ kind: 'hire-decision', hireId: doc.hireId!, approved: false }
 		);
 	}
-	/** spec/crew#auto-move: what a host finds at its start. */
-	private async resumeMove(doc: MoveDocument) {
-		if (doc.state === 'pending' && !this.deps.context.worktree) return this.holdMove(doc);
-		if (doc.state === 'moving' && !this.deps.context.worktree) {
-			// The host stopped before the switch: the project folder never changed; the copies go.
-			await rollbackMove(this.moveDeps(), doc.branch).catch(() => {});
-			return this.failMove(doc, 'The move stopped before it finished');
-		}
-	}
-	/**
-	 * spec/crew#auto-move, step 9, in the host that starts in the worktree: the commit, the workers, the row and the agent's message. The
-	 * document stays `switched` until the hire is decided, so a restart in between finishes it again; the hire's own record starts only the
-	 * parts that have no worker yet.
-	 */
-	private async finishMove(doc: MoveDocument) {
-		const store = this.deps.store,
-			key = this.deps.key;
-		const current = await restoreProject(store, key, doc);
-		const announced = this.deps
-			.records()
-			.some(
-				({ event }) =>
-					event.kind === 'workspace.move' && event.id === current.id && event.state === 'moved'
-			);
-		if (!announced)
-			await this.deps.emit({
-				kind: 'workspace.move',
-				id: current.id,
-				hireId: current.hireId,
-				state: 'moved',
-				repos: current.repos,
-				...(current.branch ? { branch: current.branch } : {}),
-				...(current.base ? { base: current.base } : {}),
-				stayed: current.stayed ?? [],
-			});
-		const stayed = current.stayed ?? [];
-		const preface = `The task moved into a worktree: ${current.to} on branch ${current.branch} (from ${current.base}). Your edits moved with it; work there from now on.${
-			stayed.length
-				? ` These paths stayed in the project folder (${current.from}): ${stayed
-						.slice(0, 50)
-						.map((item) => `${item.path} (${stayReason[item.reason]})`)
-						.join(', ')}.`
-				: ''
-		}\n\n`;
+	/** spec/crew#auto-move, step 9: the commit, the workers and the agent's message; the hire's own record starts only the parts without a worker. */
+	private async hireMoved(doc: MoveDocument, preface: string) {
 		const hire = await this.pendingHire();
-		if (hire?.id === current.hireId)
-			try {
-				await this.decideHire(current.decision, preface);
-			} catch (error) {
-				await this.hireFailed(
-					hire,
-					preface,
-					error instanceof Error ? error.message : String(error)
-				);
-			}
-		await saveMove(store, key, { ...current, state: 'moved' });
+		if (!hire || hire.id !== doc.hireId || !doc.decision) return;
+		try {
+			await this.decideHire(doc.decision, preface);
+		} catch (error) {
+			await this.hireFailed(hire, preface, error instanceof Error ? error.message : String(error));
+		}
 	}
 	/** The hire stopped half-way: the workers that started stay hired, the rest goes back to the agent. */
 	private async hireFailed(hire: AutoHire, preface: string, message: string) {

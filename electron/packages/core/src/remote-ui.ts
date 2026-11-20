@@ -28,6 +28,8 @@ export type NativeMenuItem = {
 	checked?: boolean;
 	/** Shown beside the item only: the menu bar owns the key. */
 	accelerator?: string;
+	/** A second line under the label, e.g. why a disabled item cannot run (spec/tasks#move-to-worktree). */
+	sublabel?: string;
 	role?: 'cut' | 'copy' | 'paste' | 'selectAll';
 	copy?: string;
 	reveal?: string;
@@ -57,6 +59,7 @@ export function isNativeMenuItem(value: unknown, nested = false): value is Nativ
 				'enabled',
 				'checked',
 				'accelerator',
+				'sublabel',
 				'role',
 				'copy',
 				'reveal',
@@ -77,6 +80,7 @@ export function isNativeMenuItem(value: unknown, nested = false): value is Nativ
 		text(value.label, 300) &&
 		(value.icon === undefined || (typeof value.icon === 'string' && iconNames.has(value.icon))) &&
 		(value.enabled === undefined || typeof value.enabled === 'boolean') &&
+		(value.sublabel === undefined || text(value.sublabel, 300)) &&
 		(value.checked === undefined || typeof value.checked === 'boolean') &&
 		(value.accelerator === undefined ||
 			(typeof value.accelerator === 'string' && /^[\x21-\x7e]{1,40}$/.test(value.accelerator))) &&

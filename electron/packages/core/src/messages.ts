@@ -77,6 +77,8 @@ const uk = {
 	'whole project · name folders': 'весь проєкт · вкажи теки',
 	'parent zone': 'зона батька',
 	'When to use': 'Коли брати',
+	'Rules of every developer': 'Правила кожного розробника',
+	'Rules of every checker': 'Правила кожного перевіряльника',
 	'One line, in English.': 'Один рядок, англійською.',
 	'{provider} is off': '{provider} вимкнено',
 	own: 'своє',

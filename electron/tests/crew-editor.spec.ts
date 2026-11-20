@@ -191,6 +191,12 @@ test('builds a crew in the editor, saves it as a template and manages the librar
 			'Checks the work, writes no code'
 		);
 		await expect(settings.getByRole('textbox', { name: 'Instructions' })).toHaveCount(0);
+		// spec/crew-templates-and-editor#template-library: the rules of its rights are shown, collapsed and read-only.
+		const rules = settings.locator('[data-read-only-details]');
+		await expect(rules).toHaveCount(1);
+		await expect(rules).not.toHaveAttribute('open');
+		await rules.locator('summary').click();
+		await expect(rules).toContainText('submit_review');
 		await settings.getByRole('button', { name: 'Duplicate' }).click();
 		await expect(agents.getByRole('radio')).toHaveCount(9);
 		await expect(settings.getByRole('textbox', { name: 'Name' })).toHaveValue('Reviewer 2');

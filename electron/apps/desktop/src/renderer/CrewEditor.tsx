@@ -11,6 +11,7 @@ import {
 	crewName,
 	crewParent,
 	crewRecommendedDepth,
+	crewRightsInstructions,
 	crewWhenToUse,
 	crewWhenToUseLimit,
 	findCrewAgent,
@@ -37,6 +38,7 @@ import {
 	type ProviderCatalog,
 } from '@brigadir/core';
 import { crewLabel } from './Crew';
+import { ReadOnlyDetails } from './ui/ReadOnlyDetails';
 import { Glyph } from './ui/Glyph';
 import { effortOptions } from './ui/EffortIcon';
 import { optionChoices } from './ui/OptionIcon';
@@ -1162,31 +1164,38 @@ export function CrewEditor({
 									</p>
 								)}
 								<hr className={styles.sep} />
+								{/* spec/crew-templates-and-editor#editor-inspector: the rules of the node's rights come before its role's instructions. */}
+								{!isRoot && !isLead && crewRightsInstructions[agentRole] && (
+									<ReadOnlyDetails
+										locale={locale}
+										title={t(
+											locale,
+											agentRole === 'reviewer'
+												? 'Rules of every checker'
+												: 'Rules of every developer'
+										)}
+										text={crewRightsInstructions[agentRole]}
+									/>
+								)}
 								{(resolvedTemplate?.instructions.trim() || isRoot || isLead) && (
-									<details
-										className={styles.instructions}
+									<ReadOnlyDetails
+										locale={locale}
 										open={instructionsOpen}
-										onToggle={(event) => setInstructionsOpen(event.currentTarget.open)}>
-										<summary>
-											<Glyph name="tree-right" size={9} />
-											<span>
-												{t(locale, 'Template instructions «{name}»').replace(
-													'{name}',
-													crewLabel(
-														locale,
-														(isLead || isRoot ? lookup(foremanTemplateId) : resolvedTemplate)
-															?.name ?? ''
-													)
-												)}
-											</span>
-											<small>· {t(locale, 'read only')}</small>
-										</summary>
-										<p>
-											{(isLead || isRoot ? lookup(foremanTemplateId) : resolvedTemplate)
+										onToggle={setInstructionsOpen}
+										title={t(locale, 'Template instructions «{name}»').replace(
+											'{name}',
+											crewLabel(
+												locale,
+												(isLead || isRoot ? lookup(foremanTemplateId) : resolvedTemplate)?.name ??
+													''
+											)
+										)}
+										text={
+											(isLead || isRoot ? lookup(foremanTemplateId) : resolvedTemplate)
 												?.instructions ||
-												t(locale, 'Instructions here add to the briefing, they do not replace it.')}
-										</p>
-									</details>
+											t(locale, 'Instructions here add to the briefing, they do not replace it.')
+										}
+									/>
 								)}
 								<div className={styles.row}>
 									<span className={styles.group}>

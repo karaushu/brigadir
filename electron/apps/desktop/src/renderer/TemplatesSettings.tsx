@@ -17,6 +17,7 @@ import {
 	builtinCrewTemplates,
 	starterCrewTemplate,
 	builtinCrewCustomized,
+	crewRightsInstructions,
 	crewWhenToUseLimit,
 	isMessageKey,
 	crewAgents,
@@ -39,6 +40,7 @@ import { Button, IconButton, Popup, Segments, Switch } from './ui/Controls';
 import { TextArea, TextInput } from './ui/Input';
 import { Glyph } from './ui/Glyph';
 import { LevelDots } from './ui/LevelDots';
+import { ReadOnlyDetails } from './ui/ReadOnlyDetails';
 import { OptionCard } from './ui/OptionCard';
 import { MenuItem, MenuPopover, MenuSeparator } from './ui/Popover';
 import { effortOptions } from './ui/EffortIcon';
@@ -746,8 +748,11 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 								</div>
 							</fieldset>
 						)}
-						{/* spec/crew-templates-and-editor#rights: a built-in with no instructions of its own is only its rights' rules, which live in code. */}
-						{(!agent.builtin || agent.instructions.trim()) && (
+						{/* spec/crew-templates-and-editor#template-library: the rules of the rights come first, read-only and collapsed; then the role's own
+						    instructions. A built-in with none of its own (Developer, Reviewer) shows the rules alone; a foreman's rules are its brief. */}
+						{(crewRightsInstructions[agent.role] ||
+							!agent.builtin ||
+							agent.instructions.trim()) && (
 							<fieldset
 								className={`${styles.group} ${styles.instructionsGroup}`}
 								disabled={disabled}>
@@ -757,15 +762,31 @@ export function TemplatesSettings({ locale, busy: outerBusy }: { locale: Locale;
 										{t(locale, 'in English: who you are, not what to do')}
 									</small>
 								</div>
-								{/* A built-in's role reads in full (and copies): read-only, not a dimmed disabled field. */}
-								<TextArea
-									aria-label={t(locale, 'Instructions')}
-									className={styles.instructions}
-									readOnly={agent.builtin}
-									value={agent.instructions}
-									placeholder={t(locale, 'Optional')}
-									onChange={(event) => saveAgent({ ...agent, instructions: event.target.value })}
-								/>
+								{crewRightsInstructions[agent.role] && (
+									<ReadOnlyDetails
+										key={agent.role}
+										locale={locale}
+										className={styles.rules}
+										title={t(
+											locale,
+											agent.role === 'reviewer'
+												? 'Rules of every checker'
+												: 'Rules of every developer'
+										)}
+										text={crewRightsInstructions[agent.role]}
+									/>
+								)}
+								{(!agent.builtin || agent.instructions.trim()) && (
+									// A built-in's role reads in full (and copies): read-only, not a dimmed disabled field.
+									<TextArea
+										aria-label={t(locale, 'Instructions')}
+										className={styles.instructions}
+										readOnly={agent.builtin}
+										value={agent.instructions}
+										placeholder={t(locale, 'Optional')}
+										onChange={(event) => saveAgent({ ...agent, instructions: event.target.value })}
+									/>
+								)}
 							</fieldset>
 						)}
 					</>

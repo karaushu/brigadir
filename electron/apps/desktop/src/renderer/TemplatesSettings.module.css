@@ -264,6 +264,10 @@
 	margin: 0 12px 12px 132px;
 	line-height: 1.5;
 }
+/* The rules of the rights sit under the caption, on the field's left edge. */
+.instructionsGroup .rules {
+	margin: 0 12px 8px 132px;
+}
 .instructionsGroup .instructions:read-only {
 	color: var(--fg2);
 }

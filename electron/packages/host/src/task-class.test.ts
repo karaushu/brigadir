@@ -96,6 +96,28 @@ describe('TaskClassLife (spec/reviews#classes)', () => {
 			},
 		]);
 	});
+	it('a class that owes no plan never tells the agent to wait for the host (spec/reviews#plan-mode)', async () => {
+		const { value, emit } = life();
+		const first = await value.set({ class: 'medium', reason: 'touches the API' });
+		expect(first.next).toContain('Brigadir switches the session into plan mode');
+		await emit({
+			kind: 'permission.requested',
+			request: {
+				id: 'p1',
+				tool: {
+					id: 'plan',
+					title: 'Implement this plan?',
+					category: 'switch_mode',
+					status: 'pending',
+				},
+				options: [{ id: 'implement_plan', name: 'Yes', kind: 'allow_once' }],
+			} as never,
+		});
+		await emit({ kind: 'permission.resolved', id: 'p1', optionId: 'implement_plan' });
+		const raised = await value.set({ class: 'large', reason: 'two layers' });
+		expect(raised.next).toContain('no new plan for approval is asked now');
+		expect(raised.next).not.toContain('Brigadir switches');
+	});
 	it('refuses a bad call, a task that writes no code and a class below Large while workers run', async () => {
 		const { value, emit } = life({ auto: true });
 		await expect(value.set({ class: 'huge', reason: 'x' })).rejects.toThrow('small, medium, large');

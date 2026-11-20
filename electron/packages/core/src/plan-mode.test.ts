@@ -233,6 +233,11 @@ describe('plan mode by the host (spec/reviews#plan-mode)', () => {
 		expect(planModeDue(journal([...switched, presented, started(codex())]))).toMatchObject({
 			value: 'plan',
 		});
+		// A mode option follows a newer mode update without a new catalog.
+		expect(
+			planModeChoice(journal([started(claude('auto')), { kind: 'mode.changed', modeId: 'plan' }]))
+				?.current
+		).toBe('plan');
 		// No plan mode in the catalog: nothing.
 		expect(planModeDue(journal([started([]), classed('medium')]))).toBeNull();
 	});
@@ -282,6 +287,18 @@ describe('plan mode by the host (spec/reviews#plan-mode)', () => {
 		expect(
 			planModeReturn(
 				journal([...base, approved, { kind: 'turn.started', text: 'next' } as SessionEvent])
+			)
+		).toBeNull();
+		// The session left the plan before (the person picked Default, then Plan again on their own): not the host's to undo.
+		expect(
+			planModeReturn(
+				journal([
+					...base.slice(0, 4),
+					{ kind: 'options.changed', options: codex() },
+					{ kind: 'options.changed', options: codex('plan') },
+					...base.slice(4),
+					approved,
+				])
 			)
 		).toBeNull();
 	});

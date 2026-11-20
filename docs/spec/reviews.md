@@ -529,7 +529,8 @@ not list it. `reason` (1–200 characters) is one line on why, shown in the chat
     edit. How depends on the session's [plan mode](#plan-mode): already in it — research without editing and present
     the plan from there; a plan mode in the catalog — enter it yourself if you can (`EnterPlanMode`, for example),
     else end the turn now without editing, and the host switches the session into it and asks for the plan; no plan
-    mode — write the plan in the reply and end the turn without editing. Large adds: call `request_review` after a
+    mode — write the plan in the reply and end the turn without editing. A class that owes no plan (one was approved
+    already, or the host raised the class) says no new plan is asked and to go on. Large adds: call `request_review` after a
     layer other work builds on; in an Auto task, hire only independent parts, and a mid-task review starts when the
     hired parts are back.
 - The same class again journals nothing and returns the same answer. Another class journals `task.class` with
@@ -558,7 +559,8 @@ approval: the host switches the session into its plan mode between turns.
   `plan.mode`. Never during a turn: a turn that has already edited goes on to its end, and Codex takes a collaboration
   mode only from its next turn anyway. A switch the agent refuses is left; the turn runs as it is.
 - **The ask.** A turn that ends while a plan is owed, with no plan for approval presented and no ask sent since it
-  became owed, gets one ask: a prompt in front of the queue (marker `plan-ask`, no row of the person's), `This task is
+  became owed, gets one ask: a prompt in front of the queue, also of messages held for the turn (marker `plan-ask`, no
+  row of the person's; one the queue refuses is asked again at the next turn end), `This task is
   <Medium|Large>: present a plan for approval before you change anything more. Brigadir switched this session into plan
   mode: research without editing files, then present the plan. If files were already changed, the plan covers what is
   done and what is left.` (rule 12). Its turn starts in plan mode, as above.
@@ -566,11 +568,13 @@ approval: the host switches the session into its plan mode between turns.
   the [plan review](#plan-start) and [the approval](chat-turns-plans-and-questions.md#plan-approval) run unchanged.
 - **Back to writing.** The agent leaves its plan mode on approval: Codex sets `Collaboration mode` to `Default` and goes
   on in the same turn with `Implement the approved plan.`; Claude through the approval's option. A turn with an approval
-  that ends with the session still in the plan choice the host set is followed by the host setting the value from
-  before its switch (`plan.mode`, `on: false`).
+  that ends with the session still in the plan choice the host set — never left since the switch — is followed by the
+  host setting the value from before its switch (`plan.mode`, `on: false`), before the next turn starts. A plan the
+  session entered again after leaving the host's is not the host's to undo.
 - **The person's choice wins.** The capsule shows the switched value as any option (`Collaboration mode · Plan`). A
   plan mode the person picked is left as it is. When the person moves the option off the plan after the host's switch,
-  the host journals `plan.mode` (`by: person`, `on: false`) and does not switch again while that class owes its plan.
+  the host journals `plan.mode` (`by: person`, `on: false`) and does not switch again while that class owes its plan;
+  the change and its record go before any next turn starts.
 - **A restart while the plan waits.** The waiting plan ends with the old host's turn and no turn starts by itself.
   The adapter may open the session without its plan mode; the next turn, whoever sends it, is switched into it again
   unless the person moved it off.

@@ -102,9 +102,16 @@ export class PlanModeLife {
 			const due = planAskDue(this.deps.records());
 			if (!due || this.asked.has(due.since)) return null;
 			this.asked.add(due.since);
-			return planAskPrompt(due.class);
+			return { since: due.since, text: planAskPrompt(due.class) };
 		});
-		if (ask) await this.deps.ask(ask);
+		if (!ask) return;
+		try {
+			await this.deps.ask(ask.text);
+		} catch (error) {
+			// Not queued (a full queue, a stopping host): the next turn end asks again.
+			this.asked.delete(ask.since);
+			throw error;
+		}
 	}
 	/** The person's own mode change: off the plan after the host's switch, it is kept. */
 	person(

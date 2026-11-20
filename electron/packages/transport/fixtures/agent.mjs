@@ -26,6 +26,8 @@ const crewSteering=scenario==='crew-steering';
 // spec/reviews#plan-mode `crew-codex-plan`: the scripted crew agent with codex-acp's `Collaboration mode` (default/plan). In `plan` a turn presents
 // its plan as codex-acp does — `plan_update`, then `Implement this plan?` without text; `implement_plan` switches back to `default` and runs the script.
 const codexPlan=scenario==='crew-codex-plan';
+// `@stay-in-plan` (sticky): the approval leaves the session in `plan`; `@refuse-plan` (sticky): a switch into `plan` is refused.
+let stayInPlan=false,refusePlan=false;
 const steering=scenario==='steering'||scenario==='steering-late'||scenario==='steering-codex'||crewCompaction||crewSteering;let steerWaiter;
 const threadStatus=(client,type)=>update(client,{sessionUpdate:'session_info_update',_meta:{codex:{threadStatus:{type,...(type==='active'?{activeFlags:[]}:{})}}}});
 // spec/chat-turns-plans-and-questions#agent-started-turns `agent-turn`: Claude Code begins a turn on its own after a background task — the wire of a live
@@ -92,6 +94,7 @@ connection = agent({name:'fixture'})
  .onRequest(methods.agent.session.setMode, async ({params,client}) => {record('mode',params);if(planModes)syncMode(params.modeId); if(quotaRejected&&params.modeId==='manual'){quotaRejected=false;await update(client,{sessionUpdate:'usage_update',used:1,size:100,_meta:{'_claude/rateLimit':{status:'allowed',rateLimitType:'five_hour'}}});}return {};})
  .onRequest(methods.agent.session.setConfigOption, async ({params,client}) => {
   record('option',params);if(scenario==='ghost-option-fail')throw new Error('Option unavailable');
+  if(codexPlan&&refusePlan&&params.configId==='collaboration_mode'&&params.value==='plan')throw new Error('Plan mode unavailable');
   if(scenario==='ghost-notice'&&params.configId==='model')await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'**Auto mode unavailable:** the selected model does not support Auto mode; using Accept edits instead.'}});
   if(perModel&&params.configId==='effort'&&!options.find(option=>option.id==='effort')?.options.some(choice=>choice.value===params.value))throw new Error('Effort is not available for this model');
   options=perModel&&params.configId==='model'?withEffort(params.value):options.map(option=>option.id===params.configId?{...option,currentValue:params.value}:option);
@@ -208,6 +211,8 @@ connection = agent({name:'fixture'})
     script=comment?`@call submit_review {"taskId":"${check[1]}","reviewId":"${check[2]}","comments":[{"path":"${file}","start":1,"end":1,"text":"Round ${check[3]}: say hello instead"}]}`:`@call approve {"taskId":"${check[1]}","reviewId":"${check[2]}"}`;}
    // spec/smoke-run#limit: the host's ask for the smoke report is answered with one, every flow unchecked.
    if(/with smoke_report:/.test(script)&&!/^@/m.test(script))script='@call smoke_report {"steps":[{"step":"Clients list","result":"unchecked","note":"the run stopped first"}],"summary":"Stopped before the steps were done."}';
+   if(codexPlan&&/^@stay-in-plan$/m.test(script))stayInPlan=true;
+   if(codexPlan&&/^@refuse-plan$/m.test(script))refusePlan=true;
    if(codexPlan&&collaboration()==='plan'&&!own&&!check){
     record('plan-prompt',script);
     const plan=`# Plan\n\n1. ${script.split('\n').find(line=>line.startsWith('@write '))?.slice(7)??'Nothing to write'}`;
@@ -216,8 +221,8 @@ connection = agent({name:'fixture'})
      options:[{optionId:'implement_plan',kind:'allow_once',name:'Yes, implement this plan'},{optionId:'revise_plan',kind:'reject_once',name:'No, and tell Codex what to do differently'}]});
     record('plan-result',result);
     if(result.outcome.outcome!=='selected'||result.outcome.optionId!=='implement_plan'){await update(client,{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'kept planning'}});return {stopReason:'end_turn'};}
-    options=options.map(option=>option.id==='collaboration_mode'?{...option,currentValue:'default'}:option);
-    await update(client,{sessionUpdate:'config_option_update',configOptions:options});
+    if(!stayInPlan){options=options.map(option=>option.id==='collaboration_mode'?{...option,currentValue:'default'}:option);
+    await update(client,{sessionUpdate:'config_option_update',configOptions:options});}
    }
    for(const line of script.split('\n')){
     if(line.startsWith('@sleep ')){await new Promise(resolve=>setTimeout(resolve,Number(line.slice(7))));continue;}

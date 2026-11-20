@@ -1099,7 +1099,12 @@ export async function startHost(config: HostConfig) {
 					record.event.prompt.id === id
 			)?.seq ?? -1;
 		const heldSeq = since(item.id),
-			before = queue.prompts.find((entry) => since(entry.id) > heldSeq)?.id;
+			// spec/reviews#plan-mode: the host's ask for an owed plan keeps its place in front.
+			before = queue.prompts.find(
+				(entry) =>
+					since(entry.id) > heldSeq &&
+					!(entry.command.kind === 'prompt' && entry.command.crew?.kind === 'plan-ask')
+			)?.id;
 		await emit({ kind: 'prompt.queued', prompt: item, ...(before ? { before } : {}) });
 	}
 	function scheduleHeld() {
@@ -3067,10 +3072,19 @@ export async function startHost(config: HostConfig) {
 				kickPrompts();
 			});
 		if (busy) throw new Error('Wait for the active turn before changing options');
-		if (c.kind === 'setMode' || c.kind === 'setOption') modeReturn = null;
+		if (c.kind === 'setMode' || c.kind === 'setOption') {
+			modeReturn = null;
+			// spec/reviews#plan-mode: the person's own move off the plan mode the host set is kept. On the prompt chain, so no turn starts (and
+			// switches back) between the change and its record.
+			const change = c;
+			return serialPrompt(async () => {
+				if (busy) throw new Error('Wait for the active turn before changing options');
+				if (!transport) throw new Error('Agent is not available');
+				await transport.send(change);
+				await planMode.person(change).catch(() => {});
+			});
+		}
 		await transport.send(c);
-		// spec/reviews#plan-mode: the person's own move off the plan mode the host set is kept.
-		if (c.kind === 'setMode' || c.kind === 'setOption') await planMode.person(c).catch(() => {});
 	}
 	/** spec/agents-and-providers#sign-in-recovery: the failed turn again, on a fresh adapter process (a process whose token refresh failed need not reread the
 	 *  Keychain). `auth`: sent to every host after a sign-in; a host whose last failure was something else ignores it. */

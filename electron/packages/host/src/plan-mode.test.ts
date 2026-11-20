@@ -293,3 +293,65 @@ it('no plan mode in the catalog keeps the instruction; the tripwire’s raise sw
 	expect(ofKind(after, 'permission.requested')).toEqual([]);
 	expect(collaboration(after)).toBe('default');
 }, 240_000);
+
+it('the agent stays in plan mode after the approval: the host sets the mode back before the next turn; a refused switch lets the turn run (spec/reviews#plan-mode)', async () => {
+	const { repo, store, task } = await setup('Plan mode back');
+	const { client } = await launch(store, task, 'crew-codex-plan');
+	const start = await last(client);
+	await turn(
+		client,
+		'@stay-in-plan\n@call set_task_class {"class":"medium","reason":"touches the API"}'
+	);
+	const switched = await next(client, start, 'plan.mode');
+	const plan = await next(client, switched.seq, 'permission.requested');
+	// The person queues a message while the plan waits; it runs after the approval's turn.
+	await client.command({ kind: 'prompt', text: '@write q.txt queued' });
+	await next(client, plan.seq, 'prompt.queued');
+	await client.command({
+		kind: 'answerPermission',
+		id: plan.event.request.id,
+		optionId: 'implement_plan',
+	});
+	const back = await next(client, plan.seq, 'plan.mode');
+	expect(back.event).toEqual({
+		kind: 'plan.mode',
+		on: false,
+		by: 'host',
+		class: 'medium',
+		option: 'collaboration_mode',
+		name: 'Collaboration mode',
+		value: 'default',
+		valueName: 'Default',
+	});
+	const queued = await next(
+		client,
+		plan.seq,
+		'turn.started',
+		(e) => e.text === '@write q.txt queued'
+	);
+	expect(back.seq).toBeLessThan(queued.seq);
+	await next(client, queued.seq, 'turn.completed');
+	expect(await readFile(join(repo, 'q.txt'), 'utf8')).toBe('queued\n');
+	expect(
+		ofKind(
+			(await records(client)).filter((r) => r.seq > back.seq),
+			'plan.mode'
+		)
+	).toEqual([]);
+
+	// An agent that refuses the switch: no `plan.mode`, the ask still runs, once.
+	const refused = await setup('Plan mode refused');
+	const b = await launch(refused.store, refused.task, 'crew-codex-plan');
+	const from = await last(b.client);
+	await turn(
+		b.client,
+		'@refuse-plan\n@call set_task_class {"class":"large","reason":"two layers"}'
+	);
+	const ask = await next(b.client, from, 'turn.started', (e) => e.crew?.kind === 'plan-ask');
+	await next(b.client, ask.seq, 'turn.completed');
+	await turn(b.client, '@write r.txt runs');
+	const list = await records(b.client);
+	expect(ofKind(list, 'plan.mode')).toEqual([]);
+	expect(ofKind(list, 'turn.started').filter((e) => e.crew?.kind === 'plan-ask')).toHaveLength(1);
+	expect(await readFile(join(refused.repo, 'r.txt'), 'utf8')).toBe('runs\n');
+}, 240_000);

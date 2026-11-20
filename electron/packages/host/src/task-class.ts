@@ -5,6 +5,7 @@ import {
 	newestHire,
 	owedRaise,
 	overSmallTask,
+	planOwed,
 	runningHires,
 	smallTaskLimitOf,
 	taskClassOf,
@@ -58,8 +59,9 @@ export async function readSmallTaskLimit(root: string): Promise<SmallTaskLimit> 
 export function classBrief(auto: boolean): string {
 	return `Before your first edit, after reading the task and the code it touches, state the task's class once with set_task_class: small — one chain of steps with no contract change; medium — the task comes from a ticket or a contract, or touches the data layer, an API or migrations; large — ${auto ? 'you are going to hire workers for independent parts, or ' : ''}the work comes in layers that other work builds on. Its answer says what the class needs next. Call it again only when the task turns out larger or smaller.`;
 }
-/** spec/reviews#plan-mode: the session is in its plan mode, has one in its catalog, or has none. */
-export type PlanModeState = 'on' | 'available' | 'none';
+/** spec/reviews#plan-mode: the session is in its plan mode, has one in its catalog, or has none; `settled` — the class owes no plan now (one
+ *  was approved, or the class came from the host). */
+export type PlanModeState = 'on' | 'available' | 'none' | 'settled';
 /** spec/reviews#class-tool: what the class asks of the agent now (English, rule 12). */
 export function classNext(
 	value: TaskClass,
@@ -84,7 +86,10 @@ function classNextOf(
 			: options.planMode === 'available'
 				? 'if you can switch yourself into plan mode (EnterPlanMode, for example), do it now, research without editing files and present the plan for approval from there. Otherwise end this turn now without editing files: Brigadir switches the session into plan mode and asks you for the plan. A reviewer checks the plan before the person approves it.'
 				: 'write the plan in your reply and end your turn without editing files; start the work when the person answers.';
-	const head = `${value === 'medium' ? 'Medium' : 'Large'}: before you edit any file, save the ticket or the contract with save_source if there is one, then present a plan for approval: ${plan}`;
+	const head =
+		options.planMode === 'settled'
+			? `${value === 'medium' ? 'Medium' : 'Large'}: no new plan for approval is asked now; go on with the work.`
+			: `${value === 'medium' ? 'Medium' : 'Large'}: before you edit any file, save the ticket or the contract with save_source if there is one, then present a plan for approval: ${plan}`;
 	if (value === 'medium') return head;
 	return `${head} After a layer that other work builds on, call request_review.${options.auto ? ' Hire workers only for parts that are independent, with hire_workers; when the hired parts are back, Brigadir starts a mid-task review.' : ''}`;
 }
@@ -132,7 +137,9 @@ export class TaskClassLife {
 				class: value,
 				...(previous && previous !== value ? { previous } : {}),
 				next: classNext(value, {
-					planMode: this.deps.planMode(),
+					// spec/reviews#plan-mode: a class that owes no plan (approved already, or the host's) never says to wait for the host.
+					planMode:
+						value !== 'small' && !planOwed(this.deps.records()) ? 'settled' : this.deps.planMode(),
 					auto: this.deps.auto,
 					limit: await this.deps.limit(),
 					smoke: this.deps.smoke?.() ?? false,

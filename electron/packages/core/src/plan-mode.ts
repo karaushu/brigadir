@@ -37,15 +37,19 @@ export function planModeChoice(records: readonly EventRecord[]): PlanModeChoice 
 		...selects.filter((option) => agentOptionKind(option) !== 'mode'),
 	]) {
 		const choice = option.choices.find((item) => isPlanWord(item.value) || isPlanWord(item.name));
+		// The mode option follows the newest mode record: an adapter may leave a mode by `current_mode_update` alone.
+		const current =
+			agentOptionKind(option) === 'mode'
+				? (sessionModes(records).at(-1) ?? option.value)
+				: option.value;
 		if (choice)
 			return {
 				option: option.id,
 				name: option.name,
 				value: choice.value,
 				valueName: choice.name,
-				current: option.value,
-				currentName:
-					option.choices.find((item) => item.value === option.value)?.name ?? option.value,
+				current,
+				currentName: option.choices.find((item) => item.value === current)?.name ?? current,
 				choices: option.choices.map((item) => ({ value: item.value, name: item.name })),
 			};
 	}
@@ -168,6 +172,20 @@ export function planModeReturn(
 	if (set?.event.kind !== 'plan.mode' || set.event.previous === undefined) return null;
 	const switched = set.event;
 	if (planModeAfter(records, set.seq).length) return null;
+	// The switch is the host's only while the session stays in it: once the session left the plan (the agent, the person), a later plan is
+	// not the host's to undo.
+	const latest = records.findLast(
+			(record) => record.event.kind === 'session.started' || record.event.kind === 'options.changed'
+		)?.event,
+		catalog = latest && 'options' in latest ? latest.options : [],
+		modeOption = catalog.some(
+			(item) => item.id === switched.option && agentOptionKind(item) === 'mode'
+		);
+	for (const record of records) {
+		if (record.seq <= set.seq) continue;
+		const value = planValueOf(record.event, switched.option ?? null, modeOption);
+		if (value !== null && value !== switched.value) return null;
+	}
 	const turn = records.findLast((record) => record.event.kind === 'turn.started');
 	const approved = approvals(records);
 	if (![...approved].some((seq) => seq > set.seq && seq > (turn?.seq ?? 0))) return null;
@@ -185,6 +203,21 @@ export function planModeReturn(
 		previous: switched.previous!,
 		previousName: switched.previousName ?? switched.previous!,
 	};
+}
+/** The value a record sets on the plan's option (`null` option: the legacy mode); null when it says nothing of it. */
+function planValueOf(
+	event: SessionEvent,
+	option: string | null,
+	modeOption: boolean
+): string | null {
+	if (option === null) return event.kind === 'mode.changed' ? event.modeId : null;
+	if (event.kind === 'session.started' || event.kind === 'options.changed') {
+		const found = event.options.find((item) => item.id === option);
+		return found?.kind === 'select' ? found.value : null;
+	}
+	// A mode option also moves by the agent's own mode update.
+	if (event.kind === 'mode.changed' && modeOption) return event.modeId;
+	return null;
 }
 /** spec/reviews#plan-mode: the person's own change of the plan option after the host's switch, while the class owes its plan. */
 export function planModeDeclined(

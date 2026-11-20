@@ -541,7 +541,8 @@ export function slackTextPieces(
 export function slackTodoList(
 	project: string | null,
 	picked: string | null,
-	lists: readonly { name: string; project: string | null; updatedAt: string }[]
+	lists: readonly { name: string; project: string | null; updatedAt: string }[],
+	/** The name a new list takes: `Inbox` in the interface language. */ inbox = 'Inbox'
 ): string {
 	const own = lists.filter((list) => list.project === project);
 	if (picked) {
@@ -550,7 +551,7 @@ export function slackTodoList(
 		if (found) return found.name;
 	}
 	const recent = [...own].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0];
-	return recent?.name ?? 'Inbox';
+	return recent?.name ?? inbox;
 }
 /** The to-do a mention makes: the agent's `todo`, else its summary line, else the message's first line. */
 export function slackTodoOf(mention: Pick<SlackMention, 'agent' | 'text' | 'permalink'>): {

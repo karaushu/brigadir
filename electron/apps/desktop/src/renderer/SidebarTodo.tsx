@@ -16,6 +16,7 @@ import { ProjectIcon, projectToneStyle } from './ui/ProjectIcon';
 import { SkeletonRows } from './ui/Loading';
 import { toastError } from './ui/Toast';
 import { RenameDialog } from './RenameTask';
+import { SidebarGroup } from './SidebarGroup';
 import { addTodoListToCache, markFreshTodoList, useTodoLists } from './todo-data';
 import styles from './App.module.css';
 
@@ -157,70 +158,45 @@ export function SidebarTodo({
 						const shut = !needle && collapsed.includes(id),
 							name = project?.name ?? t(locale, 'No project');
 						return (
-							<section key={id || '-'} className={styles.project} data-open={!shut}>
-								<div
-									className={styles.projectHeader}
-									style={
-										project ? projectToneStyle(project, colors.get(project.id) ?? 0) : undefined
-									}>
+							<SidebarGroup
+								key={id || '-'}
+								locale={locale}
+								name={name}
+								glyph="todo"
+								icon={
+									project ? (
+										<ProjectIcon project={project} slot={colors.get(project.id) ?? 0} size={22} />
+									) : undefined
+								}
+								tone={project ? projectToneStyle(project, colors.get(project.id) ?? 0) : undefined}
+								title={project?.path}
+								count={rows.length}
+								shut={shut}
+								onFold={() => fold(id, shut)}>
+								{rows.map((list) => (
 									<button
-										className={styles.projectCollapse}
-										aria-label={`${t(locale, shut ? 'Expand project' : 'Collapse project')} · ${name}`}
-										title={t(locale, shut ? 'Expand project' : 'Collapse project')}
-										aria-expanded={!shut}
-										onClick={() => fold(id, shut)}>
-										<Glyph name="sidebar-chevron" size={10} />
-									</button>
-									<span className={styles.projectIconButton} aria-hidden="true">
-										{project ? (
-											<ProjectIcon project={project} slot={colors.get(project.id) ?? 0} size={22} />
-										) : (
+										key={list.id}
+										className={styles.task}
+										data-sidebar-todo-list={list.id}
+										aria-pressed={list.id === selected}
+										title={todoListName(locale, list)}
+										onClick={() => onOpen(list.id)}
+										onContextMenu={(event) => {
+											event.preventDefault();
+											void menu(list, event.currentTarget);
+										}}>
+										<span className={styles.noteGlyph}>
 											<Glyph name="todo" size={14} />
-										)}
-									</span>
-									{/* The name stretches over the header and folds the group (rule 15: the whole row). */}
-									<h3 title={project?.path}>
-										<button
-											className={styles.projectSelect}
-											aria-expanded={!shut}
-											onClick={() => fold(id, shut)}>
-											{name}
-										</button>
-									</h3>
-									<span className={styles.sectionGroupCount}>{rows.length}</span>
-								</div>
-								<div
-									className={styles.projectDisclosure}
-									data-open={!shut}
-									inert={shut}
-									aria-hidden={shut}>
-									<div>
-										{rows.map((list) => (
-											<button
-												key={list.id}
-												className={styles.task}
-												data-sidebar-todo-list={list.id}
-												aria-pressed={list.id === selected}
-												title={todoListName(locale, list)}
-												onClick={() => onOpen(list.id)}
-												onContextMenu={(event) => {
-													event.preventDefault();
-													void menu(list, event.currentTarget);
-												}}>
-												<span className={styles.noteGlyph}>
-													<Glyph name="todo" size={14} />
-												</span>
-												<span className={styles.taskCopy}>
-													<span className={styles.taskHead}>
-														<span className={styles.taskTitle}>{todoListName(locale, list)}</span>
-													</span>
-													<small className={styles.prLine}>{todoCountsLine(locale, list)}</small>
-												</span>
-											</button>
-										))}
-									</div>
-								</div>
-							</section>
+										</span>
+										<span className={styles.taskCopy}>
+											<span className={styles.taskHead}>
+												<span className={styles.taskTitle}>{todoListName(locale, list)}</span>
+											</span>
+											<small className={styles.prLine}>{todoCountsLine(locale, list)}</small>
+										</span>
+									</button>
+								))}
+							</SidebarGroup>
 						);
 					})
 				)}

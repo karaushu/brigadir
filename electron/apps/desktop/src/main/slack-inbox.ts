@@ -83,7 +83,10 @@ export type SlackInboxDeps = {
 	/** The project whose Slack channel (`Where`) this is. */
 	channelProject(channel: string): Promise<string | null>;
 	channelName(channel: string): Promise<string | null>;
-	todo: SlackInboxTodo | null;
+	/** Read at every use: null while the Todo module is off (`Add to Todo` goes away). */
+	todo(): SlackInboxTodo | null;
+	/** The name of a new list, `Inbox` in the interface language. */
+	inboxName?(): string;
 	changed(view: SlackInboxView): void;
 	now?(): number;
 	/** How long a new mention waits before today's summary is made again while the section is open. */
@@ -300,7 +303,8 @@ export class SlackInbox {
 		await this.load();
 		const now = this.now(),
 			account = this.deps.account();
-		const lists = this.deps.todo ? await this.deps.todo.todoLists().catch(() => null) : null;
+		const todo = this.deps.todo();
+		const lists = todo ? await todo.todoLists().catch(() => null) : null;
 		const projects = await this.deps.projects().catch(() => []);
 		const all = [...this.mentions.values()].sort((a, b) => Number(b.ts) - Number(a.ts));
 		const live = all.filter((mention) => !slackArchived(mention.ts, now)),
@@ -310,7 +314,7 @@ export class SlackInbox {
 		return {
 			connected: !!account,
 			me: account?.user ?? null,
-			todo: !!this.deps.todo,
+			todo: !!todo,
 			mentions: rows,
 			days,
 			weeks: slackWeekRows(days, this.weeks, now),
@@ -332,7 +336,7 @@ export class SlackInbox {
 			const project = await this.projectOf(mention, projects);
 			target = {
 				project: projects.find((item) => item.id === project)?.name ?? null,
-				list: slackTodoList(project, mention.agent?.list ?? null, lists),
+				list: slackTodoList(project, mention.agent?.list ?? null, lists, this.deps.inboxName?.()),
 			};
 		}
 		return { ...mention, status, target };
@@ -676,8 +680,9 @@ export class SlackInbox {
 			if (!mention || (mention.agentState === 'done' && !force)) return;
 			const projects = await this.deps.projects().catch(() => []),
 				project = await this.projectOf(mention, projects),
-				lists = this.deps.todo
-					? (await this.deps.todo.todoLists().catch(() => []))
+				todo = this.deps.todo(),
+				lists = todo
+					? (await todo.todoLists().catch(() => []))
 							.filter((list) => list.project === project)
 							.map((list) => list.name)
 					: [];
@@ -931,7 +936,7 @@ export class SlackInbox {
 	/** spec/todo-and-slack-inbox#slack-inbox-to-todo: a to-do from the mention in its project's list, the message as its source. */
 	async addTodo(id: string): Promise<SlackTodoRef> {
 		await this.load();
-		const todo = this.deps.todo,
+		const todo = this.deps.todo(),
 			mention = this.mentions.get(id);
 		if (!todo) throw new Error('Todo is off in Settings.');
 		if (!mention) throw new Error('The mention is gone.');
@@ -942,13 +947,15 @@ export class SlackInbox {
 			item = slackTodoOf(mention);
 		const made = await todo.addTodo({
 			project,
-			list: slackTodoList(project, mention.agent?.list ?? null, lists),
+			// The agent's pick when the project has that list; else the store's own choice (the latest changed list, else a new `Inbox`).
+			list: picked(project, mention.agent?.list ?? null, lists),
 			title: item.title,
 			description: item.description,
 			source: {
 				kind: 'slack',
 				permalink: mention.permalink ?? '',
-				channel: mention.dm ? 'Direct message' : (mention.channelName ?? mention.channel),
+				// spec/todo-and-slack-inbox#todo-file: the channel's name, or the DM's person.
+				channel: mention.dm ? this.name(mention.author) : (mention.channelName ?? mention.channel),
 				author: this.name(mention.author),
 				ts: mention.ts,
 				mention: mention.id,
@@ -970,9 +977,14 @@ export class SlackInbox {
 	async undoTodo(id: string): Promise<void> {
 		await this.load();
 		const mention = this.mentions.get(id);
-		if (!mention?.todo || !this.deps.todo) return;
-		await this.deps.todo.removeTodo(mention.todo.listId, mention.todo.itemId);
+		const todo = this.deps.todo();
+		if (!mention?.todo || !todo) return;
+		await todo.removeTodo(mention.todo.listId, mention.todo.itemId);
 		await this.put({ ...(this.mentions.get(id) ?? mention), todo: null });
+		this.changed();
+	}
+	/** Something the view shows changed outside the section (the Todo module switched): every window reads it again. */
+	viewChanged() {
 		this.changed();
 	}
 	/** The token changed (connected, replaced or gone): a new connection reads the gap. */
@@ -989,6 +1001,18 @@ export class SlackInbox {
 	settled(): Promise<unknown> {
 		return Promise.all([this.writes, this.calls]);
 	}
+}
+/** The agent's list when the project has it (its own spelling), else null. */
+function picked(
+	project: string | null,
+	name: string | null,
+	lists: readonly { name: string; project: string | null }[]
+): string | null {
+	const key = name?.trim().toLowerCase();
+	return key
+		? (lists.find((list) => list.project === project && list.name.trim().toLowerCase() === key)
+				?.name ?? null)
+		: null;
 }
 function emptyDay(day: string): SlackDayFile {
 	return { schemaVersion: 1, day, wrote: [], state: 'none', madeAt: null, summary: null };

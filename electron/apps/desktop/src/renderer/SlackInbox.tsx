@@ -18,7 +18,8 @@ import {
 import { Button } from './ui/Controls';
 import { Avatar } from './ui/Avatar';
 import { ChatCardChip } from './ui/ChatCard';
-import { Glyph, type GlyphName } from './ui/Glyph';
+import { Glyph } from './ui/Glyph';
+import { EmptyState } from './ui/EmptyState';
 import { Spinner, SkeletonText } from './ui/Loading';
 import { Tag } from './ui/Tag';
 import { notify, toastError } from './ui/Toast';
@@ -39,11 +40,6 @@ import s from './SlackInbox.module.css';
 /** spec/todo-and-slack-inbox#slack-inbox-to-todo: `b2c › Release 1.15`; a list without a project is `No project › …`. */
 const targetText = (locale: Locale, project: string | null, list: string) =>
 	`${project ?? t(locale, 'No project')} › ${list}`;
-/**
- * The Todo glyph of the Slack section's buttons. The Todo module brings its own `todo` glyph; until both meet, the tick in a
- * circle stands in (spec/todo-and-slack-inbox#slack-inbox-to-todo).
- */
-const todoGlyph: GlyphName = 'check-pass';
 const statusTag = (locale: Locale, status: SlackMentionRow['status']) =>
 	status === 'waiting' ? (
 		<Tag tone="amber">{t(locale, 'Waiting')}</Tag>
@@ -124,28 +120,22 @@ export function SlackInboxScreen({
 			</>
 		);
 		body = (
-			<div className={n.empty} data-slack-connect-empty>
-				<span className={s.mark}>
-					<Glyph name="slack" size={22} />
-				</span>
-				<h2>{t(locale, 'Connect your Slack account')}</h2>
-				<div className={s.actions} data-size="m">
-					<Button
-						appearance="primary"
-						onClick={() =>
-							useWorkspace
-								.getState()
-								.openBrigadir(null, t(locale, 'Connect my Slack account for mentions'))
-						}
-						data-slack-brigadir>
-						<Glyph name="helmet-chat" size={13} />
-						{t(locale, 'Set up with Brigadir')}
-					</Button>
-					<Button onClick={onOpenSettings} data-slack-settings>
-						{t(locale, 'Open Slack settings')}
-					</Button>
-				</div>
-			</div>
+			<EmptyState glyph="slack" title={t(locale, 'Connect your Slack account')}>
+				<Button
+					appearance="primary"
+					onClick={() =>
+						useWorkspace
+							.getState()
+							.openBrigadir(null, t(locale, 'Connect my Slack account for mentions'))
+					}
+					data-slack-brigadir>
+					<Glyph name="helmet-chat" size={13} />
+					{t(locale, 'Set up with Brigadir')}
+				</Button>
+				<Button onClick={onOpenSettings} data-slack-settings>
+					{t(locale, 'Open Slack settings')}
+				</Button>
+			</EmptyState>
 		);
 	} else if (open.kind === 'mention') {
 		const mention = view.mentions.find((item) => item.id === open.id);
@@ -293,9 +283,9 @@ async function addToTodo(locale: Locale, mention: SlackMentionRow) {
 		}
 	);
 }
-/** The Todo section opens the list: it listens for this (the Todo module owns its route). */
+/** `Open` and the `In Todo` chip: the Todo section on that list. */
 function openTodo(ref: SlackTodoRef) {
-	window.dispatchEvent(new CustomEvent('brigadir:open-todo', { detail: ref }));
+	useWorkspace.getState().openTodo(ref.listId);
 }
 /** `Add to Todo`, or where it went: `In Todo · b2c › Inbox`. */
 function TodoAction({
@@ -309,24 +299,24 @@ function TodoAction({
 	todo: boolean;
 	primary?: boolean;
 }) {
+	if (!todo) return null;
 	if (mention.todo)
 		return (
 			<ChatCardChip onClick={() => openTodo(mention.todo!)} data-slack-in-todo>
-				<Glyph name={todoGlyph} size={12} />
+				<Glyph name={'todo'} size={12} />
 				{t(locale, 'In Todo · {target}').replace(
 					'{target}',
 					targetText(locale, mention.todo.project, mention.todo.listName)
 				)}
 			</ChatCardChip>
 		);
-	if (!todo) return null;
 	return (
 		<Button
 			size="s"
 			appearance={primary ? 'primary' : 'neutral'}
 			onClick={() => void addToTodo(locale, mention)}
 			data-slack-add-todo>
-			<Glyph name={todoGlyph} size={12} />
+			<Glyph name={'todo'} size={12} />
 			{t(locale, 'Add to Todo')}
 		</Button>
 	);
@@ -379,7 +369,7 @@ function MentionHead({
 				<Glyph name="tick" size={13} />
 				{t(locale, 'Done')}
 			</Button>
-			{(todo || mention.todo) && <TodoAction locale={locale} mention={mention} todo={todo} />}
+			{todo && <TodoAction locale={locale} mention={mention} todo={todo} />}
 		</>
 	);
 }

@@ -42,21 +42,6 @@
 	margin: 0 auto;
 	padding: 22px 0 32px;
 }
-.mark {
-	width: 44px;
-	height: 44px;
-	border-radius: 12px;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	background: var(--tint);
-	color: var(--fg2);
-}
-.actions {
-	display: flex;
-	gap: 8px;
-}
-
 /* A day's and a week's counts: the number over its word. */
 .stats {
 	display: flex;

@@ -1468,7 +1468,11 @@ let todoStoreOnce: Promise<TodoStore> | undefined;
 const sharedTodoStore = () =>
 	(todoStoreOnce ??= TodoStore.at(
 		process.env.BRIGADIR_DATA_DIR,
-		(change) => clients.broadcast('todo:changed', change),
+		(change) => {
+			clients.broadcast('todo:changed', change);
+			// spec/todo-and-slack-inbox#slack-inbox-to-todo: the Slack section's targets name the lists as they are now.
+			slack.inbox?.viewChanged();
+		},
 		() => t(currentLocale(), 'Inbox')
 	));
 /** spec/settings-modules-and-onboarding#modules: the Brigadir chat's tool list follows the modules (the Todo module's tools). */
@@ -1575,7 +1579,7 @@ const slack: Slack = new Slack({
 	},
 	// spec/notifications-slack-notes-and-schedules#slack «watch and tell me here»: a PR read fresh, its runs and bells (spec/pull-requests-and-ci#ci-bell), a task's state.
 	// spec/todo-and-slack-inbox#slack-inbox: the Slack section — `Slack: summaries` of Customize per action (else the Helper agent) makes its
-	// summaries; Todo comes in through `todo` once that module is wired (null: `Add to Todo` is not shown).
+	// summaries; `Add to Todo` goes to the shared Todo store while the Todo module is on (spec/todo-and-slack-inbox#slack-inbox-to-todo).
 	inbox: {
 		locale: () => (currentLocale() === 'uk' ? 'uk' : 'en'),
 		agent: async (prompt, characterLimit) => {
@@ -1594,7 +1598,22 @@ const slack: Slack = new Slack({
 					process.env.BRIGADIR_DATA_DIR ? { dataDir: process.env.BRIGADIR_DATA_DIR } : {}
 				)
 			).projects.map(({ id, name }) => ({ id, name })),
-		todo: null,
+		todo: () =>
+			appliedSettings.modules.todo
+				? {
+						addTodo: async (input) => (await sharedTodoStore()).addItem(input),
+						removeTodo: async (listId, itemId) => {
+							await (await sharedTodoStore()).removeItem(listId, itemId);
+						},
+						todoLists: async () =>
+							(await (await sharedTodoStore()).lists()).map(({ name, project, updatedAt }) => ({
+								name,
+								project,
+								updatedAt,
+							})),
+					}
+				: null,
+		inboxName: () => t(currentLocale(), 'Inbox'),
 		changed: (view) => clients.broadcast('slack-inbox:changed', view),
 	},
 	watching: {
@@ -3432,6 +3451,7 @@ void app.whenReady().then(async () => {
 			authorChanged = value.editor.lineAuthor !== appliedSettings.editor.lineAuthor,
 			columnsChanged = value.taskColumns !== appliedSettings.taskColumns,
 			slackChanged = value.modules.slack !== appliedSettings.modules.slack,
+			todoChanged = value.modules.todo !== appliedSettings.modules.todo,
 			remoteChanged =
 				value.modules.remoteAccess !== appliedSettings.modules.remoteAccess ||
 				JSON.stringify(value.remoteAccess) !== JSON.stringify(appliedSettings.remoteAccess);
@@ -3445,6 +3465,8 @@ void app.whenReady().then(async () => {
 		if (updatesChanged) appUpdates.settingsChanged();
 		if (archiveChanged) void taskArchives.autoArchive().catch(() => {});
 		if (modulesChanged) scheduleSettings?.();
+		// spec/todo-and-slack-inbox#todo: the Slack section's `Add to Todo` follows the Todo module.
+		if (todoChanged) slack.inbox?.viewChanged();
 		if (modulesChanged) for (const listener of chatModuleListeners) listener();
 		if (keymapChanged || modulesChanged || authorChanged || columnsChanged) rebuildMenu?.();
 		if (!saved.modules.browser) browsers.close();

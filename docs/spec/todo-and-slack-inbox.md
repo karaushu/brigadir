@@ -155,10 +155,14 @@ then archived. It reads Slack as the person, so it needs the person's own token 
 - **Where it goes**: the project whose Slack channel is the mention's channel, else a project the text names, else
   `No project`; in that project the list the agent picks by name from the project's lists (a list for the release or
   the area the message is about), else the project's most recently changed list, else a new list `Inbox`.
-- The toast `Added to b2c › Release 1.15` has `Open` and `Undo`; the mention shows `In Todo` with the target.
-- With the Todo module off, the button is not shown. The section reaches Todo only through what the Todo module gives it
-  (add an item to a list by name, remove it for `Undo`, the lists with their projects and times); `Open` asks the Todo
-  section to show the list.
+- The toast `Added to b2c › Release 1.15` has `Open` and `Undo`; the mention shows `In Todo` with the target. `Open` and
+  a click on `In Todo` open that list in the Todo section; `Undo` deletes the item and the mention offers `Add to Todo`
+  again.
+- With the Todo module off, the button, the suggestion and `In Todo` are not shown; switching the module shows or hides
+  them at once. The section writes through the Todo store every writer shares ([Files](#todo-file)): an item into a list
+  by name (the agent's pick when the project has that list, else the store's own choice above), its removal for `Undo`,
+  and the lists with their projects and times for the target shown before the click. A change in Todo updates the
+  targets the section shows.
 
 <a id="slack-inbox-files"></a>
 ### Files and the archive

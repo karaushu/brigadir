@@ -139,7 +139,7 @@ async function setup(
 			projects: async () => [{ id: 'b2c', name: 'b2c' }],
 			channelProject: async (channel) => (channel === 'C1' ? 'b2c' : null),
 			channelName: async (channel) => (channel === 'C1' ? 'b2c' : null),
-			todo: options.todo ? todos.todo : null,
+			todo: () => (options.todo ? todos.todo : null),
 			changed: (view) => views.push(view.waiting),
 			now: () => now,
 			summaryDelayMs: 10,
@@ -517,7 +517,7 @@ describe('Slack with the person’s token (spec/todo-and-slack-inbox#slack-inbox
 				locale: () => 'en',
 				agent: async () => ({ kind: 'none' }),
 				projects: async () => [],
-				todo: null,
+				todo: () => null,
 				changed: () => {},
 			},
 			fetch: (async (url: string, init: RequestInit) => {

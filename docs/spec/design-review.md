@@ -101,6 +101,25 @@ do:
 - `Header: the design image could not be read (no such file). Save the node's image from Figma to a file.`
 - With mismatches: `Fix the mismatches, take new screenshots of those nodes and submit the screen again.`
 - `passed`: `The design review passed.`
+- Last, `warnings` about the [area](#area) of accepted nodes, one line each.
+
+<a id="area"></a>
+
+### The area
+
+A node's `area` is its frame on the screenshot, as tight around the node as the design image is around the design node:
+the [pair](#card) shows the two at the same scale only then, and the rows read from a wider crop read the wrong
+pixels. The tool's description says so. The host checks the shape and warns; it does not refuse:
+
+- No `area`: `{node}: pass its area on the screenshot, tight around the node, so the person sees the node next to its
+  design.`
+- An area whose width-to-height ratio (in the screenshot's pixels) is more than half again (`designAreaRatio`, 1.5)
+  from the design image's: `{node}: its area on the screenshot is {a}:1 (width to height), the design image {d}:1. Fit
+  the area tightly around this node (its frame from simulator_ui or browser_ui), not the screen or a section around it,
+  and check the rows you read from it. If the app really draws the node that much {wider|taller}, keep the area and say
+  so in a row.`
+- The node stays accepted with its rows: an app that draws a node much taller or wider than the design is a mismatch
+  the agent must be able to file, and the host cannot tell it from a loose crop.
 
 <a id="flow"></a>
 
@@ -179,7 +198,7 @@ A popover over the chat, 500 px wide: the head is the node's name, its id (mono,
 
 ## Data
 
-- `shots/shots.json`, `schemaVersion: 1` (rule 10): `shots` — `id`, `file` (`s12.jpg`), `tool` ∈ `simulator |
+- `shots/shots.json`, `schemaVersion: 1` (rule 10): `shots` — `id`, `file` (`s12.png`), `tool` ∈ `simulator |
   browser`, `device?`, `at`, `trees` (`scopeId`, `tree`), `kept?` — and `next` (the next number). One image file per shot.
 - `design/design-reviews.json`, `schemaVersion: 1`: `reviews`, the last 50 — `id`, `screen`, `at`, `state`,
   `reviewId?`, `trees` (the trees it was filed on) and `nodes` as in the event. A node's design image is copied to

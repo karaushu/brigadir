@@ -11,6 +11,9 @@ import {
 	isTaskAgentRequest,
 	samePullRequest,
 	waitsForPerson,
+	statusAfterStop,
+	workspaceStoppedLimit,
+	type WorkspaceStopped,
 	statusAfterTurn,
 	queuedCrewQuestion,
 	type TaskProposal,
@@ -532,7 +535,12 @@ export async function startHost(config: HostConfig) {
 				? new AutoCrewHost({
 						...deps,
 						app: (method, params) => (ui ? ui.request(method, params) : null),
-						workspace: { hold: holdWorkspace, gate: gateWorkspace, sessionId: () => sessionId() },
+						workspace: {
+							hold: holdWorkspace,
+							gate: gateWorkspace,
+							sessionId: () => sessionId(),
+							restartCommands,
+						},
 					})
 				: new CrewHost(deps);
 		await host.start();
@@ -597,6 +605,13 @@ export async function startHost(config: HostConfig) {
 	let turnGen = 0;
 	/** A steer is out: the turn it aims at leaves `busy` to it, so nothing slips into the moment an adopted turn begins. */
 	let steerPending = false;
+	/** spec/crew#auto-budget: this worker was stopped at its part budget; nothing starts by itself until the person's message continues it. */
+	let overBudget = task.overBudget === true;
+	/** true — the person continues the part (the stop is lifted on disk too, so a restart keeps a continuation that waits); false — stopped. */
+	async function continuePart(go: boolean) {
+		overBudget = !go;
+		await store.updateTask(config.key, { overBudget: !go });
+	}
 	/** spec/composer-steering-queue-and-ghost#steering-hold: when each held message was sent, the window timer of Claude, and the tools of subagents (no step boundary). */
 	const heldAt = new Map<string, number>();
 	let heldTimer: ReturnType<typeof setTimeout> | undefined;
@@ -613,10 +628,7 @@ export async function startHost(config: HostConfig) {
 	 * spec/crew#auto-move: work that needs the task with no session, no capture and no watcher — the move into a worktree. It runs once no turn
 	 * runs; returning true stops this host (`moved`) so the next one starts in the new folder.
 	 */
-	type WorkspaceWork = (hold: {
-		capture(): Promise<void>;
-		detach(): Promise<void>;
-	}) => Promise<boolean>;
+	type WorkspaceWork = (hold: MoveHold) => Promise<boolean>;
 	let workspaceDue: WorkspaceWork | null = null,
 		workspaceHeld = false,
 		/** spec/crew#auto-move: the host in the new folder finishes the hire before any prompt starts. */
@@ -674,8 +686,11 @@ export async function startHost(config: HostConfig) {
 			await startingAgent?.catch(() => {});
 			stopScopeWatch();
 			stopScopeWatch = () => {};
-			// Consoles of the task stop with the session: nothing writes into the folder while it is captured and restored.
-			terminals.closeAll();
+			// spec/crew#auto-move: what stops with the session and the consoles, read while it still runs; the row names it.
+			const stopped = stoppedByMove();
+			// Consoles of the task stop with the session: nothing writes into the folder while it is captured and restored. A saved
+			// command started again later must not meet its old process on its port.
+			await terminals.closeAll();
 			await scopeRefresh.catch(() => {});
 			await saveFinished.catch(() => {});
 			await agentFileTail.catch(() => {});
@@ -686,6 +701,7 @@ export async function startHost(config: HostConfig) {
 				await old.closed.catch(() => {});
 			}
 			restart = await work({
+				...stopped,
 				capture: async () => {
 					await checkpoint('refresh');
 				},
@@ -706,8 +722,9 @@ export async function startHost(config: HostConfig) {
 				restartAfterStop = true;
 				setImmediate(() => void stop('moved'));
 			} else {
-				// The move failed and the task stays here: the watcher and the agent's session come back, then the queue goes on.
+				// The move failed and the task stays here: the consoles, the watcher and the agent's session come back, then the queue goes on.
 				workspaceHeld = false;
+				terminals.reopen();
 				if (!stopping) {
 					startScopeWatch();
 					void ensureAgent()
@@ -800,8 +817,10 @@ export async function startHost(config: HostConfig) {
 				!transport ||
 				queue.paused ||
 				quotaBlocked() ||
+				overBudget ||
 				!queue.prompts.length ||
-				(await budgetBlocks())
+				(await budgetBlocks()) ||
+				overBudget
 			)
 				return;
 			const next = queue.prompts[0]!;
@@ -920,8 +939,11 @@ export async function startHost(config: HostConfig) {
 			});
 	}
 	/** spec/composer-steering-queue-and-ghost#steering-hold: the step boundary sends every held message (`all`), Claude's window only those older than it. */
+	/** spec/composer-steering-queue-and-ghost#steering-conditions: a hire card's call waits in the turn; held messages wait for its answer. */
+	const hireCallWaits = () => crewHost instanceof AutoCrewHost && crewHost.hireWaiting();
 	function flushHeld(all: boolean) {
 		void serialPrompt(async () => {
+			if (busy && hireCallWaits()) return;
 			const limit = holdWindowMs(),
 				due = (queue.held ?? []).filter(
 					(item) => all || (limit !== null && Date.now() - (heldAt.get(item.id) ?? 0) >= limit)
@@ -931,8 +953,17 @@ export async function startHost(config: HostConfig) {
 			let queued = queue.prompts.some((item) => turnHeld.has(item.id));
 			for (const item of due) {
 				if (!queue.held?.some((entry) => entry.id === item.id)) continue;
+				// A hire's call that began meanwhile (a parallel tool) holds this one and every later one.
+				if (busy && hireCallWaits()) break;
+				// spec/crew#auto-move: a hire that moves the task ends the turn; what was held waits for the host in the new folder.
 				const inputs =
-					!queued && busy && transport?.steering && !quotaBlocked() && !budget?.held()
+					!queued &&
+					busy &&
+					transport?.steering &&
+					!quotaBlocked() &&
+					!budget?.held() &&
+					!workspaceDue &&
+					!workspaceHeld
 						? (
 								await assets.resolve(
 									config.key,
@@ -940,6 +971,7 @@ export async function startHost(config: HostConfig) {
 								)
 							).map((value) => ({ ...value.input, id: value.attachment.id }))
 						: null;
+				if (inputs && busy && hireCallWaits()) break;
 				if (!inputs || !(await steerPrompt(item, inputs))) {
 					await queueHeld(item);
 					queued = true;
@@ -967,7 +999,7 @@ export async function startHost(config: HostConfig) {
 		clearTimeout(heldTimer);
 		const limit = holdWindowMs(),
 			first = queue.held?.[0];
-		if (limit === null || !first || stopping) return;
+		if (limit === null || !first || stopping || (busy && hireCallWaits())) return;
 		heldTimer = setTimeout(
 			() => flushHeld(false),
 			Math.max(0, (heldAt.get(first.id) ?? Date.now()) + limit - Date.now())
@@ -1590,7 +1622,12 @@ export async function startHost(config: HostConfig) {
 				status = waitsForPerson(left) || left.crewQuestions.length ? 'needs-you' : 'done';
 			}
 			if (event.kind === 'session.failed') status = 'failed';
-			if (event.kind === 'host.stopped' && busy) status = 'interrupted';
+			// spec/crew#auto-hire: a hire card or a split outlives the turn the host stopped under.
+			if (event.kind === 'host.stopped' && busy)
+				status = statusAfterStop(
+					pendingInputs([...records, record]),
+					taskReview.document().review?.state === 'yours'
+				);
 			if (event.kind === 'crew.accepted' && event.conflicts.length) status = 'needs-you';
 			// spec/reviews#loop: the reviewers and the agent did not agree in two rounds; the person decides.
 			if (event.kind === 'review.finished' && event.state === 'disputed' && !busy)
@@ -1620,7 +1657,13 @@ export async function startHost(config: HostConfig) {
 				});
 			}
 			// spec/crew#auto-budget: the person's next turn on a worker over its budget takes the part over; the budget is not checked again.
-			if (event.kind === 'turn.started' && (await store.task(config.key)).overBudget)
+			// A turn the agent began on its own is not the person's.
+			if (
+				event.kind === 'turn.started' &&
+				event.origin !== 'agent' &&
+				!overBudget &&
+				(await store.task(config.key)).overBudget
+			)
 				await store.updateTask(config.key, { overBudget: false });
 			// spec/crew#auto-guard: after each turn of the Auto agent the host looks for its own changes inside the zones it hired out.
 			if (event.kind === 'turn.completed' && autoTask)
@@ -1950,6 +1993,43 @@ export async function startHost(config: HostConfig) {
 	}
 	/** spec/search-menus-and-commands#agent-command-tools: commands the person let the agent run in this task without their `agentRuns` mark, until the app restarts. */
 	const commandGrants = new Set<string>();
+	/** spec/crew#auto-move: the saved commands the agent started with `commands_run` in this host. */
+	const agentCommands = new Set<string>();
+	/** spec/crew#auto-move: the consoles, saved commands and background commands that run now; the ones the agent started to run again. */
+	function stoppedByMove(): { stopped: WorkspaceStopped[]; restart: MoveCommand[] } {
+		const stopped: WorkspaceStopped[] = [],
+			restart: MoveCommand[] = [];
+		for (const info of terminals.consoles()) {
+			if (info.exited) continue;
+			if (info.run) {
+				stopped.push({ kind: 'command', name: info.run.name });
+				const id = info.run.commandId;
+				if (id && agentCommands.has(id)) restart.push({ id, name: info.run.name });
+			} else stopped.push({ kind: 'console', name: info.title });
+		}
+		for (const command of [...liveBackground(records), ...liveBackgroundSubagents(records)])
+			stopped.push({ kind: 'background', name: command.name.slice(0, 200) });
+		return { stopped: stopped.slice(0, workspaceStoppedLimit), restart };
+	}
+	/** spec/crew#auto-move: the saved commands the agent had started, run again in this host's folder after a move (or a failed one). */
+	async function restartCommands(items: readonly MoveCommand[]) {
+		if (!modules.current().commands) return [];
+		terminals.reopen();
+		const commands = (await store.project(config.key.projectId)).commands ?? [],
+			started: string[] = [];
+		for (const item of items) {
+			const command = commands.find((value) => value.id === item.id);
+			if (!command) continue;
+			try {
+				await terminals.command({ kind: 'run', run: commandRunSpec(command) });
+				agentCommands.add(command.id);
+				started.push(command.id);
+			} catch {
+				/* A command that does not start stays stopped; the row says so. */
+			}
+		}
+		return started;
+	}
 	/** Polls the command tab until `done` or the time runs out; a cancelled call stops waiting, not the command. */
 	async function untilRun(
 		commandId: string,
@@ -2050,11 +2130,13 @@ export async function startHost(config: HostConfig) {
 				await store.setProjectCommandAgentRuns(config.key.projectId, command.id, true);
 		}
 		if (kind === 'stop') {
+			agentCommands.delete(command.id);
 			await terminals.command({ kind: 'stop', id: current!.id });
 			await untilRun(command.id, 6000, signal, (run) => run.exited);
 			return answer();
 		}
 		await terminals.command({ kind: 'run', run: commandRunSpec(command) });
+		agentCommands.add(command.id);
 		const wait = typeof params.wait === 'number' ? params.wait : 20;
 		await untilRun(command.id, wait * 1000, signal, (run) => run.exited || run.run?.port !== null);
 		const run = terminals.commandRun(command.id);
@@ -2381,12 +2463,14 @@ export async function startHost(config: HostConfig) {
 		}
 		// spec/crew#auto-budget: the part went over its budget; the turn stops and the worker waits for the person.
 		if (c.kind === 'overBudget') {
+			// The flag goes first, in the prompt order: a dispatch already under way ends as a turn this stop cancels, and the end of the
+			// stopped turn starts nothing queued.
+			await serialPrompt(() => continuePart(false));
 			if (busy) {
 				await command({ kind: 'cancel' });
 				for (let waited = 0; busy && waited < 30_000; waited += 200)
 					await new Promise((resolve) => setTimeout(resolve, 200));
 			}
-			await store.updateTask(config.key, { overBudget: true });
 			await emit({
 				kind: 'crew.budget.exceeded',
 				taskId: config.key.id,
@@ -2664,9 +2748,13 @@ export async function startHost(config: HostConfig) {
 						: c;
 				// spec/reviews#plan-loop: the findings of a plan review answered the waiting plan, so they run before what is queued.
 				const front = c.kind === 'submitReview' && planAnswered.delete(c.review.id);
+				// spec/crew#auto-budget: the person's message continues a worker stopped at its part budget, before what waited meanwhile; the
+				// stop is lifted once the message is taken.
+				const resumes = overBudget && c.kind === 'prompt' && !c.crew;
 				if (
 					!busy &&
-					!queue.prompts.length &&
+					(!overBudget || resumes) &&
+					(!queue.prompts.length || resumes) &&
 					!queue.paused &&
 					!quotaBlocked() &&
 					!workspaceDue &&
@@ -2674,7 +2762,13 @@ export async function startHost(config: HostConfig) {
 					!workspaceGate &&
 					!(await budgetBlocks())
 				) {
-					await beginPrompt(own);
+					if (resumes) await continuePart(true);
+					try {
+						await beginPrompt(own);
+					} catch (error) {
+						if (resumes) await continuePart(false);
+						throw error;
+					}
 					return;
 				}
 				if (
@@ -2698,6 +2792,7 @@ export async function startHost(config: HostConfig) {
 				if (
 					c.kind === 'prompt' &&
 					c.steer === true &&
+					!resumes &&
 					busy &&
 					transport!.steering &&
 					!queue.prompts.length &&
@@ -2711,8 +2806,9 @@ export async function startHost(config: HostConfig) {
 					scheduleHeld();
 					return;
 				}
-				const before = front ? queue.prompts[0]?.id : undefined;
+				const before = front || resumes ? queue.prompts[0]?.id : undefined;
 				await emit({ kind: 'prompt.queued', prompt, ...(before ? { before } : {}) });
+				if (resumes) await continuePart(true);
 				kickPrompts();
 			});
 		if (busy) throw new Error('Wait for the active turn before changing options');
@@ -3386,7 +3482,7 @@ export async function startHost(config: HostConfig) {
 			crewWorker?.stop();
 			budget?.stop();
 			await crewHost?.stop().catch(() => {});
-			terminals.closeAll();
+			void terminals.closeAll();
 			transport?.close();
 			if (transport) await transport.closed;
 			// spec/chat-turns-plans-and-questions#background-commands: nothing is stopped on purpose; what ran in the background is journaled as stopped with the host.
@@ -3417,6 +3513,15 @@ export async function startHost(config: HostConfig) {
 		}
 	}
 	/** spec/architecture-and-platform#host-lifecycle: nothing to do for `idleMs` → the same graceful stop as Stop. The repo locks go with the host; the journal keeps the session. */
+	/** spec/architecture-and-platform#host-lifecycle: a hire card or a split waits for the person after its turn; it keeps the host, like a question. */
+	let cards = { at: -1, count: 0 };
+	function waitingCards() {
+		if (cards.at !== records.length) {
+			const inputs = pendingInputs(records);
+			cards = { at: records.length, count: (inputs.crewHire ? 1 : 0) + (inputs.crewPlan ? 1 : 0) };
+		}
+		return cards.count;
+	}
 	function idleState() {
 		return {
 			background: liveBackground(records).length > 0 || liveBackgroundSubagents(records).length > 0,
@@ -3429,7 +3534,8 @@ export async function startHost(config: HostConfig) {
 				permissions.size +
 				questions.size +
 				proposals.size +
-				(budget?.currentHold()?.state === 'asked' ? 1 : 0),
+				(budget?.currentHold()?.state === 'asked' ? 1 : 0) +
+				waitingCards(),
 			queued: queue.prompts.length,
 			quota: quotaBlocked(),
 			consoles: terminals.consolesAlive(),
@@ -3711,7 +3817,10 @@ export async function startHost(config: HostConfig) {
 			if (queue.prompts.length && !queue.paused && !quotaBlocked())
 				await emit({ kind: 'queue.paused' });
 			if (!['backlog', 'completed'].includes(task.status)) {
-				await store.setStatus(config.key, quotaBlocked() ? 'rate-limited' : 'interrupted');
+				await store.setStatus(
+					config.key,
+					quotaBlocked() ? 'rate-limited' : statusAfterStop(pendingInputs(records))
+				);
 				await store.updateTask(config.key, { activitySeq: records.at(-1)!.seq });
 			}
 		}
@@ -3878,4 +3987,4 @@ export async function startHost(config: HostConfig) {
 	};
 }
 import { relayContext } from './relay-context';
-import { finishSwitch } from './workspace-move';
+import { finishSwitch, type MoveCommand, type MoveHold } from './workspace-move';

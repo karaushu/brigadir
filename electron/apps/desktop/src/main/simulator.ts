@@ -1441,15 +1441,13 @@ export class Simulators {
 			...args,
 		]);
 	}
-	/** A JPEG from sim-helper or a PNG from the Android helper, for the chat and for the agent. */
+	/** spec/browser-and-simulator#simulator: a lossless PNG from either helper, for the chat and for the agent; a design review compares its pixel colours. */
 	private async screenshot(runtime: Runtime) {
 		const shot = await this.request(runtime, {
 			cmd: 'screenshot',
 			maxSide: 1000,
 			orientation: runtime.orientation,
 		});
-		if (isRecord(shot) && typeof shot.jpeg === 'string')
-			return { image: shot.jpeg, mimeType: 'image/jpeg' };
 		if (isRecord(shot) && typeof shot.png === 'string')
 			return { image: shot.png, mimeType: 'image/png' };
 		throw new Error('The device sent no screenshot.');

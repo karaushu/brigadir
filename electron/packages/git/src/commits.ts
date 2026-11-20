@@ -368,12 +368,53 @@ export async function commitBaskets(
 	}
 	return result;
 }
+/**
+ * spec/crew#auto-commit: the files of a repo that are submodule pointers the task did not change (the same commit as at the task's start)
+ * and whose submodule did not commit in this run.
+ */
+async function personGitlinks(
+	item: CommitScope,
+	result: CommitResult,
+	fresh: CommitPreview
+): Promise<CommitFile[]> {
+	const candidates = item.files.filter((file) => file.beforeTask && file.path === file.oldPath);
+	if (!candidates.length) return [];
+	const committed = new Set(
+		result.committed.map(
+			(done) => fresh.scopes.find((value) => value.scope.id === done.scopeId)!.scope.path
+		)
+	);
+	const records = (
+		await git(item.scope.path, [
+			'--literal-pathspecs',
+			'ls-tree',
+			'-z',
+			'--full-tree',
+			item.tree,
+			'--',
+			...candidates.map((file) => file.path),
+		])
+	)
+		.toString('utf8')
+		.split('\0');
+	const links = new Set(
+		records.flatMap((record) => {
+			const tab = record.indexOf('\t');
+			return tab > 0 && record.startsWith('160000 ') ? [record.slice(tab + 1)] : [];
+		})
+	);
+	return candidates.filter(
+		(file) => links.has(file.path) && !committed.has(join(item.scope.path, file.path))
+	);
+}
 /** Explicit Commit all: only reviewed paths; no shell interpolation or blanket add. */
 export async function commitPreview(
 	preview: CommitPreview,
 	scopes: Scope[],
 	message: string,
-	snapshots?: SnapshotDocument
+	snapshots?: SnapshotDocument,
+	/** spec/crew#auto-commit: the agent's own commit leaves out a submodule pointer the task did not change (`beforeTask`): it stays the person's. */
+	options: { taskGitlinksOnly?: boolean } = {}
 ): Promise<CommitResult> {
 	if (!message.trim() || Buffer.byteLength(message) > 16000 || message.includes('\0'))
 		throw new Error('Invalid commit message');
@@ -386,6 +427,45 @@ export async function commitPreview(
 			const { scope, files } = item;
 			if ((await head(scope)) !== item.head)
 				throw new Error('The branch changed. Refresh the commit list.');
+			const left = options.taskGitlinksOnly ? await personGitlinks(item, result, fresh) : [];
+			if (left.length) {
+				const kept = files.filter((file) => !left.includes(file));
+				// A child committed in this run: its gitlink in the parent is the child's new HEAD.
+				const gitlinks = new Map<string, string>();
+				for (const done of result.committed) {
+					const child = fresh.scopes.find((value) => value.scope.id === done.scopeId)!.scope;
+					if (child.kind === 'submodule' && child.path.startsWith(`${scope.path}/`))
+						gitlinks.set(relative(scope.path, child.path), done.sha);
+				}
+				const expected = await basketTree(scope, item.head, item.tree, touched(kept), gitlinks);
+				await stage(scope, kept);
+				// The person's pointer stays out of the index as well: the working copy keeps its commit, the index the recorded one.
+				await git(
+					scope.path,
+					item.head
+						? ['--literal-pathspecs', 'reset', '-q', '--', ...touched(left)]
+						: [
+								'--literal-pathspecs',
+								'rm',
+								'-q',
+								'--cached',
+								'--ignore-unmatch',
+								'--',
+								...touched(left),
+							]
+				);
+				if ((await gitText(scope.path, ['write-tree'])) !== expected)
+					throw new Error('Files or staging changed. Review the commit list again.');
+				const baseTree = item.head
+					? await gitText(scope.path, ['rev-parse', `${item.head}^{tree}`])
+					: await emptyTree(scope);
+				if (expected === baseTree) continue;
+				await git(scope.path, ['commit', '-q', '--file=-'], { input: message });
+				const sha = await head(scope);
+				if (!sha || !isSha(sha)) throw new Error('Cannot read the new commit');
+				result.committed.push({ scopeId: scope.id, name: scope.name, sha });
+				continue;
+			}
 			// Parent trees are rebased only for successful child commits. All other blobs
 			// stay exactly as reviewed, and the real index must match before git commit.
 			const expected = await withIndex(scope, item.tree, async (env) => {

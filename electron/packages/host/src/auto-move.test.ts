@@ -275,3 +275,48 @@ it('a move that fails keeps everything where it was: the hire is refused and the
 	);
 	expect(await git(repo, 'branch', '--list', 'brigadir/*')).toBe('');
 }, 240_000);
+
+it('the move names what its restart stopped and starts the saved command the agent ran again in the worktree', async () => {
+	const { store, task } = await setup();
+	await store.setProjectCommands(task.projectId, [
+		{
+			id: 'watch',
+			name: 'Watch',
+			command: 'echo watching; sleep 30',
+			repo: '',
+			directory: '',
+			agentRuns: true,
+		},
+	]);
+	const client = await launch(store, task);
+	const parts = [
+		{ title: 'API', role: 'Developer', zone: ['apps/api/**'], lines: 300, prompt: 'API.' },
+		{ title: 'Web', role: 'Developer', zone: ['apps/web/**'], lines: 300, prompt: 'Web.' },
+	];
+	await client.command({
+		kind: 'prompt',
+		text: [
+			'@call commands_run {"id":"watch","wait":1}',
+			'@write apps/api/lead.ts export const lead = 1;',
+			`@call hire_workers ${JSON.stringify({ summary: 'Apart.', parts })}`,
+		].join('\n'),
+	});
+	const requested = await until(async () =>
+		(await journal(store, task)).find((record) => record.event.kind === 'crew.hire.requested')
+	);
+	if (requested.event.kind !== 'crew.hire.requested') throw new Error('unreachable');
+	await client.command({
+		kind: 'decideHire',
+		decision: { id: requested.event.hire.id, approved: true, parts: null },
+	});
+	const moved = await until(
+		async () =>
+			(await journal(store, task)).find(
+				(record) => record.event.kind === 'workspace.move' && record.event.state === 'moved'
+			),
+		120_000
+	);
+	expect(moved.event).toMatchObject({
+		stopped: [{ kind: 'command', name: 'Watch', restarted: true }],
+	});
+}, 240_000);

@@ -662,12 +662,32 @@ export class CrewHost {
 				const task = await this.deps.store
 					.task({ projectId: this.deps.key.projectId, id: worker.taskId })
 					.catch(() => null);
-				if ((task?.status === 'queued' && !task.hasStarted) || worker.next?.state === 'queued')
+				if (
+					((task?.status === 'queued' && !task.hasStarted) || worker.next?.state === 'queued') &&
+					!(await this.parked(worker))
+				)
 					this.waiting.push(worker.taskId);
 			}
 			this.watchSlots();
 			this.watchMerges();
 		});
+	}
+	/** spec/crew#auto-hire: a worker whose start waits for a decision that is not made yet (a hire interrupted half-way); it is not launched at start. */
+	protected async parked(_worker: CrewWorkerRecord): Promise<boolean> {
+		return false;
+	}
+	/** A worker that waited for a decision starts now, as a new one would; a launch a stopped host left half-way goes on from there. */
+	protected async launchLater(worker: CrewWorkerRecord) {
+		if (this.waiting.includes(worker.taskId) || this.launching.has(worker.taskId)) return;
+		const key = this.workerKey(worker),
+			task = await this.deps.store.task(key).catch(() => null);
+		if (!task || task.hasStarted) return;
+		// The worktree's preparation resumes from its manifest.
+		if (task.status === 'preparing' || task.status === 'interrupted')
+			await this.deps.store.setStatus(key, 'queued');
+		else if (task.status !== 'queued') return;
+		this.waiting.push(worker.taskId);
+		this.watchSlots();
 	}
 	async stop() {
 		this.stopping = true;

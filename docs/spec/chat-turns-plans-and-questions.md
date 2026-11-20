@@ -331,7 +331,7 @@ The question of a task that [reached its token budget](agents-and-providers.md#b
 | Part | Look |
 | --- | --- |
 | Header | pause glyph, `{Provider} budget reached`, hint `{tokens} of {budget} tokens` (`≈` when the count was an estimate), `waiting {age}` after a minute |
-| Body | `The task is paused.`, or `The task and its {n} workers are paused.` for a crew (four `uk` forms); below, muted: `Turns that run now finish. Nothing new starts: no hires, no deliveries, no queued messages.` |
+| Body | `The task is paused.`, or `The task and its {n} workers are paused.` for a crew (four `uk` forms); `{n}` counts the members that are not dismissed or completed, and with none of them the body is `The task is paused.`; below, muted: `Turns that run now finish. Nothing new starts: no hires, no deliveries, no queued messages.` |
 | Actions | `Stop now` (ghost), `Finish turns, then stop` (soft), `Raise to {n}` — the primary split button; its menu (`ui/MenuPopover` with `Esc`) lists `Raise to {n}` and the next two values, then `No limit for this task` |
 
 - **After the answer** the card folds into the plain line `{Provider} budget reached · Resolved` with the answer under it: `Raise to {n}`, `No limit for this task`, `Finish turns, then stop` or `Stop now`. `budget.decided` draws nothing of its own.

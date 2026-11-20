@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
 	budgetJournal,
+	crewMembers,
 	budgetToAsk,
 	decidedBudget,
 	formatTokenCount,
@@ -127,7 +128,7 @@ export class TaskBudget {
 	private stoppedFor: string | null = null;
 	private members = new Map<string, Stamped>();
 	readonly root: boolean;
-	readonly rootKey: TaskKey;
+	rootKey: TaskKey;
 	private provider: AgentProvider | undefined;
 	constructor(
 		private deps: TaskBudgetDeps,
@@ -155,7 +156,15 @@ export class TaskBudget {
 				this.tally = { ...this.tally, openingShare: saved.share };
 			await this.writeTokens(true);
 			if (this.root) await this.writeHold();
-			else await this.readRootHold();
+			else {
+				// spec/agents-and-providers#task-tokens: a reviewer of a worker's own review carries the worker; the budget is the crew root's.
+				for (let depth = 0; depth < 8; depth++) {
+					const parent = await this.deps.store.task(this.rootKey).catch(() => null);
+					if (!parent?.crewTaskId || parent.crewTaskId === parent.id) break;
+					this.rootKey = { projectId: this.rootKey.projectId, id: parent.crewTaskId };
+				}
+				await this.readRootHold();
+			}
 		});
 		this.poll = setInterval(() => void this.tick(), budgetPollMs);
 		this.poll.unref?.();
@@ -297,8 +306,9 @@ export class TaskBudget {
 			}
 		}
 		this.members = next;
-		return [...next.values()].flatMap((entry) =>
-			entry.task?.crewTaskId === this.rootKey.id ? [entry.task] : []
+		return crewMembers(
+			this.rootKey,
+			[...next.values()].flatMap((entry) => (entry.task ? [entry.task] : []))
 		);
 	}
 	/** spec/agents-and-providers#task-tokens: the root's own figure from memory, its members' from disk. */

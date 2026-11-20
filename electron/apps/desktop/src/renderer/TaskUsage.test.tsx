@@ -186,6 +186,20 @@ it('the budget card: the paused crew, the three answers with Raise to the next v
 		/>
 	);
 	expect(solo).toContain('Задача на паузі.');
+	// Dismissed workers (their tasks completed) are not paused with the task.
+	const team = crew({ claude: 2_000_000 });
+	team[1] = { ...team[1]!, status: 'completed' };
+	team[2] = { ...team[2]!, status: 'completed' };
+	const fewer = renderToStaticMarkup(
+		<BudgetCard
+			question={question}
+			view={view(team)}
+			locale="en"
+			disabled={false}
+			send={() => {}}
+		/>
+	);
+	expect(fewer).toContain('The task and its 1 worker are paused.');
 	expect(solo).toContain('≈2m з 2m токенів');
 	expect(solo).toContain('Підняти до 3m');
 });

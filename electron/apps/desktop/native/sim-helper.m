@@ -658,10 +658,11 @@ static NSDictionary *screenshot(double maxSide, CGImagePropertyOrientation orien
   CGRect extent = CGRectIntegral(image.extent);
   image = [image imageByCroppingToRect:extent];
   CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-  NSData *jpeg = [context JPEGRepresentationOfImage:image colorSpace:space options:@{(__bridge NSString *)kCGImageDestinationLossyCompressionQuality: @0.8}];
+  // Lossless: a design review compares pixel colours with the design (spec/design-review#shots).
+  NSData *png = [context PNGRepresentationOfImage:image format:kCIFormatRGBA8 colorSpace:space options:@{}];
   CGColorSpaceRelease(space);
-  if (!jpeg) { *error = @"The screenshot could not be encoded."; return nil; }
-  return @{@"jpeg": [jpeg base64EncodedStringWithOptions:0], @"width": @(extent.size.width), @"height": @(extent.size.height)};
+  if (!png) { *error = @"The screenshot could not be encoded."; return nil; }
+  return @{@"png": [png base64EncodedStringWithOptions:0], @"width": @(extent.size.width), @"height": @(extent.size.height)};
 }
 
 // ---------------------------------------------------------------- accessibility (AXPTranslator)

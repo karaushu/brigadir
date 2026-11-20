@@ -1,4 +1,5 @@
-import { open, readFile, stat, unlink } from 'node:fs/promises';
+import { link, open, readFile, rename, stat, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 
 import { isRecord, type TaskKey } from '@brigadir/core';
@@ -64,6 +65,39 @@ export async function readMetroPorts(root: string): Promise<Record<string, numbe
 	}
 	return ports;
 }
+/**
+ * A stale lock goes under a second lock file (`.break`, taken with `wx`), so one process at a time removes one, and only after it read
+ * again that the lock is still the same stale file: a process that found it stale a moment ago cannot remove the fresh lock another took
+ * since. The removal renames it to a name of this process first; a file that turns out not to be that stale lock is put back.
+ */
+async function takeStale(path: string, ino: number) {
+	const breaker = `${path}.break`;
+	try {
+		await (await open(breaker, 'wx', 0o600)).close();
+	} catch (error) {
+		if (!isRecord(error) || error.code !== 'EEXIST') return;
+		// A breaker left by a process that died while it removed a lock goes after the same time.
+		const info = await stat(breaker).catch(() => null);
+		if (info && Date.now() - info.mtimeMs > staleLockMs) await unlink(breaker).catch(() => {});
+		return;
+	}
+	try {
+		const now = await stat(path).catch(() => null);
+		if (!now || now.ino !== ino || Date.now() - now.mtimeMs <= staleLockMs) return;
+		const aside = `${path}.${process.pid}-${randomUUID()}`;
+		try {
+			await rename(path, aside);
+		} catch {
+			return;
+		}
+		const taken = await stat(aside).catch(() => null);
+		if (taken && (taken.ino !== ino || Date.now() - taken.mtimeMs <= staleLockMs))
+			await link(aside, path).catch(() => {});
+		await unlink(aside).catch(() => {});
+	} finally {
+		await unlink(breaker).catch(() => {});
+	}
+}
 /** Runs `work` while this process holds the lock file; a lock left by a process that died goes after 15 s. */
 async function locked<T>(root: string, work: () => Promise<T>, waitMs = 20_000): Promise<T> {
 	const path = await safePath(root, lockFile),
@@ -75,11 +109,8 @@ async function locked<T>(root: string, work: () => Promise<T>, waitMs = 20_000):
 			break;
 		} catch (error) {
 			if (!isRecord(error) || error.code !== 'EEXIST') throw error;
-			const age = await stat(path).then(
-				(info) => Date.now() - info.mtimeMs,
-				() => 0
-			);
-			if (age > staleLockMs) await unlink(path).catch(() => {});
+			const info = await stat(path).catch(() => null);
+			if (info && Date.now() - info.mtimeMs > staleLockMs) await takeStale(path, info.ino);
 			else if (Date.now() > until) throw new Error('The Metro ports are locked.');
 			else await new Promise((resolve) => setTimeout(resolve, 25));
 		}

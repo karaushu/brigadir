@@ -60,7 +60,10 @@ import {
 	restoreProject,
 	rollbackMove,
 	saveMove,
+	stoppedRow,
+	type MoveCommand,
 	type MoveDocument,
+	type MoveHold,
 } from './workspace-move';
 /** spec/crew#auto-move: the stay reasons as the agent reads them. */
 const stayReason = {
@@ -80,9 +83,9 @@ export type AutoCrewDeps = CrewHostDeps & {
 	app(method: string, params: unknown): Promise<unknown> | null;
 	/** spec/crew#auto-move: the host's hold for moving the task into a worktree; absent where the host cannot restart (unit tests). */
 	workspace?: {
-		hold(
-			work: (hold: { capture(): Promise<void>; detach(): Promise<void> }) => Promise<boolean>
-		): void;
+		hold(work: (hold: MoveHold) => Promise<boolean>): void;
+		/** spec/crew#auto-move: starts the saved commands again in this host's folder; the ids that started. */
+		restartCommands?(commands: readonly MoveCommand[]): Promise<string[]>;
 		/** No prompt starts until `work` settles: the host in the worktree finishes the hire first. */
 		gate?(work: Promise<void>): void;
 		sessionId(): string | null;
@@ -126,6 +129,8 @@ export function uniqueName(base: string, taken: ReadonlySet<string>, limit = 80)
 		if (!taken.has(name)) return name;
 	}
 }
+/** spec/crew#auto-guard: the paths one `crew.zone.touched` names; what is named is not named again, also after a restart. */
+const zoneTouchedLimit = 500;
 export class AutoCrewHost extends CrewHost {
 	private hireWaiter: {
 		hire: AutoHire;
@@ -150,6 +155,10 @@ export class AutoCrewHost extends CrewHost {
 		const auto = this.deps.context.auto;
 		if (!auto) throw new Error('This task is not an Auto task');
 		return auto;
+	}
+	/** spec/composer-steering-queue-and-ghost#steering-conditions: the agent's `hire_workers` call waits for the person's answer in this host. */
+	hireWaiting() {
+		return this.hireWaiter !== null;
 	}
 	override async start() {
 		await super.start();
@@ -417,6 +426,14 @@ export class AutoCrewHost extends CrewHost {
 			return;
 		}
 		const hired = decision.approved ? await this.executeHire(pending.id, parts) : [];
+		// spec/crew#auto-hire: workers an interrupted approval created for parts that are not hired now (`Do it yourself`) are discarded.
+		for (const worker of this.workers.filter(
+			(item) =>
+				item.hireId === pending.id &&
+				!crewWorkerClosed(item) &&
+				!hired.some((value) => value.taskId === item.taskId)
+		))
+			await this.dismiss(worker, 'discarded');
 		await atomicJson(await this.file(hireFile), { schemaVersion: 1, hire: pending, decision });
 		await this.deps.emit({
 			kind: 'crew.hire.resolved',
@@ -486,15 +503,18 @@ export class AutoCrewHost extends CrewHost {
 		workspace.hold((hold) => this.runMove(doc, hold));
 	}
 	/** spec/crew#auto-move, steps 2–8, in the host that still runs in the project folder. True: the host restarts in the worktree. */
-	private async runMove(
-		doc: MoveDocument,
-		hold: { capture(): Promise<void>; detach(): Promise<void> }
-	): Promise<boolean> {
+	private async runMove(doc: MoveDocument, hold: MoveHold): Promise<boolean> {
 		const store = this.deps.store,
 			key = this.deps.key;
 		const sessionId =
 			(await store.task(key)).provider === 'claude' ? this.autoDeps.workspace?.sessionId() : null;
-		let current: MoveDocument = { ...doc, state: 'moving', ...(sessionId ? { sessionId } : {}) };
+		let current: MoveDocument = {
+			...doc,
+			state: 'moving',
+			...(sessionId ? { sessionId } : {}),
+			...(hold.stopped?.length ? { stopped: hold.stopped } : {}),
+			...(hold.restart?.length ? { restart: hold.restart } : {}),
+		};
 		try {
 			await saveMove(store, key, current);
 			await hold.capture();
@@ -522,6 +542,8 @@ export class AutoCrewHost extends CrewHost {
 		const store = this.deps.store,
 			key = this.deps.key;
 		await saveMove(store, key, { ...doc, state: 'failed', message });
+		// The task stays in the project folder: the saved commands the agent had started run there again.
+		const stopped = stoppedRow(doc, await this.restartCommands(doc));
 		await this.deps.emit({
 			kind: 'workspace.move',
 			id: doc.id,
@@ -529,6 +551,7 @@ export class AutoCrewHost extends CrewHost {
 			state: 'failed',
 			repos: doc.repos,
 			message,
+			...(stopped.length ? { stopped } : {}),
 		});
 		const hire = await this.pendingHire();
 		if (hire?.id === doc.hireId) {
@@ -550,6 +573,10 @@ export class AutoCrewHost extends CrewHost {
 			`The task could not move into a worktree: ${message}. The hire did not start and the task keeps running in the project folder, with your edits where they were. Do these parts yourself.`,
 			{ kind: 'hire-decision', hireId: doc.hireId, approved: false }
 		);
+	}
+	private async restartCommands(doc: MoveDocument) {
+		if (!doc.restart?.length) return [];
+		return (await this.autoDeps.workspace?.restartCommands?.(doc.restart).catch(() => [])) ?? [];
 	}
 	/** spec/crew#auto-move: what a host finds at its start. */
 	private async resumeMove(doc: MoveDocument) {
@@ -575,7 +602,11 @@ export class AutoCrewHost extends CrewHost {
 				({ event }) =>
 					event.kind === 'workspace.move' && event.id === current.id && event.state === 'moved'
 			);
-		if (!announced)
+		// spec/crew#auto-move: the saved commands the agent had started run again in the worktree, in every host that finishes the move (an
+		// earlier one that stopped took its commands with it); the row, written once, names what the restart stopped.
+		const restarted = await this.restartCommands(current);
+		if (!announced) {
+			const stopped = stoppedRow(current, restarted);
 			await this.deps.emit({
 				kind: 'workspace.move',
 				id: current.id,
@@ -585,7 +616,9 @@ export class AutoCrewHost extends CrewHost {
 				...(current.branch ? { branch: current.branch } : {}),
 				...(current.base ? { base: current.base } : {}),
 				stayed: current.stayed ?? [],
+				...(stopped.length ? { stopped } : {}),
 			});
+		}
 		const stayed = current.stayed ?? [];
 		const preface = `The task moved into a worktree: ${current.to} on branch ${current.branch} (from ${current.base}). Your edits moved with it; work there from now on.${
 			stayed.length
@@ -662,14 +695,49 @@ export class AutoCrewHost extends CrewHost {
 	 * spec/crew#auto-hire: commit the agent's edits, add the parts to the crew and start one worker task per part. A worker carries its hire
 	 * and part from the moment its record is written, so a decision made again after a crash starts only the parts that have no worker yet.
 	 */
+	/** spec/crew#auto-hire: a worker of a hire that waits for the person (it was being decided when the host stopped) starts only with the decision. */
+	protected override async parked(worker: CrewWorkerRecord) {
+		if (!worker.hireId) return false;
+		return (await this.pendingHire())?.id === worker.hireId;
+	}
 	private async executeHire(hireId: string, parts: readonly AutoHirePart[]): Promise<AutoHired[]> {
 		const hireable = autoHireable(parts);
 		if (!hireable.length) return [];
 		const started = new Map(
 			this.workers
-				.filter((worker) => worker.hireId === hireId && worker.planPartId)
+				.filter(
+					(worker) => worker.hireId === hireId && worker.planPartId && !crewWorkerClosed(worker)
+				)
 				.map((worker) => [worker.planPartId!, worker])
 		);
+		// The workers this hire created before the host stopped waited for the decision. One whose role the person changed now is
+		// discarded and hired again; the others take the part as decided now (title, prompt, acceptance, budget) and start.
+		const saved = started.size
+			? ((await this.deps.store.task(this.deps.key)).crew ?? this.deps.context.spec)
+			: this.deps.context.spec;
+		for (const [partId, worker] of [...started]) {
+			const part = hireable.find((item) => item.id === partId),
+				task = await this.deps.store.task(this.workerKey(worker)).catch(() => null);
+			if (!part || !task || task.hasStarted) continue;
+			const node = saved.root.agents.find((agent) => agent.id === worker.nodeId);
+			if (node && node.template !== part.role) {
+				await this.dismiss(worker, 'discarded');
+				started.delete(partId);
+				continue;
+			}
+			if (task.title !== part.title || task.prompt !== part.prompt)
+				await this.deps.store.updateTask(task, { title: part.title, prompt: part.prompt });
+			if (
+				worker.title !== part.title ||
+				JSON.stringify(worker.budget) !== JSON.stringify(part.budget)
+			) {
+				worker.title = part.title;
+				worker.budget = part.budget;
+				await this.saveWorkers();
+			}
+			await this.savePartBrief(worker, part.prompt, part.acceptance ?? '');
+			await this.launchLater(worker);
+		}
 		const pending = hireable.filter((part) => !started.has(part.id));
 		if (pending.length) {
 			if (!this.deps.context.worktree) throw new Error('Hiring needs this task in a worktree.');
@@ -677,9 +745,17 @@ export class AutoCrewHost extends CrewHost {
 			const from = await this.leadHeads();
 			const spec = this.deps.context.spec,
 				taken = new Set(this.specNames(spec.root));
-			// A part's node id comes from its hire and part, so a decision made again after a crash finds the node it already added.
-			const nodeId = (part: AutoHirePart) =>
-				`w-${createHash('sha256').update(`${hireId}\0${part.id}`).digest('hex').slice(0, 16)}`;
+			// A part's node id comes from its hire and part, so a decision made again after a crash finds the node it already added; a part
+			// whose role changed in between gets a node of that role.
+			const hash = (text: string) =>
+				`w-${createHash('sha256').update(text).digest('hex').slice(0, 16)}`;
+			const nodeId = (part: AutoHirePart) => {
+				const first = hash(`${hireId}\0${part.id}`),
+					node = spec.root.agents.find((agent) => agent.id === first);
+				return !node || node.template === part.role
+					? first
+					: hash(`${hireId}\0${part.id}\0${part.role}`);
+			};
 			const nodes = pending.map((part) => {
 				const existing = spec.root.agents.find((agent) => agent.id === nodeId(part));
 				if (existing) return { part, node: existing, added: false };
@@ -787,7 +863,9 @@ export class AutoCrewHost extends CrewHost {
 			reason === 'hire' ? `${task.title} (before hiring: ${subject})` : task.title,
 			fallback
 		);
-		const result = await commitPreview(preview, scopes, message, snapshots);
+		const result = await commitPreview(preview, scopes, message, snapshots, {
+			taskGitlinksOnly: true,
+		});
 		if (result.error) throw new Error(`Committing your edits failed: ${result.error}`);
 		if (result.committed.length)
 			await this.deps.emit({
@@ -930,6 +1008,15 @@ export class AutoCrewHost extends CrewHost {
 	 * spec/crew#auto-guard: Claude and Codex write files themselves, not through the app's file layer, so after each turn of the agent the host
 	 * compares its tree with the commit the hire started from and names the files it changed inside a hired zone.
 	 */
+	private namedInZone(taskId: string) {
+		return new Set(
+			this.deps
+				.records()
+				.flatMap(({ event }) =>
+					event.kind === 'crew.zone.touched' && event.taskId === taskId ? event.paths : []
+				)
+		);
+	}
 	async checkZones(): Promise<void> {
 		const project = await this.deps.store.projectForTask(this.deps.key).catch(() => null);
 		if (!project) return;
@@ -949,7 +1036,8 @@ export class AutoCrewHost extends CrewHost {
 					if (zoneOwns(worker.zone, full)) paths.push(full);
 				}
 			}
-			const seen = this.touched.get(worker.taskId) ?? new Set<string>(),
+			// The files already named are in the journal, so a restarted host does not name them again.
+			const seen = this.touched.get(worker.taskId) ?? this.namedInZone(worker.taskId),
 				fresh = [...new Set(paths)].filter((path) => !seen.has(path));
 			if (!fresh.length) continue;
 			for (const path of fresh) seen.add(path);
@@ -959,7 +1047,7 @@ export class AutoCrewHost extends CrewHost {
 				taskId: worker.taskId,
 				name: worker.name,
 				title: worker.title,
-				paths: fresh.slice(0, 50),
+				paths: fresh.slice(0, zoneTouchedLimit),
 			});
 			await this.deps.prompt(
 				`You changed files inside «${worker.title}», the part you hired out to ${worker.name}: ${fresh.slice(0, 20).join(', ')}. Put them back as they were at the hire, or hand the change to ${worker.name} with prompt_task; otherwise accepting its part will conflict.`,

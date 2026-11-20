@@ -12,6 +12,7 @@ import {
 	taskTokenSum,
 	tokenCount,
 	tokenMembers,
+	budgetRoot,
 	type AgentProvider,
 	type AgentTask,
 	type BudgetDecision,
@@ -43,7 +44,7 @@ export type TaskTokensView = {
 	hold: TokenHold | null;
 	lead: BudgetLead | null;
 	spans: QuotaSpan[];
-	/** The crew's members besides the root (workers, leads, reviewers). */ workers: number;
+	/** spec/chat-turns-plans-and-questions#budget-card: the members besides the root (workers, leads, reviewers) that are paused with it — not a dismissed or completed one. */ workers: number;
 	label(taskId: string): string;
 };
 export function tokensView(
@@ -52,10 +53,7 @@ export function tokensView(
 	locale: Locale
 ): TaskTokensView {
 	const member = Boolean(task.crewTaskId && task.crewTaskId !== task.id),
-		root = member
-			? (tasks.find((item) => item.id === task.crewTaskId && item.projectId === task.projectId) ??
-				task)
-			: task,
+		root = member ? budgetRoot(task, tasks) : task,
 		own = member ? [task] : tokenMembers(root, tasks),
 		sum = member ? taskTokenSum(task, [task]) : taskTokenSum(root, tasks),
 		budget = member ? undefined : root.tokenBudget;
@@ -67,7 +65,9 @@ export function tokensView(
 		hold: member ? null : (root.tokenHold ?? null),
 		lead: budgetLead(sum, budget),
 		spans: quotaSpans(own.map((item) => item.tokens)),
-		workers: Math.max(0, own.length - 1),
+		workers: own.filter(
+			(item) => item.id !== root.id && item.status !== 'completed' && !item.archived
+		).length,
 		label: (taskId) => {
 			if (taskId === root.id && !member) return t(locale, 'Agent');
 			const item = tasks.find((entry) => entry.id === taskId);

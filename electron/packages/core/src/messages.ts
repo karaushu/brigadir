@@ -278,6 +278,11 @@ const uk = {
 	'conflicts with edits made before the task': 'конфлікт із правками до задачі',
 	'ignored by git': 'ігнорує git',
 	'outside git': 'поза git',
+	// spec/crew#auto-move: what the move's restart stopped.
+	command: 'команда',
+	console: 'консоль',
+	'in the background': 'у фоні',
+	'started again': 'запущено знову',
 	'over budget': 'понад бюджет',
 	'{used} of {budget}': '{used} з {budget}',
 	zone: 'зона',

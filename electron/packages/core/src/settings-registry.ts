@@ -19,7 +19,8 @@ import type { Locale } from './messages';
 export type SettingKind =
 	| { type: 'enum'; values: readonly (string | number | null)[] }
 	| { type: 'number'; min: number; max: number; step: number }
-	| { type: 'boolean' };
+	| { type: 'boolean' }
+	| { type: 'text'; max: number };
 export type SettingEdit = {
 	/** The key the agent names, a path into `settings.json`. */
 	key: string;
@@ -243,6 +244,13 @@ export const settingEdits: readonly SettingEdit[] = [
 		get: (s) => s.suggestNextPrompt,
 		set: (s, v) => ({ ...s, suggestNextPrompt: v as boolean }),
 	},
+	{
+		key: 'slack.memberId',
+		id: 'module-slack',
+		kind: { type: 'text', max: 20 },
+		get: (s) => s.slack.memberId,
+		set: (s, v) => ({ ...s, slack: { ...s.slack, memberId: String(v ?? '') } }),
+	},
 	...modules.map((module): SettingEdit => ({
 		key: `modules.${module}`,
 		id: `module-${module}`,
@@ -260,9 +268,11 @@ export function settingEdit(key: string): SettingEdit | null {
 const kindText = (kind: SettingKind) =>
 	kind.type === 'boolean'
 		? 'true | false'
-		: kind.type === 'enum'
-			? kind.values.map((value) => JSON.stringify(value)).join(' | ')
-			: `${kind.min}–${kind.max}${kind.step !== 1 ? ` by ${kind.step}` : ''}`;
+		: kind.type === 'text'
+			? `text up to ${kind.max} characters`
+			: kind.type === 'enum'
+				? kind.values.map((value) => JSON.stringify(value)).join(' | ')
+				: `${kind.min}–${kind.max}${kind.step !== 1 ? ` by ${kind.step}` : ''}`;
 /** The place of a setting as Settings shows it in English: `Settings ▸ Appearance ▸ Editor ▸ Size`. */
 function place(edit: SettingEdit): string {
 	const where = settingLocation(edit.id, 'en');
@@ -289,7 +299,9 @@ function info(edit: SettingEdit, settings: AppSettings): SettingInfo {
 			? `Settings ▸ Modules ▸ ${edit.key.slice(8)}`
 			: edit.key === 'agents.slackPostWithoutAsking'
 				? 'Settings ▸ Modules ▸ Slack ▸ Agents can post without confirmation'
-				: place(edit),
+				: edit.key === 'slack.memberId'
+					? 'Settings ▸ Modules ▸ Slack ▸ Your member ID'
+					: place(edit),
 		values: kindText(edit.kind),
 		current: edit.get(settings),
 		confirm: Boolean(edit.confirm),
@@ -333,6 +345,10 @@ export function changeSetting(settings: AppSettings, key: string, value: unknown
 	if (kind.type === 'boolean') {
 		if (typeof value !== 'boolean') throw new Error(`${key} takes true or false.`);
 		next = value;
+	} else if (kind.type === 'text') {
+		if (typeof value !== 'string' || value.length > kind.max)
+			throw new Error(`${key} takes ${kindText(kind)}.`);
+		next = value.trim();
 	} else if (kind.type === 'number') {
 		const number = typeof value === 'string' ? Number(value) : value;
 		if (number === null && edit.key === 'chatFont.size') next = null;

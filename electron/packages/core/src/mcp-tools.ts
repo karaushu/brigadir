@@ -91,6 +91,16 @@ const verbs = {
 	read_notes: ['Reading the crew log', 'Read the crew log', 'Could not read the crew log'],
 	ask_user: ['Asking you', 'Asked you', 'Could not ask you'],
 	create_task: ['Proposing a task', 'Proposed a task', 'Could not propose a task'],
+	// spec/settings-modules-and-onboarding#brigadir-chat-tools: the Brigadir chat's own tools.
+	settings_find: ['Looking up settings', 'Looked up settings', 'Could not look up settings'],
+	settings_set: ['Changing a setting', 'Changed a setting', 'Could not change the setting'],
+	settings_open: ['Opening Settings', 'Opened Settings', 'Could not open Settings'],
+	setup_start: ['Starting a setup', 'Started a setup', 'Could not start the setup'],
+	secret_request: ['Asking for a token', 'Got a token', 'No token came'],
+	open_link: ['Showing a link', 'Showed a link', 'Could not show the link'],
+	send_to_task: ['Writing to a task', 'Wrote to a task', 'Could not write to the task'],
+	ask_task: ['Asking a task', 'Asked a task', 'Could not ask the task'],
+	open_task: ['Opening a task', 'Opened a task', 'Could not open the task'],
 	add_folder: ['Adding a folder', 'Added a folder', 'Could not add the folder'],
 	slack_post: ['Posting to Slack', 'Posted to Slack', 'Could not post to Slack'],
 	tasks_list: ['Looking up tasks', 'Looked up tasks', 'Could not look up tasks'],
@@ -239,6 +249,17 @@ const actVerbs: Record<string, readonly [MessageKey, MessageKey]> = {
 	button: ['Pressing a button', 'Pressed a button'],
 	rotate: ['Rotating the simulator', 'Rotated the simulator'],
 };
+const brigadirChatToolNames = new Set([
+	'settings_find',
+	'settings_set',
+	'settings_open',
+	'setup_start',
+	'secret_request',
+	'open_link',
+	'send_to_task',
+	'ask_task',
+	'open_task',
+]);
 export function mcpModule(tool: string): McpModule {
 	if (
 		tool === 'ask_user' ||
@@ -253,7 +274,8 @@ export function mcpModule(tool: string): McpModule {
 		tool === 'set_task_class' ||
 		tool === 'smoke_start' ||
 		tool === 'smoke_report' ||
-		tool === 'ready_to_look'
+		tool === 'ready_to_look' ||
+		brigadirChatToolNames.has(tool)
 	)
 		return 'human';
 	if (tool === 'editor_state' || tool === 'editor_restart_language_servers') return 'editor';

@@ -36,6 +36,7 @@ Brigadir means “foreman.” Assign tasks to agents and review their changes.
 - **Messages.** Send messages mid-turn (steering) or queue them. Answer questions, approve permissions and review
   tasks proposed by agents.
 - **Background work.** Agents keep running after you close the window. Reopen Brigadir to reconnect.
+  AppImage hosts stop when the app exits; see [Install](#install).
 
 ### Review the diff
 
@@ -49,16 +50,21 @@ Brigadir means “foreman.” Assign tasks to agents and review their changes.
 - **Git:** commit (messages generated on request), push, branch switching, merge and conflict
   resolution, file history and blame.
 
-### Crews
+### Auto and crews
 
 ![A Foreman task: the approved plan with two parts, worker rows, a report from Payments and the reviewer's check; the sidebar shows the crew card with its three agents](docs/assets/readme/crew.webp)
 
-- A **Foreman** task runs an orchestrator that writes no code. It proposes a plan: parts, which agent takes each, which
-  files belong to whom. You approve or edit it.
-- **Workers** are ordinary tasks inside the foreman's card. They report with diffs, ask the foreman questions,
-  share notes, and go through a reviewer agent before the foreman accepts their work into its branch.
-- Crews are built from **templates** in a crew editor (a tree of agents with roles, models and zones), or the foreman
-  composes one itself for the task.
+- **Auto** runs one coding agent that can hire workers with your approval. It is the default for GUI tasks.
+- **Named crews** define roles, models and zones. A foreman proposes a plan, delegates work and accepts the results.
+  You approve or edit the plan; the foreman writes no code.
+- **Workers** run as tasks with their own diffs, reports and review results.
+
+### Agent reviews and smoke runs
+
+- **Reviews.** Review plans and code during a task or before a PR. Agents address findings; unresolved issues return
+  to you. Main-tree tasks are excluded.
+- **Smoke runs.** Agents check changed flows in the browser or simulator within a time limit and report findings.
+- **Ready to look.** Get notified when a screen is ready to inspect while the agent continues working.
 
 ### Monorepos and worktrees
 
@@ -66,6 +72,7 @@ Brigadir means “foreman.” Assign tasks to agents and review their changes.
   finds them, shows each with its own branch and changes, and passes them to the agent as directories of one session.
 - Every task chooses **isolation**: work in place, or in a fresh **git worktree** (outside the repo, with an
   agent-chosen branch name, optional `.env` copying and a setup command).
+- Move an existing task into a **worktree** later. Worktrees created by the task’s agent can also join the task.
 - Repo **locks** stop two in-place tasks from writing to the same tree at once.
 
 ### Built-in tools
@@ -95,6 +102,11 @@ Uses the GitHub CLI (`gh`).
 - **Fix and merge.** Send review comments to the agent. Merge when GitHub allows it.
 - **CI.** View runs, steps and deployments after a merge. Get notified when a run finishes.
 
+### Brigadir chat
+
+Ask about code and tasks, create tasks, change settings, and set up Slack or remote access through chat.
+Brigadir chat reads project files without editing them. Changes that need confirmation appear as approval cards.
+
 ### Modules
 
 Disable modules in **Settings ▸ Modules** to remove their UI, menu items, background work and agent tools.
@@ -110,7 +122,12 @@ Disable modules in **Settings ▸ Modules** to remove their UI, menu items, back
 | Remote access   | Control this machine from another computer (access itself stays off until you set it up) | on      |
 | Notes           | Markdown notes with their own agent chat                                                 | on      |
 | Scheduled tasks | Run a task later or on repeat                                                            | on      |
-| Slack           | Task and CI messages from your own CI bot, and tasks from mentions                       | off     |
+| Slack           | Task notifications, mentions, daily and weekly summaries, and task or to-do creation     | off     |
+| Todo            | To-do lists by project, with descriptions and task creation                              | on      |
+
+### Todo
+
+Keep to-do lists by project or without a project. Add descriptions, turn items into tasks, or save Slack mentions to Todo.
 
 ### Remote access and phone
 
@@ -142,7 +159,8 @@ Download the latest package from [Releases](https://github.com/karaushu/brigadir
   Apple Developer ID yet: after moving the app to Applications, open it once with right-click ▸ Open, or run
   `xattr -dr com.apple.quarantine /Applications/Brigadir.app`. Unsigned builds tell you about new versions instead of
   installing them.
-- **Linux**: AppImage, `.deb` or `.rpm`.
+- **Linux**: AppImage, `.deb` or `.rpm`. Use `.deb` or `.rpm` to keep agents running after the app exits.
+  AppImage task hosts stop on exit; tasks recover on the next launch.
 
 Maintainers: building, signing and publishing releases is described in
 [docs/guides/releasing.md](docs/guides/releasing.md).

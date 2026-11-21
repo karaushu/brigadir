@@ -115,6 +115,8 @@ two similar actions. Do not add a description when the name is enough.
 - Shortcuts come from the active keymap and platform. The catalog text holds `{shortcut}`, never a literal `⌘`:
   `{shortcut} відкриває в редакторі`. `renderer/ui/shortcut-hint.ts` fills it (`⌘+click` on macOS, `Ctrl+click`
   elsewhere).
+- Credentials in shared UI use **key store / сховище ключів**. Name Keychain only for a macOS-specific
+  instruction. A token tool reports that a token was saved, never that the agent received its value.
 - Sleep prevention is **Keep awake / Без сну**, with the switch text «Keep the computer awake while agents work» /
   «Тримати компʼютер активним, поки працюють агенти» ([Keep awake](spec/architecture-and-platform.md#keep-awake)).
   The display hold is **Display / Екран**, «Keep the display on while agents work» / «Не вимикати екран, поки
@@ -139,6 +141,8 @@ two similar actions. Do not add a description when the name is enough.
   «деплой». The glossary decides which form a term takes. A technical term is not a defect: fix inaccurate meaning,
   metaphors and extra words around it, not the term itself. Internal names that a person cannot know still need a
   plain word.
+- Use the same term in settings, tool rows and reports: **smoke run / smoke-прогін**,
+  **turn / турн**, **limit / ліміт**. A failure names the operation: «Помилка CI», «Помилка деплою».
 - Keep the set and the count of placeholders. Changing `{count}` from a ready phrase to a bare number needs a change
   at the call site. Do not translate a sentence in pieces.
 - Ukrainian strings run 15–30 % longer: no fixed widths on buttons, labels or segments.

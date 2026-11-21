@@ -76,7 +76,10 @@ export function nextText(locale: Locale, schedule: ScheduleSummary, now = Date.n
 	const ms = Date.parse(schedule.nextRun) - now;
 	if (ms < 3_600_000) {
 		const minutes = Math.max(1, Math.round(ms / 60_000));
-		return locale === 'uk' ? `за ${minutes} хв` : `in ${minutes} min`;
+		return t(locale, 'in {minutes} min').replace(
+			'{minutes}',
+			new Intl.NumberFormat(locale).format(minutes)
+		);
 	}
 	return formatSlot(locale, schedule.nextRun, schedule.timeZone);
 }

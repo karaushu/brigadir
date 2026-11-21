@@ -12,6 +12,7 @@ import {
 } from 'react';
 import {
 	commentCount,
+	commitCount,
 	mergeControlState,
 	commitsSince,
 	draftCount,
@@ -992,7 +993,7 @@ export function PRReviewModal({
 								glyph="diff"
 								title={t(locale, 'No changes')}
 								text={t(locale, '{n}, but together they change nothing against {base}.')
-									.replace('{n}', commitWord(locale, detail.commits.length))
+									.replace('{n}', commitCount(locale, detail.commits.length))
 									.replace('{base}', pr.base)}
 								action={
 									<Button onClick={github}>
@@ -1070,11 +1071,6 @@ export function PRReviewModal({
 		</ModalDialog>
 	);
 }
-
-const commitWord = (locale: Locale, n: number) =>
-	locale === 'uk'
-		? `${n} ${({ one: 'коміт', few: 'коміти', many: 'комітів', other: 'коміту' } as Record<string, string>)[new Intl.PluralRules('uk').select(n)] ?? 'комітів'}`
-		: `${n} ${n === 1 ? 'commit' : 'commits'}`;
 
 function Empty({
 	glyph,
@@ -1557,7 +1553,7 @@ function AgentSummary({
 			<p className={styles.expl} data-summary-size>
 				{fileCount(locale, detail.files.length)} ·{' '}
 				<ChangeCounts additions={added} deletions={removed} locale={locale} /> ·{' '}
-				{commitWord(locale, detail.commits.length)} · ~
+				{commitCount(locale, detail.commits.length)} · ~
 				{t(locale, '{n} min').replace('{n}', String(minutes))}
 			</p>
 		</section>

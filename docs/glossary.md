@@ -60,7 +60,7 @@ Names" category of STE.
 | worktree | worktree | A git worktree that isolates a task. | «робоче дерево» (that is the git working tree) |
 | working tree | робоче дерево | The checked-out files of a repo, as in `git status`. | |
 | Push | Відправити | The push button and menu item: `Відправити`, `Відправити коміти…`, `Відправити все`. As a noun, `push` stays: «Перший push», «push 2 год тому». | «залити» |
-| Pull | Pull | Fetch and fast-forward a branch. | «підтягнути» as a button (it is used only in sentences: «підтягне 3 коміти з origin») |
+| Pull | Pull | Fetch and fast-forward a branch, or rebase its local commits when it has diverged. | «підтягнути» as a button (it is used only in sentences: «підтягне 3 коміти з origin») |
 | Rebase | Rebase | | |
 | merge / Merge | мердж / Змерджити | The noun is «мердж», the verb is «змерджити», the past participle is «змерджено». | «злиття», «злити» |
 | stash / Stash | stash / Stash | `Stash і перемкнути`, `Повернути зі stash…`. | |
@@ -317,7 +317,7 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Developer / Reviewer | Розробник / Ревʼюер | Built-in agent templates. | |
 | Senior developer | Старший розробник | Built-in agent template: a Developer on a stronger model. | |
 | Tester | Тестувальник | Built-in agent template: writes and runs the automated tests of a part. | «тестер», «QA» |
-| Technical writer | Технічний письменник | Built-in agent template: writes the documents of a change. | «техрайтер» |
+| Technical writer | Технічний автор | Built-in agent template: writes the documents of a change. | «техрайтер» |
 | Designer | Дизайнер | Built-in agent template: checks changed screens against the design, writes no code. | |
 | Security reviewer | Ревʼюер безпеки | Built-in agent template: checks changes for security defects. | «безпечник» |
 | Crew with tests | Бригада з тестами | Crew name the app translates: a person's crew of a developer, a tester and a reviewer may carry it. | |
@@ -461,7 +461,7 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | Property · Expected · On device | Властивість · Очікується · На пристрої | The columns of a design review's table. | |
 | mismatch · old screenshot · no screenshot · no design image | розбіжність · старий знімок · без знімка · без зображення дизайну | The tags of a design review's rows; `before the last change` / `до останньої зміни` under an old screenshot. | |
 | Smoke run | Smoke-прогін | One pass of an agent through the flows a change touches in the running app, under a time limit the host enforces (spec/smoke-run). In a service row `smoke`. | «тест», «перевірка» |
-| Smoke run limit | Межа smoke-прогону | The minutes after which the host stops a smoke run and asks for the report. | «ліміт», «стеля» |
+| Smoke run limit | Ліміт smoke-прогону | The minutes after which the host stops a smoke run and asks for the report. | «стеля» |
 | Ready to look | Можна дивитись | The agent's notice that a screen is assembled and can be looked at; in a service row `ready` / `готово`. Not a question: the agent works on. | «Готово до перегляду» |
 | Plan vs ticket · Plan vs code · Gaps in the ticket | План і тикет · План і код · Прогалини в тикеті | The three lists of a plan review: what the author fixes (the first two) and the ticket's own gaps, which are questions for the person. | |
 | missed · contradicts · out of scope · wrong assumption · left open · cannot verify · split | пропущено · суперечить · поза задачею · хибне припущення · не вирішено · не перевірити · поділ | The kinds of a plan finding. | |
@@ -473,7 +473,7 @@ The crew is a foreman and its workers, or an Auto agent and the workers it hired
 | review before PR · plan · plan review · reviews · workers | ревʼю перед PR · план · ревʼю плану · ревʼю · воркери | What a class adds, after its reason in the chat row. | |
 | plan mode · for a Medium task · after the approved plan | режим плану · для середньої задачі · після погодженого плану | The row of the host's switch into the agent's plan mode for a class, and back after the approval. | |
 | more than a small task | більше за малу задачу | The tripwire's review row: a small task grew past its limit. | |
-| Small task limit | Межа малої задачі | Settings ▸ Agents ▸ Reviews: files and changed lines past which a small task gets a mid-task review. | «поріг», «ліміт» |
+| Small task limit | Ліміт малої задачі | Settings ▸ Agents ▸ Reviews: files and changed lines past which a small task gets a mid-task review. | «поріг» |
 
 ## Pull requests and CI
 

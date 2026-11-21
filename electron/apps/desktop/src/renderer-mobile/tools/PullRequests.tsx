@@ -455,7 +455,7 @@ export function RepoSheet({
 		</span>
 	);
 	return (
-		<Sheet label="Repo" title="Repo" locale={locale} close={back}>
+		<Sheet label={t(locale, 'Repo')} title={t(locale, 'Repo')} locale={locale} close={back}>
 			<Group>
 				<SheetRow
 					role="menuitemradio"

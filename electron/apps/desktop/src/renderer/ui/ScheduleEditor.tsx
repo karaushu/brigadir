@@ -380,7 +380,7 @@ export function ScheduleEditor({
 								<TextInput
 									className={s.wide}
 									spellCheck={false}
-									aria-label="Cron"
+									aria-label={t(locale, 'Cron')}
 									aria-invalid={typeof cronError === 'string'}
 									data-mono
 									value={cronDraft}
